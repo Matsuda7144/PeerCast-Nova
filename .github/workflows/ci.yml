@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build and test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - windows-latest
+          - ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore PeerCast-Nova.sln
+
+      - name: Build
+        run: dotnet build PeerCast-Nova.sln --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test PeerCast-Nova.sln --configuration Release --no-build --logger "console;verbosity=normal"
+
+      - name: Format
+        run: dotnet format PeerCast-Nova.sln --verify-no-changes --no-restore

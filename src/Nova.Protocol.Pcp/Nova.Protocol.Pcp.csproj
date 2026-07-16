@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>PeerCast.Nova.Protocol.Pcp</AssemblyName>
+    <RootNamespace>PeerCast.Nova.Protocol.Pcp</RootNamespace>
+  </PropertyGroup>
+</Project>

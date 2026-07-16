@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>PeerCast.Nova.Foundation</AssemblyName>
+    <RootNamespace>PeerCast.Nova.Foundation</RootNamespace>
+  </PropertyGroup>
+</Project>

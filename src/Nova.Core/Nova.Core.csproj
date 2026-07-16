@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>PeerCast.Nova.Core</AssemblyName>
+    <RootNamespace>PeerCast.Nova.Core</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Nova.Foundation/Nova.Foundation.csproj" />
+  </ItemGroup>
+</Project>

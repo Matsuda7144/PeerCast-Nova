@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>PeerCast.Nova.Network</AssemblyName>
+    <RootNamespace>PeerCast.Nova.Network</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Nova.Core/Nova.Core.csproj" />
+    <ProjectReference Include="../Nova.Foundation/Nova.Foundation.csproj" />
+    <ProjectReference Include="../Nova.Protocol.Pcp/Nova.Protocol.Pcp.csproj" />
+  </ItemGroup>
+</Project>

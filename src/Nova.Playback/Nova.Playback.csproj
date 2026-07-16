@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>PeerCast.Nova.Playback</AssemblyName>
+    <RootNamespace>PeerCast.Nova.Playback</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Nova.Network/Nova.Network.csproj" />
+  </ItemGroup>
+</Project>
