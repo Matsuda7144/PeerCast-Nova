@@ -122,6 +122,25 @@ public sealed class VerifiedPlaybackDecoderRuntimeLease : IDisposable, IAsyncDis
         }
     }
 
+    internal TResult UseVerifiedRuntime<TResult>(
+        Func<IReadOnlyDictionary<string, VerifiedPlaybackDecoderRuntimeFile>, TResult>
+            guardedOperation)
+    {
+        ArgumentNullException.ThrowIfNull(guardedOperation);
+        lock (_sync)
+        {
+            var files = _files ?? throw CreateDisposedException();
+            var paths = _paths ?? throw CreateDisposedException();
+            var access = files.ToDictionary(
+                static entry => entry.Key,
+                entry => new VerifiedPlaybackDecoderRuntimeFile(
+                    paths[entry.Key],
+                    entry.Value),
+                StringComparer.OrdinalIgnoreCase);
+            return guardedOperation(access);
+        }
+    }
+
     public void Dispose()
     {
         Dictionary<string, FileStream>? files;
@@ -176,6 +195,10 @@ public sealed class VerifiedPlaybackDecoderRuntimeLease : IDisposable, IAsyncDis
             nameof(VerifiedPlaybackDecoderRuntimeLease),
             "The verified runtime lease is no longer available.");
 }
+
+internal readonly record struct VerifiedPlaybackDecoderRuntimeFile(
+    string Path,
+    Stream Stream);
 
 /// <summary>
 /// Resolves one explicitly supplied local fixed-drive directory. It never

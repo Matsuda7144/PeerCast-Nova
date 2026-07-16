@@ -13,7 +13,8 @@ $filter = @(
     'FullyQualifiedName~PlaybackDecoderBackendRuntimeInventoryTests',
     'FullyQualifiedName~PlaybackDecoderBackendBoundaryTests',
     'FullyQualifiedName~PlaybackDecoderBackendArtifactVerifierTests',
-    'FullyQualifiedName~PlaybackFfmpegBackendCandidateTests'
+    'FullyQualifiedName~PlaybackFfmpegBackendCandidateTests',
+    'FullyQualifiedName~PlaybackDecoderFfmpegAbiSymbolGateTests'
 ) -join '|'
 
 $originalLib = $env:LIB
