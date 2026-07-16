@@ -51,13 +51,14 @@ public sealed class PcpRelayFanoutTests
         await fanout.ConsumeAsync(
             CreatePacket(0, [0x01]),
             CancellationToken.None);
-        await slowSink.Entered.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await slowSink.Entered.Task;
+        await fastSink.WaitForCountAsync(1);
 
         await fanout.ConsumeAsync(
             CreatePacket(1, [0x02]),
             CancellationToken.None);
         await fastSink.WaitForCountAsync(2);
-        await WaitForStateAsync(slowChild, PcpRelayChildState.Stopped);
+        await slowChild.Completion;
 
         Assert.Equal(1, fanout.ActiveChildCount);
         Assert.Equal(
@@ -372,6 +373,7 @@ public sealed class PcpRelayFanoutTests
     {
         private readonly object _gate = new();
         private readonly List<ObservedRelayPacket> _packets = [];
+        private TaskCompletionSource _packetAdded = CreatePacketAddedSource();
 
         public ObservedRelayPacket[] Packets
         {
@@ -390,6 +392,8 @@ public sealed class PcpRelayFanoutTests
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            TaskCompletionSource packetAdded;
+
             lock (_gate)
             {
                 _packets.Add(
@@ -398,28 +402,39 @@ public sealed class PcpRelayFanoutTests
                         packet.StreamPosition,
                         packet.Payload.ToArray(),
                         packet.Discontinuity));
+                packetAdded = _packetAdded;
+                _packetAdded = CreatePacketAddedSource();
             }
+
+            packetAdded.TrySetResult();
 
             return ValueTask.CompletedTask;
         }
 
         public async Task WaitForCountAsync(int expected)
         {
-            using var timeout = new CancellationTokenSource(
-                TimeSpan.FromSeconds(2));
-
             while (true)
             {
+                Task packetAdded;
+
                 lock (_gate)
                 {
                     if (_packets.Count >= expected)
                     {
                         return;
                     }
+
+                    packetAdded = _packetAdded.Task;
                 }
 
-                await Task.Delay(10, timeout.Token);
+                await packetAdded.ConfigureAwait(false);
             }
+        }
+
+        private static TaskCompletionSource CreatePacketAddedSource()
+        {
+            return new TaskCompletionSource(
+                TaskCreationOptions.RunContinuationsAsynchronously);
         }
     }
 
