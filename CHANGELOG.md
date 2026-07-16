@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### 0.0.6d FFmpeg ABI / Symbol Gate
+
+- Consumed the live verified five-DLL lease without rediscovery, re-hashing, or managed re-open.
+- Added bounded PE import inspection and fail-closed rejection of non-verified, non-system dependencies.
+- Loaded only with `LoadLibraryExW` search scopes `DLL_LOAD_DIR` and `SYSTEM32`.
+- Verified fixed FFmpeg ABI majors and required symbols through a testable native-loader boundary.
+- Released every partially loaded module in reverse order on success or failure.
+- Returned fixed privacy-safe results, including an unsupported result on non-Windows systems.
+- Added no codec initialization, packet decode, frame output, FFmpeg binary, or external dependency.
+
 ### 0.0.6c2-fix1 runtime lease CI and artifact consistency
 
 - Added explicit Windows-only test discovery with documented skip reasons.

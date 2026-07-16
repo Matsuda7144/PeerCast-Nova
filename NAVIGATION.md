@@ -2,7 +2,7 @@
 
 ## 現在地
 
-**Milestone 0.0.6c2-fix1 — Verified FFmpeg Runtime Lease**
+**Milestone 0.0.6d — FFmpeg ABI / Symbol Gate**
 
 - 候補記録と技術検証: 完了
 - FFmpeg backend activation: 未承認
@@ -10,7 +10,7 @@
 - runtime 5 DLLの名前・サイズ・SHA-256固定と事前照合: 完了
 - 配布方針: ユーザー/ホスト導入、動的リンク、Novaによる同梱・再配布なし
 - locator: 明示指定された1ディレクトリだけを検査
-- 次: 0.0.6d FFmpeg ABI / Symbol Gate
+- current: fixed FFmpeg DLL, ABI-major, import, and symbol gate
 - trust boundary: verified 5-DLL handles remain open until lease disposal
 - path boundary: local fixed drives only; UNC and reparse points are rejected
 - enum boundary: undefined provenance and container values fail closed
@@ -39,6 +39,7 @@
 | 0.0.6c1 | Explicit Installed Runtime Locator | Verified; activation pending |
 | 0.0.6c2 | Verified FFmpeg Runtime Lease | Verified; activation pending |
 | 0.0.6c2-fix1 | Runtime Lease CI and Artifact Consistency | Windows verified; Ubuntu CI execution pending |
+| 0.0.6d | FFmpeg ABI / Symbol Gate | Implemented; activation pending |
 
 ## 0.0.6b固定候補
 
@@ -80,6 +81,8 @@
 - `src/Nova.Playback/PlaybackDecoderBackendRuntimeInventory.cs`
 - `src/Nova.Playback/PlaybackDecoderBackendRuntimeInventoryVerifier.cs`
 - `src/Nova.Playback/PlaybackDecoderBackendInstalledRuntimeLocator.cs`
+- `src/Nova.Playback/PlaybackDecoderFfmpegAbiSymbolGate.cs`
+- `src/Nova.Playback/PortableExecutableDependencyInspector.cs`
 
 ## 検証入口
 
@@ -88,6 +91,7 @@
 - lifecycle反復: `tools/Test-DecoderLifecycle.ps1`
 - backend反復: `tools/Test-DecoderBackendBoundary.ps1`
 - runtime lease反復: `tools/Test-VerifiedRuntimeLease.ps1`
+- ABI/symbol gate repetition: `tools/Test-FfmpegAbiSymbolGate.ps1`
 - FFmpeg候補: `tools/Test-FfmpegBackendCandidate.ps1`
 - 実機lifecycle: `tools/Test-PeerCastStationDecoderLifecycle.ps1`
 
@@ -102,18 +106,18 @@
 - `docs/adr/ADR-0049-PINNED-FFMPEG-BACKEND-CANDIDATE.md`
 - `docs/adr/ADR-0051-USER-PROVIDED-FFMPEG-RUNTIME.md`
 - `docs/adr/ADR-0052-VERIFIED-FFMPEG-RUNTIME-LEASE.md`
+- `docs/adr/ADR-0053-FFMPEG-ABI-SYMBOL-GATE.md`
 - `docs/reviews/PCN-0058-PINNED-FFMPEG-CANDIDATE-VALIDATION.md`
 - `docs/reviews/PCN-0060-EXPLICIT-INSTALLED-RUNTIME-LOCATOR-VALIDATION.md`
 - `docs/reviews/PCN-0061-VERIFIED-FFMPEG-RUNTIME-LEASE-VALIDATION.md`
+- `docs/reviews/PCN-0062-FFMPEG-ABI-SYMBOL-GATE-VALIDATION.md`
 - `docs/legal/THIRD-PARTY-AND-PROVENANCE.md`
 
 ## 次の作業
 
-0.0.6dでは、0.0.6c2のverified runtime leaseを直接受け取り、leaseが保持する
-同一DLLだけを読み込みます。元pathからの再探索・再検証・再openは禁止します。
-期待するABI majorと
-必須symbolだけを検査して直ちに解放するgateを設計します。media inputやdecoder
-instanceはまだ作らず、license reviewも`Pending`のまま維持します。
+0.0.6dの次は、実decoderをまだ作らず、実在するユーザー提供runtimeで
+ABI/symbol gateを独立再現する手順とactivation条件を確定します。codec初期化、
+packet decode、frame出力、FFmpeg同梱、license approvalは引き続き未完了です。
 
 ## まだ完了を主張しないもの
 

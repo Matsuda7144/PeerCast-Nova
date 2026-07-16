@@ -7,13 +7,14 @@ PeerCast Nova は、長年親しまれてきた PeerCast の思想を受け継�
 
 ## 現在の段階
 
-**Milestone 0.0.6c2-fix1 — Verified FFmpeg Runtime Lease**
+**Milestone 0.0.6d — FFmpeg ABI / Symbol Gate**
 
-0.0.6c2 verifies exactly five user-supplied FFmpeg runtime DLLs and retains
-their read handles plus guarded local-directory handles in one disposable
-lease. UNC, non-fixed-drive, reparse-point, case-duplicate, and undefined-enum
-inputs fail closed. The next milestone is 0.0.6d ABI / Symbol Gate, which must
-consume this same live lease without reopening the original runtime path.
+0.0.6d consumes the live five-DLL verified runtime lease without rediscovery,
+re-enumeration, re-hashing, or managed re-open. On Windows it preflights PE
+imports, then uses `LoadLibraryExW` with only `DLL_LOAD_DIR` and `SYSTEM32`
+search scopes to verify fixed ABI majors and required symbols. Any failure
+unloads all opened modules in reverse order. Non-Windows platforms return a
+fixed unsupported result. Codec initialization and decoding remain pending.
 
 既存PeerCastStationとの接続を確認する互換プローブを実装しました。
 

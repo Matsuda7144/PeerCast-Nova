@@ -158,7 +158,7 @@ selecting a codec backend or output device.
 - Explicit local fixed-drive locator — Verified in 0.0.6c1
 - Verified five-handle runtime lease and fail-closed enum boundary — Verified in 0.0.6c2
 - Cross-platform test discovery and artifact consistency — 0.0.6c2-fix1
-- FFmpeg ABI loading and symbol gate using the same verified lease — Next in 0.0.6d
+- FFmpeg ABI loading and symbol gate using the same verified lease — Implemented in 0.0.6d; activation pending
 - FLV demux/decode backend — Pending
 - Bounded decoded audio/video queues and renderer/device sinks — Pending
 - Audio/video playback and A/V synchronization — Pending
