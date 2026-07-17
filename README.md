@@ -7,14 +7,14 @@ PeerCast Nova は、長年親しまれてきた PeerCast の思想を受け継�
 
 ## 現在の段階
 
-**Milestone 0.0.6g — Native Parameter Transfer Boundary**
+**Milestone 0.0.6h — avcodec_open2 Boundary**
 
-0.0.6g transfers the owned H.264 or AAC parameters into the existing native
-decoder context through a fixed Windows x64 boundary. It extends the verified
-symbol gate, creates temporary `AVCodecParameters`, copies zero-padded
-extradata, and fails closed on codec mismatch, missing symbols, rejected
-transfer, or native failure. `avcodec_open2`, packet or frame processing,
-demux, conversion, and FFmpeg redistribution remain out of scope.
+0.0.6h opens an existing H.264 or AAC decoder context only after the owned
+parameters were transferred successfully. It extends the verified symbol gate
+with `avcodec_open2`, calls the fixed Windows x64 boundary with no codec option
+dictionary, accepts only native result zero, and discards a rejected or failed
+context instead of retrying it. Packet or frame processing, demux, conversion,
+and FFmpeg redistribution remain out of scope.
 
 既存PeerCastStationとの接続を確認する互換プローブを実装しました。
 

@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### 0.0.6h avcodec_open2 Boundary
+
+- Extended the verified FFmpeg gate with the fixed `avcodec_open2` symbol.
+- Required a live owned context with completed parameter transfer before codec open.
+- Added a Windows x64 call using the decoder fixed during context allocation and no option dictionary.
+- Accepted only native result zero; every nonzero result or native exception discards the context fail closed.
+- Rejected duplicate open and repeated parameter transfer before another native call.
+- Added no packet/frame processing, demux, conversion, FFmpeg binary, or dependency.
+
 ### 0.0.6g Native Parameter Transfer Boundary
 
 - Extended the verified FFmpeg gate with fixed native parameter allocation, layout, and transfer symbols.

@@ -212,6 +212,8 @@ public sealed class PlaybackDecoderFfmpegContextLease : IDisposable, IAsyncDispo
     private readonly IPlaybackDecoderFfmpegContextNativeApi _nativeApi;
     private readonly nint _freeContext;
     private nint _context;
+    private bool _parametersTransferred;
+    private bool _isOpened;
 
     internal PlaybackDecoderFfmpegContextLease(
         VerifiedPlaybackDecoderRuntimeLease runtimeLease,
@@ -242,6 +244,28 @@ public sealed class PlaybackDecoderFfmpegContextLease : IDisposable, IAsyncDispo
         }
     }
 
+    internal bool HasTransferredParameters
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _context != 0 && _parametersTransferred;
+            }
+        }
+    }
+
+    internal bool IsOpened
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _context != 0 && _isOpened;
+            }
+        }
+    }
+
     internal TResult UseContext<TResult>(Func<nint, TResult> use)
     {
         ArgumentNullException.ThrowIfNull(use);
@@ -263,6 +287,37 @@ public sealed class PlaybackDecoderFfmpegContextLease : IDisposable, IAsyncDispo
         }
     }
 
+    internal void MarkParametersTransferred()
+    {
+        lock (_sync)
+        {
+            EnsureAvailable();
+            if (_parametersTransferred || _isOpened)
+            {
+                throw new InvalidOperationException(
+                    "Codec parameters cannot be transferred after the context is configured.");
+            }
+
+            _parametersTransferred = true;
+        }
+    }
+
+    internal void MarkOpened()
+    {
+        lock (_sync)
+        {
+            EnsureAvailable();
+            if (!_parametersTransferred || _isOpened)
+            {
+                throw new InvalidOperationException(
+                    "The native decoder context is not ready to be opened.");
+            }
+
+            _isOpened = true;
+        }
+    }
+
+
     public void Dispose()
     {
         nint context;
@@ -270,6 +325,8 @@ public sealed class PlaybackDecoderFfmpegContextLease : IDisposable, IAsyncDispo
         {
             context = _context;
             _context = 0;
+            _parametersTransferred = false;
+            _isOpened = false;
         }
 
         if (context == 0)

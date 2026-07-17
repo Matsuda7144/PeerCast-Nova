@@ -9,6 +9,7 @@ public enum PlaybackDecoderFfmpegParameterTransferResult
     CodecMismatch,
     ContextUnavailable,
     ParametersUnavailable,
+    ContextAlreadyConfigured,
     GateRejected,
     NativeAllocationFailed,
     NativeTransferRejected,
@@ -94,6 +95,12 @@ public sealed class PlaybackDecoderFfmpegParameterTransfer
             result = contextLease.UseContextAndSymbols((context, symbols) =>
                 parametersLease.UseOwnedParameters(parameters =>
                 {
+                    if (contextLease.HasTransferredParameters || contextLease.IsOpened)
+                    {
+                        return PlaybackDecoderFfmpegParameterTransferResult
+                            .ContextAlreadyConfigured;
+                    }
+
                     if (!symbols.TryGetValue(
                             AllocateParametersSymbol,
                             out var allocateParameters) ||
@@ -109,14 +116,21 @@ public sealed class PlaybackDecoderFfmpegParameterTransfer
                         return PlaybackDecoderFfmpegParameterTransferResult.GateRejected;
                     }
 
-                    return _nativeApi.Transfer(
+                    var nativeResult = _nativeApi.Transfer(
                         allocateParameters,
                         freeParameters,
                         allocateZeroed,
                         initializeChannelLayout,
                         transferParameters,
                         context,
-                        parameters) switch
+                        parameters);
+                    if (nativeResult ==
+                        PlaybackDecoderFfmpegNativeParameterTransferResult.Applied)
+                    {
+                        contextLease.MarkParametersTransferred();
+                    }
+
+                    return nativeResult switch
                     {
                         PlaybackDecoderFfmpegNativeParameterTransferResult.Applied =>
                             PlaybackDecoderFfmpegParameterTransferResult.Applied,

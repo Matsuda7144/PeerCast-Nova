@@ -162,6 +162,7 @@ selecting a codec backend or output device.
 - Native decoder lookup and context ownership lease — Implemented in 0.0.6e; codec open pending
 - Managed H.264/AAC codec parameter ownership and padded extradata boundary — Implemented in 0.0.6f; native transfer pending
 - Native parameter transfer into the owned decoder context — Implemented in 0.0.6g; codec open pending
+- Fixed `avcodec_open2` transition for transferred owned contexts — Implemented in 0.0.6h; packet/frame processing pending
 - FLV demux/decode backend — Pending
 - Bounded decoded audio/video queues and renderer/device sinks — Pending
 - Audio/video playback and A/V synchronization — Pending
