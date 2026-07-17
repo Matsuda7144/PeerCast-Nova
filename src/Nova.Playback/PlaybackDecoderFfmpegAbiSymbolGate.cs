@@ -42,7 +42,8 @@ public sealed class PlaybackDecoderFfmpegAbiSymbolGate
     [
         new("avutil-60.dll", "avutil_version", 60,
             [
-                "avutil_version", "av_version_info", "av_mallocz",
+                "avutil_version", "av_version_info", "av_malloc", "av_mallocz",
+                "av_free", "av_frame_alloc", "av_frame_free",
                 "av_channel_layout_default",
             ]),
         new("swresample-6.dll", "swresample_version", 6,
@@ -54,7 +55,8 @@ public sealed class PlaybackDecoderFfmpegAbiSymbolGate
                 "avcodec_version", "avcodec_find_decoder", "avcodec_alloc_context3",
                 "avcodec_free_context", "avcodec_parameters_alloc",
                 "avcodec_parameters_free", "avcodec_parameters_to_context",
-                "avcodec_open2", "avcodec_send_packet", "avcodec_receive_frame",
+                "avcodec_open2", "av_packet_alloc", "av_packet_free",
+                "av_packet_from_data", "avcodec_send_packet", "avcodec_receive_frame",
             ]),
         new("avformat-62.dll", "avformat_version", 62,
             [
