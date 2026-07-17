@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### 0.0.6g Native Parameter Transfer Boundary
+
+- Extended the verified FFmpeg gate with fixed native parameter allocation, layout, and transfer symbols.
+- Added a Windows x64 boundary that transfers owned H.264 or AAC parameters into the existing decoder context.
+- Allocated and freed temporary `AVCodecParameters` and zero-padded native extradata on every path.
+- Cleared the managed parameter lease after success and discarded the context after rejected or exceptional transfer.
+- Kept codec open, packet/frame processing, demux, conversion, FFmpeg binaries, and new dependencies out of scope.
+
 ### 0.0.6f Codec Parameter Ownership Boundary
 
 - Added managed-only fixed H.264 and AAC codec-parameter inputs with fail-closed validation.

@@ -2,7 +2,7 @@
 
 ## 現在地
 
-**Milestone 0.0.6f — Codec Parameter Ownership Boundary**
+**Milestone 0.0.6g — Native Parameter Transfer Boundary**
 
 - 候補記録と技術検証: 完了
 - FFmpeg backend activation: 未承認
@@ -10,7 +10,7 @@
 - runtime 5 DLLの名前・サイズ・SHA-256固定と事前照合: 完了
 - 配布方針: ユーザー/ホスト導入、動的リンク、Novaによる同梱・再配布なし
 - locator: 明示指定された1ディレクトリだけを検査
-- current: managed H.264/AAC parameter validation and owned padded extradata
+- current: fixed native H.264/AAC parameter transfer into the owned decoder context
 - trust boundary: verified 5-DLL handles remain open until lease disposal
 - path boundary: local fixed drives only; UNC and reparse points are rejected
 - enum boundary: undefined provenance, container, codec, and result values fail closed
@@ -42,6 +42,7 @@
 | 0.0.6d | FFmpeg ABI / Symbol Gate | Implemented; activation pending |
 | 0.0.6e | Native Decoder Context Lease | Implemented; codec open pending |
 | 0.0.6f | Codec Parameter Ownership Boundary | Implemented; native transfer pending |
+| 0.0.6g | Native Parameter Transfer Boundary | Implemented; codec open pending |
 
 ## 0.0.6b固定候補
 
@@ -87,6 +88,7 @@
 - `src/Nova.Playback/PortableExecutableDependencyInspector.cs`
 - `src/Nova.Playback/PlaybackDecoderFfmpegContextLease.cs`
 - `src/Nova.Playback/PlaybackDecoderFfmpegCodecParameters.cs`
+- `src/Nova.Playback/PlaybackDecoderFfmpegParameterTransfer.cs`
 
 ## 検証入口
 
@@ -98,6 +100,7 @@
 - ABI/symbol gate repetition: `tools/Test-FfmpegAbiSymbolGate.ps1`
 - decoder context lease repetition: `tools/Test-FfmpegDecoderContextLease.ps1`
 - codec parameter ownership repetition: `tools/Test-FfmpegCodecParameters.ps1`
+- native parameter transfer repetition: `tools/Test-FfmpegParameterTransfer.ps1`
 - FFmpeg候補: `tools/Test-FfmpegBackendCandidate.ps1`
 - 実機lifecycle: `tools/Test-PeerCastStationDecoderLifecycle.ps1`
 
@@ -115,19 +118,20 @@
 - `docs/adr/ADR-0053-FFMPEG-ABI-SYMBOL-GATE.md`
 - `docs/adr/ADR-0054-NATIVE-DECODER-CONTEXT-LEASE.md`
 - `docs/adr/ADR-0055-CODEC-PARAMETER-OWNERSHIP-BOUNDARY.md`
+- `docs/adr/ADR-0056-NATIVE-PARAMETER-TRANSFER-BOUNDARY.md`
 - `docs/reviews/PCN-0058-PINNED-FFMPEG-CANDIDATE-VALIDATION.md`
 - `docs/reviews/PCN-0060-EXPLICIT-INSTALLED-RUNTIME-LOCATOR-VALIDATION.md`
 - `docs/reviews/PCN-0061-VERIFIED-FFMPEG-RUNTIME-LEASE-VALIDATION.md`
 - `docs/reviews/PCN-0062-FFMPEG-ABI-SYMBOL-GATE-VALIDATION.md`
 - `docs/reviews/PCN-0063-NATIVE-DECODER-CONTEXT-LEASE-VALIDATION.md`
 - `docs/reviews/PCN-0064-CODEC-PARAMETER-OWNERSHIP-VALIDATION.md`
+- `docs/reviews/PCN-0065-NATIVE-PARAMETER-TRANSFER-VALIDATION.md`
 - `docs/legal/THIRD-PARTY-AND-PROVENANCE.md`
 
 ## 次の作業
 
-0.0.6fの次は、owned codec parametersを既存のdecoder context leaseへ移す
-native transfer境界を設計します。`avcodec_parameters_to_context`または同等の固定境界を
-別マイルストーンで検証し、`avcodec_open2`、packet送信、frame受信、demux、変換、
+0.0.6gの次は、parameter transfer済みcontextを開く`avcodec_open2`境界を
+別マイルストーンで設計します。codec options、packet送信、frame受信、demux、変換、
 FFmpeg同梱、license approvalは引き続き未完了とします。
 
 ## まだ完了を主張しないもの

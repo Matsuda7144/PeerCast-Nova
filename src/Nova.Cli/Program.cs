@@ -14,7 +14,7 @@ using PeerCast.Nova.Network.Transport;
 using PeerCast.Nova.Protocol.Pcp;
 
 Console.WriteLine("Hello, Nova.");
-Console.WriteLine("PeerCast Nova 0.0.6f Codec Parameter Ownership Boundary");
+Console.WriteLine("PeerCast Nova 0.0.6g Native Parameter Transfer Boundary");
 
 INovaLogger logger = new ConsoleNovaLogger();
 

@@ -247,14 +247,19 @@ public sealed class PlaybackDecoderFfmpegContextLease : IDisposable, IAsyncDispo
         ArgumentNullException.ThrowIfNull(use);
         lock (_sync)
         {
-            if (_context == 0 || _gateLease.IsDisposed || _runtimeLease.IsDisposed)
-            {
-                throw new ObjectDisposedException(
-                    nameof(PlaybackDecoderFfmpegContextLease),
-                    "The native decoder context lease is no longer available.");
-            }
-
+            EnsureAvailable();
             return use(_context);
+        }
+    }
+
+    internal TResult UseContextAndSymbols<TResult>(
+        Func<nint, IReadOnlyDictionary<string, nint>, TResult> use)
+    {
+        ArgumentNullException.ThrowIfNull(use);
+        lock (_sync)
+        {
+            EnsureAvailable();
+            return _gateLease.UseSymbols(symbols => use(_context, symbols));
         }
     }
 
@@ -300,6 +305,16 @@ public sealed class PlaybackDecoderFfmpegContextLease : IDisposable, IAsyncDispo
     {
         Dispose();
         return ValueTask.CompletedTask;
+    }
+
+    private void EnsureAvailable()
+    {
+        if (_context == 0 || _gateLease.IsDisposed || _runtimeLease.IsDisposed)
+        {
+            throw new ObjectDisposedException(
+                nameof(PlaybackDecoderFfmpegContextLease),
+                "The native decoder context lease is no longer available.");
+        }
     }
 }
 

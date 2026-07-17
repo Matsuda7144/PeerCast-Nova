@@ -41,7 +41,10 @@ public sealed class PlaybackDecoderFfmpegAbiSymbolGate
     private static readonly ModuleRequirement[] Requirements =
     [
         new("avutil-60.dll", "avutil_version", 60,
-            ["avutil_version", "av_version_info"]),
+            [
+                "avutil_version", "av_version_info", "av_mallocz",
+                "av_channel_layout_default",
+            ]),
         new("swresample-6.dll", "swresample_version", 6,
             ["swresample_version", "swr_alloc", "swr_init", "swr_free"]),
         new("swscale-9.dll", "swscale_version", 9,
@@ -49,7 +52,9 @@ public sealed class PlaybackDecoderFfmpegAbiSymbolGate
         new("avcodec-62.dll", "avcodec_version", 62,
             [
                 "avcodec_version", "avcodec_find_decoder", "avcodec_alloc_context3",
-                "avcodec_free_context", "avcodec_send_packet", "avcodec_receive_frame",
+                "avcodec_free_context", "avcodec_parameters_alloc",
+                "avcodec_parameters_free", "avcodec_parameters_to_context",
+                "avcodec_send_packet", "avcodec_receive_frame",
             ]),
         new("avformat-62.dll", "avformat_version", 62,
             [

@@ -161,6 +161,7 @@ selecting a codec backend or output device.
 - FFmpeg ABI loading and symbol gate using the same verified lease — Implemented in 0.0.6d; activation pending
 - Native decoder lookup and context ownership lease — Implemented in 0.0.6e; codec open pending
 - Managed H.264/AAC codec parameter ownership and padded extradata boundary — Implemented in 0.0.6f; native transfer pending
+- Native parameter transfer into the owned decoder context — Implemented in 0.0.6g; codec open pending
 - FLV demux/decode backend — Pending
 - Bounded decoded audio/video queues and renderer/device sinks — Pending
 - Audio/video playback and A/V synchronization — Pending
