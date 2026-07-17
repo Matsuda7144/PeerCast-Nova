@@ -159,6 +159,7 @@ selecting a codec backend or output device.
 - Verified five-handle runtime lease and fail-closed enum boundary — Verified in 0.0.6c2
 - Cross-platform test discovery and artifact consistency — 0.0.6c2-fix1
 - FFmpeg ABI loading and symbol gate using the same verified lease — Implemented in 0.0.6d; activation pending
+- Native decoder lookup and context ownership lease — Implemented in 0.0.6e; codec open pending
 - FLV demux/decode backend — Pending
 - Bounded decoded audio/video queues and renderer/device sinks — Pending
 - Audio/video playback and A/V synchronization — Pending

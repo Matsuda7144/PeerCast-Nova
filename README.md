@@ -7,14 +7,15 @@ PeerCast Nova は、長年親しまれてきた PeerCast の思想を受け継�
 
 ## 現在の段階
 
-**Milestone 0.0.6d — FFmpeg ABI / Symbol Gate**
+**Milestone 0.0.6e — Native Decoder Context Lease**
 
-0.0.6d consumes the live five-DLL verified runtime lease without rediscovery,
-re-enumeration, re-hashing, or managed re-open. On Windows it preflights PE
-imports, then uses `LoadLibraryExW` with only `DLL_LOAD_DIR` and `SYSTEM32`
-search scopes to verify fixed ABI majors and required symbols. Any failure
-unloads all opened modules in reverse order. Non-Windows platforms return a
-fixed unsupported result. Codec initialization and decoding remain pending.
+0.0.6e transfers a successful live ABI/symbol gate into a bounded decoder
+context lease. It resolves only a fixed codec ID, calls
+`avcodec_find_decoder` and `avcodec_alloc_context3`, and retains the context,
+native gate, and verified runtime until ordered disposal. It does not reload,
+rediscover, or re-hash DLLs. Opening the codec, configuring parameters, packet
+or frame processing, demux, conversion, and FFmpeg redistribution remain out
+of scope.
 
 既存PeerCastStationとの接続を確認する互換プローブを実装しました。
 

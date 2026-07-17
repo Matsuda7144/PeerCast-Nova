@@ -14,7 +14,7 @@ using PeerCast.Nova.Network.Transport;
 using PeerCast.Nova.Protocol.Pcp;
 
 Console.WriteLine("Hello, Nova.");
-Console.WriteLine("PeerCast Nova 0.0.6d FFmpeg ABI / Symbol Gate");
+Console.WriteLine("PeerCast Nova 0.0.6e Native Decoder Context Lease");
 
 INovaLogger logger = new ConsoleNovaLogger();
 

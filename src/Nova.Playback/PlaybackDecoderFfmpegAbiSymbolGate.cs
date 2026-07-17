@@ -101,29 +101,44 @@ public sealed class PlaybackDecoderFfmpegAbiSymbolGate
     public PlaybackDecoderFfmpegAbiSymbolGateResult Verify(
         VerifiedPlaybackDecoderRuntimeLease lease)
     {
+        var acquisition = Acquire(lease);
+        if (acquisition.Lease is null)
+        {
+            return acquisition.Result;
+        }
+
+        return acquisition.Lease.Release()
+            ? PlaybackDecoderFfmpegAbiSymbolGateResult.Verified
+            : PlaybackDecoderFfmpegAbiSymbolGateResult.ReleaseFailed;
+    }
+
+    public PlaybackDecoderFfmpegAbiSymbolGateLeaseResult Acquire(
+        VerifiedPlaybackDecoderRuntimeLease lease)
+    {
         ArgumentNullException.ThrowIfNull(lease);
         if (!_isSupportedPlatform)
         {
-            return PlaybackDecoderFfmpegAbiSymbolGateResult.Unsupported;
+            return new(PlaybackDecoderFfmpegAbiSymbolGateResult.Unsupported);
         }
 
         try
         {
-            return lease.UseVerifiedRuntime(VerifyGuardedRuntime);
+            return lease.UseVerifiedRuntime(runtime => AcquireGuardedRuntime(lease, runtime));
         }
         catch (ObjectDisposedException)
         {
-            return PlaybackDecoderFfmpegAbiSymbolGateResult.LeaseUnavailable;
+            return new(PlaybackDecoderFfmpegAbiSymbolGateResult.LeaseUnavailable);
         }
     }
 
-    private PlaybackDecoderFfmpegAbiSymbolGateResult VerifyGuardedRuntime(
+    private PlaybackDecoderFfmpegAbiSymbolGateLeaseResult AcquireGuardedRuntime(
+        VerifiedPlaybackDecoderRuntimeLease owner,
         IReadOnlyDictionary<string, VerifiedPlaybackDecoderRuntimeFile> runtime)
     {
         if (runtime.Count != Requirements.Length ||
             Requirements.Any(requirement => !runtime.ContainsKey(requirement.FileName)))
         {
-            return PlaybackDecoderFfmpegAbiSymbolGateResult.RuntimeMismatch;
+            return new(PlaybackDecoderFfmpegAbiSymbolGateResult.RuntimeMismatch);
         }
 
         foreach (var requirement in Requirements)
@@ -135,114 +150,122 @@ public sealed class PlaybackDecoderFfmpegAbiSymbolGate
                 if (!_dependencyInspector.TryGetDependencies(image, out var dependencies) ||
                     dependencies.Any(static dependency => !IsAllowedDependency(dependency)))
                 {
-                    return PlaybackDecoderFfmpegAbiSymbolGateResult.DependencyRejected;
+                    return new(PlaybackDecoderFfmpegAbiSymbolGateResult.DependencyRejected);
                 }
             }
             catch (Exception exception) when (exception is IOException or NotSupportedException)
             {
-                return PlaybackDecoderFfmpegAbiSymbolGateResult.DependencyRejected;
+                return new(PlaybackDecoderFfmpegAbiSymbolGateResult.DependencyRejected);
             }
         }
 
         var loaded = new List<nint>(Requirements.Length);
+        var symbols = new Dictionary<string, nint>(StringComparer.Ordinal);
         var result = PlaybackDecoderFfmpegAbiSymbolGateResult.Verified;
+        foreach (var requirement in Requirements)
+        {
+            nint module;
+            try
+            {
+                module = _loader.Load(
+                    runtime[requirement.FileName].Path,
+                    PlaybackDecoderNativeSearchScope.VerifiedDirectoryAndSystem32);
+            }
+            catch (Exception exception) when (exception is
+                InvalidOperationException or
+                NotSupportedException or
+                DllNotFoundException)
+            {
+                result = PlaybackDecoderFfmpegAbiSymbolGateResult.ModuleLoadFailed;
+                break;
+            }
+
+            if (module == 0)
+            {
+                result = PlaybackDecoderFfmpegAbiSymbolGateResult.ModuleLoadFailed;
+                break;
+            }
+
+            loaded.Add(module);
+            nint versionSymbol = 0;
+            foreach (var symbol in requirement.RequiredSymbols)
+            {
+                nint address;
+                try
+                {
+                    address = _loader.GetSymbol(module, symbol);
+                }
+                catch (Exception exception) when (exception is InvalidOperationException)
+                {
+                    address = 0;
+                }
+
+                if (address == 0)
+                {
+                    result = PlaybackDecoderFfmpegAbiSymbolGateResult.SymbolMissing;
+                    break;
+                }
+
+                symbols.TryAdd(symbol, address);
+                if (string.Equals(
+                    symbol,
+                    requirement.VersionSymbol,
+                    StringComparison.Ordinal))
+                {
+                    versionSymbol = address;
+                }
+            }
+
+            if (result != PlaybackDecoderFfmpegAbiSymbolGateResult.Verified)
+            {
+                break;
+            }
+
+            uint version;
+            try
+            {
+                version = _loader.InvokeVersion(versionSymbol);
+            }
+            catch (Exception exception) when (exception is InvalidOperationException)
+            {
+                result = PlaybackDecoderFfmpegAbiSymbolGateResult.VersionMismatch;
+                break;
+            }
+
+            if (((version >> 16) & 0xff) != requirement.ExpectedMajor)
+            {
+                result = PlaybackDecoderFfmpegAbiSymbolGateResult.VersionMismatch;
+                break;
+            }
+        }
+
+        if (result == PlaybackDecoderFfmpegAbiSymbolGateResult.Verified)
+        {
+            return new(
+                result,
+                new PlaybackDecoderFfmpegAbiSymbolGateLease(
+                    owner,
+                    _loader,
+                    loaded,
+                    symbols));
+        }
+
         var releaseFailed = false;
-        try
+        for (var index = loaded.Count - 1; index >= 0; index--)
         {
-            foreach (var requirement in Requirements)
+            try
             {
-                nint module;
-                try
-                {
-                    module = _loader.Load(
-                        runtime[requirement.FileName].Path,
-                        PlaybackDecoderNativeSearchScope.VerifiedDirectoryAndSystem32);
-                }
-                catch (Exception exception) when (exception is
-                    InvalidOperationException or
-                    NotSupportedException or
-                    DllNotFoundException)
-                {
-                    result = PlaybackDecoderFfmpegAbiSymbolGateResult.ModuleLoadFailed;
-                    break;
-                }
-
-                if (module == 0)
-                {
-                    result = PlaybackDecoderFfmpegAbiSymbolGateResult.ModuleLoadFailed;
-                    break;
-                }
-
-                loaded.Add(module);
-                nint versionSymbol = 0;
-                foreach (var symbol in requirement.RequiredSymbols)
-                {
-                    nint address;
-                    try
-                    {
-                        address = _loader.GetSymbol(module, symbol);
-                    }
-                    catch (Exception exception) when (exception is InvalidOperationException)
-                    {
-                        address = 0;
-                    }
-
-                    if (address == 0)
-                    {
-                        result = PlaybackDecoderFfmpegAbiSymbolGateResult.SymbolMissing;
-                        break;
-                    }
-
-                    if (string.Equals(
-                        symbol,
-                        requirement.VersionSymbol,
-                        StringComparison.Ordinal))
-                    {
-                        versionSymbol = address;
-                    }
-                }
-
-                if (result != PlaybackDecoderFfmpegAbiSymbolGateResult.Verified)
-                {
-                    break;
-                }
-
-                uint version;
-                try
-                {
-                    version = _loader.InvokeVersion(versionSymbol);
-                }
-                catch (Exception exception) when (exception is InvalidOperationException)
-                {
-                    result = PlaybackDecoderFfmpegAbiSymbolGateResult.VersionMismatch;
-                    break;
-                }
-
-                if (((version >> 16) & 0xff) != requirement.ExpectedMajor)
-                {
-                    result = PlaybackDecoderFfmpegAbiSymbolGateResult.VersionMismatch;
-                    break;
-                }
+                _loader.Free(loaded[index]);
             }
-        }
-        finally
-        {
-            for (var index = loaded.Count - 1; index >= 0; index--)
+            catch (Exception exception) when (exception is InvalidOperationException)
             {
-                try
-                {
-                    _loader.Free(loaded[index]);
-                }
-                catch (Exception exception) when (exception is InvalidOperationException)
-                {
-                    releaseFailed = true;
-                }
+                releaseFailed = true;
             }
         }
 
-        return releaseFailed
+        return new(releaseFailed
             ? PlaybackDecoderFfmpegAbiSymbolGateResult.ReleaseFailed
-            : result;
+            : result);
     }
 
     private static bool IsAllowedDependency(string dependency)
@@ -266,6 +289,122 @@ public sealed class PlaybackDecoderFfmpegAbiSymbolGate
         string VersionSymbol,
         uint ExpectedMajor,
         string[] RequiredSymbols);
+}
+
+public sealed class PlaybackDecoderFfmpegAbiSymbolGateLeaseResult
+{
+    internal PlaybackDecoderFfmpegAbiSymbolGateLeaseResult(
+        PlaybackDecoderFfmpegAbiSymbolGateResult result,
+        PlaybackDecoderFfmpegAbiSymbolGateLease? lease = null)
+    {
+        if (!Enum.IsDefined(result))
+        {
+            throw new ArgumentException(
+                "The native gate result category is undefined.",
+                nameof(result));
+        }
+
+        if ((result == PlaybackDecoderFfmpegAbiSymbolGateResult.Verified) !=
+            (lease is not null))
+        {
+            throw new ArgumentException(
+                "The native gate result is inconsistent.",
+                nameof(lease));
+        }
+
+        Result = result;
+        Lease = lease;
+    }
+
+    public PlaybackDecoderFfmpegAbiSymbolGateResult Result { get; }
+
+    public PlaybackDecoderFfmpegAbiSymbolGateLease? Lease { get; }
+}
+
+public sealed class PlaybackDecoderFfmpegAbiSymbolGateLease : IDisposable
+{
+    private readonly object _sync = new();
+    private readonly VerifiedPlaybackDecoderRuntimeLease _runtimeLease;
+    private IPlaybackDecoderNativeLibraryLoader? _loader;
+    private List<nint>? _modules;
+    private Dictionary<string, nint>? _symbols;
+
+    internal PlaybackDecoderFfmpegAbiSymbolGateLease(
+        VerifiedPlaybackDecoderRuntimeLease runtimeLease,
+        IPlaybackDecoderNativeLibraryLoader loader,
+        List<nint> modules,
+        Dictionary<string, nint> symbols)
+    {
+        _runtimeLease = runtimeLease;
+        _loader = loader;
+        _modules = modules;
+        _symbols = symbols;
+    }
+
+    public bool IsDisposed
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _modules is null;
+            }
+        }
+    }
+
+    internal VerifiedPlaybackDecoderRuntimeLease RuntimeLease => _runtimeLease;
+
+    internal TResult UseSymbols<TResult>(Func<IReadOnlyDictionary<string, nint>, TResult> use)
+    {
+        ArgumentNullException.ThrowIfNull(use);
+        lock (_sync)
+        {
+            if (_modules is null || _symbols is null || _runtimeLease.IsDisposed)
+            {
+                throw new ObjectDisposedException(
+                    nameof(PlaybackDecoderFfmpegAbiSymbolGateLease),
+                    "The verified native gate lease is no longer available.");
+            }
+
+            return use(_symbols);
+        }
+    }
+
+    internal bool Release()
+    {
+        IPlaybackDecoderNativeLibraryLoader? loader;
+        List<nint>? modules;
+        lock (_sync)
+        {
+            loader = _loader;
+            modules = _modules;
+            _loader = null;
+            _modules = null;
+            _symbols = null;
+        }
+
+        if (loader is null || modules is null)
+        {
+            return true;
+        }
+
+        var succeeded = true;
+        for (var index = modules.Count - 1; index >= 0; index--)
+        {
+            try
+            {
+                loader.Free(modules[index]);
+            }
+            catch (Exception exception) when (exception is InvalidOperationException)
+            {
+                succeeded = false;
+            }
+        }
+
+        return succeeded;
+    }
+
+    public void Dispose() => Release();
 }
 
 internal sealed class WindowsPlaybackDecoderNativeLibraryLoader :

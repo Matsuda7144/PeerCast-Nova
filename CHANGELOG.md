@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### 0.0.6e Native Decoder Context Lease
+
+- Added a live ABI/symbol gate lease that retains the already-loaded verified modules.
+- Added fixed H.264 and AAC codec identifiers with fail-closed unknown-value rejection.
+- Added decoder lookup and `AVCodecContext` allocation behind a testable native boundary.
+- Transferred the live gate and verified runtime into an idempotent context owner on success.
+- Freed the native context before reverse module unload and runtime-handle disposal.
+- Added fixed unsupported and failure results without paths, hashes, native bytes, or error text.
+- Added no codec open, parameter setup, packet/frame processing, demux, conversion, binary, or dependency.
+
 ### 0.0.6d FFmpeg ABI / Symbol Gate
 
 - Consumed the live verified five-DLL lease without rediscovery, re-hashing, or managed re-open.
