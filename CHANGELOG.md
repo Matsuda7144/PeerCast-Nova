@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### 0.0.6f Codec Parameter Ownership Boundary
+
+- Added managed-only fixed H.264 and AAC codec-parameter inputs with fail-closed validation.
+- Added named bounds for video dimensions, pixel count, audio sample rate, channel count, and extradata.
+- Defensively copied required extradata and appended exactly 64 zero padding bytes.
+- Added an idempotent ownership lease that clears the complete padded buffer and rejects later use.
+- Kept validation behavior identical on Windows and non-Windows systems.
+- Added no native parameter transfer, codec open, packet/frame processing, FFmpeg binary, or dependency.
+
 ### 0.0.6e Native Decoder Context Lease
 
 - Added a live ABI/symbol gate lease that retains the already-loaded verified modules.

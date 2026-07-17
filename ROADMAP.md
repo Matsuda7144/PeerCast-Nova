@@ -160,6 +160,7 @@ selecting a codec backend or output device.
 - Cross-platform test discovery and artifact consistency — 0.0.6c2-fix1
 - FFmpeg ABI loading and symbol gate using the same verified lease — Implemented in 0.0.6d; activation pending
 - Native decoder lookup and context ownership lease — Implemented in 0.0.6e; codec open pending
+- Managed H.264/AAC codec parameter ownership and padded extradata boundary — Implemented in 0.0.6f; native transfer pending
 - FLV demux/decode backend — Pending
 - Bounded decoded audio/video queues and renderer/device sinks — Pending
 - Audio/video playback and A/V synchronization — Pending
