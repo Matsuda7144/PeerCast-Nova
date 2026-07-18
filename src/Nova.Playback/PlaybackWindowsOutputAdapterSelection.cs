@@ -294,6 +294,10 @@ public static class PlaybackWindowsOutputHResultMapper
 {
     private const int AccessDenied = unchecked((int)0x80070005);
     private const int InvalidArgument = unchecked((int)0x80070057);
+    private const int NotFound = unchecked((int)0x80070490);
+    private const int ClassNotRegistered = unchecked((int)0x80040154);
+    private const int ChangedComApartment = unchecked((int)0x80010106);
+    private const int ComNotInitialized = unchecked((int)0x800401F0);
     private const int DxgiNotFound = unchecked((int)0x887A0002);
     private const int DxgiUnsupported = unchecked((int)0x887A0004);
     private const int AudioClientDeviceInvalidated = unchecked((int)0x88890004);
@@ -304,10 +308,12 @@ public static class PlaybackWindowsOutputHResultMapper
         {
             0 => PlaybackWindowsOutputProbeResult.Available,
             AccessDenied => PlaybackWindowsOutputProbeResult.PermissionDenied,
-            InvalidArgument => PlaybackWindowsOutputProbeResult.InvalidEnvironment,
-            DxgiNotFound or AudioClientDeviceInvalidated =>
+            InvalidArgument or ChangedComApartment or ComNotInitialized =>
+                PlaybackWindowsOutputProbeResult.InvalidEnvironment,
+            DxgiNotFound or NotFound or AudioClientDeviceInvalidated =>
                 PlaybackWindowsOutputProbeResult.DeviceUnavailable,
-            DxgiUnsupported => PlaybackWindowsOutputProbeResult.ApiUnavailable,
+            DxgiUnsupported or ClassNotRegistered =>
+                PlaybackWindowsOutputProbeResult.ApiUnavailable,
             AudioClientUnsupportedFormat =>
                 PlaybackWindowsOutputProbeResult.FormatUnsupported,
             _ => PlaybackWindowsOutputProbeResult.Failure,

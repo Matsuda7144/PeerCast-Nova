@@ -234,6 +234,10 @@ public sealed class PlaybackWindowsOutputAdapterSelectionTests
     [InlineData(unchecked((int)0x80070057), PlaybackWindowsOutputProbeResult.InvalidEnvironment)]
     [InlineData(unchecked((int)0x887A0002), PlaybackWindowsOutputProbeResult.DeviceUnavailable)]
     [InlineData(unchecked((int)0x887A0004), PlaybackWindowsOutputProbeResult.ApiUnavailable)]
+    [InlineData(unchecked((int)0x80040154), PlaybackWindowsOutputProbeResult.ApiUnavailable)]
+    [InlineData(unchecked((int)0x80070490), PlaybackWindowsOutputProbeResult.DeviceUnavailable)]
+    [InlineData(unchecked((int)0x80010106), PlaybackWindowsOutputProbeResult.InvalidEnvironment)]
+    [InlineData(unchecked((int)0x800401F0), PlaybackWindowsOutputProbeResult.InvalidEnvironment)]
     [InlineData(unchecked((int)0x88890008), PlaybackWindowsOutputProbeResult.FormatUnsupported)]
     [InlineData(unchecked((int)0x81234567), PlaybackWindowsOutputProbeResult.Failure)]
     public void HResultMappingIsFixedAndUnknownValuesFailClosed(

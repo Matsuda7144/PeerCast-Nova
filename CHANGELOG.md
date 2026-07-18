@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### 0.0.6u Windows Output Activation Boundary
+
+- Added finite D3D11 device/context and WASAPI default-endpoint/client/event activation behind an injectable native boundary.
+- Normalized platform, API, device, permission, environment, failure, and disposed outcomes to fixed public results.
+- Made COM and native-resource ownership explicit with reverse-order partial-failure cleanup and idempotent disposal.
+
 ### 0.0.6t Windows Output Adapter Selection
 
 - Selected Direct3D 11 for BGRA32 video and WASAPI shared/event-driven for interleaved S16/F32 audio.
