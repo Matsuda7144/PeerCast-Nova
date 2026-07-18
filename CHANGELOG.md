@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### 0.0.6t Windows Output Adapter Selection
+
+- Selected Direct3D 11 for BGRA32 video and WASAPI shared/event-driven for interleaved S16/F32 audio.
+- Added a deterministic non-activating Windows 11 probe for required System32 DLL exports with fixed results and HRESULT mapping.
+- Fixed future threading, COM apartment, device generation, reset, and native-resource ownership boundaries.
+
 ### 0.0.6s Renderer / Audio Sink Boundary
 
 - Added separate awaited contracts for canonical BGRA32 video and interleaved S16/F32 audio output.

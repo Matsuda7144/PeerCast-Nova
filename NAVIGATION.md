@@ -2,7 +2,7 @@
 
 ## 現在地
 
-**Milestone 0.0.6s — Renderer / Audio Sink Boundary**
+**Milestone 0.0.6t — Windows Output Adapter Selection**
 
 - 候補記録と技術検証: 完了
 - FFmpeg backend activation: 未承認
@@ -10,7 +10,7 @@
 - runtime 5 DLLの名前・サイズ・SHA-256固定と事前照合: 完了
 - 配布方針: ユーザー/ホスト導入、動的リンク、Novaによる同梱・再配布なし
 - locator: 明示指定された1ディレクトリだけを検査
-- current: separate awaited canonical video renderer and audio device contracts
+- current: Direct3D 11 and WASAPI shared/event-driven selected; OS activation pending
 - trust boundary: verified 5-DLL handles remain open until lease disposal
 - path boundary: local fixed drives only; UNC and reparse points are rejected
 - enum boundary: undefined provenance, container, codec, and result values fail closed
@@ -55,6 +55,7 @@
 | 0.0.6q | Playback Policy / Clock Boundary | Implemented; scheduling pending |
 | 0.0.6r | Bounded Playback Scheduler | Implemented; renderer/device pending |
 | 0.0.6s | Renderer / Audio Sink Boundary | Implemented; OS adapters pending |
+| 0.0.6t | Windows Output Adapter Selection | Implemented; OS activation pending |
 
 ## 0.0.6b固定候補
 
@@ -179,7 +180,7 @@
 
 ## 次の作業
 
-0.0.6sの次は、具体的なOS renderer/audio device adapterを選定します。demux、
+0.0.6tの次は、選定したWindows adapterの有限なOS activation境界を設計します。demux、
 FFmpeg同梱、license approvalは引き続き未完了です。
 
 ## まだ完了を主張しないもの

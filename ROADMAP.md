@@ -174,6 +174,7 @@ selecting a codec backend or output device.
 - Bounded playback policy and monotonic A/V clock responsibility boundary — Implemented in 0.0.6q; scheduling pending
 - Explicitly driven fixed-capacity playback scheduler — Implemented in 0.0.6r
 - Separate awaited renderer/audio sink contracts — Implemented in 0.0.6s; OS adapters pending
+- Windows 11 D3D11 and WASAPI shared/event-driven selection/probe — Implemented in 0.0.6t; activation pending
 - FLV demux/decode backend — Pending
 - Bounded decoded audio/video queues and renderer/device sinks — Pending
 - Audio/video playback and A/V synchronization — Pending

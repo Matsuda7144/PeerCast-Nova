@@ -7,13 +7,13 @@ PeerCast Nova は、長年親しまれてきた PeerCast の思想を受け継�
 
 ## 現在の段階
 
-**Milestone 0.0.6s — Renderer / Audio Sink Boundary**
+**Milestone 0.0.6t — Windows Output Adapter Selection**
 
-0.0.6s separates video renderer and audio device responsibilities behind
-independent awaited pure-managed contracts. It accepts canonical BGRA32 video
-and interleaved S16/F32 audio, revalidates configuration and bounded payloads,
-and fixes configure, submit, flush, reset, generation, cancellation, and device
-failure outcomes without adding an OS renderer or audio API.
+0.0.6t selects Direct3D 11 for canonical BGRA32 video and WASAPI shared
+event-driven mode for interleaved S16/F32 audio on Windows 11. A non-activating
+probe checks required System32 DLL exports and fixes platform/API/format outcomes
+without enumerating or creating a device, window, swap chain, audio client, or
+stream.
 
 既存PeerCastStationとの接続を確認する互換プローブを実装しました。
 

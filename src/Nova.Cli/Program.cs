@@ -14,7 +14,7 @@ using PeerCast.Nova.Network.Transport;
 using PeerCast.Nova.Protocol.Pcp;
 
 Console.WriteLine("Hello, Nova.");
-Console.WriteLine("PeerCast Nova 0.0.6s Renderer / Audio Sink Boundary");
+Console.WriteLine("PeerCast Nova 0.0.6t Windows Output Adapter Selection");
 
 INovaLogger logger = new ConsoleNovaLogger();
 
