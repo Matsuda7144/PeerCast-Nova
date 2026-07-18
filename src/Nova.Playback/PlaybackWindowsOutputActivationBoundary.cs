@@ -223,6 +223,7 @@ public sealed class PlaybackWindowsOutputActivationBoundary : IDisposable
 internal enum PlaybackWindowsOutputResourceBorrowResult
 {
     Success,
+    WouldBlock,
     ActivationRequired,
     DeviceLost,
     FormatUnsupported,
@@ -239,6 +240,9 @@ internal readonly record struct PlaybackWindowsOutputBorrowedResources(
 internal interface IPlaybackWindowsDirect3D11BorrowedResource
 {
     nint Device { get; }
+    nint ImmediateContext { get; }
+    nint SwapChain { get; }
+    nint RenderTargetView { get; }
     void ReplaceOutputResources(nint swapChain, nint renderTargetView);
     void ClearOutputResources();
 }
@@ -246,7 +250,9 @@ internal interface IPlaybackWindowsDirect3D11BorrowedResource
 internal interface IPlaybackWindowsWasapiBorrowedResource
 {
     nint AudioClient { get; }
+    nint AudioRenderClient { get; }
     nint EventHandle { get; }
+    bool EnsureAudioRenderClient();
     bool RecreateAudioClient();
     void ResetAudioClient();
 }
@@ -469,6 +475,9 @@ internal sealed class SystemPlaybackWindowsOutputNativeActivation :
         private nint _swapChain;
         private nint _renderTargetView;
         public nint Device => _device;
+        public nint ImmediateContext => _context;
+        public nint SwapChain => _swapChain;
+        public nint RenderTargetView => _renderTargetView;
 
         public void ReplaceOutputResources(nint swapChain, nint renderTargetView)
         {
@@ -502,8 +511,10 @@ internal sealed class SystemPlaybackWindowsOutputNativeActivation :
         private nint _enumerator = enumerator;
         private nint _endpoint = endpoint;
         private nint _client = client;
+        private nint _renderClient;
         private nint _eventHandle = eventHandle;
         public nint AudioClient => _client;
+        public nint AudioRenderClient => _renderClient;
         public nint EventHandle => _eventHandle;
 
         public bool RecreateAudioClient()
@@ -517,6 +528,8 @@ internal sealed class SystemPlaybackWindowsOutputNativeActivation :
                     ref audioClientId, ClsctxInprocServer, 0, out var replacement);
                 if (result < 0 || replacement == 0) return false;
                 var previous = Interlocked.Exchange(ref _client, replacement);
+                var previousRender = Interlocked.Exchange(ref _renderClient, 0);
+                if (previousRender != 0) Marshal.Release(previousRender);
                 if (previous != 0) Marshal.Release(previous);
                 return true;
             }
@@ -526,8 +539,29 @@ internal sealed class SystemPlaybackWindowsOutputNativeActivation :
             }
         }
 
+        public bool EnsureAudioRenderClient()
+        {
+            if (_renderClient != 0) return true;
+            if (_client == 0) return false;
+            var clientObject = (IAudioClientReset)Marshal.GetObjectForIUnknown(_client);
+            try
+            {
+                var interfaceId = AudioRenderClientInterface;
+                var result = clientObject.GetService(ref interfaceId, out var renderClient);
+                if (result < 0 || renderClient == 0) return false;
+                _renderClient = renderClient;
+                return true;
+            }
+            finally
+            {
+                Marshal.FinalReleaseComObject(clientObject);
+            }
+        }
+
         public void ResetAudioClient()
         {
+            var renderClient = Interlocked.Exchange(ref _renderClient, 0);
+            if (renderClient != 0) Marshal.Release(renderClient);
             if (_client == 0) return;
             var clientObject = (IAudioClientReset)Marshal.GetObjectForIUnknown(_client);
             try { clientObject.Reset(); }
@@ -537,10 +571,12 @@ internal sealed class SystemPlaybackWindowsOutputNativeActivation :
         public void Dispose()
         {
             var handle = Interlocked.Exchange(ref _eventHandle, 0);
+            var ownedRenderClient = Interlocked.Exchange(ref _renderClient, 0);
             var ownedClient = Interlocked.Exchange(ref _client, 0);
             var ownedEndpoint = Interlocked.Exchange(ref _endpoint, 0);
             var ownedEnumerator = Interlocked.Exchange(ref _enumerator, 0);
             if (handle != 0) CloseHandle(handle);
+            if (ownedRenderClient != 0) Marshal.Release(ownedRenderClient);
             if (ownedClient != 0) Marshal.Release(ownedClient);
             if (ownedEndpoint != 0) Marshal.Release(ownedEndpoint);
             if (ownedEnumerator != 0) Marshal.Release(ownedEnumerator);
@@ -562,5 +598,10 @@ internal sealed class SystemPlaybackWindowsOutputNativeActivation :
         [PreserveSig] int Start();
         [PreserveSig] int Stop();
         [PreserveSig] int Reset();
+        [PreserveSig] int SetEventHandle(nint eventHandle);
+        [PreserveSig] int GetService(ref Guid interfaceId, out nint service);
     }
+
+    private static readonly Guid AudioRenderClientInterface =
+        new("F294ACFC-3146-4483-A7BF-ADDCA7C260E2");
 }

@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### 0.0.6x Windows Output Buffer Processing Boundary
+
+- Added finite one-frame BGRA32 upload/Present and one-buffer WASAPI write processing over synchronized activation-owned resource borrows.
+- Added strict layout and generation validation, one-time audio Start, WouldBlock, resize, device-lost, and fail-closed fixed results.
+- Added independent video/audio serialization, reverse audio-to-video cleanup, and idempotent reset/disposal without a scheduler, A/V synchronization, or a continuous playback loop.
+
 ### 0.0.6w Windows Output Stream Initialization Boundary
 
 - Added finite video/audio initialization state above bound Windows output resources with independent generations.

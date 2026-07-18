@@ -82,6 +82,9 @@ public sealed class PlaybackWindowsOutputProductionNativeStreamInitializerTests
         IDisposable, IPlaybackWindowsDirect3D11BorrowedResource
     {
         public nint Device { get { calls.Add("device"); return 1; } }
+        public nint ImmediateContext => 1;
+        public nint SwapChain => 1;
+        public nint RenderTargetView => 1;
         public int ReplaceCount { get; private set; }
         public int ClearCount { get; private set; }
         public void ReplaceOutputResources(nint swapChain, nint renderTargetView) =>
@@ -94,9 +97,11 @@ public sealed class PlaybackWindowsOutputProductionNativeStreamInitializerTests
         IDisposable, IPlaybackWindowsWasapiBorrowedResource
     {
         public nint AudioClient { get { calls.Add("client"); return 0; } }
+        public nint AudioRenderClient => 0;
         public nint EventHandle { get { calls.Add("event"); return 1; } }
         public int ResetCount { get; private set; }
         public bool RecreateAudioClient() { calls.Add("recreate"); return false; }
+        public bool EnsureAudioRenderClient() => false;
         public void ResetAudioClient() => ResetCount++;
         public void Dispose() { }
     }
