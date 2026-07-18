@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### 0.0.7b Timed Scheduler Dispatch Boundary
+
+- Added one-reservation timed dispatch that delegates decisions to 0.0.7a and dispatches only `ProcessNow` items.
+- Added bounded cancellable Wait and same-item redecision with mandatory decision-count, total-wait, and single-delay limits.
+- Retained every non-successful item and advanced fairness only after successful video/audio processing.
+- Added reset/dispose exclusion without owning the scheduler, timing boundary, processor, or native resources.
+
 ### 0.0.7a A/V Timing Decision Boundary
 
 - Added a one-item, injectable decision boundary comparing presentation timestamps with monotonic playback position.

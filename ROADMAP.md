@@ -182,6 +182,7 @@ selecting a codec backend or output device.
 - Explicit one-item bounded-scheduler adapter with retained retryable items and deterministic audio/video fairness — Implemented in 0.0.6y; continuous pumping, timers, A/V synchronization, and drift correction pending
 - Explicit continuous pump policy bounded by mandatory pump-count, monotonic-duration, and consecutive-idle limits — Implemented in 0.0.6z; precise timing, A/V synchronization, drift correction, and real-media playback pending
 - One-item A/V timing decision from presentation timestamp and monotonic playback position with bounded media-specific tolerances — Implemented in 0.0.7a; precise delay, drop/duplication, resampling, drift correction, complete A/V synchronization, and real-media playback pending
+- One-reservation timed scheduler dispatch with bounded cancellable Wait/redecision and success-only consumption — Implemented in 0.0.7b; late-item policy, precise timers, drop/duplication, resampling, drift correction, complete A/V synchronization, and real-media playback pending
 - FLV demux/decode backend — Pending
 - Bounded decoded audio/video queues and renderer/device sinks — Pending
 - Audio/video playback and A/V synchronization — Pending

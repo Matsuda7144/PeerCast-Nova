@@ -2,7 +2,7 @@
 
 ## 現在地
 
-**Milestone 0.0.7a — A/V Timing Decision Boundary**
+**Milestone 0.0.7b — Timed Scheduler Dispatch Boundary**
 
 - 候補記録と技術検証: 完了
 - FFmpeg backend activation: 未承認
@@ -10,7 +10,7 @@
 - runtime 5 DLLの名前・サイズ・SHA-256固定と事前照合: 完了
 - 配布方針: ユーザー/ホスト導入、動的リンク、Novaによる同梱・再配布なし
 - locator: 明示指定された1ディレクトリだけを検査
-- current: one-item A/V timing actions are decided from presentation timestamps and monotonic playback position
+- current: one reserved scheduler item receives bounded timing decisions, finite cancellable Wait, and success-only output dispatch
 - trust boundary: verified 5-DLL handles remain open until lease disposal
 - path boundary: local fixed drives only; UNC and reparse points are rejected
 - enum boundary: undefined provenance, container, codec, and result values fail closed
@@ -63,6 +63,7 @@
 | 0.0.6y | Windows Output Scheduler Adapter Boundary | Implemented; continuous pumping, timer drive, and A/V synchronization pending |
 | 0.0.6z | Finite Continuous Playback Pump Policy Boundary | Implemented; precise timing, A/V synchronization, and drift correction pending |
 | 0.0.7a | A/V Timing Decision Boundary | Implemented; delay, drop/duplication, resampling, drift correction, and complete A/V synchronization pending |
+| 0.0.7b | Timed Scheduler Dispatch Boundary | Implemented; late policy, drop/duplication, resampling, drift correction, and complete A/V synchronization pending |
 
 ## 0.0.6b固定候補
 
@@ -198,7 +199,7 @@
 
 ## 次の作業
 
-0.0.6zの次は、有限pump policy上にA/V timing判断を設計します。精密timer、A/V同期、drift補正、demux、
+0.0.7bの次は、保持されたlate itemに対する明示policyを設計します。precise timer、drop/duplication、resampling、drift補正、完全なA/V同期、demux、
 FFmpeg同梱、license approvalは引き続き未完了です。
 
 ## まだ完了を主張しないもの
