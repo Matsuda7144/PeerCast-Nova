@@ -7,15 +7,13 @@ PeerCast Nova は、長年親しまれてきた PeerCast の思想を受け継�
 
 ## 現在の段階
 
-**Milestone 0.0.6k — Native Frame Metadata Extraction**
+**Milestone 0.0.6l — Frame Plane / Sample Boundary**
 
-0.0.6k reads the minimum video/audio metadata from an FFmpeg 8.1 AVFrame only
-inside the 0.0.6j callback and maps it to fixed managed values. The isolated
-Windows x64 reader is pinned to the verified libavutil 60 public layout.
-Unset time bases, timestamp sentinels, and zero duration become fixed managed
-unknown values; invalid bounds, malformed time bases, and overflow fail closed. Plane
-copy, conversion, decoded output, demux, and FFmpeg redistribution remain out
-of scope.
+0.0.6l uses the validated 0.0.6k metadata to expose bounded FFmpeg 8.1 video
+planes and audio samples only inside the 0.0.6j callback. Pointer-free `ref
+struct` views reject null pointers, malformed line sizes, overflow, and
+excessive sizes before consumption. Managed copy, conversion, decoded output,
+demux, and FFmpeg redistribution remain out of scope.
 
 既存PeerCastStationとの接続を確認する互換プローブを実装しました。
 

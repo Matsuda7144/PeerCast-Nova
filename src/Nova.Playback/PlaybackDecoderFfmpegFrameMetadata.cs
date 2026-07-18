@@ -178,6 +178,15 @@ public sealed class PlaybackDecoderFfmpegFrameMetadataBoundary
         };
     }
 
+    internal bool TryReadCallbackMetadata(
+        nint frame,
+        PlaybackDecoderFfmpegCodecId codecId,
+        out PlaybackDecoderFfmpegFrameMetadata metadata)
+    {
+        var raw = _nativeApi.Read(frame);
+        return TryCreate(codecId, raw, out metadata);
+    }
+
     private sealed class MetadataConsumerAdapter : IPlaybackDecoderFfmpegNativeFrameConsumer
     {
         private readonly IPlaybackDecoderFfmpegFrameMetadataNativeApi _nativeApi;

@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### 0.0.6l Frame Plane / Sample Boundary
+
+- Added callback-only, pointer-free views over validated FFmpeg video planes and audio samples.
+- Checked formats, plane geometry, line sizes, pointers, overflow, and total referenced bytes before consumption.
+- Preserved unknown timing values and context state on consumer rejection; native failures remain fail closed.
+- Added no managed copy, format conversion, decoded output, demux, queue, renderer, or device.
+
 ### 0.0.6k Native Frame Metadata Extraction
 
 - Added callback-scoped video/audio metadata extraction without retaining the native frame pointer.
