@@ -47,6 +47,21 @@ public sealed class PlaybackDecoderFfmpegManagedFormatConversionBoundary
         long sequence,
         PlaybackDecodedFrameDiscontinuityKind discontinuity,
         IPlaybackDecoderFfmpegDecodedOutputConsumer consumer)
+        => ConvertAsync(
+            contextLease,
+            frame,
+            sequence,
+            discontinuity,
+            new SynchronousConsumer(consumer),
+            CancellationToken.None).AsTask().GetAwaiter().GetResult();
+
+    internal async ValueTask<PlaybackDecoderFfmpegManagedFormatConversionResult> ConvertAsync(
+        PlaybackDecoderFfmpegContextLease contextLease,
+        PlaybackDecoderFfmpegManagedFrame frame,
+        long sequence,
+        PlaybackDecodedFrameDiscontinuityKind discontinuity,
+        IPlaybackDecoderFfmpegDecodedOutputAsyncConsumer consumer,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(contextLease);
         ArgumentNullException.ThrowIfNull(frame);
@@ -93,6 +108,11 @@ public sealed class PlaybackDecoderFfmpegManagedFormatConversionBoundary
             Array.Clear(payload);
             return PlaybackDecoderFfmpegManagedFormatConversionResult.ConversionFailed;
         }
+        catch
+        {
+            Array.Clear(payload);
+            throw;
+        }
 
         var metadata = frame.Metadata;
         var timestamp = metadata.PresentationTimestamp.IsKnown
@@ -103,13 +123,14 @@ public sealed class PlaybackDecoderFfmpegManagedFormatConversionBoundary
             : PlaybackDecoderFfmpegDecodedOutputAdapter.UnknownDuration;
         try
         {
-            bool accepted;
+            PlaybackDecodedVideoFrame video = default;
+            PlaybackDecodedAudioFrame audio = default;
             try
             {
-                accepted = output.Kind switch
+                switch (output.Kind)
                 {
-                    OutputKind.Video => consumer.ConsumeVideo(
-                        PlaybackDecodedVideoFrame.Create(
+                    case OutputKind.Video:
+                        video = PlaybackDecodedVideoFrame.Create(
                             sequence,
                             timestamp,
                             duration,
@@ -118,9 +139,10 @@ public sealed class PlaybackDecoderFfmpegManagedFormatConversionBoundary
                             metadata.Width,
                             metadata.Height,
                             output.Stride,
-                            payload)),
-                    OutputKind.AudioSigned16 => consumer.ConsumeAudio(
-                        PlaybackDecodedAudioFrame.Create(
+                            payload);
+                        break;
+                    case OutputKind.AudioSigned16:
+                        audio = PlaybackDecodedAudioFrame.Create(
                             sequence,
                             timestamp,
                             duration,
@@ -129,9 +151,10 @@ public sealed class PlaybackDecoderFfmpegManagedFormatConversionBoundary
                             metadata.SampleRate,
                             metadata.ChannelCount,
                             metadata.SampleCount,
-                            payload)),
-                    OutputKind.AudioFloat32 => consumer.ConsumeAudio(
-                        PlaybackDecodedAudioFrame.Create(
+                            payload);
+                        break;
+                    case OutputKind.AudioFloat32:
+                        audio = PlaybackDecodedAudioFrame.Create(
                             sequence,
                             timestamp,
                             duration,
@@ -140,15 +163,21 @@ public sealed class PlaybackDecoderFfmpegManagedFormatConversionBoundary
                             metadata.SampleRate,
                             metadata.ChannelCount,
                             metadata.SampleCount,
-                            payload)),
-                    _ => false,
-                };
+                            payload);
+                        break;
+                    default:
+                        return PlaybackDecoderFfmpegManagedFormatConversionResult.InvalidFrame;
+                }
             }
             catch (Exception exception) when (exception is
                 ArgumentException or OverflowException)
             {
                 return PlaybackDecoderFfmpegManagedFormatConversionResult.InvalidFrame;
             }
+
+            var accepted = output.Kind == OutputKind.Video
+                ? await consumer.ConsumeVideoAsync(video, cancellationToken).ConfigureAwait(false)
+                : await consumer.ConsumeAudioAsync(audio, cancellationToken).ConfigureAwait(false);
 
             return accepted
                 ? PlaybackDecoderFfmpegManagedFormatConversionResult.Converted
@@ -158,6 +187,20 @@ public sealed class PlaybackDecoderFfmpegManagedFormatConversionBoundary
         {
             Array.Clear(payload);
         }
+    }
+
+    private sealed class SynchronousConsumer(IPlaybackDecoderFfmpegDecodedOutputConsumer consumer) :
+        IPlaybackDecoderFfmpegDecodedOutputAsyncConsumer
+    {
+        public ValueTask<bool> ConsumeAudioAsync(
+            PlaybackDecodedAudioFrame frame,
+            CancellationToken cancellationToken) =>
+            ValueTask.FromResult(consumer.ConsumeAudio(frame));
+
+        public ValueTask<bool> ConsumeVideoAsync(
+            PlaybackDecodedVideoFrame frame,
+            CancellationToken cancellationToken) =>
+            ValueTask.FromResult(consumer.ConsumeVideo(frame));
     }
 
     private static PlaybackDecoderFfmpegManagedFormatConversionResult Validate(

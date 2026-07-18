@@ -18,6 +18,17 @@ public interface IPlaybackDecoderFfmpegDecodedOutputConsumer
     bool ConsumeVideo(PlaybackDecodedVideoFrame frame);
 }
 
+internal interface IPlaybackDecoderFfmpegDecodedOutputAsyncConsumer
+{
+    ValueTask<bool> ConsumeAudioAsync(
+        PlaybackDecodedAudioFrame frame,
+        CancellationToken cancellationToken);
+
+    ValueTask<bool> ConsumeVideoAsync(
+        PlaybackDecodedVideoFrame frame,
+        CancellationToken cancellationToken);
+}
+
 public sealed class PlaybackDecoderFfmpegDecodedOutputAdapter
 {
     internal static readonly TimeSpan UnknownTimestamp = TimeSpan.Zero;
@@ -42,6 +53,21 @@ public sealed class PlaybackDecoderFfmpegDecodedOutputAdapter
         long sequence,
         PlaybackDecodedFrameDiscontinuityKind discontinuity,
         IPlaybackDecoderFfmpegDecodedOutputConsumer consumer)
+        => AdaptAsync(
+            contextLease,
+            frame,
+            sequence,
+            discontinuity,
+            new SynchronousConsumer(consumer),
+            CancellationToken.None).AsTask().GetAwaiter().GetResult();
+
+    internal async ValueTask<PlaybackDecoderFfmpegDecodedOutputAdapterResult> AdaptAsync(
+        PlaybackDecoderFfmpegContextLease contextLease,
+        PlaybackDecoderFfmpegManagedFrame frame,
+        long sequence,
+        PlaybackDecodedFrameDiscontinuityKind discontinuity,
+        IPlaybackDecoderFfmpegDecodedOutputAsyncConsumer consumer,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(contextLease);
         ArgumentNullException.ThrowIfNull(frame);
@@ -101,10 +127,14 @@ public sealed class PlaybackDecoderFfmpegDecodedOutputAdapter
             var duration = metadata.Duration.IsKnown
                 ? metadata.Duration.Value
                 : UnknownDuration;
-            var accepted = layout.OutputKind switch
+            PlaybackDecodedVideoFrame video = default;
+            PlaybackDecodedAudioFrame audio = default;
+            try
             {
-                OutputKind.Video => consumer.ConsumeVideo(
-                    PlaybackDecodedVideoFrame.Create(
+                switch (layout.OutputKind)
+                {
+                    case OutputKind.Video:
+                        video = PlaybackDecodedVideoFrame.Create(
                         sequence,
                         timestamp,
                         duration,
@@ -113,9 +143,10 @@ public sealed class PlaybackDecoderFfmpegDecodedOutputAdapter
                         metadata.Width,
                         metadata.Height,
                         layout.LogicalRowBytes,
-                        payload)),
-                OutputKind.AudioSigned16 => consumer.ConsumeAudio(
-                    PlaybackDecodedAudioFrame.Create(
+                        payload);
+                        break;
+                    case OutputKind.AudioSigned16:
+                        audio = PlaybackDecodedAudioFrame.Create(
                         sequence,
                         timestamp,
                         duration,
@@ -124,9 +155,10 @@ public sealed class PlaybackDecoderFfmpegDecodedOutputAdapter
                         metadata.SampleRate,
                         metadata.ChannelCount,
                         metadata.SampleCount,
-                        payload)),
-                OutputKind.AudioFloat32 => consumer.ConsumeAudio(
-                    PlaybackDecodedAudioFrame.Create(
+                        payload);
+                        break;
+                    case OutputKind.AudioFloat32:
+                        audio = PlaybackDecodedAudioFrame.Create(
                         sequence,
                         timestamp,
                         duration,
@@ -135,22 +167,42 @@ public sealed class PlaybackDecoderFfmpegDecodedOutputAdapter
                         metadata.SampleRate,
                         metadata.ChannelCount,
                         metadata.SampleCount,
-                        payload)),
-                _ => false,
-            };
+                        payload);
+                        break;
+                    default:
+                        return PlaybackDecoderFfmpegDecodedOutputAdapterResult.InvalidFrame;
+                }
+            }
+            catch (Exception exception) when (exception is ArgumentException or OverflowException)
+            {
+                return PlaybackDecoderFfmpegDecodedOutputAdapterResult.InvalidFrame;
+            }
+
+            var accepted = layout.OutputKind == OutputKind.Video
+                ? await consumer.ConsumeVideoAsync(video, cancellationToken).ConfigureAwait(false)
+                : await consumer.ConsumeAudioAsync(audio, cancellationToken).ConfigureAwait(false);
             return accepted
                 ? PlaybackDecoderFfmpegDecodedOutputAdapterResult.Converted
                 : PlaybackDecoderFfmpegDecodedOutputAdapterResult.ConsumerRejected;
-        }
-        catch (Exception exception) when (exception is
-            ArgumentException or OverflowException)
-        {
-            return PlaybackDecoderFfmpegDecodedOutputAdapterResult.InvalidFrame;
         }
         finally
         {
             Array.Clear(payload);
         }
+    }
+
+    private sealed class SynchronousConsumer(IPlaybackDecoderFfmpegDecodedOutputConsumer consumer) :
+        IPlaybackDecoderFfmpegDecodedOutputAsyncConsumer
+    {
+        public ValueTask<bool> ConsumeAudioAsync(
+            PlaybackDecodedAudioFrame frame,
+            CancellationToken cancellationToken) =>
+            ValueTask.FromResult(consumer.ConsumeAudio(frame));
+
+        public ValueTask<bool> ConsumeVideoAsync(
+            PlaybackDecodedVideoFrame frame,
+            CancellationToken cancellationToken) =>
+            ValueTask.FromResult(consumer.ConsumeVideo(frame));
     }
 
     private static bool TryValidate(

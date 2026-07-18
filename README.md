@@ -7,13 +7,13 @@ PeerCast Nova は、長年親しまれてきた PeerCast の思想を受け継�
 
 ## 現在の段階
 
-**Milestone 0.0.6o — Managed Format Conversion**
+**Milestone 0.0.6p — Awaited Decoded Sink Delivery**
 
-0.0.6o converts owned YUV420P/NV12 to BGRA32 with fixed BT.601 limited-range
-coefficients and interleaves planar S16/F32 using managed code only. Odd video
-dimensions, checked capacity, 256 MiB limits, Unknown times, and callback-only
-temporary payload ownership are fixed and tested. Native conversion, delivery,
-queues, rendering, devices, and demux remain out of scope.
+0.0.6p serially awaits canonical audio/video callbacks on the existing decoded
+frame sink. Sink delay provides direct backpressure without a decoder-owned
+queue; payload is valid through the awaited callback and cleared afterward.
+Cancellation and sink failures preserve the context, while unexpected integration
+failure is fail closed. Rendering, devices, demux, and activation remain out of scope.
 
 既存PeerCastStationとの接続を確認する互換プローブを実装しました。
 

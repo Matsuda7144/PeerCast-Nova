@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### 0.0.6p Awaited Decoded Sink Delivery
+
+- Added serial awaited delivery from existing canonical frame boundaries to `IPlaybackDecodedFrameSink`.
+- Preserved callback-scoped payload ownership, direct cancellation propagation, and sink backpressure without a decoder-owned queue.
+- Added fixed cancellation/sink failure results and fail-closed handling for unexpected integration failures.
+- Made disposal close admission without racing active or waiting sink deliveries.
+
 ### 0.0.6o Managed Format Conversion
 
 - Added managed YUV420P/NV12 to BGRA32 conversion with fixed BT.601 limited-range coefficients.
