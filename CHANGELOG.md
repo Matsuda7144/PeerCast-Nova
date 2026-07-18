@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### 0.0.6r Bounded Playback Scheduler
+
+- Added an explicitly driven fixed-array scheduler with shared audio/video capacity.
+- Added configurable DropOldest, DropIncoming, and Reject full-buffer policies.
+- Reused the bounded playback policy and awaited sink delivery with deterministic ownership cleanup and snapshots.
+
 ### 0.0.6q Playback Policy / Clock Boundary
 
 - Added a monotonic clock abstraction and a locked, bounded, pure managed timing policy.

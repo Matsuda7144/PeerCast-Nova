@@ -7,13 +7,13 @@ PeerCast Nova は、長年親しまれてきた PeerCast の思想を受け継�
 
 ## 現在の段階
 
-**Milestone 0.0.6q — Playback Policy / Clock Boundary**
+**Milestone 0.0.6r — Bounded Playback Scheduler**
 
-0.0.6q separates a monotonic A/V clock and bounded playback-policy contract from
-decoding, delivery, and sinks. It returns fixed deliver, finite-wait, drop,
-reset-clock, or reject decisions under explicit wait/lateness/lead limits and a
-configurable audio/video master. It starts no scheduler, queue, timer, renderer,
-device, demux, or backend activation.
+0.0.6r adds an explicitly driven fixed-array scheduler over the 0.0.6q policy
+and 0.0.6p awaited delivery. Audio/video share a default 16-frame capacity with
+a 1,024 hard limit and configurable DropOldest, DropIncoming, or Reject behavior.
+It owns and disposes queued frames deterministically and starts no resident loop,
+renderer, device, demux, or backend activation.
 
 既存PeerCastStationとの接続を確認する互換プローブを実装しました。
 

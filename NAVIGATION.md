@@ -2,7 +2,7 @@
 
 ## 現在地
 
-**Milestone 0.0.6q — Playback Policy / Clock Boundary**
+**Milestone 0.0.6r — Bounded Playback Scheduler**
 
 - 候補記録と技術検証: 完了
 - FFmpeg backend activation: 未承認
@@ -10,7 +10,7 @@
 - runtime 5 DLLの名前・サイズ・SHA-256固定と事前照合: 完了
 - 配布方針: ユーザー/ホスト導入、動的リンク、Novaによる同梱・再配布なし
 - locator: 明示指定された1ディレクトリだけを検査
-- current: bounded playback policy and monotonic A/V clock contract
+- current: explicitly driven bounded decoded-frame scheduler
 - trust boundary: verified 5-DLL handles remain open until lease disposal
 - path boundary: local fixed drives only; UNC and reparse points are rejected
 - enum boundary: undefined provenance, container, codec, and result values fail closed
@@ -53,6 +53,7 @@
 | 0.0.6o | Managed Format Conversion | Implemented; delivery pending |
 | 0.0.6p | Awaited Decoded Sink Delivery | Implemented; playback policy pending |
 | 0.0.6q | Playback Policy / Clock Boundary | Implemented; scheduling pending |
+| 0.0.6r | Bounded Playback Scheduler | Implemented; renderer/device pending |
 
 ## 0.0.6b固定候補
 
@@ -109,6 +110,7 @@
 - `src/Nova.Playback/PlaybackDecoderFfmpegManagedFormatConversion.cs`
 - `src/Nova.Playback/PlaybackDecoderFfmpegAwaitedSinkDelivery.cs`
 - `src/Nova.Playback/PlaybackPolicyClockBoundary.cs`
+- `src/Nova.Playback/BoundedPlaybackScheduler.cs`
 
 ## 検証入口
 
@@ -153,6 +155,7 @@
 - `docs/adr/ADR-0064-MANAGED-FORMAT-CONVERSION.md`
 - `docs/adr/ADR-0065-AWAITED-DECODED-SINK-DELIVERY.md`
 - `docs/adr/ADR-0066-PLAYBACK-POLICY-CLOCK-BOUNDARY.md`
+- `docs/adr/ADR-0067-BOUNDED-PLAYBACK-SCHEDULER.md`
 - `docs/reviews/PCN-0058-PINNED-FFMPEG-CANDIDATE-VALIDATION.md`
 - `docs/reviews/PCN-0060-EXPLICIT-INSTALLED-RUNTIME-LOCATOR-VALIDATION.md`
 - `docs/reviews/PCN-0061-VERIFIED-FFMPEG-RUNTIME-LEASE-VALIDATION.md`
@@ -170,11 +173,12 @@
 - `docs/reviews/PCN-0073-MANAGED-FORMAT-CONVERSION-VALIDATION.md`
 - `docs/reviews/PCN-0074-AWAITED-DECODED-SINK-DELIVERY-VALIDATION.md`
 - `docs/reviews/PCN-0075-PLAYBACK-POLICY-CLOCK-VALIDATION.md`
+- `docs/reviews/PCN-0076-BOUNDED-PLAYBACK-SCHEDULER-VALIDATION.md`
 - `docs/legal/THIRD-PARTY-AND-PROVENANCE.md`
 
 ## 次の作業
 
-0.0.6qの次は、有限queueと実スケジューラの責任境界を設計します。demux、
+0.0.6rの次は、renderer/audio device sinkの責任境界を設計します。demux、
 FFmpeg同梱、license approvalは引き続き未完了です。
 
 ## まだ完了を主張しないもの
