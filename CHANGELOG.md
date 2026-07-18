@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### 0.0.7a A/V Timing Decision Boundary
+
+- Added a one-item, injectable decision boundary comparing presentation timestamps with monotonic playback position.
+- Added independent audio/video early and late tolerances, bounded Wait decisions, and fixed late, clock, discontinuity, and generation results.
+- Added transactional audio-to-video generation reset, rollback fault state, and idempotent disposal without consuming scheduler items or owning lower boundaries.
+- Rebased the relative monotonic playback origin only within successful explicit reset, with fixed reverse generation rollback and partial-fault handling when origin reset cannot complete.
+
 ### 0.0.6z Finite Continuous Playback Pump Policy Boundary
 
 - Added an explicitly started and stopped continuous pump run bounded by mandatory pump-count, monotonic-duration, and consecutive-idle limits.

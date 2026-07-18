@@ -2,7 +2,7 @@
 
 ## 現在地
 
-**Milestone 0.0.6z — Finite Continuous Playback Pump Policy Boundary**
+**Milestone 0.0.7a — A/V Timing Decision Boundary**
 
 - 候補記録と技術検証: 完了
 - FFmpeg backend activation: 未承認
@@ -10,7 +10,7 @@
 - runtime 5 DLLの名前・サイズ・SHA-256固定と事前照合: 完了
 - 配布方針: ユーザー/ホスト導入、動的リンク、Novaによる同梱・再配布なし
 - locator: 明示指定された1ディレクトリだけを検査
-- current: explicit continuous pumping is bounded by pump-count, duration, and consecutive-idle limits
+- current: one-item A/V timing actions are decided from presentation timestamps and monotonic playback position
 - trust boundary: verified 5-DLL handles remain open until lease disposal
 - path boundary: local fixed drives only; UNC and reparse points are rejected
 - enum boundary: undefined provenance, container, codec, and result values fail closed
@@ -62,6 +62,7 @@
 | 0.0.6x | Windows Output Buffer Processing Boundary | Implemented; scheduling, A/V synchronization, and continuous playback pending |
 | 0.0.6y | Windows Output Scheduler Adapter Boundary | Implemented; continuous pumping, timer drive, and A/V synchronization pending |
 | 0.0.6z | Finite Continuous Playback Pump Policy Boundary | Implemented; precise timing, A/V synchronization, and drift correction pending |
+| 0.0.7a | A/V Timing Decision Boundary | Implemented; delay, drop/duplication, resampling, drift correction, and complete A/V synchronization pending |
 
 ## 0.0.6b固定候補
 

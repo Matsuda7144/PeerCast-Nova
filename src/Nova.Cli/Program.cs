@@ -14,7 +14,7 @@ using PeerCast.Nova.Network.Transport;
 using PeerCast.Nova.Protocol.Pcp;
 
 Console.WriteLine("Hello, Nova.");
-Console.WriteLine("PeerCast Nova 0.0.6z Finite Continuous Playback Pump Policy Boundary");
+Console.WriteLine("PeerCast Nova 0.0.7a A/V Timing Decision Boundary");
 
 INovaLogger logger = new ConsoleNovaLogger();
 
