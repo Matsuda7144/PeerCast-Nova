@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+### 0.0.6k Native Frame Metadata Extraction
+
+- Added callback-scoped video/audio metadata extraction without retaining the native frame pointer.
+- Pinned the isolated reader to the official FFmpeg 8.1 libavutil 60 Windows x64 public layout.
+- Mapped fixed formats and valid-time-base timestamps into privacy-safe managed metadata.
+- Represented unset time bases, FFmpeg timestamp sentinels, and zero duration as fixed managed unknown values.
+- Reused decoded output bounds and rejected malformed, negative-duration, overflowing, and excessive values.
+- Preserved opened context state on consumer rejection and discarded it after unexpected native failure.
+- Added no plane/sample copy, conversion, decoded frame output, demux, binary, or dependency.
+
+### 0.0.6j Callback-Scoped Native Frame Boundary
+
+- Kept each received AVFrame inside one callback and freed it on every path.
+- Preserved context state on consumer rejection and discarded it after unexpected native failure.
+- Added no metadata extraction, payload copy, conversion, or output.
+
+### 0.0.6i Packet / Frame Processing Boundary
+
+- Added bounded encoded packet submission and decoded frame state receipt.
+- Released temporary packet, padded buffer, and frame ownership on every path.
+- Added no frame extraction, conversion, demux, or output.
+
 ### 0.0.6h avcodec_open2 Boundary
 
 - Extended the verified FFmpeg gate with the fixed `avcodec_open2` symbol.

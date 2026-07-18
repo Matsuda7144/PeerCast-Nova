@@ -73,8 +73,14 @@ public sealed class PlaybackDecoderFfmpegNativeFrameBoundary
 
     public PlaybackDecoderFfmpegNativeFrameResult ReceiveAndProcess(
         PlaybackDecoderFfmpegContextLease contextLease)
+        => ReceiveAndProcess(contextLease, _consumer);
+
+    internal PlaybackDecoderFfmpegNativeFrameResult ReceiveAndProcess(
+        PlaybackDecoderFfmpegContextLease contextLease,
+        IPlaybackDecoderFfmpegNativeFrameConsumer consumer)
     {
         ArgumentNullException.ThrowIfNull(contextLease);
+        ArgumentNullException.ThrowIfNull(consumer);
         if (!_isSupportedPlatform)
         {
             return PlaybackDecoderFfmpegNativeFrameResult.Unsupported;
@@ -106,7 +112,7 @@ public sealed class PlaybackDecoderFfmpegNativeFrameBoundary
                     frameFree,
                     receiveFrame,
                     context,
-                    _consumer) switch
+                    consumer) switch
                 {
                     PlaybackDecoderFfmpegNativeFrameReceiveResult.Success =>
                         PlaybackDecoderFfmpegNativeFrameResult.Processed,

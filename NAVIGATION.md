@@ -2,7 +2,7 @@
 
 ## 現在地
 
-**Milestone 0.0.6h — avcodec_open2 Boundary**
+**Milestone 0.0.6k — Native Frame Metadata Extraction**
 
 - 候補記録と技術検証: 完了
 - FFmpeg backend activation: 未承認
@@ -10,7 +10,7 @@
 - runtime 5 DLLの名前・サイズ・SHA-256固定と事前照合: 完了
 - 配布方針: ユーザー/ホスト導入、動的リンク、Novaによる同梱・再配布なし
 - locator: 明示指定された1ディレクトリだけを検査
-- current: fixed zero-only codec-open transition for the transferred owned decoder context
+- current: callback-scoped FFmpeg 8.1 metadata with explicit managed unknown time values
 - trust boundary: verified 5-DLL handles remain open until lease disposal
 - path boundary: local fixed drives only; UNC and reparse points are rejected
 - enum boundary: undefined provenance, container, codec, and result values fail closed
@@ -44,6 +44,9 @@
 | 0.0.6f | Codec Parameter Ownership Boundary | Implemented; native transfer pending |
 | 0.0.6g | Native Parameter Transfer Boundary | Implemented; codec open pending |
 | 0.0.6h | avcodec_open2 Boundary | Implemented; packet/frame processing pending |
+| 0.0.6i | Packet / Frame Processing Boundary | Implemented; frame extraction pending |
+| 0.0.6j | Callback-Scoped Native Frame Boundary | Implemented; metadata extraction pending |
+| 0.0.6k | Native Frame Metadata Extraction | Implemented; plane copy/conversion pending |
 
 ## 0.0.6b固定候補
 
@@ -91,6 +94,9 @@
 - `src/Nova.Playback/PlaybackDecoderFfmpegCodecParameters.cs`
 - `src/Nova.Playback/PlaybackDecoderFfmpegParameterTransfer.cs`
 - `src/Nova.Playback/PlaybackDecoderFfmpegCodecOpen.cs`
+- `src/Nova.Playback/PlaybackDecoderFfmpegPacketFrameBoundary.cs`
+- `src/Nova.Playback/PlaybackDecoderFfmpegNativeFrameBoundary.cs`
+- `src/Nova.Playback/PlaybackDecoderFfmpegFrameMetadata.cs`
 
 ## 検証入口
 
@@ -104,6 +110,9 @@
 - codec parameter ownership repetition: `tools/Test-FfmpegCodecParameters.ps1`
 - native parameter transfer repetition: `tools/Test-FfmpegParameterTransfer.ps1`
 - codec-open repetition: `tools/Test-FfmpegCodecOpen.ps1`
+- packet/frame repetition: `tools/Test-FfmpegPacketFrameBoundary.ps1`
+- callback frame repetition: `tools/Test-FfmpegNativeFrameBoundary.ps1`
+- frame metadata repetition: `tools/Test-FfmpegFrameMetadata.ps1`
 - FFmpeg候補: `tools/Test-FfmpegBackendCandidate.ps1`
 - 実機lifecycle: `tools/Test-PeerCastStationDecoderLifecycle.ps1`
 
@@ -123,6 +132,9 @@
 - `docs/adr/ADR-0055-CODEC-PARAMETER-OWNERSHIP-BOUNDARY.md`
 - `docs/adr/ADR-0056-NATIVE-PARAMETER-TRANSFER-BOUNDARY.md`
 - `docs/adr/ADR-0057-AVCODEC-OPEN-BOUNDARY.md`
+- `docs/adr/ADR-0058-PACKET-FRAME-PROCESSING-BOUNDARY.md`
+- `docs/adr/ADR-0059-CALLBACK-SCOPED-NATIVE-FRAME-BOUNDARY.md`
+- `docs/adr/ADR-0060-NATIVE-FRAME-METADATA-EXTRACTION.md`
 - `docs/reviews/PCN-0058-PINNED-FFMPEG-CANDIDATE-VALIDATION.md`
 - `docs/reviews/PCN-0060-EXPLICIT-INSTALLED-RUNTIME-LOCATOR-VALIDATION.md`
 - `docs/reviews/PCN-0061-VERIFIED-FFMPEG-RUNTIME-LEASE-VALIDATION.md`
@@ -131,12 +143,16 @@
 - `docs/reviews/PCN-0064-CODEC-PARAMETER-OWNERSHIP-VALIDATION.md`
 - `docs/reviews/PCN-0065-NATIVE-PARAMETER-TRANSFER-VALIDATION.md`
 - `docs/reviews/PCN-0066-AVCODEC-OPEN-VALIDATION.md`
+- `docs/reviews/PCN-0067-PACKET-FRAME-BOUNDARY-VALIDATION.md`
+- `docs/reviews/PCN-0068-CALLBACK-SCOPED-NATIVE-FRAME-VALIDATION.md`
+- `docs/reviews/PCN-0069-NATIVE-FRAME-METADATA-VALIDATION.md`
 - `docs/legal/THIRD-PARTY-AND-PROVENANCE.md`
 
 ## 次の作業
 
-0.0.6hの次は、open済みcontextに対するpacket送信とframe受信の固定境界を
-設計します。demux、変換、FFmpeg同梱、license approvalは引き続き未完了とします。
+0.0.6kの次は、検証済みmetadataを使うcallback-scoped plane/sample境界を
+設計します。コピー、変換、demux、FFmpeg同梱、license approvalは引き続き
+未完了とします。
 
 ## まだ完了を主張しないもの
 

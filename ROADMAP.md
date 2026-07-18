@@ -164,6 +164,8 @@ selecting a codec backend or output device.
 - Native parameter transfer into the owned decoder context — Implemented in 0.0.6g; codec open pending
 - Fixed `avcodec_open2` transition for transferred owned contexts — Implemented in 0.0.6h; packet/frame processing pending
 - Bounded encoded-packet send and decoded-frame state receive boundary — Implemented in 0.0.6i; frame extraction pending
+- Callback-scoped native frame ownership and unconditional release — Implemented in 0.0.6j
+- FFmpeg 8.1 native frame metadata extraction with explicit unknown-time values — Implemented in 0.0.6k; plane copy/conversion pending
 - FLV demux/decode backend — Pending
 - Bounded decoded audio/video queues and renderer/device sinks — Pending
 - Audio/video playback and A/V synchronization — Pending
