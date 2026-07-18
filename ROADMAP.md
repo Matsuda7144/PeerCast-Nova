@@ -177,6 +177,7 @@ selecting a codec backend or output device.
 - Windows 11 D3D11 and WASAPI shared/event-driven selection/probe — Implemented in 0.0.6t; activation pending
 - Finite D3D11 and WASAPI native activation ownership boundary — Implemented in 0.0.6u; rendering and stream initialization pending
 - Borrowed D3D11/WASAPI resource binding state and generation boundary — Implemented in 0.0.6v; rendering and stream initialization pending
+- Finite video target and WASAPI shared/event-driven stream initialization boundary — Implemented in 0.0.6w; rendering, Present, and audio Start pending
 - FLV demux/decode backend — Pending
 - Bounded decoded audio/video queues and renderer/device sinks — Pending
 - Audio/video playback and A/V synchronization — Pending

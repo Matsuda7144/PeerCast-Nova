@@ -225,6 +225,8 @@ internal enum PlaybackWindowsOutputResourceBorrowResult
     Success,
     ActivationRequired,
     DeviceLost,
+    FormatUnsupported,
+    ResizeRequired,
     InvalidEnvironment,
     Disposed,
     Failure,
@@ -233,6 +235,21 @@ internal enum PlaybackWindowsOutputResourceBorrowResult
 internal readonly record struct PlaybackWindowsOutputBorrowedResources(
     IDisposable Direct3D11,
     IDisposable Wasapi);
+
+internal interface IPlaybackWindowsDirect3D11BorrowedResource
+{
+    nint Device { get; }
+    void ReplaceOutputResources(nint swapChain, nint renderTargetView);
+    void ClearOutputResources();
+}
+
+internal interface IPlaybackWindowsWasapiBorrowedResource
+{
+    nint AudioClient { get; }
+    nint EventHandle { get; }
+    bool RecreateAudioClient();
+    void ResetAudioClient();
+}
 
 internal interface IPlaybackWindowsOutputNativeActivation
 {
@@ -314,11 +331,7 @@ internal sealed class SystemPlaybackWindowsOutputNativeActivation :
 
             var ownedDevice = devicePointer;
             var ownedContext = contextPointer;
-            device = new ActionResource(() =>
-            {
-                Marshal.Release(ownedContext);
-                Marshal.Release(ownedDevice);
-            });
+            device = new Direct3D11Resource(ownedDevice, ownedContext);
             devicePointer = 0;
             contextPointer = 0;
             return PlaybackWindowsOutputActivationResult.Activated;
@@ -368,13 +381,8 @@ internal sealed class SystemPlaybackWindowsOutputNativeActivation :
             var ownedEndpoint = endpoint;
             var ownedClient = client;
             var ownedEventHandle = eventHandle;
-            audio = new ActionResource(() =>
-            {
-                CloseHandle(ownedEventHandle);
-                Marshal.Release(ownedClient);
-                Marshal.Release(ownedEndpoint);
-                Marshal.Release(ownedEnumerator);
-            });
+            audio = new WasapiResource(
+                ownedEnumerator, ownedEndpoint, ownedClient, ownedEventHandle);
             enumerator = endpoint = client = eventHandle = 0;
             return PlaybackWindowsOutputActivationResult.Activated;
         }
@@ -451,5 +459,108 @@ internal sealed class SystemPlaybackWindowsOutputNativeActivation :
     {
         private Action? _release = release;
         public void Dispose() => Interlocked.Exchange(ref _release, null)?.Invoke();
+    }
+
+    private sealed class Direct3D11Resource(nint device, nint context) :
+        IDisposable, IPlaybackWindowsDirect3D11BorrowedResource
+    {
+        private nint _device = device;
+        private nint _context = context;
+        private nint _swapChain;
+        private nint _renderTargetView;
+        public nint Device => _device;
+
+        public void ReplaceOutputResources(nint swapChain, nint renderTargetView)
+        {
+            ClearOutputResources();
+            _swapChain = swapChain;
+            _renderTargetView = renderTargetView;
+        }
+
+        public void ClearOutputResources()
+        {
+            var view = Interlocked.Exchange(ref _renderTargetView, 0);
+            var chain = Interlocked.Exchange(ref _swapChain, 0);
+            if (view != 0) Marshal.Release(view);
+            if (chain != 0) Marshal.Release(chain);
+        }
+
+        public void Dispose()
+        {
+            ClearOutputResources();
+            var ownedContext = Interlocked.Exchange(ref _context, 0);
+            var ownedDevice = Interlocked.Exchange(ref _device, 0);
+            if (ownedContext != 0) Marshal.Release(ownedContext);
+            if (ownedDevice != 0) Marshal.Release(ownedDevice);
+        }
+    }
+
+    private sealed class WasapiResource(
+        nint enumerator, nint endpoint, nint client, nint eventHandle) :
+        IDisposable, IPlaybackWindowsWasapiBorrowedResource
+    {
+        private nint _enumerator = enumerator;
+        private nint _endpoint = endpoint;
+        private nint _client = client;
+        private nint _eventHandle = eventHandle;
+        public nint AudioClient => _client;
+        public nint EventHandle => _eventHandle;
+
+        public bool RecreateAudioClient()
+        {
+            if (_endpoint == 0) return false;
+            var endpointObject = (IMMDevice)Marshal.GetObjectForIUnknown(_endpoint);
+            try
+            {
+                var audioClientId = AudioClientInterface;
+                var result = endpointObject.Activate(
+                    ref audioClientId, ClsctxInprocServer, 0, out var replacement);
+                if (result < 0 || replacement == 0) return false;
+                var previous = Interlocked.Exchange(ref _client, replacement);
+                if (previous != 0) Marshal.Release(previous);
+                return true;
+            }
+            finally
+            {
+                Marshal.FinalReleaseComObject(endpointObject);
+            }
+        }
+
+        public void ResetAudioClient()
+        {
+            if (_client == 0) return;
+            var clientObject = (IAudioClientReset)Marshal.GetObjectForIUnknown(_client);
+            try { clientObject.Reset(); }
+            finally { Marshal.FinalReleaseComObject(clientObject); }
+        }
+
+        public void Dispose()
+        {
+            var handle = Interlocked.Exchange(ref _eventHandle, 0);
+            var ownedClient = Interlocked.Exchange(ref _client, 0);
+            var ownedEndpoint = Interlocked.Exchange(ref _endpoint, 0);
+            var ownedEnumerator = Interlocked.Exchange(ref _enumerator, 0);
+            if (handle != 0) CloseHandle(handle);
+            if (ownedClient != 0) Marshal.Release(ownedClient);
+            if (ownedEndpoint != 0) Marshal.Release(ownedEndpoint);
+            if (ownedEnumerator != 0) Marshal.Release(ownedEnumerator);
+        }
+    }
+
+    [ComImport]
+    [Guid("1CB9AD4C-DBFA-4C32-B178-C2F568A703B2")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IAudioClientReset
+    {
+        [PreserveSig] int Initialize(uint shareMode, uint streamFlags, long duration, long periodicity, nint format, nint session);
+        [PreserveSig] int GetBufferSize(out uint frames);
+        [PreserveSig] int GetStreamLatency(out long latency);
+        [PreserveSig] int GetCurrentPadding(out uint frames);
+        [PreserveSig] int IsFormatSupported(uint shareMode, nint format, out nint closest);
+        [PreserveSig] int GetMixFormat(out nint format);
+        [PreserveSig] int GetDevicePeriod(out long defaultPeriod, out long minimumPeriod);
+        [PreserveSig] int Start();
+        [PreserveSig] int Stop();
+        [PreserveSig] int Reset();
     }
 }

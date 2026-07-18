@@ -14,7 +14,7 @@ using PeerCast.Nova.Network.Transport;
 using PeerCast.Nova.Protocol.Pcp;
 
 Console.WriteLine("Hello, Nova.");
-Console.WriteLine("PeerCast Nova 0.0.6v Windows Output Resource Binding Boundary");
+Console.WriteLine("PeerCast Nova 0.0.6w Windows Output Stream Initialization Boundary");
 
 INovaLogger logger = new ConsoleNovaLogger();
 

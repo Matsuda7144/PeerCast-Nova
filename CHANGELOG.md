@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### 0.0.6w Windows Output Stream Initialization Boundary
+
+- Added finite video/audio initialization state above bound Windows output resources with independent generations.
+- Added opaque window-token, bounded resize, shared/event-driven audio negotiation, event association, and buffer-duration contracts behind an injectable native boundary.
+- Added reverse-order partial rollback, device-lost, reset, fail-closed, and idempotent disposal behavior without presenting frames or starting audio.
+
 ### 0.0.6v Windows Output Resource Binding Boundary
 
 - Added finite video/audio binding state and generation transitions from activated Windows resources to the existing output configurations.
