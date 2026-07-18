@@ -14,7 +14,7 @@ using PeerCast.Nova.Network.Transport;
 using PeerCast.Nova.Protocol.Pcp;
 
 Console.WriteLine("Hello, Nova.");
-Console.WriteLine("PeerCast Nova 0.0.6m Managed Frame Copy");
+Console.WriteLine("PeerCast Nova 0.0.6n Decoded Output Adapter");
 
 INovaLogger logger = new ConsoleNovaLogger();
 

@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### 0.0.6n Decoded Output Adapter
+
+- Added a revalidating adapter from owned managed frames to existing decoded output models.
+- Adapted padding-free BGRA32 and packed S16/F32 without format conversion.
+- Returned fixed conversion-required results for valid YUV, NV12, and planar PCM layouts.
+- Fixed Unknown time mapping and cleared temporary callback payloads on every path.
+
 ### 0.0.6m Managed Frame Copy
 
 - Added owned managed copies of validated video planes and audio sample planes.

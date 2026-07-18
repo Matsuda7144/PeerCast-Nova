@@ -7,13 +7,13 @@ PeerCast Nova は、長年親しまれてきた PeerCast の思想を受け継�
 
 ## 現在の段階
 
-**Milestone 0.0.6m — Managed Frame Copy**
+**Milestone 0.0.6n — Decoded Output Adapter**
 
-0.0.6m copies validated 0.0.6l video planes and audio samples into owned
-managed buffers before the native callback ends. Video padding is omitted;
-metadata, plane shape, native stride, and logical row bytes are retained.
-Checked capacity and allocation failures are fixed and bounded. Conversion,
-decoded output, demux, and FFmpeg redistribution remain out of scope.
+0.0.6n revalidates owned 0.0.6m frames and adapts padding-free BGRA32 and
+packed S16/F32 to the existing decoded output models. Valid YUV420P, NV12, and
+planar PCM return a fixed conversion-required result because conversion remains
+out of scope. Unknown times are mapped deterministically and temporary output
+payloads are cleared after the consumer callback.
 
 既存PeerCastStationとの接続を確認する互換プローブを実装しました。
 

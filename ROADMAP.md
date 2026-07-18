@@ -168,6 +168,7 @@ selecting a codec backend or output device.
 - FFmpeg 8.1 native frame metadata extraction with explicit unknown-time values — Implemented in 0.0.6k
 - Callback-scoped validated video plane/audio sample views — Implemented in 0.0.6l
 - Owned bounded managed plane/sample copies without conversion — Implemented in 0.0.6m
+- Revalidated adapter to existing decoded output models — Implemented in 0.0.6n; YUV/planar conversion pending
 - FLV demux/decode backend — Pending
 - Bounded decoded audio/video queues and renderer/device sinks — Pending
 - Audio/video playback and A/V synchronization — Pending
