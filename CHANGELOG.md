@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### 0.0.6v Windows Output Resource Binding Boundary
+
+- Added finite video/audio binding state and generation transitions from activated Windows resources to the existing output configurations.
+- Kept native resource ownership in the activation boundary while binding borrows resources only for synchronized callbacks.
+- Added reverse-order partial rollback, reset, device-lost, fail-closed, and idempotent disposal behavior without rendering or audio streaming.
+
 ### 0.0.6u Windows Output Activation Boundary
 
 - Added finite D3D11 device/context and WASAPI default-endpoint/client/event activation behind an injectable native boundary.

@@ -17,15 +17,19 @@ public enum PlaybackWindowsOutputActivationResult
 
 public sealed class PlaybackWindowsOutputActivationBoundary : IDisposable
 {
+    private readonly object _sync = new();
     private readonly IPlaybackWindowsOutputNativeActivation _native;
     private readonly Func<bool> _isSupportedPlatform;
+    private readonly bool _enforceOwningThread;
     private readonly List<IDisposable> _ownedResources = [];
     private bool _isActivated;
     private bool _isDisposed;
+    private int _owningThreadId;
 
     public PlaybackWindowsOutputActivationBoundary()
         : this(CreateSystemNativeActivation(),
-            static () => OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22_000))
+            static () => OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22_000),
+            enforceOwningThread: true)
     {
     }
 
@@ -37,14 +41,31 @@ public sealed class PlaybackWindowsOutputActivationBoundary : IDisposable
     internal PlaybackWindowsOutputActivationBoundary(
         IPlaybackWindowsOutputNativeActivation native,
         Func<bool> isSupportedPlatform)
+        : this(native, isSupportedPlatform, enforceOwningThread: false)
+    {
+    }
+
+    internal PlaybackWindowsOutputActivationBoundary(
+        IPlaybackWindowsOutputNativeActivation native,
+        Func<bool> isSupportedPlatform,
+        bool enforceOwningThread)
     {
         ArgumentNullException.ThrowIfNull(native);
         ArgumentNullException.ThrowIfNull(isSupportedPlatform);
         _native = native;
         _isSupportedPlatform = isSupportedPlatform;
+        _enforceOwningThread = enforceOwningThread;
     }
 
     public PlaybackWindowsOutputActivationResult Activate()
+    {
+        lock (_sync)
+        {
+            return ActivateCore();
+        }
+    }
+
+    private PlaybackWindowsOutputActivationResult ActivateCore()
     {
         if (_isDisposed)
         {
@@ -85,6 +106,7 @@ public sealed class PlaybackWindowsOutputActivationBoundary : IDisposable
             }
 
             _isActivated = true;
+            _owningThreadId = Environment.CurrentManagedThreadId;
             return PlaybackWindowsOutputActivationResult.Activated;
         }
         catch
@@ -96,14 +118,57 @@ public sealed class PlaybackWindowsOutputActivationBoundary : IDisposable
 
     public void Dispose()
     {
-        if (_isDisposed)
+        lock (_sync)
         {
-            return;
-        }
+            if (_isDisposed)
+            {
+                return;
+            }
 
-        _isDisposed = true;
-        _isActivated = false;
-        ReleaseOwnedResources();
+            _isDisposed = true;
+            _isActivated = false;
+            _owningThreadId = 0;
+            ReleaseOwnedResources();
+        }
+    }
+
+    internal PlaybackWindowsOutputResourceBorrowResult BorrowActivatedResources(
+        Func<PlaybackWindowsOutputBorrowedResources,
+            PlaybackWindowsOutputResourceBorrowResult> callback)
+    {
+        ArgumentNullException.ThrowIfNull(callback);
+        lock (_sync)
+        {
+            if (_isDisposed)
+            {
+                return PlaybackWindowsOutputResourceBorrowResult.Disposed;
+            }
+
+            if (!_isActivated || _ownedResources.Count != 3)
+            {
+                return PlaybackWindowsOutputResourceBorrowResult.ActivationRequired;
+            }
+
+            if (_enforceOwningThread &&
+                _owningThreadId != Environment.CurrentManagedThreadId)
+            {
+                return PlaybackWindowsOutputResourceBorrowResult.InvalidEnvironment;
+            }
+
+            try
+            {
+                var result = callback(new(
+                    _ownedResources[1],
+                    _ownedResources[2]));
+                return Enum.IsDefined(result)
+                    ? result
+                    : PlaybackWindowsOutputResourceBorrowResult.Failure;
+            }
+            catch
+            {
+                return PlaybackWindowsOutputResourceBorrowResult.Failure;
+            }
+        }
     }
 
     private PlaybackWindowsOutputActivationResult Acquire(
@@ -154,6 +219,20 @@ public sealed class PlaybackWindowsOutputActivationBoundary : IDisposable
     internal delegate PlaybackWindowsOutputActivationResult NativeActivationStep(
         out IDisposable? resource);
 }
+
+internal enum PlaybackWindowsOutputResourceBorrowResult
+{
+    Success,
+    ActivationRequired,
+    DeviceLost,
+    InvalidEnvironment,
+    Disposed,
+    Failure,
+}
+
+internal readonly record struct PlaybackWindowsOutputBorrowedResources(
+    IDisposable Direct3D11,
+    IDisposable Wasapi);
 
 internal interface IPlaybackWindowsOutputNativeActivation
 {
