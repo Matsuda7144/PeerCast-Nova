@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### 0.0.6m Managed Frame Copy
+
+- Added owned managed copies of validated video planes and audio sample planes.
+- Copied logical row/sample bytes only and omitted native video padding.
+- Bounded total allocation to existing metadata limits and 256 MiB with fixed failure results.
+- Added no conversion, decoded output delivery, demux, queue, renderer, or device.
+
 ### 0.0.6l Frame Plane / Sample Boundary
 
 - Added callback-only, pointer-free views over validated FFmpeg video planes and audio samples.

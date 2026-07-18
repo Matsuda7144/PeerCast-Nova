@@ -7,13 +7,13 @@ PeerCast Nova は、長年親しまれてきた PeerCast の思想を受け継�
 
 ## 現在の段階
 
-**Milestone 0.0.6l — Frame Plane / Sample Boundary**
+**Milestone 0.0.6m — Managed Frame Copy**
 
-0.0.6l uses the validated 0.0.6k metadata to expose bounded FFmpeg 8.1 video
-planes and audio samples only inside the 0.0.6j callback. Pointer-free `ref
-struct` views reject null pointers, malformed line sizes, overflow, and
-excessive sizes before consumption. Managed copy, conversion, decoded output,
-demux, and FFmpeg redistribution remain out of scope.
+0.0.6m copies validated 0.0.6l video planes and audio samples into owned
+managed buffers before the native callback ends. Video padding is omitted;
+metadata, plane shape, native stride, and logical row bytes are retained.
+Checked capacity and allocation failures are fixed and bounded. Conversion,
+decoded output, demux, and FFmpeg redistribution remain out of scope.
 
 既存PeerCastStationとの接続を確認する互換プローブを実装しました。
 

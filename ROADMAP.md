@@ -166,7 +166,8 @@ selecting a codec backend or output device.
 - Bounded encoded-packet send and decoded-frame state receive boundary — Implemented in 0.0.6i; frame extraction pending
 - Callback-scoped native frame ownership and unconditional release — Implemented in 0.0.6j
 - FFmpeg 8.1 native frame metadata extraction with explicit unknown-time values — Implemented in 0.0.6k
-- Callback-scoped validated video plane/audio sample views — Implemented in 0.0.6l; managed copy/conversion pending
+- Callback-scoped validated video plane/audio sample views — Implemented in 0.0.6l
+- Owned bounded managed plane/sample copies without conversion — Implemented in 0.0.6m
 - FLV demux/decode backend — Pending
 - Bounded decoded audio/video queues and renderer/device sinks — Pending
 - Audio/video playback and A/V synchronization — Pending

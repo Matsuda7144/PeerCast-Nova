@@ -69,6 +69,13 @@ public interface IPlaybackDecoderFfmpegFrameDataConsumer
         PlaybackDecoderFfmpegFrameDataView data);
 }
 
+internal interface IPlaybackDecoderFfmpegFrameDataSource
+{
+    PlaybackDecoderFfmpegFrameDataResult ReceiveAndConsume(
+        PlaybackDecoderFfmpegContextLease contextLease,
+        IPlaybackDecoderFfmpegFrameDataConsumer consumer);
+}
+
 internal enum PlaybackDecoderFfmpegFrameDataVisitResult
 {
     Consumed,
@@ -93,7 +100,8 @@ internal interface IPlaybackDecoderFfmpegFrameDataNativeApi
         IPlaybackDecoderFfmpegFrameDataConsumer consumer);
 }
 
-public sealed class PlaybackDecoderFfmpegFrameDataBoundary
+public sealed class PlaybackDecoderFfmpegFrameDataBoundary :
+    IPlaybackDecoderFfmpegFrameDataSource
 {
     private readonly PlaybackDecoderFfmpegNativeFrameBoundary _frameBoundary;
     private readonly PlaybackDecoderFfmpegFrameMetadataBoundary _metadataBoundary;
