@@ -169,6 +169,7 @@ selecting a codec backend or output device.
 - Callback-scoped validated video plane/audio sample views — Implemented in 0.0.6l
 - Owned bounded managed plane/sample copies without conversion — Implemented in 0.0.6m
 - Revalidated adapter to existing decoded output models — Implemented in 0.0.6n; YUV/planar conversion pending
+- Managed BT.601 YUV and planar PCM conversion to decoded output models — Implemented in 0.0.6o
 - FLV demux/decode backend — Pending
 - Bounded decoded audio/video queues and renderer/device sinks — Pending
 - Audio/video playback and A/V synchronization — Pending

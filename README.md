@@ -7,13 +7,13 @@ PeerCast Nova は、長年親しまれてきた PeerCast の思想を受け継�
 
 ## 現在の段階
 
-**Milestone 0.0.6n — Decoded Output Adapter**
+**Milestone 0.0.6o — Managed Format Conversion**
 
-0.0.6n revalidates owned 0.0.6m frames and adapts padding-free BGRA32 and
-packed S16/F32 to the existing decoded output models. Valid YUV420P, NV12, and
-planar PCM return a fixed conversion-required result because conversion remains
-out of scope. Unknown times are mapped deterministically and temporary output
-payloads are cleared after the consumer callback.
+0.0.6o converts owned YUV420P/NV12 to BGRA32 with fixed BT.601 limited-range
+coefficients and interleaves planar S16/F32 using managed code only. Odd video
+dimensions, checked capacity, 256 MiB limits, Unknown times, and callback-only
+temporary payload ownership are fixed and tested. Native conversion, delivery,
+queues, rendering, devices, and demux remain out of scope.
 
 既存PeerCastStationとの接続を確認する互換プローブを実装しました。
 

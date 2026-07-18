@@ -2,7 +2,7 @@
 
 ## 現在地
 
-**Milestone 0.0.6n — Decoded Output Adapter**
+**Milestone 0.0.6o — Managed Format Conversion**
 
 - 候補記録と技術検証: 完了
 - FFmpeg backend activation: 未承認
@@ -10,7 +10,7 @@
 - runtime 5 DLLの名前・サイズ・SHA-256固定と事前照合: 完了
 - 配布方針: ユーザー/ホスト導入、動的リンク、Novaによる同梱・再配布なし
 - locator: 明示指定された1ディレクトリだけを検査
-- current: revalidated adapter from owned FFmpeg frames to decoded output models
+- current: managed YUV/planar PCM conversion to decoded output models
 - trust boundary: verified 5-DLL handles remain open until lease disposal
 - path boundary: local fixed drives only; UNC and reparse points are rejected
 - enum boundary: undefined provenance, container, codec, and result values fail closed
@@ -50,6 +50,7 @@
 | 0.0.6l | Frame Plane / Sample Boundary | Implemented; managed copy/conversion pending |
 | 0.0.6m | Managed Frame Copy | Implemented; conversion/output pending |
 | 0.0.6n | Decoded Output Adapter | Implemented; YUV/planar conversion pending |
+| 0.0.6o | Managed Format Conversion | Implemented; delivery pending |
 
 ## 0.0.6b固定候補
 
@@ -103,6 +104,7 @@
 - `src/Nova.Playback/PlaybackDecoderFfmpegFrameDataBoundary.cs`
 - `src/Nova.Playback/PlaybackDecoderFfmpegManagedFrameCopy.cs`
 - `src/Nova.Playback/PlaybackDecoderFfmpegDecodedOutputAdapter.cs`
+- `src/Nova.Playback/PlaybackDecoderFfmpegManagedFormatConversion.cs`
 
 ## 検証入口
 
@@ -144,6 +146,7 @@
 - `docs/adr/ADR-0061-CALLBACK-SCOPED-FRAME-DATA-BOUNDARY.md`
 - `docs/adr/ADR-0062-MANAGED-FRAME-COPY.md`
 - `docs/adr/ADR-0063-DECODED-OUTPUT-ADAPTER.md`
+- `docs/adr/ADR-0064-MANAGED-FORMAT-CONVERSION.md`
 - `docs/reviews/PCN-0058-PINNED-FFMPEG-CANDIDATE-VALIDATION.md`
 - `docs/reviews/PCN-0060-EXPLICIT-INSTALLED-RUNTIME-LOCATOR-VALIDATION.md`
 - `docs/reviews/PCN-0061-VERIFIED-FFMPEG-RUNTIME-LEASE-VALIDATION.md`
@@ -158,12 +161,13 @@
 - `docs/reviews/PCN-0070-FRAME-PLANE-SAMPLE-BOUNDARY-VALIDATION.md`
 - `docs/reviews/PCN-0071-MANAGED-FRAME-COPY-VALIDATION.md`
 - `docs/reviews/PCN-0072-DECODED-OUTPUT-ADAPTER-VALIDATION.md`
+- `docs/reviews/PCN-0073-MANAGED-FORMAT-CONVERSION-VALIDATION.md`
 - `docs/legal/THIRD-PARTY-AND-PROVENANCE.md`
 
 ## 次の作業
 
-0.0.6nの次は、YUV/planar PCMを既存decoded output形式へ変換する境界を
-設計します。demux、FFmpeg同梱、license approvalは引き続き未完了です。
+0.0.6oの次は、変換済みdecoded outputを既存sinkへ有限・await型で渡す統合
+境界を設計します。demux、FFmpeg同梱、license approvalは引き続き未完了です。
 
 ## まだ完了を主張しないもの
 

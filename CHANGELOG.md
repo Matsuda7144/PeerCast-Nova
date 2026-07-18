@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### 0.0.6o Managed Format Conversion
+
+- Added managed YUV420P/NV12 to BGRA32 conversion with fixed BT.601 limited-range coefficients.
+- Added byte-preserving planar S16/F32 to interleaved PCM conversion.
+- Covered odd video dimensions, bounded allocation, fixed failures, and callback payload cleanup.
+- Added no native converter, SIMD/GPU optimization, delivery, queue, renderer, device, or demux.
+
 ### 0.0.6n Decoded Output Adapter
 
 - Added a revalidating adapter from owned managed frames to existing decoded output models.
