@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### 0.0.6z Finite Continuous Playback Pump Policy Boundary
+
+- Added an explicitly started and stopped continuous pump run bounded by mandatory pump-count, monotonic-duration, and consecutive-idle limits.
+- Added injectable production monotonic-clock and cancellable-delay seams with finite Empty/WouldBlock waiting and no busy spin.
+- Added fixed stop, cancellation, recovery, transactional-reset, fault, and disposal behavior without owning the scheduler or Windows output boundaries.
+- Made stop-through-reset commit one exclusive `Resetting` operation with fixed concurrent Run/Reset/Stop results and Dispose waiting.
+
 ### 0.0.6y Windows Output Scheduler Adapter Boundary
 
 - Added explicit one-item pumping from the bounded scheduler to the Windows output buffer processor without a resident loop or timer.

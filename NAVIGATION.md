@@ -2,7 +2,7 @@
 
 ## 現在地
 
-**Milestone 0.0.6y — Windows Output Scheduler Adapter Boundary**
+**Milestone 0.0.6z — Finite Continuous Playback Pump Policy Boundary**
 
 - 候補記録と技術検証: 完了
 - FFmpeg backend activation: 未承認
@@ -10,7 +10,7 @@
 - runtime 5 DLLの名前・サイズ・SHA-256固定と事前照合: 完了
 - 配布方針: ユーザー/ホスト導入、動的リンク、Novaによる同梱・再配布なし
 - locator: 明示指定された1ディレクトリだけを検査
-- current: bounded scheduler items have finite explicit one-item dispatch into Windows output processing
+- current: explicit continuous pumping is bounded by pump-count, duration, and consecutive-idle limits
 - trust boundary: verified 5-DLL handles remain open until lease disposal
 - path boundary: local fixed drives only; UNC and reparse points are rejected
 - enum boundary: undefined provenance, container, codec, and result values fail closed
@@ -61,6 +61,7 @@
 | 0.0.6w | Windows Output Stream Initialization Boundary | Implemented; rendering, Present, and audio Start pending |
 | 0.0.6x | Windows Output Buffer Processing Boundary | Implemented; scheduling, A/V synchronization, and continuous playback pending |
 | 0.0.6y | Windows Output Scheduler Adapter Boundary | Implemented; continuous pumping, timer drive, and A/V synchronization pending |
+| 0.0.6z | Finite Continuous Playback Pump Policy Boundary | Implemented; precise timing, A/V synchronization, and drift correction pending |
 
 ## 0.0.6b固定候補
 
@@ -123,6 +124,7 @@
 - `src/Nova.Playback/PlaybackWindowsOutputStreamInitializationBoundary.cs`
 - `src/Nova.Playback/PlaybackWindowsOutputBufferProcessingBoundary.cs`
 - `src/Nova.Playback/PlaybackWindowsOutputSchedulerAdapterBoundary.cs`
+- `src/Nova.Playback/FiniteContinuousPlaybackPumpPolicyBoundary.cs`
 
 ## 検証入口
 
@@ -195,7 +197,7 @@
 
 ## 次の作業
 
-0.0.6yの次は、明示pumpを連続再生policyへ接続する境界を設計します。timer駆動、A/V同期、drift補正、demux、
+0.0.6zの次は、有限pump policy上にA/V timing判断を設計します。精密timer、A/V同期、drift補正、demux、
 FFmpeg同梱、license approvalは引き続き未完了です。
 
 ## まだ完了を主張しないもの

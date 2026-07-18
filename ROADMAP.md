@@ -180,6 +180,7 @@ selecting a codec backend or output device.
 - Finite video target and WASAPI shared/event-driven stream initialization boundary — Implemented in 0.0.6w; rendering, Present, and audio Start pending
 - Finite one-frame BGRA32 upload/Present and WASAPI buffer-write/one-time-Start boundary — Implemented in 0.0.6x; scheduling, A/V synchronization, and continuous playback pending
 - Explicit one-item bounded-scheduler adapter with retained retryable items and deterministic audio/video fairness — Implemented in 0.0.6y; continuous pumping, timers, A/V synchronization, and drift correction pending
+- Explicit continuous pump policy bounded by mandatory pump-count, monotonic-duration, and consecutive-idle limits — Implemented in 0.0.6z; precise timing, A/V synchronization, drift correction, and real-media playback pending
 - FLV demux/decode backend — Pending
 - Bounded decoded audio/video queues and renderer/device sinks — Pending
 - Audio/video playback and A/V synchronization — Pending
