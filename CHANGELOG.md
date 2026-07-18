@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### 0.0.6s Renderer / Audio Sink Boundary
+
+- Added separate awaited contracts for canonical BGRA32 video and interleaved S16/F32 audio output.
+- Added explicit configure, submit, flush, reset, device generation, and fixed failure results.
+- Revalidated bounded payload layout and serialized each sink independently without OS APIs or queues.
+
 ### 0.0.6r Bounded Playback Scheduler
 
 - Added an explicitly driven fixed-array scheduler with shared audio/video capacity.

@@ -7,13 +7,13 @@ PeerCast Nova は、長年親しまれてきた PeerCast の思想を受け継�
 
 ## 現在の段階
 
-**Milestone 0.0.6r — Bounded Playback Scheduler**
+**Milestone 0.0.6s — Renderer / Audio Sink Boundary**
 
-0.0.6r adds an explicitly driven fixed-array scheduler over the 0.0.6q policy
-and 0.0.6p awaited delivery. Audio/video share a default 16-frame capacity with
-a 1,024 hard limit and configurable DropOldest, DropIncoming, or Reject behavior.
-It owns and disposes queued frames deterministically and starts no resident loop,
-renderer, device, demux, or backend activation.
+0.0.6s separates video renderer and audio device responsibilities behind
+independent awaited pure-managed contracts. It accepts canonical BGRA32 video
+and interleaved S16/F32 audio, revalidates configuration and bounded payloads,
+and fixes configure, submit, flush, reset, generation, cancellation, and device
+failure outcomes without adding an OS renderer or audio API.
 
 既存PeerCastStationとの接続を確認する互換プローブを実装しました。
 
