@@ -14,7 +14,7 @@ using PeerCast.Nova.Network.Transport;
 using PeerCast.Nova.Protocol.Pcp;
 
 Console.WriteLine("Hello, Nova.");
-Console.WriteLine("PeerCast Nova 0.0.6p Awaited Decoded Sink Delivery");
+Console.WriteLine("PeerCast Nova 0.0.6q Playback Policy / Clock Boundary");
 
 INovaLogger logger = new ConsoleNovaLogger();
 

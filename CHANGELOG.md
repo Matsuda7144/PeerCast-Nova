@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### 0.0.6q Playback Policy / Clock Boundary
+
+- Added a monotonic clock abstraction and a locked, bounded, pure managed timing policy.
+- Added fixed deliver, finite-wait, drop, reset-clock, and reject decisions with configurable audio/video master selection.
+- Fixed default and hard limits for wait, lateness, and lead without adding scheduling, queues, timers, or sink integration.
+
 ### 0.0.6p Awaited Decoded Sink Delivery
 
 - Added serial awaited delivery from existing canonical frame boundaries to `IPlaybackDecodedFrameSink`.

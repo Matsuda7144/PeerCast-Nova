@@ -171,6 +171,7 @@ selecting a codec backend or output device.
 - Revalidated adapter to existing decoded output models — Implemented in 0.0.6n; YUV/planar conversion pending
 - Managed BT.601 YUV and planar PCM conversion to decoded output models — Implemented in 0.0.6o
 - Serial awaited delivery to the decoded frame sink without a decoder-owned queue — Implemented in 0.0.6p
+- Bounded playback policy and monotonic A/V clock responsibility boundary — Implemented in 0.0.6q; scheduling pending
 - FLV demux/decode backend — Pending
 - Bounded decoded audio/video queues and renderer/device sinks — Pending
 - Audio/video playback and A/V synchronization — Pending

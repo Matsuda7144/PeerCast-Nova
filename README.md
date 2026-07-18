@@ -7,13 +7,13 @@ PeerCast Nova は、長年親しまれてきた PeerCast の思想を受け継�
 
 ## 現在の段階
 
-**Milestone 0.0.6p — Awaited Decoded Sink Delivery**
+**Milestone 0.0.6q — Playback Policy / Clock Boundary**
 
-0.0.6p serially awaits canonical audio/video callbacks on the existing decoded
-frame sink. Sink delay provides direct backpressure without a decoder-owned
-queue; payload is valid through the awaited callback and cleared afterward.
-Cancellation and sink failures preserve the context, while unexpected integration
-failure is fail closed. Rendering, devices, demux, and activation remain out of scope.
+0.0.6q separates a monotonic A/V clock and bounded playback-policy contract from
+decoding, delivery, and sinks. It returns fixed deliver, finite-wait, drop,
+reset-clock, or reject decisions under explicit wait/lateness/lead limits and a
+configurable audio/video master. It starts no scheduler, queue, timer, renderer,
+device, demux, or backend activation.
 
 既存PeerCastStationとの接続を確認する互換プローブを実装しました。
 
