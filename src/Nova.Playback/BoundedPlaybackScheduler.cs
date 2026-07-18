@@ -81,6 +81,7 @@ public sealed class BoundedPlaybackScheduler : IDisposable
     private long _dropCount;
     private long _deliveryCount;
     private int _isDisposed;
+    private ScheduledFrame? _outputReservation;
 
     public BoundedPlaybackScheduler(
         PlaybackSchedulerOptions options,
@@ -157,7 +158,14 @@ public sealed class BoundedPlaybackScheduler : IDisposable
                 switch (_fullPolicy)
                 {
                     case PlaybackSchedulerFullPolicy.DropOldest:
+                        var previousCount = _count;
                         DropHead();
+                        if (_count == previousCount)
+                        {
+                            frame.Dispose();
+                            IncrementSaturated(ref _dropCount);
+                            return PlaybackSchedulerEnqueueResult.DroppedIncoming;
+                        }
                         result = PlaybackSchedulerEnqueueResult.EnqueuedAfterDroppingOldest;
                         break;
                     case PlaybackSchedulerFullPolicy.DropIncoming:
@@ -293,6 +301,52 @@ public sealed class BoundedPlaybackScheduler : IDisposable
         }
     }
 
+    internal bool IsDisposed => Volatile.Read(ref _isDisposed) != 0;
+
+    internal async ValueTask<PlaybackSchedulerOutputReservation?> ReserveOutputAsync(
+        PlaybackSchedulerOutputKind preferredKind,
+        CancellationToken cancellationToken)
+    {
+        if (!Enum.IsDefined(preferredKind) || Volatile.Read(ref _isDisposed) != 0)
+        {
+            return null;
+        }
+
+        using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken, _disposeCancellation.Token);
+        try
+        {
+            await _runGate.WaitAsync(linkedCancellation.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return null;
+        }
+
+        lock (_sync)
+        {
+            if (_isDisposed != 0 || _outputReservation is not null)
+            {
+                _runGate.Release();
+                return null;
+            }
+
+            var scheduled = FindOutput(preferredKind) ?? FindOutput(
+                preferredKind == PlaybackSchedulerOutputKind.Video
+                    ? PlaybackSchedulerOutputKind.Audio
+                    : PlaybackSchedulerOutputKind.Video);
+            if (scheduled is null)
+            {
+                _runGate.Release();
+                return null;
+            }
+
+            _outputReservation = scheduled;
+            return new PlaybackSchedulerOutputReservation(this, scheduled, scheduled.Frame,
+                scheduled.Sequence, scheduled.Discontinuity);
+        }
+    }
+
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _isDisposed, 1) != 0)
@@ -306,7 +360,10 @@ public sealed class BoundedPlaybackScheduler : IDisposable
         {
             while (_count > 0)
             {
-                DropHead();
+                if (!DropFirstUnreserved())
+                {
+                    break;
+                }
             }
         }
 
@@ -375,6 +432,11 @@ public sealed class BoundedPlaybackScheduler : IDisposable
 
     private void DropHead()
     {
+        if (_count > 0 && ReferenceEquals(_queue[_head], _outputReservation))
+        {
+            DropFirstUnreserved();
+            return;
+        }
         var frame = Dequeue();
         if (frame is not null)
         {
@@ -382,6 +444,88 @@ public sealed class BoundedPlaybackScheduler : IDisposable
             IncrementSaturated(ref _dropCount);
         }
     }
+
+    private ScheduledFrame? FindOutput(PlaybackSchedulerOutputKind kind)
+    {
+        for (var offset = 0; offset < _count; offset++)
+        {
+            var scheduled = _queue[(_head + offset) % _queue.Length];
+            if (scheduled is not null && ToOutputKind(scheduled) == kind)
+            {
+                return scheduled;
+            }
+        }
+        return null;
+    }
+
+    private bool DropFirstUnreserved()
+    {
+        for (var offset = 0; offset < _count; offset++)
+        {
+            var scheduled = _queue[(_head + offset) % _queue.Length];
+            if (scheduled is not null && !ReferenceEquals(scheduled, _outputReservation))
+            {
+                Remove(scheduled, dispose: true, countDrop: true);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void CompleteOutput(ScheduledFrame scheduled, bool consume)
+    {
+        lock (_sync)
+        {
+            if (!ReferenceEquals(_outputReservation, scheduled))
+            {
+                return;
+            }
+            _outputReservation = null;
+            if (consume || _isDisposed != 0)
+            {
+                Remove(scheduled, dispose: true, countDrop: false);
+                if (consume) IncrementSaturated(ref _deliveryCount);
+            }
+        }
+        _runGate.Release();
+    }
+
+    internal void CompleteReservedIdentity(object scheduledIdentity, bool consume)
+    {
+        if (scheduledIdentity is ScheduledFrame scheduled)
+            CompleteOutput(scheduled, consume);
+    }
+
+    private void Remove(ScheduledFrame scheduled, bool dispose, bool countDrop)
+    {
+        var found = -1;
+        for (var offset = 0; offset < _count; offset++)
+        {
+            if (ReferenceEquals(_queue[(_head + offset) % _queue.Length], scheduled))
+            {
+                found = offset;
+                break;
+            }
+        }
+        if (found < 0) return;
+        for (var offset = found; offset < _count - 1; offset++)
+        {
+            _queue[(_head + offset) % _queue.Length] =
+                _queue[(_head + offset + 1) % _queue.Length];
+        }
+        _queue[(_head + _count - 1) % _queue.Length] = null;
+        _count--;
+        if (dispose) scheduled.Frame.Dispose();
+        if (countDrop) IncrementSaturated(ref _dropCount);
+    }
+
+    private static PlaybackSchedulerOutputKind? ToOutputKind(ScheduledFrame scheduled) =>
+        scheduled.Frame.Metadata.MediaKind switch
+        {
+            PlaybackDecoderFfmpegFrameMediaKind.Video => PlaybackSchedulerOutputKind.Video,
+            PlaybackDecoderFfmpegFrameMediaKind.Audio => PlaybackSchedulerOutputKind.Audio,
+            _ => null,
+        };
 
     private void IncrementDrop()
     {
@@ -403,4 +547,40 @@ public sealed class BoundedPlaybackScheduler : IDisposable
         PlaybackDecoderFfmpegManagedFrame Frame,
         long Sequence,
         PlaybackDecodedFrameDiscontinuityKind Discontinuity);
+}
+
+internal enum PlaybackSchedulerOutputKind
+{
+    Video,
+    Audio,
+}
+
+internal sealed class PlaybackSchedulerOutputReservation : IDisposable
+{
+    private BoundedPlaybackScheduler? _scheduler;
+    private readonly object _scheduledIdentity;
+
+    internal PlaybackSchedulerOutputReservation(BoundedPlaybackScheduler scheduler,
+        object scheduledIdentity, PlaybackDecoderFfmpegManagedFrame frame, long sequence,
+        PlaybackDecodedFrameDiscontinuityKind discontinuity)
+    {
+        _scheduler = scheduler;
+        _scheduledIdentity = scheduledIdentity;
+        Frame = frame;
+        Sequence = sequence;
+        Discontinuity = discontinuity;
+    }
+
+    public PlaybackDecoderFfmpegManagedFrame Frame { get; }
+    public long Sequence { get; }
+    public PlaybackDecodedFrameDiscontinuityKind Discontinuity { get; }
+
+    public void Complete(bool consume)
+    {
+        var scheduler = Interlocked.Exchange(ref _scheduler, null);
+        if (scheduler is not null)
+            scheduler.CompleteReservedIdentity(_scheduledIdentity, consume);
+    }
+
+    public void Dispose() => Complete(consume: false);
 }

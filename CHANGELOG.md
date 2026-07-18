@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### 0.0.6y Windows Output Scheduler Adapter Boundary
+
+- Added explicit one-item pumping from the bounded scheduler to the Windows output buffer processor without a resident loop or timer.
+- Added deterministic video/audio preference alternation and scheduler-owned reservation/acknowledgement so only successful dispatch consumes an item.
+- Added fixed retry retention, generation reset, cancellation, disposal, validation, and fail-closed results without A/V synchronization or continuous playback.
+- Made cross-media reset transactional with single-attempt audio rollback and an explicit partial-reset fault state when rollback cannot restore generation consistency.
+
 ### 0.0.6x Windows Output Buffer Processing Boundary
 
 - Added finite one-frame BGRA32 upload/Present and one-buffer WASAPI write processing over synchronized activation-owned resource borrows.
