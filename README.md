@@ -9,102 +9,87 @@ License: **Apache License 2.0**
 
 ## 現在地
 
-**Milestone 0.0.8p — Playback Cutover Architecture Review**
+**Milestone 0.0.8q — Bounded Scheduler Aggregate Byte Budget**
 
-受信・中継・再生基盤を小さな有限境界に分け、所有権、失敗時の状態、reset／rollback、resource cleanupをテストで固定している段階です。
+診断専用のH.264／AAC経路は、native context openからmanaged frame copy、format conversion、awaited sink callbackまで到達しています。本番decoder factoryからは独立しており、FFmpeg backend activationや配布承認を変更していません。
 
-診断専用の再生経路では、H.264／AAC各1packetについて次の有限処理まで到達しました。
+0.0.8qでは、decoderと既存schedulerを接続する前提として、`BoundedPlaybackScheduler`へaggregate owned-byte budgetを追加しました。
 
-```text
-native context open
-→ packet send / frame receive
-→ callback-scoped metadata and plane/sample view
-→ owned managed frame copy
-→ managed canonical conversion
-→ awaited decoded sink callback
-```
+- frame数とowned byte数を独立して制限
+- queued、reserved、in-flight frameをownership終了までaccount
+- single-frame oversizeを`FrameTooLarge`で拒否・破棄
+- countまたはbyte上限で既存full policyを適用
+- `DropOldest`はreserved frameを保護しながら複数frameを破棄可能
+- delivery、cancellation、failure、reservation completion、disposeでaccountingを解放
+- snapshotへ`OwnedByteCount`を追加
+- 既存の三引数snapshot constructionは維持
 
-この経路はproduction decoder factoryから独立しており、FFmpeg backend activationや配布承認を変更しません。
-
-0.0.8pでは、既存scheduler・timing・recovery・Windows outputへ接続する前にarchitecture reviewを行いました。
-
-- converted callback payloadは保存・queueしない
-- future cutover seamはconversion前のowned managed frame
-- 既存`BoundedPlaybackScheduler`を再利用し、第二のdecoded queueを作らない
-- decoder ingress前にschedulerへaggregate owned-byte budgetを追加する
-- frame-count capacityだけではmemory boundとして不十分
-- unknown timestampを許す現段階ではduration cutoffを必須化しない
-- `Nova.Playback`のproject分割は具体的なplatform／packaging要求まで延期
-- `net10.0`を維持し、supported servicing updateで検証する
-- production dependencyや第三者assetを安易に追加しない
-
-次の実装は**0.0.8q Bounded Scheduler Aggregate Byte Budget**です。
+第二のdecoded queue、decoder ingress、duration cutoffは追加していません。
 
 ## 実装済みの主な領域
 
 ### PCP互換・Channel受信
 
-- PeerCastStation互換のHTTP relay entryとPCP handshake
-- CHAN control decodeとpayload受信
-- bounded buffer、backpressure、有限timeout／停止
-- 再接続を含むChannel Session
-- privacy-safeな固定形式診断snapshot
+- PeerCastStation互換HTTP relay entryとPCP handshake
+- CHAN control decodeとbounded payload受信
+- backpressure、有限timeout、停止、再接続
+- official Stable／developmentとの互換性検証
 
 ### Relay
 
-- bounded fan-out
+- bounded fan-outとslow child isolation
 - downstream relay session／server
-- upstream、fan-out、downstreamを束ねるrelay coordinator
-- 有限drainとcleanup
+- owned relay coordinatorと有限drain
 - controlled real-media relay verification
 
 ### 再生基盤
 
-- FFmpeg runtime候補の検証境界とlease管理
+- verified FFmpeg runtime locator／leaseとABI gate
 - native decoder context、parameter transfer、codec open、packet/frame境界
-- callback-scoped frame、metadata、plane/sample境界
-- owned managed frame copyとcanonical format conversion
+- callback-scoped metadata／plane／sample view
+- owned managed frame copyとcanonical conversion
 - serial awaited sink delivery
-- bounded decoded-frame scheduler
+- count／byte bounded decoded-frame scheduler
 - A/V timing、late-item、recovery、deadline-aware run policy
-- Windows D3D11／DXGI／WASAPI output境界
-- finite continuous pump boundary
-- diagnostic H.264/AAC path through awaited sink delivery
+- Windows D3D11／WASAPI output境界
+- finite continuous pump
+- diagnostic H.264／AAC path through awaited sink delivery
 
-詳細は以下を参照してください。
+詳細:
 
-- [CHANGELOG.md](CHANGELOG.md) — milestoneごとの変更履歴
-- [NAVIGATION.md](NAVIGATION.md) — 現在地、重要文書、次の作業
-- [ROADMAP.md](ROADMAP.md) — 実装済み／未実装の全体計画
-- [docs/adr](docs/adr) — Architecture Decision Records
-- [docs/reviews](docs/reviews) — validationとreview記録
+- [CHANGELOG.md](CHANGELOG.md)
+- [NAVIGATION.md](NAVIGATION.md)
+- [ROADMAP.md](ROADMAP.md)
+- [docs/adr](docs/adr)
+- [docs/reviews](docs/reviews)
 
 ## まだ完了していないもの
 
 PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信アプリではありません。
 
-未実装または未承認の主な範囲:
-
 - bounded FLV／MP4 demux
-- production decoderからschedulerへのmanaged-frame ingress
-- schedulerのaggregate byte budget
+- diagnostic／production decoderからschedulerへのmanaged-frame ingress
 - decoded-buffer duration cutoff
 - complete A/V synchronization、resampling、drift correction
 - precise multimedia timerとin-flight preemption
 - approved FFmpeg backend activation
-- NovaによるFFmpeg runtime同梱／再配布
+- FFmpeg runtime同梱／再配布
 - controlled audible／visible real-media playback
 - GUI、window message loop、installer、recorder
 
 FFmpeg backend activation、runtime bundling／distribution、license approvalは、ADRで明示的に承認されるまで未承認です。
 
+## 次のマイルストーン
+
+**0.0.8r — Diagnostic Managed Frame Scheduler Ingress Transaction**
+
+0.0.8mで所有したmanaged frameを既存schedulerへ診断専用の固定順序で渡し、sequence、discontinuity、enqueue result、部分成功時のownershipを固定します。二streamのatomic enqueueは主張しません。
+
 ## 必要環境
 
 - .NET SDK 10
 - Windows 11はWindows output境界の対象
-- Linux／WindowsのCIでbuild、test、formatを検証
-
-Windows native outputを必要としない境界は、実deviceなしでもテストできるよう設計しています。
+- Linux／Windows CI
 
 ## ビルドとテスト
 
@@ -115,32 +100,18 @@ dotnet test PeerCast-Nova.sln -c Release --no-build --no-restore
 dotnet format PeerCast-Nova.sln --verify-no-changes --no-restore
 ```
 
-CLIの起動:
-
-```powershell
-dotnet run --project src/Nova.Cli/Nova.Cli.csproj -c Release
-```
-
-各診断コマンドの目的と制約は、`NAVIGATION.md`および`docs/reviews`を参照してください。
-
 ## 設計原則
 
 - 1回の公開操作を有限化する
 - resident loopや無限retryを暗黙に導入しない
-- countだけでなくresource量も明示的にboundする
-- 所有権を明示し、借用したresourceをdisposeしない
+- countだけでなくresource量もboundする
+- ownership transferとcleanupを明示する
 - 成功した処理だけをconsume／commitする
 - undefined enumや不正値はfail closed
-- resetの途中失敗を成功として隠さない
-- lower boundaryのpointer、handle、HRESULTをpublic contractへ漏らさない
+- reset途中の失敗を成功として隠さない
+- native pointer、handle、HRESULTをpublic contractへ漏らさない
 - 実装していない機能を完了扱いしない
 - 第三者assetはprovenanceとredistribution permissionを記録する
-
-## コントリビューション
-
-プロジェクトは段階的に開発中です。変更は小さなmilestoneとADR、テスト、validation文書をセットにして進めます。
-
-IssueやPull Requestを作成する際は、変更範囲、所有権、有限性、memory／time bound、失敗時の状態、検証方法を明記してください。
 
 ## ライセンス
 

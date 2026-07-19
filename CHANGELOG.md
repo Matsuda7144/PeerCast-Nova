@@ -7,6 +7,17 @@ history at commit `f078dab5372a45a8c577c1c802a697ab72b45c02` and in the associat
 ADR/PCN validation records. This active file keeps the current playback
 integration sequence concise.
 
+### 0.0.8q - Bounded Scheduler Aggregate Byte Budget
+
+- Added an aggregate owned-byte budget independent from frame-count capacity.
+- Accounted queued, output-reserved, and `RunOneAsync` in-flight managed frames until scheduler ownership ends.
+- Added checked plane-buffer aggregation, fixed single-frame oversize rejection, and `OwnedByteCount` snapshots.
+- Applied `DropOldest`, `DropIncoming`, and `Reject` when either count or byte limits would be exceeded.
+- Allowed `DropOldest` to remove multiple unreserved frames while protecting output reservations.
+- Released byte accounting on delivery, policy disposal, cancellation, failure, reservation completion, eviction, and scheduler disposal.
+- Kept the prior three-argument snapshot construction source compatible through an optional fourth value.
+- Added ADR-0101 and PCN-0109. Decoder ingress, demux, duration cutoff, production activation, and new dependencies remain outside scope.
+
 ### 0.0.8p - Playback Cutover Architecture Review
 
 - Reviewed the completed finite diagnostic path through awaited sink delivery before scheduler or production cutover.
@@ -16,7 +27,7 @@ integration sequence concise.
 - Deferred duration cutoff while unknown timestamps and durations remain valid at existing decode boundaries.
 - Retained the current project split, `net10.0`, host-installed FFmpeg policy, and no-new-production-dependency position.
 - Added third-party asset provenance and redistribution-permission requirements.
-- Added ADR-0100 and PCN-0108 and synchronized README, ROADMAP, NAVIGATION, and changelog documentation.
+- Added ADR-0100 and PCN-0108 and synchronized project documentation.
 
 ### 0.0.8o - Diagnostic Awaited Sink Delivery Transaction
 
@@ -54,50 +65,10 @@ integration sequence concise.
 - Retained validated managed metadata only and kept native AVFrame ownership inside the callback.
 - Added ADR-0095 and PCN-0103.
 
-### 0.0.8j - Diagnostic Packet / Frame Transaction
+### 0.0.8d-0.0.8j - Diagnostic Gate through Packet/Frame
 
-- Sent one bounded H.264 packet and one bounded AAC packet to independently opened diagnostic contexts.
-- Performed at most one frame-state receive per stream in fixed video-then-audio order.
-- Added no extraction, loop, flush, demux, or output.
-- Added ADR-0094 and PCN-0102.
-
-### 0.0.8i - Diagnostic Codec Open Transaction
-
-- Opened independently transferred H.264 and AAC diagnostic contexts with fixed ordering and reverse cleanup.
-- Kept packet/frame processing and production activation outside the milestone.
-- Added ADR-0093 and PCN-0101.
-
-### 0.0.8h - Diagnostic Native Parameter Transaction
-
-- Allocated independent H.264 and AAC native contexts and transferred bounded diagnostic codec parameters.
-- Preserved deterministic partial-failure cleanup and kept codec open outside the milestone.
-- Added ADR-0092 and PCN-0100.
-
-### 0.0.8g - Diagnostic Decoder Configuration
-
-- Added explicit bounded H.264 dimensions/codec data and AAC sample configuration/codec data.
-- Reused managed codec-parameter validation, defensive copying, padding, and ownership.
-- Added reverse cleanup when audio preparation fails after video preparation.
-- Added ADR-0091 and PCN-0099.
-
-### 0.0.8f - Diagnostic Fixture Adapter
-
-- Adapted the bounded fixture to exactly one H.264 packet and one AAC packet.
-- Preserved payload and timing without retry, seeking, packet loops, or native calls.
-- Added ADR-0090 and PCN-0098.
-
-### 0.0.8e - Bounded Diagnostic Playback Fixture
-
-- Added a strict fixed envelope with one bounded H.264 payload and one bounded AAC payload.
-- Added fixed validation for version, roles, timing, lengths, truncation, and trailing data.
-- Added ADR-0089 and PCN-0097.
-
-### 0.0.8d - Diagnostic Playback Pipeline Integration Probe Gate
-
-- Added a diagnostic-only phase plan across the existing playback boundaries.
-- Refused runtime and media path access while FFmpeg license review remains `Pending`.
-- Kept production backend activation unchanged.
-- Added ADR-0088 and PCN-0096.
+- Added the diagnostic gate, bounded fixture, codec configuration, native parameter transfer, codec open, and one finite packet/frame attempt per stream.
+- Kept demux, loops, flush, output, activation, and redistribution outside scope.
 
 ### 0.0.8a-0.0.8c - Recovery and Run Budget
 
