@@ -2,12 +2,12 @@
 
 ## 現在地
 
-**Milestone 0.0.8g — Diagnostic Decoder Configuration**
+**Milestone 0.0.8h — Diagnostic Native Parameter Transaction**
 
 - 候補記録と技術検証: 完了
 - FFmpeg backend activation: 未承認
 - 実decoder・可視映像・可聴音声: 未完成
-- current: 診断fixtureに不足していたH.264/AAC decoder metadataを明示する有限configurationとmanaged parameter ownershipを実装済み。native context/transferは未接続
+- current: H.264/AACの独立したnative contextを作成し、managed parameter ownersを有限transactionで転送する境界を実装済み。codec openとpacket submissionは未接続
 - safety: `PlaybackDecoderBackendFactory`等から新規再生境界へのactivation参照はなく、未承認状態を維持
 - distribution: ユーザー/ホスト導入、動的リンク、NovaによるFFmpeg同梱・再配布なし
 - trust boundary: verified 5-DLL handles remain open until lease disposal
@@ -85,6 +85,7 @@
 | 0.0.8e | Bounded Diagnostic Playback Fixture | Verified |
 | 0.0.8f | Diagnostic Fixture Adapter | Implemented; native decode blocked |
 | 0.0.8g | Diagnostic Decoder Configuration | Implemented; native transfer blocked |
+| 0.0.8h | Diagnostic Native Parameter Transaction | Implemented; codec open blocked |
 
 ## 最新のコード入口
 
@@ -100,6 +101,7 @@
 - `src/Nova.Playback/PlaybackPipelineIntegrationProbe.cs`
 - `src/Nova.Playback/PlaybackDiagnosticFixtureAdapter.cs`
 - `src/Nova.Playback/PlaybackDiagnosticDecoderConfiguration.cs`
+- `src/Nova.Playback/PlaybackDiagnosticNativeParameterTransaction.cs`
 - `src/Nova.Cli/PlaybackPipelineIntegrationProbeCommand.cs`
 - `src/Nova.Playback/BoundedDiagnosticPlaybackFixture.cs`
 
@@ -120,6 +122,7 @@
 - `docs/adr/ADR-0089-bounded-diagnostic-playback-fixture.md`
 - `docs/adr/ADR-0090-diagnostic-fixture-adapter.md`
 - `docs/adr/ADR-0091-diagnostic-decoder-configuration.md`
+- `docs/adr/ADR-0092-diagnostic-native-parameter-transaction.md`
 
 ## 最新の検証文書
 
@@ -137,6 +140,7 @@
 - `docs/reviews/PCN-0097-BOUNDED-DIAGNOSTIC-PLAYBACK-FIXTURE-VALIDATION.md`
 - `docs/reviews/PCN-0098-DIAGNOSTIC-FIXTURE-ADAPTER-VALIDATION.md`
 - `docs/reviews/PCN-0099-DIAGNOSTIC-DECODER-CONFIGURATION-VALIDATION.md`
+- `docs/reviews/PCN-0100-DIAGNOSTIC-NATIVE-PARAMETER-TRANSACTION-VALIDATION.md`
 
 ## 検証入口
 
@@ -147,7 +151,7 @@
 
 ## 次の作業
 
-0.0.8gのmanaged parameter ownersを受け取り、H.264/AAC native context allocationとparameter transferを有限transactionとして接続する。codec openとpacket submissionはさらに後段へ分離する。
+0.0.8hの独立したH.264/AAC native contextsを受け取り、既存のavcodec_open2 boundaryを有限transactionとして接続する。packet submissionはさらに後段へ分離する。
 
 ## まだ完了を主張しないもの
 
