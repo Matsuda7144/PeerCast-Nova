@@ -2,6 +2,62 @@
 
 ## [Unreleased]
 
+### 0.0.8b Recovery-aware Pump Orchestrator
+
+- Composed the finite 0.0.7h continuous pump with the bounded 0.0.8a audio recovery boundary.
+- Ran recovery only after an explicit `AudioRecoveryRequired` result and restarted pumping only after successful recovery and pump generation reset.
+- Added a mandatory recovery-attempt limit, cancellation-aware stop across pump and recovery phases, and explicit `ResetRequired` and `Faulted` states.
+- Kept injected pump and recovery boundaries caller-owned and added no device activation, generation selection, resampling, drift correction, or complete A/V synchronization.
+
+### 0.0.8a Audio Recovery Boundary
+
+- Added a finite audio recovery transaction with mandatory attempt limits and explicit recovery-effect and generation-reset steps.
+- Required successful recovery before generation reset and latched attempt exhaustion, explicit reset requests, and cancellation as `ResetRequired`.
+- Latched reset failure, dependency failure, undefined results, and unexpected exceptions as `Faulted`.
+- Kept recovery effects and generation reset implementations caller-owned and added no native audio activation, device migration, resampling, or automatic pump restart.
+
+### 0.0.7h Late-aware Continuous Pump Boundary
+
+- Repeated the 0.0.7g one-item late-aware timed dispatch under mandatory pump-count, monotonic-duration, consecutive-idle, and idle-delay limits.
+- Counted successful video/audio processing and consumed video drops as progress while preserving explicit retained-late and audio-recovery outcomes.
+- Used bounded idle delay for retained late, wait-limit, empty, would-block, and clock-not-started results, with finite stop and cancellation handling.
+- Added reset delegation and fixed reset-required/fault behavior without audio recovery effects, keyframe selection, drift correction, or native-resource activation.
+
+### 0.0.7g Late-aware Timed Dispatch Boundary
+
+- Preserved one live scheduler reservation across bounded timing wait/redecision, process-now output dispatch, and late-item disposition.
+- Consumed a reservation only after successful output processing or an explicit video-drop disposition.
+- Retained wait-limit, retryable output, cancellation, invalid, audio-recovery, and retained-late paths.
+- Added fixed reset-required handling without continuous pumping, audio recovery, keyframe selection, drift correction, or complete A/V synchronization.
+
+### 0.0.7f Late-aware Scheduler Decision Boundary
+
+- Preserved one scheduler reservation across a timing decision and late disposition.
+- Forwarded exact `VideoLate` and `AudioLate` results to the 0.0.7e boundary before reservation completion.
+- Returned process-now and wait as explicit retained follow-up actions.
+- Added no output dispatch, waiting loop, continuous pump, audio recovery, keyframe selection, or native-resource access.
+
+### 0.0.7e Late Reservation Disposition Boundary
+
+- Applied 0.0.7d late coordination outcomes to one existing scheduler reservation.
+- Retained video and audio late items by default, consumed exactly one reservation only for an explicit video-drop candidate, and preserved audio-recovery requests without consumption.
+- Completed every accepted coordination path exactly once and recorded only a bounded numeric video-drop count.
+- Kept invalid, reset, disposed, and failure paths retained without audio recovery effects, keyframe policy, drift correction, or native-resource access.
+
+### 0.0.7d Late Dispatch Coordination Boundary
+
+- Added a pure coordination boundary between 0.0.7b late dispatch results and the 0.0.7c late-item disposition policy.
+- Returned retained-video, retained-audio, video-drop-candidate, or audio-recovery-required outcomes without recomputing timestamps or playback position.
+- Rejected processed, wait, retry, mismatched, and undefined inputs fail closed and latched generation mismatch or discontinuity as `ResetRequired`.
+- Kept scheduler reservation ownership and all output, drop, and recovery effects outside the boundary.
+
+### 0.0.7c Late Item Disposition Policy Boundary
+
+- Added a pure one-item policy over existing `VideoLate` and `AudioLate` timing results.
+- Mapped video late results to retain or video-drop-candidate and audio late results to retain or audio-recovery-required through explicit configuration.
+- Accepted only exact media/result pairs, rejected non-late, mismatched, and undefined inputs fail closed, and latched generation mismatch or discontinuity as `ResetRequired`.
+- Added no scheduler acknowledgement, frame dropping, keyframe selection, audio recovery effect, resampling, drift correction, or native-resource access.
+
 ### 0.0.7b Timed Scheduler Dispatch Boundary
 
 - Added one-reservation timed dispatch that delegates decisions to 0.0.7a and dispatches only `ProcessNow` items.
