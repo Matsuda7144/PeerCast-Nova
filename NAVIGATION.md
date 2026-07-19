@@ -2,12 +2,12 @@
 
 ## 現在地
 
-**Milestone 0.0.8i — Diagnostic Codec Open Transaction**
+**Milestone 0.0.8j — Diagnostic Packet / Frame Transaction**
 
 - 候補記録と技術検証: 完了
 - FFmpeg backend activation: 未承認
 - 実decoder・可視映像・可聴音声: 未完成
-- current: 0.0.8hでparameter設定済みとなった独立H.264/AAC native contextsを、既存のzero-only `avcodec_open2` boundaryへ有限transactionとして接続済み。packet submissionとframe receiveは未接続
+- current: 0.0.8iでopen済みとなった独立H.264/AAC native contextsへ、映像packet送信・映像frame受信・音声packet送信・音声frame受信を各1回だけ行う有限診断transactionを接続済み。demux、continuous decode loop、frame extraction、output deliveryは未接続
 - safety: `PlaybackDecoderBackendFactory`等から新規再生境界へのactivation参照はなく、未承認状態を維持
 - distribution: ユーザー/ホスト導入、動的リンク、NovaによるFFmpeg同梱・再配布なし
 - trust boundary: verified 5-DLL handles remain open until lease disposal
@@ -87,6 +87,7 @@
 | 0.0.8g | Diagnostic Decoder Configuration | Implemented; native transfer blocked |
 | 0.0.8h | Diagnostic Native Parameter Transaction | Implemented; codec open blocked |
 | 0.0.8i | Diagnostic Codec Open Transaction | Implemented; packet/frame processing blocked |
+| 0.0.8j | Diagnostic Packet / Frame Transaction | Implemented; frame extraction and continuous decode blocked |
 
 ## 最新のコード入口
 
@@ -104,6 +105,7 @@
 - `src/Nova.Playback/PlaybackDiagnosticDecoderConfiguration.cs`
 - `src/Nova.Playback/PlaybackDiagnosticNativeParameterTransaction.cs`
 - `src/Nova.Playback/PlaybackDiagnosticCodecOpenTransaction.cs`
+- `src/Nova.Playback/PlaybackDiagnosticPacketFrameTransaction.cs`
 - `src/Nova.Cli/PlaybackPipelineIntegrationProbeCommand.cs`
 - `src/Nova.Playback/BoundedDiagnosticPlaybackFixture.cs`
 
@@ -126,6 +128,7 @@
 - `docs/adr/ADR-0091-diagnostic-decoder-configuration.md`
 - `docs/adr/ADR-0092-diagnostic-native-parameter-transaction.md`
 - `docs/adr/ADR-0093-diagnostic-codec-open-transaction.md`
+- `docs/adr/ADR-0094-diagnostic-packet-frame-transaction.md`
 
 ## 最新の検証文書
 
@@ -145,6 +148,7 @@
 - `docs/reviews/PCN-0099-DIAGNOSTIC-DECODER-CONFIGURATION-VALIDATION.md`
 - `docs/reviews/PCN-0100-DIAGNOSTIC-NATIVE-PARAMETER-TRANSACTION-VALIDATION.md`
 - `docs/reviews/PCN-0101-DIAGNOSTIC-CODEC-OPEN-TRANSACTION-VALIDATION.md`
+- `docs/reviews/PCN-0102-DIAGNOSTIC-PACKET-FRAME-TRANSACTION-VALIDATION.md`
 
 ## 検証入口
 
@@ -155,7 +159,7 @@
 
 ## 次の作業
 
-0.0.8iのopen済みH.264/AAC contextsを受け取り、既存のpacket/frame processing boundaryへ有限診断transactionとして接続する。packet submissionとframe receiveの各結果を固定し、demux・continuous decode loop・output deliveryはさらに後段へ分離する。
+0.0.8jの有限packet/frame transactionを受け取り、既存のcallback-scoped native frame boundaryとmetadata extraction境界へ接続する。native frameの寿命をcallback内に限定したまま、managed frame copyやcontinuous decode loopはさらに後段へ分離する。
 
 ## まだ完了を主張しないもの
 
