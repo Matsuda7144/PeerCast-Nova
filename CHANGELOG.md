@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### 0.0.8c Deadline-aware Run Budget Policy
+
+- Added a pure deadline-aware policy that derives one finite continuous-pump run budget from caller-owned monotonic timestamps.
+- Subtracted a caller-defined safety margin, then bounded run duration and pump count by the remaining deadline and one minimum pump duration.
+- Returned `DeadlineReached` when no complete pump unit fits and failed closed for invalid clocks, reversed deadlines, or invalid nested pump options.
+- Preserved existing idle and dispatch configuration without running the pump, reading a clock, waiting, recovering audio, changing generations, or activating FFmpeg.
+
 ### 0.0.8b Recovery-aware Pump Orchestrator
 
 - Composed the finite 0.0.7h continuous pump with the bounded 0.0.8a audio recovery boundary.

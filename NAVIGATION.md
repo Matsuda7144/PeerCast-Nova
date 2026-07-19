@@ -2,12 +2,12 @@
 
 ## 現在地
 
-**Milestone 0.0.8b — Recovery-aware Pump Orchestrator**
+**Milestone 0.0.8c — Deadline-aware Run Budget Policy**
 
 - 候補記録と技術検証: 完了
 - FFmpeg backend activation: 未承認
 - 実decoder・可視映像・可聴音声: 未完成
-- current: finite late-aware pump、bounded audio recovery、generation reset、controlled pump restartまで実装済み
+- current: finite late-aware pump、bounded audio recovery、controlled restart、deadline-aware finite run budgetingまで実装済み
 - safety: `PlaybackDecoderBackendFactory`等から新規再生境界へのactivation参照はなく、未承認状態を維持
 - distribution: ユーザー/ホスト導入、動的リンク、NovaによるFFmpeg同梱・再配布なし
 - trust boundary: verified 5-DLL handles remain open until lease disposal
@@ -79,6 +79,7 @@
 | 0.0.7h | Late-aware Continuous Pump Boundary | Implemented |
 | 0.0.8a | Audio Recovery Boundary | Implemented |
 | 0.0.8b | Recovery-aware Pump Orchestrator | Implemented |
+| 0.0.8c | Deadline-aware Run Budget Policy | Implemented |
 
 ## 最新のコード入口
 
@@ -90,6 +91,7 @@
 - `src/Nova.Playback/PlaybackLateAwareContinuousPumpBoundary.cs`
 - `src/Nova.Playback/PlaybackAudioRecoveryBoundary.cs`
 - `src/Nova.Playback/PlaybackRecoveryAwarePumpOrchestrator.cs`
+- `src/Nova.Playback/PlaybackDeadlineAwareRunBudgetPolicyBoundary.cs`
 
 ## 最新のADR
 
@@ -103,6 +105,7 @@
 - `docs/adr/ADR-0084-LATE-AWARE-CONTINUOUS-PUMP-BOUNDARY.md`
 - `docs/adr/ADR-0085-audio-recovery-boundary.md`
 - `docs/adr/ADR-0086-recovery-aware-pump-orchestrator.md`
+- `docs/adr/ADR-0087-deadline-aware-run-budget-policy.md`
 
 ## 最新の検証文書
 
@@ -115,6 +118,7 @@
 - `docs/reviews/PCN-0092-LATE-AWARE-CONTINUOUS-PUMP-VALIDATION.md`
 - `docs/reviews/PCN-0093-AUDIO-RECOVERY-BOUNDARY-VALIDATION.md`
 - `docs/reviews/PCN-0094-RECOVERY-AWARE-PUMP-ORCHESTRATOR-VALIDATION.md`
+- `docs/reviews/PCN-0095-DEADLINE-AWARE-RUN-BUDGET-POLICY-VALIDATION.md`
 
 ## 検証入口
 
@@ -125,7 +129,7 @@
 
 ## 次の作業
 
-新しい機能実装の前に、この棚卸しPRをマージして台帳と実態を一致させる。次のmilestone候補はdeadline-aware run budgetingだが、この文書では未着手として扱う。
+0.0.8cの純粋budget policyを回復対応pumpへ接続する前に、実行中処理を期限で強制停止できない点を維持したまま、caller-owned deadlineから単一runを開始する統合境界を設計する。
 
 ## まだ完了を主張しないもの
 
@@ -133,6 +137,6 @@
 - FFmpeg同梱判断の法務サインオフ
 - 実codecによるFLV demux/decode
 - decoded frame queue、renderer、audio deviceの実機統合
-- precise deadline scheduling、drift correction、完全なA/V同期
+- precise deadline scheduling、in-flight preemption、drift correction、完全なA/V同期
 - audible/visible real-media playback
 - GUI、installer、recorder
