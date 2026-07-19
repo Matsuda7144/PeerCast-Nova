@@ -2,12 +2,12 @@
 
 ## 現在地
 
-**Milestone 0.0.8e — Bounded Diagnostic Playback Fixture**
+**Milestone 0.0.8f — Diagnostic Fixture Adapter**
 
 - 候補記録と技術検証: 完了
 - FFmpeg backend activation: 未承認
 - 実decoder・可視映像・可聴音声: 未完成
-- current: 診断専用の1映像H.264 packet＋1音声AAC packet固定fixture contractを実装済み。0.0.8dハーネスへのadapter接続と実メディア遷移は未実装
+- current: 0.0.8e fixtureを0.0.8d RuntimeDecode phaseへ渡す診断専用adapterを実装済み。native context以降と実メディア遷移は未実装
 - safety: `PlaybackDecoderBackendFactory`等から新規再生境界へのactivation参照はなく、未承認状態を維持
 - distribution: ユーザー/ホスト導入、動的リンク、NovaによるFFmpeg同梱・再配布なし
 - trust boundary: verified 5-DLL handles remain open until lease disposal
@@ -82,6 +82,8 @@
 | 0.0.8b | Recovery-aware Pump Orchestrator | Implemented |
 | 0.0.8c | Deadline-aware Run Budget Policy | Implemented |
 | 0.0.8d | Diagnostic Playback Pipeline Integration Probe Gate | Implemented; media run blocked |
+| 0.0.8e | Bounded Diagnostic Playback Fixture | Verified |
+| 0.0.8f | Diagnostic Fixture Adapter | Implemented; native decode blocked |
 | 0.0.8e | Bounded Diagnostic Playback Fixture | Implemented; adapter not connected |
 | 0.0.8e | Bounded Diagnostic Playback Fixture | Implemented; adapter not connected |
 
@@ -97,6 +99,7 @@
 - `src/Nova.Playback/PlaybackRecoveryAwarePumpOrchestrator.cs`
 - `src/Nova.Playback/PlaybackDeadlineAwareRunBudgetPolicyBoundary.cs`
 - `src/Nova.Playback/PlaybackPipelineIntegrationProbe.cs`
+- `src/Nova.Playback/PlaybackDiagnosticFixtureAdapter.cs`
 - `src/Nova.Cli/PlaybackPipelineIntegrationProbeCommand.cs`
 - `src/Nova.Playback/BoundedDiagnosticPlaybackFixture.cs`
 - `src/Nova.Playback/BoundedDiagnosticPlaybackFixture.cs`
@@ -116,6 +119,7 @@
 - `docs/adr/ADR-0087-deadline-aware-run-budget-policy.md`
 - `docs/adr/ADR-0088-diagnostic-playback-pipeline-integration-probe.md`
 - `docs/adr/ADR-0089-bounded-diagnostic-playback-fixture.md`
+- `docs/adr/ADR-0090-diagnostic-fixture-adapter.md`
 - `docs/adr/ADR-0089-bounded-diagnostic-playback-fixture.md`
 
 ## 最新の検証文書
@@ -132,6 +136,7 @@
 - `docs/reviews/PCN-0095-DEADLINE-AWARE-RUN-BUDGET-POLICY-VALIDATION.md`
 - `docs/reviews/PCN-0096-DIAGNOSTIC-PLAYBACK-PIPELINE-INTEGRATION-PROBE-VALIDATION.md`
 - `docs/reviews/PCN-0097-BOUNDED-DIAGNOSTIC-PLAYBACK-FIXTURE-VALIDATION.md`
+- `docs/reviews/PCN-0098-DIAGNOSTIC-FIXTURE-ADAPTER-VALIDATION.md`
 - `docs/reviews/PCN-0097-BOUNDED-DIAGNOSTIC-PLAYBACK-FIXTURE-VALIDATION.md`
 
 ## 検証入口

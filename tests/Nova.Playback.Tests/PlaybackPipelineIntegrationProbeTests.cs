@@ -39,9 +39,7 @@ public sealed class PlaybackPipelineIntegrationProbeTests
             .ToArray();
 
         Assert.Equal(expectedPhases, actualPhases);
-        Assert.Equal(
-            plan.Count,
-            plan.Select(static item => item.Stage).Distinct().Count());
+        Assert.Equal(plan.Count, plan.Select(static item => item.Stage).Distinct().Count());
         Assert.All(plan, static item =>
         {
             Assert.True(Enum.IsDefined(item.Phase));
@@ -55,6 +53,7 @@ public sealed class PlaybackPipelineIntegrationProbeTests
         var expected = new[]
         {
             PlaybackPipelineIntegrationStage.FfmpegAbiSymbolGate,
+            PlaybackPipelineIntegrationStage.DiagnosticFixtureAdapter,
             PlaybackPipelineIntegrationStage.NativeDecoderContextLease,
             PlaybackPipelineIntegrationStage.CodecParameterOwnership,
             PlaybackPipelineIntegrationStage.NativeParameterTransfer,

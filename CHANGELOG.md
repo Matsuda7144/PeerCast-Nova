@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### 0.0.8f - Diagnostic Fixture Adapter
+
+- Added a diagnostic-only adapter from the bounded 0.0.8e fixture to exactly one H.264 encoded video packet and one AAC encoded audio packet.
+- Inserted the adapter after the ABI gate and before native decoder context creation in the 0.0.8d RuntimeDecode phase plan.
+- Preserved payload bytes, timestamps, and durations without retry, seeking, packet loops, native calls, or production activation changes.
+- Kept Pending license review refusal ahead of runtime and fixture path access.
+- Added ADR-0090 and PCN-0098. Native decode and start-recover-stop remain incomplete.
+
 ### 0.0.8e - Bounded Diagnostic Playback Fixture
 
 - Added a diagnostic-only fixed binary envelope containing exactly one H.264 video packet and one AAC audio packet.

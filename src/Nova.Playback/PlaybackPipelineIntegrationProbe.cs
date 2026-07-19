@@ -5,6 +5,7 @@ public enum PlaybackPipelineIntegrationProbeState
     Idle,
     LocatingRuntime,
     VerifyingAbi,
+    LoadingDiagnosticFixture,
     Running,
     Recovering,
     Stopping,
@@ -22,6 +23,7 @@ public enum PlaybackPipelineIntegrationProbeResult
     RuntimeRejected,
     AbiGateRejected,
     DiagnosticMediaRejected,
+    RuntimeDecodeUnavailable,
     ResetRequired,
     Faulted,
     Cancelled,
@@ -41,6 +43,7 @@ public enum PlaybackPipelineIntegrationPhase
 public enum PlaybackPipelineIntegrationStage
 {
     FfmpegAbiSymbolGate,
+    DiagnosticFixtureAdapter,
     NativeDecoderContextLease,
     CodecParameterOwnership,
     NativeParameterTransfer,
@@ -104,78 +107,41 @@ public sealed class PlaybackPipelineIntegrationProbe : IDisposable
 {
     private static readonly PlaybackPipelineIntegrationStageDescriptor[] OrderedPlan =
     [
-        new(PlaybackPipelineIntegrationPhase.RuntimeDecode,
-            PlaybackPipelineIntegrationStage.FfmpegAbiSymbolGate),
-        new(PlaybackPipelineIntegrationPhase.RuntimeDecode,
-            PlaybackPipelineIntegrationStage.NativeDecoderContextLease),
-        new(PlaybackPipelineIntegrationPhase.RuntimeDecode,
-            PlaybackPipelineIntegrationStage.CodecParameterOwnership),
-        new(PlaybackPipelineIntegrationPhase.RuntimeDecode,
-            PlaybackPipelineIntegrationStage.NativeParameterTransfer),
-        new(PlaybackPipelineIntegrationPhase.RuntimeDecode,
-            PlaybackPipelineIntegrationStage.CodecOpen),
-        new(PlaybackPipelineIntegrationPhase.RuntimeDecode,
-            PlaybackPipelineIntegrationStage.PacketFrameProcessing),
-        new(PlaybackPipelineIntegrationPhase.RuntimeDecode,
-            PlaybackPipelineIntegrationStage.CallbackScopedNativeFrame),
-        new(PlaybackPipelineIntegrationPhase.RuntimeDecode,
-            PlaybackPipelineIntegrationStage.NativeFrameMetadata),
-        new(PlaybackPipelineIntegrationPhase.RuntimeDecode,
-            PlaybackPipelineIntegrationStage.FramePlaneSample),
-        new(PlaybackPipelineIntegrationPhase.RuntimeDecode,
-            PlaybackPipelineIntegrationStage.ManagedFrameCopy),
-
-        new(PlaybackPipelineIntegrationPhase.ManagedDelivery,
-            PlaybackPipelineIntegrationStage.DecodedOutputAdapter),
-        new(PlaybackPipelineIntegrationPhase.ManagedDelivery,
-            PlaybackPipelineIntegrationStage.ManagedFormatConversion),
-        new(PlaybackPipelineIntegrationPhase.ManagedDelivery,
-            PlaybackPipelineIntegrationStage.AwaitedSinkDelivery),
-        new(PlaybackPipelineIntegrationPhase.ManagedDelivery,
-            PlaybackPipelineIntegrationStage.PolicyClock),
-        new(PlaybackPipelineIntegrationPhase.ManagedDelivery,
-            PlaybackPipelineIntegrationStage.BoundedScheduler),
-
-        new(PlaybackPipelineIntegrationPhase.SchedulingTiming,
-            PlaybackPipelineIntegrationStage.AvTimingDecision),
-        new(PlaybackPipelineIntegrationPhase.SchedulingTiming,
-            PlaybackPipelineIntegrationStage.TimedSchedulerDispatch),
-        new(PlaybackPipelineIntegrationPhase.SchedulingTiming,
-            PlaybackPipelineIntegrationStage.LateItemDisposition),
-        new(PlaybackPipelineIntegrationPhase.SchedulingTiming,
-            PlaybackPipelineIntegrationStage.LateDispatchCoordination),
-        new(PlaybackPipelineIntegrationPhase.SchedulingTiming,
-            PlaybackPipelineIntegrationStage.LateReservationDisposition),
-        new(PlaybackPipelineIntegrationPhase.SchedulingTiming,
-            PlaybackPipelineIntegrationStage.LateAwareSchedulerDecision),
-        new(PlaybackPipelineIntegrationPhase.SchedulingTiming,
-            PlaybackPipelineIntegrationStage.LateAwareTimedDispatch),
-
-        new(PlaybackPipelineIntegrationPhase.OutputLifecycle,
-            PlaybackPipelineIntegrationStage.RendererAudioSink),
-        new(PlaybackPipelineIntegrationPhase.OutputLifecycle,
-            PlaybackPipelineIntegrationStage.WindowsAdapterSelection),
-        new(PlaybackPipelineIntegrationPhase.OutputLifecycle,
-            PlaybackPipelineIntegrationStage.WindowsOutputActivation),
-        new(PlaybackPipelineIntegrationPhase.OutputLifecycle,
-            PlaybackPipelineIntegrationStage.WindowsResourceBinding),
-        new(PlaybackPipelineIntegrationPhase.OutputLifecycle,
-            PlaybackPipelineIntegrationStage.WindowsStreamInitialization),
-        new(PlaybackPipelineIntegrationPhase.OutputLifecycle,
-            PlaybackPipelineIntegrationStage.WindowsBufferProcessing),
-        new(PlaybackPipelineIntegrationPhase.OutputLifecycle,
-            PlaybackPipelineIntegrationStage.WindowsSchedulerAdapter),
-
-        new(PlaybackPipelineIntegrationPhase.RecoveryOrchestration,
-            PlaybackPipelineIntegrationStage.FiniteContinuousPump),
-        new(PlaybackPipelineIntegrationPhase.RecoveryOrchestration,
-            PlaybackPipelineIntegrationStage.LateAwareContinuousPump),
-        new(PlaybackPipelineIntegrationPhase.RecoveryOrchestration,
-            PlaybackPipelineIntegrationStage.AudioRecovery),
-        new(PlaybackPipelineIntegrationPhase.RecoveryOrchestration,
-            PlaybackPipelineIntegrationStage.RecoveryAwarePumpOrchestrator),
-        new(PlaybackPipelineIntegrationPhase.RecoveryOrchestration,
-            PlaybackPipelineIntegrationStage.DeadlineAwareRunBudget),
+        new(PlaybackPipelineIntegrationPhase.RuntimeDecode, PlaybackPipelineIntegrationStage.FfmpegAbiSymbolGate),
+        new(PlaybackPipelineIntegrationPhase.RuntimeDecode, PlaybackPipelineIntegrationStage.DiagnosticFixtureAdapter),
+        new(PlaybackPipelineIntegrationPhase.RuntimeDecode, PlaybackPipelineIntegrationStage.NativeDecoderContextLease),
+        new(PlaybackPipelineIntegrationPhase.RuntimeDecode, PlaybackPipelineIntegrationStage.CodecParameterOwnership),
+        new(PlaybackPipelineIntegrationPhase.RuntimeDecode, PlaybackPipelineIntegrationStage.NativeParameterTransfer),
+        new(PlaybackPipelineIntegrationPhase.RuntimeDecode, PlaybackPipelineIntegrationStage.CodecOpen),
+        new(PlaybackPipelineIntegrationPhase.RuntimeDecode, PlaybackPipelineIntegrationStage.PacketFrameProcessing),
+        new(PlaybackPipelineIntegrationPhase.RuntimeDecode, PlaybackPipelineIntegrationStage.CallbackScopedNativeFrame),
+        new(PlaybackPipelineIntegrationPhase.RuntimeDecode, PlaybackPipelineIntegrationStage.NativeFrameMetadata),
+        new(PlaybackPipelineIntegrationPhase.RuntimeDecode, PlaybackPipelineIntegrationStage.FramePlaneSample),
+        new(PlaybackPipelineIntegrationPhase.RuntimeDecode, PlaybackPipelineIntegrationStage.ManagedFrameCopy),
+        new(PlaybackPipelineIntegrationPhase.ManagedDelivery, PlaybackPipelineIntegrationStage.DecodedOutputAdapter),
+        new(PlaybackPipelineIntegrationPhase.ManagedDelivery, PlaybackPipelineIntegrationStage.ManagedFormatConversion),
+        new(PlaybackPipelineIntegrationPhase.ManagedDelivery, PlaybackPipelineIntegrationStage.AwaitedSinkDelivery),
+        new(PlaybackPipelineIntegrationPhase.ManagedDelivery, PlaybackPipelineIntegrationStage.PolicyClock),
+        new(PlaybackPipelineIntegrationPhase.ManagedDelivery, PlaybackPipelineIntegrationStage.BoundedScheduler),
+        new(PlaybackPipelineIntegrationPhase.SchedulingTiming, PlaybackPipelineIntegrationStage.AvTimingDecision),
+        new(PlaybackPipelineIntegrationPhase.SchedulingTiming, PlaybackPipelineIntegrationStage.TimedSchedulerDispatch),
+        new(PlaybackPipelineIntegrationPhase.SchedulingTiming, PlaybackPipelineIntegrationStage.LateItemDisposition),
+        new(PlaybackPipelineIntegrationPhase.SchedulingTiming, PlaybackPipelineIntegrationStage.LateDispatchCoordination),
+        new(PlaybackPipelineIntegrationPhase.SchedulingTiming, PlaybackPipelineIntegrationStage.LateReservationDisposition),
+        new(PlaybackPipelineIntegrationPhase.SchedulingTiming, PlaybackPipelineIntegrationStage.LateAwareSchedulerDecision),
+        new(PlaybackPipelineIntegrationPhase.SchedulingTiming, PlaybackPipelineIntegrationStage.LateAwareTimedDispatch),
+        new(PlaybackPipelineIntegrationPhase.OutputLifecycle, PlaybackPipelineIntegrationStage.RendererAudioSink),
+        new(PlaybackPipelineIntegrationPhase.OutputLifecycle, PlaybackPipelineIntegrationStage.WindowsAdapterSelection),
+        new(PlaybackPipelineIntegrationPhase.OutputLifecycle, PlaybackPipelineIntegrationStage.WindowsOutputActivation),
+        new(PlaybackPipelineIntegrationPhase.OutputLifecycle, PlaybackPipelineIntegrationStage.WindowsResourceBinding),
+        new(PlaybackPipelineIntegrationPhase.OutputLifecycle, PlaybackPipelineIntegrationStage.WindowsStreamInitialization),
+        new(PlaybackPipelineIntegrationPhase.OutputLifecycle, PlaybackPipelineIntegrationStage.WindowsBufferProcessing),
+        new(PlaybackPipelineIntegrationPhase.OutputLifecycle, PlaybackPipelineIntegrationStage.WindowsSchedulerAdapter),
+        new(PlaybackPipelineIntegrationPhase.RecoveryOrchestration, PlaybackPipelineIntegrationStage.FiniteContinuousPump),
+        new(PlaybackPipelineIntegrationPhase.RecoveryOrchestration, PlaybackPipelineIntegrationStage.LateAwareContinuousPump),
+        new(PlaybackPipelineIntegrationPhase.RecoveryOrchestration, PlaybackPipelineIntegrationStage.AudioRecovery),
+        new(PlaybackPipelineIntegrationPhase.RecoveryOrchestration, PlaybackPipelineIntegrationStage.RecoveryAwarePumpOrchestrator),
+        new(PlaybackPipelineIntegrationPhase.RecoveryOrchestration, PlaybackPipelineIntegrationStage.DeadlineAwareRunBudget),
     ];
 
     private readonly object _sync = new();
@@ -199,15 +165,7 @@ public sealed class PlaybackPipelineIntegrationProbe : IDisposable
         {
             lock (_sync)
             {
-                return new(
-                    _state,
-                    _currentPhase,
-                    _lastCompletedPhase,
-                    _lastStage,
-                    0,
-                    0,
-                    0,
-                    0);
+                return new(_state, _currentPhase, _lastCompletedPhase, _lastStage, 0, 0, 0, 0);
             }
         }
     }
@@ -233,42 +191,26 @@ public sealed class PlaybackPipelineIntegrationProbe : IDisposable
         {
             var review = PlaybackFfmpegBackendCandidate.Provenance.LicenseReview;
             if (!Enum.IsDefined(review))
-                return SetTerminal(
-                    PlaybackPipelineIntegrationProbeState.Faulted,
-                    PlaybackPipelineIntegrationProbeResult.Faulted);
+                return SetTerminal(PlaybackPipelineIntegrationProbeState.Faulted, PlaybackPipelineIntegrationProbeResult.Faulted);
             if (review == PlaybackDecoderBackendLicenseReview.Pending)
-                return SetTerminal(
-                    PlaybackPipelineIntegrationProbeState.Idle,
-                    PlaybackPipelineIntegrationProbeResult.LicenseReviewPending);
+                return SetTerminal(PlaybackPipelineIntegrationProbeState.Idle, PlaybackPipelineIntegrationProbeResult.LicenseReviewPending);
             if (review != PlaybackDecoderBackendLicenseReview.Approved)
-                return SetTerminal(
-                    PlaybackPipelineIntegrationProbeState.Idle,
-                    PlaybackPipelineIntegrationProbeResult.LicenseReviewRejected);
+                return SetTerminal(PlaybackPipelineIntegrationProbeState.Idle, PlaybackPipelineIntegrationProbeResult.LicenseReviewRejected);
 
             if (options is null ||
                 string.IsNullOrWhiteSpace(options.RuntimeDirectory) ||
                 string.IsNullOrWhiteSpace(options.DiagnosticMediaFile))
             {
-                return SetTerminal(
-                    PlaybackPipelineIntegrationProbeState.Idle,
-                    PlaybackPipelineIntegrationProbeResult.InvalidConfiguration);
+                return SetTerminal(PlaybackPipelineIntegrationProbeState.Idle, PlaybackPipelineIntegrationProbeResult.InvalidConfiguration);
             }
 
-            BeginPhase(
-                PlaybackPipelineIntegrationPhase.RuntimeDecode,
-                PlaybackPipelineIntegrationProbeState.LocatingRuntime,
-                null);
+            BeginPhase(PlaybackPipelineIntegrationPhase.RuntimeDecode, PlaybackPipelineIntegrationProbeState.LocatingRuntime, null);
             var location = await PlaybackDecoderBackendInstalledRuntimeLocator.LocateAndVerifyAsync(
                 options.RuntimeDirectory,
                 PlaybackFfmpegBackendRuntimeInventory.PinnedCandidate,
                 _runCancellation.Token).ConfigureAwait(false);
-            if (location.Location != PlaybackDecoderBackendInstalledRuntimeLocation.Verified ||
-                location.Lease is null)
-            {
-                return SetTerminal(
-                    PlaybackPipelineIntegrationProbeState.Idle,
-                    PlaybackPipelineIntegrationProbeResult.RuntimeRejected);
-            }
+            if (location.Location != PlaybackDecoderBackendInstalledRuntimeLocation.Verified || location.Lease is null)
+                return SetTerminal(PlaybackPipelineIntegrationProbeState.Idle, PlaybackPipelineIntegrationProbeResult.RuntimeRejected);
 
             await using var runtimeLease = location.Lease;
             BeginPhase(
@@ -278,29 +220,35 @@ public sealed class PlaybackPipelineIntegrationProbe : IDisposable
             var gate = new PlaybackDecoderFfmpegAbiSymbolGate();
             using var gateLease = gate.Acquire(runtimeLease).Lease;
             if (gateLease is null)
-            {
-                return SetTerminal(
-                    PlaybackPipelineIntegrationProbeState.Idle,
-                    PlaybackPipelineIntegrationProbeResult.AbiGateRejected);
-            }
+                return SetTerminal(PlaybackPipelineIntegrationProbeState.Idle, PlaybackPipelineIntegrationProbeResult.AbiGateRejected);
 
-            // A bounded diagnostic demux/fixture contract is required before
-            // RuntimeDecode can complete. Do not invent an activation bypass.
+            BeginPhase(
+                PlaybackPipelineIntegrationPhase.RuntimeDecode,
+                PlaybackPipelineIntegrationProbeState.LoadingDiagnosticFixture,
+                PlaybackPipelineIntegrationStage.DiagnosticFixtureAdapter);
+            var fixtureResult = PlaybackDiagnosticFixtureAdapter.TryLoad(
+                () => File.OpenRead(options.DiagnosticMediaFile),
+                _runCancellation.Token,
+                out var encodedInput);
+            if (fixtureResult == PlaybackDiagnosticFixtureAdapterResult.Cancelled)
+                return SetTerminal(PlaybackPipelineIntegrationProbeState.Idle, PlaybackPipelineIntegrationProbeResult.Cancelled);
+            if (fixtureResult != PlaybackDiagnosticFixtureAdapterResult.Completed || encodedInput is null)
+                return SetTerminal(PlaybackPipelineIntegrationProbeState.Idle, PlaybackPipelineIntegrationProbeResult.DiagnosticMediaRejected);
+
+            // The bounded encoded input is now available. Native context creation,
+            // parameter transfer, codec open, and packet processing remain a later
+            // reviewed diagnostic-only connection.
             return SetTerminal(
                 PlaybackPipelineIntegrationProbeState.Idle,
-                PlaybackPipelineIntegrationProbeResult.DiagnosticMediaRejected);
+                PlaybackPipelineIntegrationProbeResult.RuntimeDecodeUnavailable);
         }
         catch (OperationCanceledException)
         {
-            return SetTerminal(
-                PlaybackPipelineIntegrationProbeState.Idle,
-                PlaybackPipelineIntegrationProbeResult.Cancelled);
+            return SetTerminal(PlaybackPipelineIntegrationProbeState.Idle, PlaybackPipelineIntegrationProbeResult.Cancelled);
         }
         catch
         {
-            return SetTerminal(
-                PlaybackPipelineIntegrationProbeState.Faulted,
-                PlaybackPipelineIntegrationProbeResult.Faulted);
+            return SetTerminal(PlaybackPipelineIntegrationProbeState.Faulted, PlaybackPipelineIntegrationProbeResult.Faulted);
         }
         finally
         {
@@ -348,9 +296,7 @@ public sealed class PlaybackPipelineIntegrationProbe : IDisposable
         lock (_sync)
         {
             if (!_isDisposed)
-            {
                 _state = state;
-            }
         }
 
         return result;
