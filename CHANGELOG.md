@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### 0.0.8e - Bounded Diagnostic Playback Fixture
+
+- Added a diagnostic-only fixed binary envelope containing exactly one H.264 video packet and one AAC audio packet.
+- Added strict version, codec-role, timing, payload-length, truncation, and trailing-data validation with fixed enum results.
+- Bounded payloads to 1 MiB for video and 256 KiB for audio without container probing, seeking, retry, or packet loops.
+- Preserved caller ownership of streams and kept production decoder activation, FFmpeg approval state, and native-resource ownership unchanged.
+- Added ADR-0089 and PCN-0097. This milestone does not claim MP4/FLV demux or a completed start-recover-stop media run.
+
 ### 0.0.8d - Diagnostic Playback Pipeline Integration Probe Gate
 
 - Added a diagnostic-only CLI probe topology covering the playback boundaries from 0.0.6d through 0.0.8c.
