@@ -63,6 +63,12 @@ try
     {
         await RunPlaybackDecoderLifecycleProbeAsync();
     }
+
+    if (HasArgument(PlaybackPipelineIntegrationProbeCommand.Argument))
+    {
+        var probeResult = await PlaybackPipelineIntegrationProbeCommand.RunAsync(args);
+        Console.WriteLine(probeResult);
+    }
 }
 finally
 {

@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### 0.0.8d - Diagnostic Playback Pipeline Integration Probe Gate
+
+- Added a diagnostic-only CLI probe topology covering the playback boundaries from 0.0.6d through 0.0.8c.
+- Added a mandatory startup license-review gate that refuses the pinned `Pending` candidate before runtime or media path access.
+- Added explicit installed-runtime locator and ABI/symbol-gate acquisition after approval without changing production activation.
+- Recorded that a general short-media run remains blocked because the public boundary set has no bounded demux contract.
+- Added fixed-result tests for pending-review refusal, ordered topology, CLI invocation, and disposal.
+- Added ADR-0088 and PCN-0096. Audible and visible output remain outside scope.
+
+
 ### 0.0.8c Deadline-aware Run Budget Policy
 
 - Added a pure deadline-aware policy that derives one finite continuous-pump run budget from caller-owned monotonic timestamps.

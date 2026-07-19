@@ -2,12 +2,12 @@
 
 ## 現在地
 
-**Milestone 0.0.8c — Deadline-aware Run Budget Policy**
+**Milestone 0.0.8d — Diagnostic Playback Pipeline Integration Probe Gate**
 
 - 候補記録と技術検証: 完了
 - FFmpeg backend activation: 未承認
 - 実decoder・可視映像・可聴音声: 未完成
-- current: finite late-aware pump、bounded audio recovery、controlled restart、deadline-aware finite run budgetingまで実装済み
+- current: 0.0.6d〜0.0.8cの診断配線順序、license gate、locator/ABI gate入口まで実装済み。実メディア遷移はPending reviewとdemux未実装で停止
 - safety: `PlaybackDecoderBackendFactory`等から新規再生境界へのactivation参照はなく、未承認状態を維持
 - distribution: ユーザー/ホスト導入、動的リンク、NovaによるFFmpeg同梱・再配布なし
 - trust boundary: verified 5-DLL handles remain open until lease disposal
@@ -20,6 +20,7 @@
 - PCN検証文書は既存規則に従い、今後も `docs/reviews/` に配置する。
 - milestone実装PRには、同じPR内で `CHANGELOG.md` と本ファイルの現在地・索引更新を含める。
 - activation、実機再生、法務承認など未完了事項は、実装済み境界と混同せず明示する。
+- 診断統合ハーネスは本番経路から独立し、decoder backendのactivation状態を変更しない。
 - 本棚卸しで `CHANGELOG.md` と本ファイルを0.0.8bまで照合済み。
 
 ## 実装済みマイルストーン
@@ -80,6 +81,7 @@
 | 0.0.8a | Audio Recovery Boundary | Implemented |
 | 0.0.8b | Recovery-aware Pump Orchestrator | Implemented |
 | 0.0.8c | Deadline-aware Run Budget Policy | Implemented |
+| 0.0.8d | Diagnostic Playback Pipeline Integration Probe Gate | Implemented; media run blocked |
 
 ## 最新のコード入口
 
@@ -92,6 +94,8 @@
 - `src/Nova.Playback/PlaybackAudioRecoveryBoundary.cs`
 - `src/Nova.Playback/PlaybackRecoveryAwarePumpOrchestrator.cs`
 - `src/Nova.Playback/PlaybackDeadlineAwareRunBudgetPolicyBoundary.cs`
+- `src/Nova.Playback/PlaybackPipelineIntegrationProbe.cs`
+- `src/Nova.Cli/PlaybackPipelineIntegrationProbeCommand.cs`
 
 ## 最新のADR
 
@@ -106,6 +110,7 @@
 - `docs/adr/ADR-0085-audio-recovery-boundary.md`
 - `docs/adr/ADR-0086-recovery-aware-pump-orchestrator.md`
 - `docs/adr/ADR-0087-deadline-aware-run-budget-policy.md`
+- `docs/adr/ADR-0088-diagnostic-playback-pipeline-integration-probe.md`
 
 ## 最新の検証文書
 
@@ -119,6 +124,7 @@
 - `docs/reviews/PCN-0093-AUDIO-RECOVERY-BOUNDARY-VALIDATION.md`
 - `docs/reviews/PCN-0094-RECOVERY-AWARE-PUMP-ORCHESTRATOR-VALIDATION.md`
 - `docs/reviews/PCN-0095-DEADLINE-AWARE-RUN-BUDGET-POLICY-VALIDATION.md`
+- `docs/reviews/PCN-0096-DIAGNOSTIC-PLAYBACK-PIPELINE-INTEGRATION-PROBE-VALIDATION.md`
 
 ## 検証入口
 
@@ -129,7 +135,7 @@
 
 ## 次の作業
 
-0.0.8cの純粋budget policyを回復対応pumpへ接続する前に、実行中処理を期限で強制停止できない点を維持したまま、caller-owned deadlineから単一runを開始する統合境界を設計する。
+license review承認後も本番activationとは分離したまま、一般メディアを扱う前に、1映像packet＋1音声packetを供給する有限demux/diagnostic fixture contractを別ADRで設計する。
 
 ## まだ完了を主張しないもの
 
@@ -139,4 +145,5 @@
 - decoded frame queue、renderer、audio deviceの実機統合
 - precise deadline scheduling、in-flight preemption、drift correction、完全なA/V同期
 - audible/visible real-media playback
+- approved runtimeとbounded demux inputによる全boundaryのstart-recover-stop実行
 - GUI、installer、recorder
