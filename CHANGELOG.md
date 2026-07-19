@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### 0.0.8g - Diagnostic Decoder Configuration
+
+- Added explicit bounded H.264 dimensions/codec data and AAC sample configuration/codec data for diagnostic fixtures.
+- Reused the existing managed codec-parameter factory for validation, defensive copying, padding, and ownership.
+- Added two-owner reverse cleanup and partial-video cleanup when audio preparation fails.
+- Added ADR-0091 and PCN-0099. Native context allocation and parameter transfer remain outside this milestone.
+
 ### 0.0.8f - Diagnostic Fixture Adapter
 
 - Added a diagnostic-only adapter from the bounded 0.0.8e fixture to exactly one H.264 encoded video packet and one AAC encoded audio packet.
