@@ -2,12 +2,12 @@
 
 ## 現在地
 
-**Milestone 0.0.8h — Diagnostic Native Parameter Transaction**
+**Milestone 0.0.8i — Diagnostic Codec Open Transaction**
 
 - 候補記録と技術検証: 完了
 - FFmpeg backend activation: 未承認
 - 実decoder・可視映像・可聴音声: 未完成
-- current: H.264/AACの独立したnative contextを作成し、managed parameter ownersを有限transactionで転送する境界を実装済み。codec openとpacket submissionは未接続
+- current: 0.0.8hでparameter設定済みとなった独立H.264/AAC native contextsを、既存のzero-only `avcodec_open2` boundaryへ有限transactionとして接続済み。packet submissionとframe receiveは未接続
 - safety: `PlaybackDecoderBackendFactory`等から新規再生境界へのactivation参照はなく、未承認状態を維持
 - distribution: ユーザー/ホスト導入、動的リンク、NovaによるFFmpeg同梱・再配布なし
 - trust boundary: verified 5-DLL handles remain open until lease disposal
@@ -86,6 +86,7 @@
 | 0.0.8f | Diagnostic Fixture Adapter | Implemented; native decode blocked |
 | 0.0.8g | Diagnostic Decoder Configuration | Implemented; native transfer blocked |
 | 0.0.8h | Diagnostic Native Parameter Transaction | Implemented; codec open blocked |
+| 0.0.8i | Diagnostic Codec Open Transaction | Implemented; packet/frame processing blocked |
 
 ## 最新のコード入口
 
@@ -102,6 +103,7 @@
 - `src/Nova.Playback/PlaybackDiagnosticFixtureAdapter.cs`
 - `src/Nova.Playback/PlaybackDiagnosticDecoderConfiguration.cs`
 - `src/Nova.Playback/PlaybackDiagnosticNativeParameterTransaction.cs`
+- `src/Nova.Playback/PlaybackDiagnosticCodecOpenTransaction.cs`
 - `src/Nova.Cli/PlaybackPipelineIntegrationProbeCommand.cs`
 - `src/Nova.Playback/BoundedDiagnosticPlaybackFixture.cs`
 
@@ -123,6 +125,7 @@
 - `docs/adr/ADR-0090-diagnostic-fixture-adapter.md`
 - `docs/adr/ADR-0091-diagnostic-decoder-configuration.md`
 - `docs/adr/ADR-0092-diagnostic-native-parameter-transaction.md`
+- `docs/adr/ADR-0093-diagnostic-codec-open-transaction.md`
 
 ## 最新の検証文書
 
@@ -141,6 +144,7 @@
 - `docs/reviews/PCN-0098-DIAGNOSTIC-FIXTURE-ADAPTER-VALIDATION.md`
 - `docs/reviews/PCN-0099-DIAGNOSTIC-DECODER-CONFIGURATION-VALIDATION.md`
 - `docs/reviews/PCN-0100-DIAGNOSTIC-NATIVE-PARAMETER-TRANSACTION-VALIDATION.md`
+- `docs/reviews/PCN-0101-DIAGNOSTIC-CODEC-OPEN-TRANSACTION-VALIDATION.md`
 
 ## 検証入口
 
@@ -151,7 +155,7 @@
 
 ## 次の作業
 
-0.0.8hの独立したH.264/AAC native contextsを受け取り、既存のavcodec_open2 boundaryを有限transactionとして接続する。packet submissionはさらに後段へ分離する。
+0.0.8iのopen済みH.264/AAC contextsを受け取り、既存のpacket/frame processing boundaryへ有限診断transactionとして接続する。packet submissionとframe receiveの各結果を固定し、demux・continuous decode loop・output deliveryはさらに後段へ分離する。
 
 ## まだ完了を主張しないもの
 
