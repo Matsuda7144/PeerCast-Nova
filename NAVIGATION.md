@@ -2,17 +2,18 @@
 
 ## 現在地
 
-**Milestone 0.0.8j — Diagnostic Packet / Frame Transaction**
+**Milestone 0.0.8p — Playback Cutover Architecture Review**
 
-- 候補記録と技術検証: 完了
+- 0.0.8k〜0.0.8oの有限診断経路: 実装・CI検証済み
+- playback cutover architecture review: 完了
 - FFmpeg backend activation: 未承認
-- 実decoder・可視映像・可聴音声: 未完成
-- current: 0.0.8iでopen済みとなった独立H.264/AAC native contextsへ、映像packet送信・映像frame受信・音声packet送信・音声frame受信を各1回だけ行う有限診断transactionを接続済み。demux、continuous decode loop、frame extraction、output deliveryは未接続
-- safety: `PlaybackDecoderBackendFactory`等から新規再生境界へのactivation参照はなく、未承認状態を維持
+- FLV/MP4 demux、continuous decode、実機再生: 未完成
+- current: H.264/AAC各1packetを独立native contextへ送り、callback-scoped native frame、metadata、plane/sample view、managed copy、managed conversion、awaited sink deliveryまでを診断専用の有限transactionとして接続済み
+- cutover decision: converted callback payloadではなく、conversion前のowned managed frameを既存`BoundedPlaybackScheduler`へ渡す
+- prerequisite: schedulerはframe数だけでなくaggregate owned-byte budgetを持つまでdecoder ingressへ接続しない
+- safety: `PlaybackDecoderBackendFactory`等から診断経路へのactivation参照はなく、未承認状態を維持
 - distribution: ユーザー/ホスト導入、動的リンク、NovaによるFFmpeg同梱・再配布なし
-- trust boundary: verified 5-DLL handles remain open until lease disposal
-- path boundary: local fixed drives only; UNC and reparse points are rejected
-- enum boundary: undefined provenance, container, codec, and result values fail closed
+- asset policy: 第三者media、logo、icon、font等はsource/license/redistribution permissionを記録せず追加しない
 
 ## 進捗記録の規律
 
@@ -21,7 +22,7 @@
 - milestone実装PRには、同じPR内で `CHANGELOG.md` と本ファイルの現在地・索引更新を含める。
 - activation、実機再生、法務承認など未完了事項は、実装済み境界と混同せず明示する。
 - 診断統合ハーネスは本番経路から独立し、decoder backendのactivation状態を変更しない。
-- 本棚卸しで `CHANGELOG.md` と本ファイルを0.0.8bまで照合済み。
+- 本棚卸しで `README.md`、`ROADMAP.md`、`CHANGELOG.md`、本ファイルを0.0.8pまで照合する。
 
 ## 実装済みマイルストーン
 
@@ -87,68 +88,49 @@
 | 0.0.8g | Diagnostic Decoder Configuration | Implemented; native transfer blocked |
 | 0.0.8h | Diagnostic Native Parameter Transaction | Implemented; codec open blocked |
 | 0.0.8i | Diagnostic Codec Open Transaction | Implemented; packet/frame processing blocked |
-| 0.0.8j | Diagnostic Packet / Frame Transaction | Implemented; frame extraction and continuous decode blocked |
+| 0.0.8j | Diagnostic Packet / Frame Transaction | Implemented |
+| 0.0.8k | Diagnostic Frame Metadata Transaction | Implemented |
+| 0.0.8l | Diagnostic Frame Data Transaction | Implemented |
+| 0.0.8m | Diagnostic Managed Frame Copy Transaction | Implemented |
+| 0.0.8n | Diagnostic Managed Format Conversion Transaction | Implemented |
+| 0.0.8o | Diagnostic Awaited Sink Delivery Transaction | Verified |
+| 0.0.8p | Playback Cutover Architecture Review | Accepted; documentation alignment |
 
 ## 最新のコード入口
 
-- `src/Nova.Playback/PlaybackLateItemDispositionPolicyBoundary.cs`
-- `src/Nova.Playback/PlaybackLateDispatchCoordinationBoundary.cs`
-- `src/Nova.Playback/PlaybackLateReservationDispositionBoundary.cs`
-- `src/Nova.Playback/PlaybackLateAwareSchedulerDecisionBoundary.cs`
-- `src/Nova.Playback/PlaybackLateAwareTimedDispatchBoundary.cs`
-- `src/Nova.Playback/PlaybackLateAwareContinuousPumpBoundary.cs`
-- `src/Nova.Playback/PlaybackAudioRecoveryBoundary.cs`
-- `src/Nova.Playback/PlaybackRecoveryAwarePumpOrchestrator.cs`
-- `src/Nova.Playback/PlaybackDeadlineAwareRunBudgetPolicyBoundary.cs`
 - `src/Nova.Playback/PlaybackPipelineIntegrationProbe.cs`
-- `src/Nova.Playback/PlaybackDiagnosticFixtureAdapter.cs`
-- `src/Nova.Playback/PlaybackDiagnosticDecoderConfiguration.cs`
 - `src/Nova.Playback/PlaybackDiagnosticNativeParameterTransaction.cs`
 - `src/Nova.Playback/PlaybackDiagnosticCodecOpenTransaction.cs`
 - `src/Nova.Playback/PlaybackDiagnosticPacketFrameTransaction.cs`
-- `src/Nova.Cli/PlaybackPipelineIntegrationProbeCommand.cs`
-- `src/Nova.Playback/BoundedDiagnosticPlaybackFixture.cs`
+- `src/Nova.Playback/PlaybackDiagnosticFrameMetadataTransaction.cs`
+- `src/Nova.Playback/PlaybackDiagnosticFrameDataTransaction.cs`
+- `src/Nova.Playback/PlaybackDiagnosticManagedFrameCopyTransaction.cs`
+- `src/Nova.Playback/PlaybackDiagnosticManagedFormatConversionTransaction.cs`
+- `src/Nova.Playback/PlaybackDiagnosticAwaitedSinkDeliveryTransaction.cs`
+- `src/Nova.Playback/BoundedPlaybackScheduler.cs`
+- `src/Nova.Playback/PlaybackLateAwareContinuousPumpBoundary.cs`
+- `src/Nova.Playback/PlaybackRecoveryAwarePumpOrchestrator.cs`
+- `src/Nova.Playback/PlaybackDeadlineAwareRunBudgetPolicyBoundary.cs`
 
 ## 最新のADR
 
-- `docs/adr/ADR-0077-TIMED-SCHEDULER-DISPATCH-BOUNDARY.md`
-- `docs/adr/ADR-0078-LATE-ITEM-DISPOSITION-POLICY.md`
-- `docs/adr/ADR-0079-LATE-DISPATCH-COORDINATION-BOUNDARY.md`
-- `docs/adr/ADR-0080-LATE-RESERVATION-DISPOSITION-BOUNDARY.md`
-- `docs/adr/ADR-0081-LATE-AWARE-SCHEDULER-DECISION-BOUNDARY.md`
-- ADR-0082: permanent gap caused by numbering error; no file is to be created retroactively
-- `docs/adr/ADR-0083-LATE-AWARE-TIMED-DISPATCH-BOUNDARY.md`
-- `docs/adr/ADR-0084-LATE-AWARE-CONTINUOUS-PUMP-BOUNDARY.md`
-- `docs/adr/ADR-0085-audio-recovery-boundary.md`
-- `docs/adr/ADR-0086-recovery-aware-pump-orchestrator.md`
-- `docs/adr/ADR-0087-deadline-aware-run-budget-policy.md`
-- `docs/adr/ADR-0088-diagnostic-playback-pipeline-integration-probe.md`
-- `docs/adr/ADR-0089-bounded-diagnostic-playback-fixture.md`
-- `docs/adr/ADR-0090-diagnostic-fixture-adapter.md`
-- `docs/adr/ADR-0091-diagnostic-decoder-configuration.md`
-- `docs/adr/ADR-0092-diagnostic-native-parameter-transaction.md`
-- `docs/adr/ADR-0093-diagnostic-codec-open-transaction.md`
 - `docs/adr/ADR-0094-diagnostic-packet-frame-transaction.md`
+- `docs/adr/ADR-0095-diagnostic-frame-metadata-transaction.md`
+- `docs/adr/0096-bounded-diagnostic-frame-data-transaction.md`
+- `docs/adr/ADR-0097-diagnostic-managed-frame-copy-transaction.md`
+- `docs/adr/ADR-0098-diagnostic-managed-format-conversion-transaction.md`
+- `docs/adr/ADR-0099-diagnostic-awaited-sink-delivery-transaction.md`
+- `docs/adr/ADR-0100-playback-cutover-architecture-review.md`
 
 ## 最新の検証文書
 
-- `docs/reviews/PCN-0086-TIMED-SCHEDULER-DISPATCH-VALIDATION.md`
-- `docs/reviews/PCN-0087-LATE-ITEM-DISPOSITION-POLICY-VALIDATION.md`
-- `docs/reviews/PCN-0088-LATE-DISPATCH-COORDINATION-VALIDATION.md`
-- `docs/reviews/PCN-0089-LATE-RESERVATION-DISPOSITION-VALIDATION.md`
-- `docs/reviews/PCN-0090-LATE-AWARE-SCHEDULER-DECISION-VALIDATION.md`
-- `docs/reviews/PCN-0091-LATE-AWARE-TIMED-DISPATCH-VALIDATION.md`
-- `docs/reviews/PCN-0092-LATE-AWARE-CONTINUOUS-PUMP-VALIDATION.md`
-- `docs/reviews/PCN-0093-AUDIO-RECOVERY-BOUNDARY-VALIDATION.md`
-- `docs/reviews/PCN-0094-RECOVERY-AWARE-PUMP-ORCHESTRATOR-VALIDATION.md`
-- `docs/reviews/PCN-0095-DEADLINE-AWARE-RUN-BUDGET-POLICY-VALIDATION.md`
-- `docs/reviews/PCN-0096-DIAGNOSTIC-PLAYBACK-PIPELINE-INTEGRATION-PROBE-VALIDATION.md`
-- `docs/reviews/PCN-0097-BOUNDED-DIAGNOSTIC-PLAYBACK-FIXTURE-VALIDATION.md`
-- `docs/reviews/PCN-0098-DIAGNOSTIC-FIXTURE-ADAPTER-VALIDATION.md`
-- `docs/reviews/PCN-0099-DIAGNOSTIC-DECODER-CONFIGURATION-VALIDATION.md`
-- `docs/reviews/PCN-0100-DIAGNOSTIC-NATIVE-PARAMETER-TRANSACTION-VALIDATION.md`
-- `docs/reviews/PCN-0101-DIAGNOSTIC-CODEC-OPEN-TRANSACTION-VALIDATION.md`
 - `docs/reviews/PCN-0102-DIAGNOSTIC-PACKET-FRAME-TRANSACTION-VALIDATION.md`
+- `docs/reviews/PCN-0103-DIAGNOSTIC-FRAME-METADATA-TRANSACTION-VALIDATION.md`
+- `docs/reviews/PCN-0104-DIAGNOSTIC-FRAME-DATA-TRANSACTION-VALIDATION.md`
+- `docs/reviews/PCN-0105-DIAGNOSTIC-MANAGED-FRAME-COPY-TRANSACTION-VALIDATION.md`
+- `docs/reviews/PCN-0106-DIAGNOSTIC-MANAGED-FORMAT-CONVERSION-TRANSACTION-VALIDATION.md`
+- `docs/reviews/PCN-0107-DIAGNOSTIC-AWAITED-SINK-DELIVERY-TRANSACTION-VALIDATION.md`
+- `docs/reviews/PCN-0108-PLAYBACK-CUTOVER-ARCHITECTURE-REVIEW.md`
 
 ## 検証入口
 
@@ -159,14 +141,19 @@
 
 ## 次の作業
 
-0.0.8jの有限packet/frame transactionを受け取り、既存のcallback-scoped native frame boundaryとmetadata extraction境界へ接続する。native frameの寿命をcallback内に限定したまま、managed frame copyやcontinuous decode loopはさらに後段へ分離する。
+**0.0.8q — Bounded Scheduler Aggregate Byte Budget**
+
+`BoundedPlaybackScheduler`へ既存frame-count capacityと独立したaggregate owned-byte budgetを追加する。checked byte accounting、single-frame oversize拒否、count/byte両制約に対するfull-policy動作、reservation保護、snapshot、drop/dispose時の減算、overflow fail-closedをfocused testsで固定する。
+
+0.0.8qがVerifiedになるまで、診断decoderからschedulerへのmanaged-frame ownership transferは接続しない。
 
 ## まだ完了を主張しないもの
 
 - FFmpeg backend activationまたは配布承認
 - FFmpeg同梱判断の法務サインオフ
-- 実codecによるFLV demux/decode
-- decoded frame queue、renderer、audio deviceの実機統合
+- bounded FLV/MP4 demux contract
+- diagnosticまたはproduction decoderからschedulerへのframe ingress
+- decoded bufferingのduration cutoff
 - precise deadline scheduling、in-flight preemption、drift correction、完全なA/V同期
 - audible/visible real-media playback
 - approved runtimeとbounded demux inputによる全boundaryのstart-recover-stop実行
