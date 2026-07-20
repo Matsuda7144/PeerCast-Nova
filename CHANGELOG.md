@@ -5,6 +5,19 @@
 Detailed history through 0.0.8g remains preserved in Git history at commit
 `f078dab5372a45a8c577c1c802a697ab72b45c02` and in milestone ADR/PCN records.
 
+### 0.0.9c - AVPacket Metadata and Flush ABI Review
+
+- Approved one future metadata-aware native packet／flush boundary only for the exact verified FFmpeg 8 runtime identity.
+- Rejected direct field writes under a major-version-only or arbitrary-runtime assumption.
+- Required `av_packet_alloc`／`av_packet_free` ownership and prohibited managed allocation based on `sizeof(AVPacket)`.
+- Approved only the reviewed PTS, DTS, data, size, stream index, key flag, duration, and time-base prefix needed for decoding.
+- Mapped unknown timestamps to `AV_NOPTS_VALUE`, unknown duration to `0`, and parser keyframe state to `AV_PKT_FLAG_KEY`.
+- Required exact source-session stream and time-base matching without implicit rescaling.
+- Selected `avcodec_send_packet(context, NULL)` as the only EOS flush representation and kept `avcodec_flush_buffers` outside EOS drain.
+- Required one finite send attempt, explicit `EAGAIN` retention, no second encoded queue, and no hidden retry or drain loop.
+- Added ADR-0113 and PCN-0121. Runtime source, native ABI implementation, packet submission, flush execution, drain, PCP composition, activation, distribution, and output remain unchanged.
+- Audited ADR／PCN numbering and recorded ADR-0096 and PCN-0104 as permanent numbering-error gaps, following the ADR-0082 precedent without retroactive reuse.
+
 ### 0.0.9b - Source-bound Opened Native Decoder Session
 
 - Added one finite factory from a live FLV parameter binding plus distinct video/audio ABI gate leases into one opened H.264/AAC decoder session.

@@ -9,20 +9,23 @@ License: **Apache License 2.0**
 
 ## 現在地
 
-**Milestone 0.0.9b — Source-bound Opened Native Decoder Session**
+**Milestone 0.0.9c — AVPacket Metadata and Flush ABI Review**
 
-0.0.8xでpure managed bounded FLV parser、0.0.8zでexact source-session identityを持つdecoder-parameter bindingを実装しました。0.0.9bでは、そのbindingをopened native H.264/AAC context pairへ有限に接続しました。
+0.0.9bでexact source identityを持つopened native H.264/AAC context pairを実装しました。0.0.9cでは、そのcontextへpacket／EOSを渡す前に必要なFFmpeg ABI境界を確定しました。
 
-- exact source-session reference、video/audio stream IDs、time basesをnative work前にsnapshot
-- distinct video／audio ABI gate ownershipを要求
-- H.264 contextのcreate／parameter transfer／open完了後にAACへ進む
-- bindingと両gate leasesをsuccess／failureに関係なくconsume
-- partial configured／opened stateはsuccessとして返さない
-- source disposal、context／transfer／open rejection、unexpected faultを明示
-- success sessionはopened contextsだけを所有
-- source demux sessionはnon-owning identity reference
-- cleanupはaudio→video順でidempotent
-- packet submission、AVPacket metadata、flush、drain、PCP ingress、backend activation、outputは未変更
+- exact verified FFmpeg 8 runtime identityだけを承認
+- major-version-onlyまたはarbitrary runtimeのdirect `AVPacket` field writeを拒否
+- packet storageは`av_packet_alloc`／`av_packet_free`で所有
+- managed `sizeof(AVPacket)` allocationは禁止
+- reviewed metadata prefixはPTS、DTS、data、size、stream index、key flag、duration、time baseだけ
+- unknown PTS／DTSは`AV_NOPTS_VALUE`
+- unknown durationは`0`
+- exact source stream IDとsnapshotted time baseを要求
+- EOSはempty packetではなく`avcodec_send_packet(context, NULL)`
+- `avcodec_flush_buffers`はEOS drainから分離
+- 1回のsendだけを行い、`EAGAIN`ではactive parser completionとnative packet ownershipを保持
+- second encoded queue、sleep、spin、hidden retry／drain loopは禁止
+- packet implementation、submission、flush execution、drain、PCP composition、backend activation、outputは未変更
 
 診断専用のframe copy、conversion、bounded scheduler、late-aware dispatch経路は引き続きproduction decoder factoryから独立しています。FFmpeg backend activationやruntime配布も未承認のままです。
 
@@ -55,6 +58,7 @@ License: **Apache License 2.0**
 - pure managed bounded FLV v1 parser
 - exact FLV session decoder-parameter binding
 - source-bound opened native decoder session
+- AVPacket metadata／flush ABI decision
 
 詳細:
 
@@ -68,7 +72,7 @@ License: **Apache License 2.0**
 
 PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信アプリではありません。
 
-- AVPacket metadata／flush ABI review and implementation
+- metadata-aware native packet／flush boundary implementation
 - finite one-event timestamp-aware packet submission
 - controlled retained FLV fixture validation
 - PCP-to-parser composition
@@ -86,9 +90,9 @@ FFmpeg backend activation、runtime bundling／distribution、license approval�
 
 ## 次のマイルストーン
 
-**0.0.9c — AVPacket Metadata and Flush ABI Review**
+**0.0.9d — Metadata-aware Native Packet and Flush Boundary**
 
-FFmpeg runtime identity、AVPacket layoutまたはverified setter seam、PTS／DTS／duration／time base／keyframe／unknown value／stream mapping、null-packet flush、ABI gate strengtheningをreviewします。major-version一致だけではdirect field writeを承認しません。
+exact source／stream／time-base validation、FFmpeg-owned padded packet allocation、PTS／DTS／duration／keyframe mapping、1回のpacket sendまたはnull flush、`EAGAIN` ownership retention、packet-first cleanupを実装します。receive loop、second queue、PCP composition、backend activationは追加しません。
 
 ## 必要環境
 
