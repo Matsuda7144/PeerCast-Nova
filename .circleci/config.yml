@@ -1,0 +1,30 @@
+version: 2.1
+
+jobs:
+  build-and-test:
+    docker:
+      - image: mcr.microsoft.com/dotnet/sdk:10.0
+    resource_class: small
+    working_directory: ~/project
+    steps:
+      - checkout
+      - run:
+          name: Show .NET SDK
+          command: dotnet --info
+      - run:
+          name: Restore
+          command: dotnet restore PeerCast-Nova.sln
+      - run:
+          name: Release build
+          command: dotnet build PeerCast-Nova.sln --configuration Release --no-restore
+      - run:
+          name: Full test suite
+          command: dotnet test PeerCast-Nova.sln --configuration Release --no-build --no-restore --logger "console;verbosity=normal"
+      - run:
+          name: Format verification
+          command: dotnet format PeerCast-Nova.sln --verify-no-changes --no-restore
+
+workflows:
+  validation:
+    jobs:
+      - build-and-test

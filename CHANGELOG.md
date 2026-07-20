@@ -7,6 +7,19 @@ history at commit `f078dab5372a45a8c577c1c802a697ab72b45c02` and in the associat
 ADR/PCN validation records. This active file keeps the current playback
 integration sequence concise.
 
+### 0.0.9a - Timestamp-aware Packet Submission Architecture Review
+
+- Reviewed the complete path from one active FLV demux completion through source-bound native contexts, packet metadata, decoder backpressure, and EOS drain.
+- Confirmed that 0.0.8z has exact source identity and codec parameters but no opened native context pair.
+- Rejected direct reuse of the diagnostic native decoder lease because it does not retain source-session identity, stream IDs, or time bases.
+- Selected 0.0.9b to create one source-bound opened native decoder session by consuming the 0.0.8z binding and two distinct gate/runtime ownership chains.
+- Required video context creation, parameter transfer, and codec open before the corresponding audio sequence, with no partial success state.
+- Confirmed that the existing packet boundary accepts payload bytes only and cannot preserve PTS, DTS, duration, time base, keyframe state, sequence, or discontinuity generation.
+- Required a separate 0.0.9c AVPacket metadata and flush ABI review because the current major-version symbol gate does not prove an exact packet structure layout.
+- Fixed the active parser completion as the only pending encoded-packet owner when send requires frame drain; no second queue or hidden retry loop is allowed.
+- Required EOS to use explicit null-packet flush and bounded per-context drain rather than an empty encoded packet.
+- Added ADR-0111 and PCN-0119. Runtime source, tests, native ABI, packet submission, and activation remain unchanged.
+
 ### 0.0.8z - FLV Session Decoder-Parameter Binding
 
 - Added a pure managed adapter from one live bounded FLV demux session to the existing managed FFmpeg codec-parameter ownership boundary.

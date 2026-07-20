@@ -30,7 +30,7 @@
 - reservation handling
 - finite pumping
 
-## 0.0.8 Recovery and Diagnostic Integration — In Progress
+## 0.0.8 Recovery and Diagnostic Integration — Verified through parameter binding
 
 ### Verified sequence
 
@@ -54,37 +54,46 @@
 - 0.0.8z FLV Session Decoder-Parameter Binding
 
 0.0.8z maps one exact live FLV session into independently owned padded H.264 and
-AAC codec-parameter leases. The binding preserves source-session identity,
-stream IDs, and time bases while owning neither parser nor session. It performs
-no native call and consumes no packet completion.
+AAC codec-parameter leases. It performs no native call and consumes no packet
+completion.
 
-### Next
+## 0.0.9 Source-bound Native Decoder and Packet Ownership — In Progress
 
-Review timestamp-aware one-event packet submission and ownership.
+### 0.0.9a — Timestamp-aware Packet Submission Architecture Review
 
-The review must decide:
+The review found that source-bound opened contexts must exist before packet
+submission. The current payload-only boundary cannot preserve parser timing or
+EOS state, and the current major-version gate does not prove an exact AVPacket
+layout.
 
-- exact source-session identity against the 0.0.8z binding;
-- context selection from stream ID and media role;
-- parser-order preservation without video/audio pairing;
-- PTS, DTS, duration, time base, keyframe flags, discontinuity, and sequence;
-- active parser-completion retention when decoder send requires frame drain;
-- bounded receive/retry state and explicit cancellation cleanup;
-- EOS as explicit flush and bounded drain rather than empty encoded payload;
-- any AVPacket ABI or native-symbol requirements under separate review;
-- no second encoded-packet queue or resident decode loop.
+### Next: 0.0.9b Source-bound Opened Native Decoder Session
+
+Implement one finite composition that:
+
+- consumes one live 0.0.8z parameter binding;
+- consumes distinct video and audio ABI gate leases with distinct runtime owners;
+- snapshots exact source session, stream IDs, and time bases;
+- creates, configures, and opens the H.264 context first;
+- creates, configures, and opens the AAC context second;
+- returns no partial success state;
+- owns the two opened contexts and disposes audio before video;
+- retains source identity without owning the parser or demux session;
+- adds no packet submission or ABI change.
 
 ### Later sequence
 
-1. implement the approved timestamp-aware packet boundary;
-2. validate parser and composition with a retained controlled FLV fixture;
-3. review PCP chunk-to-parser composition and discontinuity ownership;
-4. add bounded decode iteration and drain;
-5. explicitly review production activation and Windows lifecycle;
-6. perform controlled real-media validation.
+1. 0.0.9c review the exact AVPacket metadata and null-flush ABI;
+2. implement one metadata-aware native packet／flush boundary after approval;
+3. implement a finite one-event submission state machine that retains the active parser completion during frame-drain pressure;
+4. validate parser and composition with a retained controlled FLV fixture;
+5. review PCP chunk-to-parser composition and discontinuity ownership;
+6. add bounded decode iteration and per-stream EOS drain;
+7. explicitly review production activation and Windows lifecycle;
+8. perform controlled real-media validation.
 
 ### Deferred
 
+- AVPacket metadata field writes
 - timestamp-aware packet submission
 - PCP-to-parser composition
 - MP4／fragmented MP4 parser

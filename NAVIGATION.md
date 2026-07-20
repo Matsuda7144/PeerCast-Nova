@@ -2,24 +2,23 @@
 
 ## 現在地
 
-**0.0.8z — FLV Session Decoder-Parameter Binding — Implemented**
+**0.0.9a — Timestamp-aware Packet Submission Architecture Review — Accepted**
 
-0.0.8xのbounded FLV sessionを、既存managed codec-parameter ownership境界へpure managedで接続しました。
+0.0.8x demux completionからopened decoderへ進むためのownership／ABI順序をreviewしました。
 
-- source: liveなFLV demux sessionだけを受理
-- identity: exact source-session referenceをnon-owningで保持
-- stream: video 0 H.264／audio 1 AACを厳密検証
-- time base: video／audioともにexact `1/1000`
-- video parameters: parser由来width／height／avcCを既存factoryへ渡す
-- audio parameters: parser由来sample rate／channel count／AudioSpecificConfigを既存factoryへ渡す
-- ownership: independently copied padded video／audio parameter leasesだけをbindingが所有
-- ordering: video作成後にaudioを作成
-- partial failure: audio失敗時はvideo leaseを破棄
-- source lifetime: bindingはparser／sessionを所有・破棄しない
-- cleanup: audio→video順のidempotent disposal
-- independence: binding成功後にsource sessionが破棄されてもparameter copiesは有効
+- 0.0.8z bindingはexact source identityとH.264／AAC parametersを持つがnative contextsは未作成
+- old diagnostic native leaseはsource session／stream IDs／time basesを保持しないためreal FLV compositionには使わない
+- 0.0.9bでsource-bound opened native decoder sessionを実装
+- video context create→parameter transfer→openの後にaudioを同じ順序で処理
+- bindingとvideo／audio gate leasesをsuccess／failureに関係なくconsume
+- video／audio contextはdistinct gate／runtime ownership chainを持つ
+- current packet boundaryはpayload-onlyでPTS／DTS／duration／time base／keyframe／sequenceを保持できない
+- AVPacket field writeはmajor-version gateだけでは承認せず0.0.9c ABI reviewへ分離
+- `NeedFrameDrain`中はactive parser completionを唯一のpending ownerとして保持
+- EOSはempty payloadではなくexplicit null-packet flush＋bounded drain
+- second encoded-packet queue、hidden retry loop、resident decode loopは追加しない
 
-packet completion、native context、parameter transfer、codec open、packet submission、PCP consumer、backend activationは未接続です。
+runtime source、tests、native ABI、packet submission、PCP consumer、backend activationは0.0.9aでは変更していません。
 
 ## CI
 
@@ -27,28 +26,30 @@ packet completion、native context、parameter transfer、codec open、packet su
 
 ## 最新の入口
 
+- `docs/adr/ADR-0111-timestamp-aware-packet-submission-architecture-review.md`
+- `docs/reviews/PCN-0119-TIMESTAMP-AWARE-PACKET-SUBMISSION-ARCHITECTURE-REVIEW.md`
 - `src/Nova.Playback/PlaybackBoundedFlvDecoderParameterBinding.cs`
-- `tests/Nova.Playback.Tests/PlaybackBoundedFlvDecoderParameterBindingTests.cs`
-- `docs/adr/ADR-0110-flv-session-decoder-parameter-binding.md`
-- `docs/reviews/PCN-0118-FLV-SESSION-DECODER-PARAMETER-BINDING-VALIDATION.md`
-- `docs/adr/ADR-0109-parser-decoder-composition-review.md`
-- `src/Nova.Playback/PlaybackBoundedFlvParser.cs`
-- `src/Nova.Playback/PlaybackDecoderFfmpegCodecParameters.cs`
+- `src/Nova.Playback/PlaybackDiagnosticNativeParameterTransaction.cs`
+- `src/Nova.Playback/PlaybackDecoderFfmpegContextLease.cs`
+- `src/Nova.Playback/PlaybackDecoderFfmpegPacketFrameBoundary.cs`
+- `src/Nova.Playback/PlaybackDecoderFfmpegAbiSymbolGate.cs`
 
 ## 次の作業
 
-**Timestamp-aware Packet Submission Architecture Review**
+**0.0.9b — Source-bound Opened Native Decoder Session**
 
-0.0.8vの1 event completionをexact source bindingへ照合し、parser order、PTS／DTS／time base、keyframe、sequence、decoder backpressure、EOS flush／drainを情報損失なく扱う次の有限境界を決定します。
+liveな0.0.8z bindingとdistinct video／audio gate leasesをconsumeし、exact source-session reference、stream IDs、time basesと、parameters transferred＋opened状態のH.264／AAC contextsを1個のowned sessionへまとめます。
 
 ## 未完了
 
-- timestamp-aware packet submission review and implementation
+- source-bound opened native decoder session
+- AVPacket metadata／flush ABI review
+- metadata-aware packet boundary
+- finite one-event submission and EOS drain state
 - controlled retained FLV fixture validation
 - PCP-to-parser composition
 - MP4／fragmented MP4 parser
 - production decoder ingress
-- continuous decode、flush、EOS drain
 - duration cutoff
 - complete A/V synchronization
 - runtime distribution decision

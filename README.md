@@ -9,25 +9,25 @@ License: **Apache License 2.0**
 
 ## 現在地
 
-**Milestone 0.0.8z — FLV Session Decoder-Parameter Binding**
+**Milestone 0.0.9a — Timestamp-aware Packet Submission Architecture Review**
 
 診断専用のH.264／AAC経路は、native context openからowned managed frame copy、既存bounded schedulerへの有限ingress、late-aware timed dispatchの有限transactionまで到達しています。本番decoder factoryからは独立しており、FFmpeg backend activationや配布承認を変更していません。
 
-0.0.8xでpure managed bounded FLV v1 parserを実装し、0.0.8yのreviewを受けて、0.0.8zではparser sessionを既存managed codec-parameter ownership境界へ接続しました。
+0.0.8xでbounded FLV parser、0.0.8zでexact source-session identityを持つdecoder-parameter bindingを実装しました。0.0.9aでは、real FLV eventをopened decoderへ渡すためのownershipとABIの順序を決定しました。
 
-- liveなFLV demux sessionだけを受理
-- video 0 H.264／audio 1 AACとexact `1/1000` time baseを検証
-- parser由来width／height／avcCからvideo parameter leaseを作成
-- parser由来sample rate／channel count／AudioSpecificConfigからaudio parameter leaseを作成
-- existing factoryがcodec dataを再検証し、FFmpeg padding付き独立copyを所有
-- exact source-session referenceをnon-owningで保持
-- stream IDsとtime basesをimmutable metadataとして保持
-- video作成後にaudioを作成し、partial failureではvideoを破棄
-- binding成功後にsource sessionが破棄されてもparameter copiesは維持
-- bindingはparser／session／packet completionを所有しない
-- audio→video順のidempotent cleanup
+- packet submissionより先にsource-bound opened decoder sessionを作る
+- old diagnostic native leaseはsource identityを持たないためreal FLV pathへ使わない
+- 0.0.9bでvideo contextをcreate／configure／openした後にaudioを同じ順序で処理
+- video／audio contextsはdistinct gate／runtime ownership chainsを持つ
+- parameter bindingと両gate leasesは全resultでconsume
+- partial configured／opened stateはsuccessとして返さない
+- current packet boundaryはpayload-onlyでPTS／DTS／duration／time base／keyframe／sequenceを保持できない
+- AVPacket field writeは0.0.9c ABI reviewへ分離
+- `NeedFrameDrain`中はactive parser completionを唯一のpending encoded ownerとして保持
+- EOSはempty packetではなくexplicit null-packet flushとbounded drain
+- second encoded queue、hidden retry loop、resident decoder loopを作らない
 
-0.0.8zはnative runtime、context、parameter transfer、codec open、packet submission、PCP ingress、scheduler、deviceを所有しません。
+0.0.9aはarchitecture reviewであり、runtime source、tests、native ABI、packet submission、PCP ingress、backend activationを変更していません。
 
 ## 実装済みの主な領域
 
@@ -61,8 +61,8 @@ License: **Apache License 2.0**
 - bounded diagnostic fixture and adapter
 - pure managed bounded demux output contract
 - pure managed bounded FLV v1 parser
-- parser-to-decoder composition architecture review
 - FLV session decoder-parameter binding
+- timestamp-aware packet submission architecture review
 
 詳細:
 
@@ -76,7 +76,9 @@ License: **Apache License 2.0**
 
 PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信アプリではありません。
 
-- timestamp-aware packet submission
+- source-bound opened native decoder session
+- AVPacket metadata／flush ABI review and implementation
+- finite one-event timestamp-aware submission
 - controlled retained FLV fixture validation
 - PCP-to-parser composition
 - MP4／fragmented MP4 parser
@@ -94,11 +96,11 @@ FFmpeg backend activation、runtime bundling／distribution、license approval�
 
 ## 次のマイルストーン
 
-**Timestamp-aware Packet Submission Architecture Review**
+**0.0.9b — Source-bound Opened Native Decoder Session**
 
-0.0.8vの1 event completionと0.0.8z bindingのexact source identityを照合し、parser order、context selection、PTS／DTS／time base、keyframe、sequence、decoder backpressure、EOS flush／drainを情報損失なく扱う有限境界を決定します。
+liveな0.0.8z bindingとdistinct video／audio ABI gate leasesをconsumeし、exact source-session reference、stream IDs、time basesと、configured＋opened状態のH.264／AAC contextsを1個のowned sessionへまとめます。
 
-既存payload-only packet APIやvideo→audio固定transactionをそのまま再利用せず、active parser completionを必要な間だけ保持し、第2encoded-packet queueを作らない設計にします。
+routine Ubuntu CIではinjected operationsを使い、ordering、partial failure、source disposal、gate／runtime ownership、audio→video cleanupを検証します。
 
 ## 必要環境
 
