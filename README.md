@@ -9,23 +9,24 @@ License: **Apache License 2.0**
 
 ## 現在地
 
-**Milestone 0.0.9f — Controlled Retained FLV Fixture Validation**
+**Milestone 0.0.9g — One-event Final EOS Sequencing**
 
-実bounded FLV bytesをpure managed parserへ渡し、parserが作成したexact source sessionとsource-owned completionを0.0.9e state machineへ接続するcontrolled fixtureを検証しました。
+future composition用の有限FLV parser façadeを追加し、通常packetは既存bounded parserへ委譲したまま、final inputをvideo／audioのsource-owned EOS completionへ1操作ずつsequencingできるようにしました。
 
-- video→audio→video→audioのpacket interleaveを保持
-- video／audioのsequenceを独立保持
-- AVCC／AAC payloadを変更せず保持
-- FLV DTSとsigned composition-time PTSを保持
-- video keyframe／non-keyframe状態を保持
-- packet `EAGAIN`で元のnative packet＋parser completionを保持
-- flush `EAGAIN`で元のper-stream EOS completionを保持
-- retained中のparserは`ActiveCompletion`を返しinputを消費しない
-- retained transitionはreceive 1回＋retry 1回だけ
-- explicit video EOS後のfinal audio EOSを独立flushとして受理
-- native FFmpeg、decoded output、PCP composition、backend activationは未接続
-
-検証により、両streamが未終了の通常final inputはvideoとaudioのEOSを1 completionへまとめる一方、one-event state machineはそのcompletionをnative work前にfail closedすることも確認しました。PCP compositionの前にfinal EOSを1イベントずつsequencingする必要があります。
+- final signalは全caller bytes消費後だけ受理
+- empty operationまたは最後のcomplete packetと同時にfinal指定可能
+- incomplete carryを伴うfinalは`TruncatedData`でfail closed
+- 両streamがopenならvideo EOSを先に返し、そのcompletion解放後にaudio EOSを返す
+- 片方がexplicit EOS済みなら残りstreamだけを返す
+- first EOSは`PacketsAvailable`、final EOSは`EndOfStream`
+- final completionはexact parser-created source sessionが所有
+- per-stream sequenceは成功した実parser completionからのみ更新
+- active completionが唯一のbackpressure owner
+- detached completion、copied EOS list、second encoded queueなし
+- finalization開始後のnon-empty inputを拒否
+- explicit discontinuityでsequence／ended／final stateをreset
+- video／audioの両flushが0.0.9e state machineを通過
+- PCP composition、native FFmpeg、decoded output、backend activationは未接続
 
 診断専用のframe copy、conversion、bounded scheduler、late-aware dispatch経路は引き続きproduction decoder factoryから独立しています。FFmpeg backend activationやruntime配布も未承認のままです。
 
@@ -62,6 +63,7 @@ License: **Apache License 2.0**
 - metadata-aware native packet／flush boundary
 - finite one-event packet submission state machine
 - controlled retained FLV fixture validation
+- one-event final EOS parser façade
 
 詳細:
 
@@ -75,8 +77,7 @@ License: **Apache License 2.0**
 
 PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信アプリではありません。
 
-- one-event final EOS sequencing
-- PCP-to-parser composition
+- PCP chunk-to-FLV parser composition review／implementation
 - MP4／fragmented MP4 parser
 - production decoder ingress
 - decoded-frame ownership and delivery for the real FLV path
@@ -93,9 +94,9 @@ FFmpeg backend activation、runtime bundling／distribution、license approval�
 
 ## 次のマイルストーン
 
-**0.0.9g — One-event Final EOS Sequencing**
+**0.0.9h — PCP Chunk-to-FLV Parser Composition Review**
 
-両streamが未終了のfinal inputでも、parserが1操作につき1つのsource-owned per-stream EOS completionだけを返すようにします。video EOS completionの解放後に次のfinal操作でaudio EOSを返し、sequence commitとactive-completion backpressureを保ちながらdetached EOS copyやsecond queueを追加しません。
+awaited PCP data callbackのchunk memoryをone-event FLV parser façadeへ渡す有限compositionをレビューします。consumed bytesとcaller suffix、active completionによるpause、decoder `EAGAIN`時のchunk consumption停止、final signal、cancellation、discontinuity generation、session replacement、cleanup順を先に確定し、runtime wiringは次の実装milestoneへ分離します。
 
 ## 必要環境
 

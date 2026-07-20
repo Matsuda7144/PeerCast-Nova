@@ -49,27 +49,29 @@
 - 0.0.9d Metadata-aware Native Packet and Flush Boundary
 - 0.0.9e Finite One-event Packet Submission State Machine
 - 0.0.9f Controlled Retained FLV Fixture Validation
+- 0.0.9g One-event Final EOS Sequencing
 
-0.0.9f connects controlled real FLV bytes through the bounded parser, exact source identity, and finite one-event state machine. It validates packet interleave, timing, keyframe state, retained packet／flush backpressure, one-receive／one-retry bounds, and separately emitted per-stream EOS without native activation.
+0.0.9g adds the finite FLV parser facade selected after controlled validation. Ordinary parser completions remain unchanged, while final input emits video then audio EOS through separate source-owned completions. Final signaling, sequence commit, active-completion backpressure, explicit EOS, truncated carry, and discontinuity reset are bounded without detached completions or another encoded queue.
 
-The validation also confirms that ordinary final input currently aggregates video and audio EOS into one completion. That completion is rejected fail closed by the one-event state machine and must be sequenced before PCP composition.
+### Next: 0.0.9h PCP Chunk-to-FLV Parser Composition Review
 
-### Next: 0.0.9g One-event Final EOS Sequencing
+Review the finite connection from the awaited PCP data callback to the one-event FLV parser facade. The review must define:
 
-Update final FLV parser progress so that:
+- callback-scoped chunk-memory ownership and whether copying is ever required;
+- consumed-byte accounting and caller-owned suffix retention;
+- behavior when one parser or decoder completion remains active;
+- how decoder `EAGAIN` pauses further PCP chunk consumption;
+- final callback and one-event final EOS signaling;
+- cancellation, timeout, source disposal, and callback failure;
+- discontinuity generation and source-session replacement;
+- cleanup order across parser, native session, retained packet, and callback ownership;
+- finite per-callback work with no resident parse／decode loop or second encoded queue.
 
-- one operation emits at most one source-owned per-stream EOS event;
-- when both streams remain open, video EOS is emitted first and audio EOS remains pending;
-- the next final operation emits the remaining audio EOS and completes finalization;
-- an already-ended stream is never emitted again;
-- per-stream sequence commits only with successful completion construction;
-- active-completion backpressure remains unchanged;
-- no detached EOS completion, copied queue, resident loop, or hidden retry is introduced;
-- controlled dual-EOS rejection becomes a successful one-event finalization path.
+The review is documentation-only. Runtime composition must remain a later separately validated milestone.
 
 ### Later sequence
 
-1. review PCP chunk-to-parser composition and discontinuity ownership;
+1. implement the reviewed PCP chunk-to-parser finite composition;
 2. add bounded decode iteration and per-stream EOS drain;
 3. add decoded-frame ownership and delivery for the real FLV path;
 4. review production activation and Windows lifecycle;
@@ -77,7 +79,7 @@ Update final FLV parser progress so that:
 
 ### Deferred
 
-- PCP-to-parser composition
+- PCP-to-parser runtime composition
 - MP4／fragmented MP4 parser
 - avformat integration
 - production decoder ingress

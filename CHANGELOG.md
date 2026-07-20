@@ -5,6 +5,21 @@
 Detailed history through 0.0.8g remains preserved in Git history at commit
 `f078dab5372a45a8c577c1c802a697ab72b45c02` and in milestone ADR/PCN records.
 
+### 0.0.9g - One-event Final EOS Sequencing
+
+- Added a finite FLV parser facade for future production composition.
+- Delegated ordinary parsing to the existing bounded FLV parser without changing packet payload, timing, or keyframe behavior.
+- Latched final input only after all caller bytes were consumed and rejected incomplete final carry as truncated.
+- Emitted video then audio EOS as separate source-owned completions through the exact parser-created source session.
+- Preserved explicit per-stream EOS and emitted only the still-open stream during finalization.
+- Tracked next per-stream sequence only from successfully constructed real parser completions.
+- Preserved one-active-completion backpressure without a detached completion, copied EOS list, or second encoded queue.
+- Accepted final signaling on an empty operation or alongside the last complete packet.
+- Reset final, ended, and sequence state on explicit discontinuity.
+- Composed both final EOS flushes through the 0.0.9e state machine.
+- Added six focused tests plus ADR-0117 and PCN-0125.
+- Kept PCP composition, native FFmpeg activation, decoded-frame ownership, output, backend activation, and runtime distribution unchanged.
+
 ### 0.0.9f - Controlled Retained FLV Fixture Validation
 
 - Added one controlled in-memory FLV fixture using the real bounded FLV parser and exact parser-created source session.
@@ -74,7 +89,7 @@ Detailed history through 0.0.8g remains preserved in Git history at commit
 ### 0.0.9a - Timestamp-aware Packet Submission Architecture Review
 
 - Determined that source-bound opened native contexts must exist before packet submission.
-- Rejected the old diagnostic native lease for real FLV composition because it lacks source identity, stream IDs, and time bases.
+- Rejected the old diagnostic native decoder lease for real FLV composition because it lacks source identity, stream IDs, or time bases.
 - Selected 0.0.9b for source-bound native session ownership and 0.0.9c for exact AVPacket metadata and flush ABI review.
 - Required active parser-completion retention under decoder backpressure, explicit null-packet EOS flush, bounded drain, no second encoded queue, and no hidden retry loop.
 - Added ADR-0111 and PCN-0119.
