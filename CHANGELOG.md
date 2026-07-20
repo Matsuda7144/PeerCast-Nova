@@ -7,6 +7,20 @@ history at commit `f078dab5372a45a8c577c1c802a697ab72b45c02` and in the associat
 ADR/PCN validation records. This active file keeps the current playback
 integration sequence concise.
 
+### 0.0.8x - Pure Managed Bounded FLV v1 Demux Parser
+
+- Added caller-pushed finite FLV v1 parsing with consumed-byte progress and at most one active 0.0.8v completion per operation.
+- Added one bounded carry buffer for an incomplete FLV header, tag header, body, or previous-tag-size field without retaining caller suffixes or complete unreported packets.
+- Added strict FLV signature, version, flags, data-offset, tag type, data-size, stream-ID, timestamp, and previous-tag-size validation.
+- Added ordered AVC then AAC sequence-header bootstrap and immutable H.264／AAC 0.0.8v session creation before media.
+- Added bounded AVCDecoderConfigurationRecord, SPS dimension and cropping parsing, parameter-set validation, and AVCC NAL length walking.
+- Preserved FLV DTS, signed composition-offset PTS, keyframe state, unknown duration, and length-prefixed AVCC packet payload.
+- Added bounded AAC-LC AudioSpecificConfig parsing for indexed／explicit sample rate and channel configuration while ignoring legacy FLV audio-rate fields.
+- Added bounded script-tag skipping, exact duplicate configuration skipping, and fail-closed changed configuration handling.
+- Added explicit AVC EOS, final missing-stream EOS, final truncation detection, and discontinuity generation reset.
+- Added terminal fault latching, one-active-completion backpressure, idempotent carry／configuration cleanup, and parser-owned session disposal.
+- Added focused pure managed tests and ADR-0108／PCN-0116 without PCP composition, decoder submission, production activation, or Windows device activation.
+
 ### 0.0.8w - First Bounded Container Parser Selection Review
 
 - Compared FLV v1 with MP4／fragmented MP4 against the 0.0.8v parser-neutral contract and the existing callback-scoped sequential PCP input boundary.
@@ -49,7 +63,7 @@ integration sequence concise.
 - Added a finite diagnostic composition from the 0.0.8m managed-frame completion through the existing 0.0.8r scheduler ingress and late-aware timed dispatch seam.
 - Required known, non-negative presentation timestamps and a fresh zero-snapshot scheduler before ownership transfer.
 - Attempted at most one dispatch per accepted frame and at most two dispatch calls total.
-- Treated video processing, consumed video drop, and audio processing as explicit media consumption.
+- Treated video processing, consumed video drop, and audio processing as explicit consumption.
 - Preserved retained, recovery, reset, device, environment, cancellation, partial-ingress, and failure outcomes without implicit retry.
 - Retained outstanding scheduler ownership and the native lease in an idempotent completion, disposing scheduler-owned frames before releasing the lease.
 - Added focused cross-platform tests through injected dispatch operations without activating D3D11, WASAPI, FFmpeg, or decoder factories.

@@ -9,28 +9,31 @@ License: **Apache License 2.0**
 
 ## 現在地
 
-**Milestone 0.0.8w — First Bounded Container Parser Selection Review**
+**Milestone 0.0.8x — Pure Managed Bounded FLV v1 Demux Parser**
 
 診断専用のH.264／AAC経路は、native context openからowned managed frame copy、既存bounded schedulerへの有限ingress、late-aware timed dispatchの有限transactionまで到達しています。本番decoder factoryからは独立しており、FFmpeg backend activationや配布承認を変更していません。
 
-0.0.8vでparser-neutralなbounded demux output contractを実装し、0.0.8wでは最初のconcrete parserとしてFLV v1を選択しました。
+0.0.8vでparser-neutralなdemux output contractを作り、0.0.8wで選択した最初のreal container parserを0.0.8xでpure managed実装しました。
 
-- PeerCast ingressに合うcaller-owned callback chunkを有限push
+- caller-owned `ReadOnlyMemory<byte>` chunkを有限push
 - consumed byte countと最大1個のactive 0.0.8v completion
-- split recordだけを保持するone bounded carry buffer
-- FLV header、tag、PreviousTagSizeのstrict validation
-- media前にAVC／AAC sequence headerを要求
-- script metadataはbounded skipのみでcodec configurationには使わない
-- AVCDecoderConfigurationRecordとbounded SPS parsingで映像寸法を取得
+- splitした1個のFLV recordだけを保持するbounded carry
+- FLV signature／version／flags／data offset／tag／PreviousTagSizeのstrict validation
+- AVC sequence headerの後にAAC sequence headerを要求し、media前にimmutable sessionを作成
+- script tagはbounded skipのみ。AMF metadataは解析しない
+- AVCDecoderConfigurationRecord、SPS／PPS、profile／level、NAL length sizeを検証
+- bounded SPS bit parsingでinterlace／croppingを含む映像寸法を取得
 - AVCC NAL length walkを行い、Annex Bへ変換しない
 - FLV timestampをDTS、signed composition offsetを加えた値をPTS
-- AudioSpecificConfigからAAC-LC sample rate／channel countを取得
+- frame typeをkeyframe stateへ対応し、durationはunknownを維持
+- AAC-LC AudioSpecificConfigからindexed／explicit sample rateとchannel countを取得
 - exact duplicate sequence headerはbounded skip、変更はfail closed
-- explicit discontinuityでcarry／bootstrapをreset
-- final inputでtruncationとper-stream EOSを明示
-- 0.0.8v completion構築成功後にだけparser stateをcommit
+- AVC end-of-sequenceとfinal inputをexplicit per-stream EOSへ対応
+- active completion disposalをparser backpressureに利用
+- explicit discontinuityでold session／carry／bootstrap／sequence／EOSをreset
+- terminal malformed／codec／timestamp failuresをfault latch
 
-MP4／fragmented MP4は、init segment、box hierarchy、track／sample／fragment stateの範囲が大きいため後続reviewへ延期しました。0.0.8wはarchitecture reviewであり、FLV parser runtime、PCP composition、decoder submission、production activationは追加していません。
+0.0.8x parserはPCP ingress、decoder packet submission、scheduler、native lease、deviceを所有しません。ネットワークとdecoderへの接続は後続の明示review対象です。
 
 ## 実装済みの主な領域
 
@@ -63,7 +66,7 @@ MP4／fragmented MP4は、init segment、box hierarchy、track／sample／fragme
 - finite continuous pump
 - bounded diagnostic fixture and adapter
 - pure managed bounded demux output contract
-- bounded FLV parser architecture selection
+- pure managed bounded FLV v1 parser
 
 詳細:
 
@@ -77,10 +80,9 @@ MP4／fragmented MP4は、init segment、box hierarchy、track／sample／fragme
 
 PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信アプリではありません。
 
-- pure managed bounded FLV v1 parser
-- controlled FLV fixture validation
+- parser-to-decoder composition
+- controlled retained FLV fixture validation
 - PCP-to-parser composition
-- parser-to-codec-parameter composition
 - MP4／fragmented MP4 parser
 - production decoder ingress
 - decoded-buffer duration cutoff
@@ -96,11 +98,11 @@ FFmpeg backend activation、runtime bundling／distribution、license approval�
 
 ## 次のマイルストーン
 
-**0.0.8x — Pure Managed Bounded FLV v1 Demux Parser**
+**Parser-to-Decoder Composition Architecture Review**
 
-0.0.8wで固定したcaller-chunk、consumed-byte progress、bounded carry、FLV structural validation、AVC／AAC bootstrap、bounded SPS／AudioSpecificConfig解析、packet／EOS出力、discontinuity resetをpure managed runtimeとfocused testsで実装します。
+0.0.8x parserのimmutable stream descriptionとowned packet／EOS completionを、既存managed codec-parameter ownerとbounded native packet境界へ安全に渡す方法を決定します。
 
-PCP consumerへの接続、decoder codec-parameter transfer、packet submission、decode loop、production activation、Windows output activationは含めません。
+0.0.8v completion backpressure、event順序、payload lifetime、PTS／DTS、EOS、partial failure、cancellation、native lease cleanupを固定し、第2encoded-packet queue、PCP接続、production activationを同じmilestoneへ混ぜません。
 
 ## 必要環境
 
