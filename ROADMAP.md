@@ -50,39 +50,40 @@
 - 0.0.9e Finite One-event Packet Submission State Machine
 - 0.0.9f Controlled Retained FLV Fixture Validation
 - 0.0.9g One-event Final EOS Sequencing
+- 0.0.9h PCP Chunk-to-FLV Parser Composition Review
 
-0.0.9g adds the finite FLV parser facade selected after controlled validation. Ordinary parser completions remain unchanged, while final input emits video then audio EOS through separate source-owned completions. Final signaling, sequence commit, active-completion backpressure, explicit EOS, truncated carry, and discontinuity reset are bounded without detached completions or another encoded queue.
+0.0.9h selects one awaited, zero-suffix-copy composition from callback-scoped PCP packet memory through the one-event FLV parser and source-bound submission state machine. The callback remains incomplete until its full payload is consumed and no parser／decoder completion remains active. Exact consumed-byte accounting, bounded decoder progress, explicit owner finalization, discontinuity generation replacement, and cleanup ordering are fixed without a second encoded queue or runtime activation.
 
-### Next: 0.0.9h PCP Chunk-to-FLV Parser Composition Review
+### Next: 0.0.9i Finite Awaited PCP-to-FLV Composition Boundary
 
-Review the finite connection from the awaited PCP data callback to the one-event FLV parser facade. The review must define:
+Implement one serialized boundary that:
 
-- callback-scoped chunk-memory ownership and whether copying is ever required;
-- consumed-byte accounting and caller-owned suffix retention;
-- behavior when one parser or decoder completion remains active;
-- how decoder `EAGAIN` pauses further PCP chunk consumption;
-- final callback and one-event final EOS signaling;
-- cancellation, timeout, source disposal, and callback failure;
-- discontinuity generation and source-session replacement;
-- cleanup order across parser, native session, retained packet, and callback ownership;
-- finite per-callback work with no resident parse／decode loop or second encoded queue.
-
-The review is documentation-only. Runtime composition must remain a later separately validated milestone.
+- implements `IPcpChannelPacketConsumer` without retaining callback packet or payload memory;
+- validates exact PCP channel ID, session ID, and monotonic packet sequence;
+- consumes one callback payload through a local offset advanced only by parser `ConsumedByteCount`;
+- supports multiple FLV records in one callback and one split record in bounded parser carry;
+- processes each parser completion before resuming the same callback suffix;
+- creates one exact source-bound generation after `StreamDescriptionAvailable` through an injected generation factory;
+- pauses parser and new PCP input while a parser or decoder completion remains active;
+- bounds packet／flush `EAGAIN` progress through finite state-machine transitions;
+- fails closed on no receive progress, contradictory accounting, cancellation, undefined result, or operation-budget exhaustion;
+- exposes separate owner-invoked finalization and never infers EOS from transport state;
+- replaces the decoder generation in the reviewed order on explicit discontinuity;
+- exposes fixed privacy-safe terminal state and idempotent ordered cleanup;
+- adds no production backend activation, decoded-frame delivery, output wiring, or second encoded queue.
 
 ### Later sequence
 
-1. implement the reviewed PCP chunk-to-parser finite composition;
-2. add bounded decode iteration and per-stream EOS drain;
-3. add decoded-frame ownership and delivery for the real FLV path;
-4. review production activation and Windows lifecycle;
-5. perform controlled real-media validation.
+1. add bounded decode iteration and per-stream EOS drain;
+2. add decoded-frame ownership and delivery for the real FLV path;
+3. review production activation and Windows lifecycle;
+4. perform controlled real-media validation.
 
 ### Deferred
 
-- PCP-to-parser runtime composition
 - MP4／fragmented MP4 parser
 - avformat integration
-- production decoder ingress
+- production decoder ingress and backend activation
 - continuous decode and per-stream EOS drain
 - decoded-frame ownership and delivery for the real FLV path
 - discontinuity reset and `avcodec_flush_buffers`

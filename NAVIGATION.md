@@ -2,24 +2,25 @@
 
 ## 現在地
 
-**0.0.9g — One-event Final EOS Sequencing — Implemented**
+**0.0.9h — PCP Chunk-to-FLV Parser Composition Review — Reviewed**
 
-future composition用の有限FLV parser façadeを追加し、通常packetは既存parserへ委譲したまま、final EOSだけをexact source sessionから1操作1イベントで返すようにしました。
+awaited PCP packet callbackから0.0.9g one-event FLV parser façadeと0.0.9e submission state machineまでの有限compositionをレビューし、callback memory、suffix、decoder backpressure、finalization、discontinuity、generation ownershipを確定しました。
 
-- final signalは全caller bytes消費後だけ受理
-- final signalはempty operationまたは最後のcomplete packetと同時に指定可能
-- incomplete carryを伴うfinal signalは`TruncatedData`でfail closed
-- 両streamがopenならvideo EOSを先に、completion解放後にaudio EOSを返す
-- 片方がexplicit EOS済みなら残りstreamだけを返す
-- first EOSは`PacketsAvailable`、final EOSは`EndOfStream`
-- final EOS completionはexact parser-created source sessionが所有
-- sequenceは成功した実parser completionからだけ更新
-- active completionが唯一のbackpressure owner
-- detached EOS completion、copied EOS list、second encoded queueなし
-- finalization開始後のnon-empty inputを拒否
-- explicit discontinuityでsequence／ended／final stateをreset
-- video／audioの両final flushが0.0.9e state machineを通過
-- PCP composition、native FFmpeg、decoded output、backend activationは未接続
+- PCP readerはconsumer callbackをawaitし、その完了までpacket payloadを保持
+- callback payloadは借用のみで、callback完了後に保持しない
+- compositionはcallbackを開いたまま処理し、caller suffixを別queueへコピーしない
+- local offsetはparserの`ConsumedByteCount`だけで前進
+- parser completionがprefixで返った場合はcompletion処理後に同じcallback suffixを再開
+- parser／decoder completionがactiveな間は新しいparser inputと次のPCP Atomを停止
+- decoder `EAGAIN`はbounded `Advance`でのみ進行
+- `NoReceiveProgress`、work budget超過、undefined resultはfail closed
+- exact PCP channel／session／packet sequenceとexact parser-created source generationを要求
+- `StreamDescriptionAvailable`後にbinding、native session、fresh state machineを1 generationとして作成
+- transport close、reconnect、stop、timeout、cancellation、failureをEOSと推測しない
+- ownerが別の明示finalization操作でvideo／audio EOSを1件ずつ送る
+- explicit discontinuityではretained submission、state machine、native sessionを解放後にparserをreset
+- reconnectだけではparser／decoder generationをresetしない
+- second encoded queue、caller-suffix retention、resident loop、runtime wiringなし
 
 ## CI
 
@@ -27,12 +28,13 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 ## 最新の入口
 
+- `docs/adr/ADR-0118-pcp-chunk-to-flv-parser-composition.md`
+- `docs/reviews/PCN-0126-PCP-CHUNK-TO-FLV-PARSER-COMPOSITION-REVIEW.md`
+- `src/Nova.Network/Pcp/PcpChannelStreamReader.cs`
+- `src/Nova.Network/Pcp/IPcpChannelPacketConsumer.cs`
+- `src/Nova.Network/Pcp/PcpChannelPacket.cs`
 - `src/Nova.Playback/PlaybackOneEventFinalEosFlvParser.cs`
-- `tests/Nova.Playback.Tests/PlaybackOneEventFinalEosFlvParserTests.cs`
-- `docs/adr/ADR-0117-one-event-final-eos-sequencing.md`
-- `docs/reviews/PCN-0125-ONE-EVENT-FINAL-EOS-SEQUENCING-VALIDATION.md`
 - `src/Nova.Playback/PlaybackFiniteOneEventPacketSubmissionStateMachine.cs`
-- `src/Nova.Playback/PlaybackBoundedFlvParser.cs`
 
 ## ADR／PCN索引の永久欠番
 
@@ -42,18 +44,18 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 ## 次の作業
 
-**0.0.9h — PCP Chunk-to-FLV Parser Composition Review**
+**0.0.9i — Finite Awaited PCP-to-FLV Composition Boundary**
 
-awaited PCP callbackが所有するchunk memoryをone-event FLV parser façadeへ安全に渡す有限compositionを設計します。consumed bytesとcaller suffix、active parser／decoder completionによるpause、final signal、cancellation、discontinuity generation、session replacement、cleanup順を先に確定し、runtime wiringは後続実装へ分離します。
+`IPcpChannelPacketConsumer`を実装するserialized boundaryを追加し、callback内local suffix offset、injected generation factory、bounded parser／decoder transitions、別操作の明示finalization、discontinuity generation replacement、fixed terminal snapshot、ordered cleanupをcross-platform focused testで実装・検証します。production backend activation、decoded-frame delivery、output wiringは追加しません。
 
 ## 未完了
 
-- PCP chunk-to-FLV parser composition review／implementation
+- finite awaited PCP-to-FLV composition implementation
 - bounded decode iteration and per-stream EOS drain
 - decoded-frame ownership and delivery for the real FLV path
 - MP4／fragmented MP4 parser
 - production decoder ingress
-- discontinuity reset semantics
+- discontinuity-time native reset semantics
 - duration cutoff
 - complete A/V synchronization
 - runtime distribution decision

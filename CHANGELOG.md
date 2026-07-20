@@ -5,6 +5,19 @@
 Detailed history through 0.0.8g remains preserved in Git history at commit
 `f078dab5372a45a8c577c1c802a697ab72b45c02` and in milestone ADR/PCN records.
 
+### 0.0.9h - PCP Chunk-to-FLV Parser Composition Review
+
+- Reviewed the awaited PCP packet callback through the 0.0.9g parser facade and 0.0.9e submission state machine.
+- Selected callback-held, zero-suffix-copy composition: keep `ConsumeAsync` incomplete until all payload bytes are consumed or copied into bounded parser carry.
+- Required exact `ConsumedByteCount` offset accounting and completion-before-suffix processing.
+- Required active parser／decoder completion and decoder `EAGAIN` to pause new parser and PCP input.
+- Required bounded state-machine `Advance` transitions; no receive progress and operation-budget exhaustion fail closed.
+- Required exact PCP channel／session／packet-sequence identity and exact parser-created source generation.
+- Separated owner-invoked finalization because the packet-consumer contract has no EOS callback; transport close, reconnect, stop, timeout, cancellation, and failure are not EOS.
+- Defined discontinuity generation replacement and ordered state-machine, native-session, parser, and generation cleanup.
+- Selected 0.0.9i Finite Awaited PCP-to-FLV Composition Boundary.
+- Added ADR-0118 and PCN-0126 without changing runtime source or tests.
+
 ### 0.0.9g - One-event Final EOS Sequencing
 
 - Added a finite FLV parser facade for future production composition.

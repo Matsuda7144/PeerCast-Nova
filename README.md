@@ -9,24 +9,25 @@ License: **Apache License 2.0**
 
 ## 現在地
 
-**Milestone 0.0.9g — One-event Final EOS Sequencing**
+**Milestone 0.0.9h — PCP Chunk-to-FLV Parser Composition Review**
 
-future composition用の有限FLV parser façadeを追加し、通常packetは既存bounded parserへ委譲したまま、final inputをvideo／audioのsource-owned EOS completionへ1操作ずつsequencingできるようにしました。
+awaited PCP packet callbackから0.0.9g one-event FLV parser façadeと0.0.9e source-bound submission state machineまでの有限compositionをレビューしました。runtime wiringはまだ追加せず、callback memory、suffix、decoder backpressure、finalization、discontinuity、generation ownershipを先に確定しています。
 
-- final signalは全caller bytes消費後だけ受理
-- empty operationまたは最後のcomplete packetと同時にfinal指定可能
-- incomplete carryを伴うfinalは`TruncatedData`でfail closed
-- 両streamがopenならvideo EOSを先に返し、そのcompletion解放後にaudio EOSを返す
-- 片方がexplicit EOS済みなら残りstreamだけを返す
-- first EOSは`PacketsAvailable`、final EOSは`EndOfStream`
-- final completionはexact parser-created source sessionが所有
-- per-stream sequenceは成功した実parser completionからのみ更新
-- active completionが唯一のbackpressure owner
-- detached completion、copied EOS list、second encoded queueなし
-- finalization開始後のnon-empty inputを拒否
-- explicit discontinuityでsequence／ended／final stateをreset
-- video／audioの両flushが0.0.9e state machineを通過
-- PCP composition、native FFmpeg、decoded output、backend activationは未接続
+- PCP readerはconsumerをawaitし、callback完了までpayload memoryを保持
+- payloadは借用のみで、callback完了後にpacket／memoryを保持しない
+- callbackを開いたまま処理し、caller suffixを別queueへコピーしない
+- local suffix offsetはparserの`ConsumedByteCount`だけで前進
+- parser completionがprefixで返った場合は、そのcompletionを処理後に同じcallback suffixを再開
+- parser／decoder completionがactiveな間は新しいparser inputと次のPCP Atomを停止
+- decoder `EAGAIN`はbounded state-machine `Advance`だけで進行
+- no receive progress、work budget超過、contradictory accountingはfail closed
+- exact PCP channel／session／packet sequenceとexact parser-created source generationを要求
+- `StreamDescriptionAvailable`後にbinding、native session、fresh state machineを1 generationとして作成
+- transport close、reconnect、stop、timeout、cancellation、failureをEOSと推測しない
+- ownerが別の明示finalization操作でvideo／audio EOSを送る
+- explicit discontinuityはretained submission、state machine、native session解放後にparserをreset
+- reconnectだけではparser／decoder generationをresetしない
+- second encoded queue、caller-suffix retention、resident loop、production activationなし
 
 診断専用のframe copy、conversion、bounded scheduler、late-aware dispatch経路は引き続きproduction decoder factoryから独立しています。FFmpeg backend activationやruntime配布も未承認のままです。
 
@@ -64,6 +65,7 @@ future composition用の有限FLV parser façadeを追加し、通常packetは�
 - finite one-event packet submission state machine
 - controlled retained FLV fixture validation
 - one-event final EOS parser façade
+- reviewed awaited PCP-to-FLV composition contract
 
 詳細:
 
@@ -77,13 +79,13 @@ future composition用の有限FLV parser façadeを追加し、通常packetは�
 
 PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信アプリではありません。
 
-- PCP chunk-to-FLV parser composition review／implementation
+- finite awaited PCP-to-FLV composition implementation
 - MP4／fragmented MP4 parser
 - production decoder ingress
 - decoded-frame ownership and delivery for the real FLV path
 - decoded-buffer duration cutoff
 - continuous decode and per-stream EOS drain
-- discontinuity reset semantics
+- discontinuity-time native reset semantics
 - complete A/V synchronization、resampling、drift correction
 - approved FFmpeg backend activation
 - FFmpeg runtime同梱／再配布
@@ -94,9 +96,9 @@ FFmpeg backend activation、runtime bundling／distribution、license approval�
 
 ## 次のマイルストーン
 
-**0.0.9h — PCP Chunk-to-FLV Parser Composition Review**
+**0.0.9i — Finite Awaited PCP-to-FLV Composition Boundary**
 
-awaited PCP data callbackのchunk memoryをone-event FLV parser façadeへ渡す有限compositionをレビューします。consumed bytesとcaller suffix、active completionによるpause、decoder `EAGAIN`時のchunk consumption停止、final signal、cancellation、discontinuity generation、session replacement、cleanup順を先に確定し、runtime wiringは次の実装milestoneへ分離します。
+`IPcpChannelPacketConsumer`を実装するserialized boundaryを追加し、callback内local suffix offset、exact identity／sequence、injected decoder-generation factory、bounded parser／decoder transitions、別操作の明示finalization、discontinuity generation replacement、fixed terminal snapshot、ordered cleanupをcross-platform focused testで実装・検証します。production backend activation、decoded-frame delivery、output wiringはまだ追加しません。
 
 ## 必要環境
 
