@@ -2,28 +2,20 @@
 
 ## 現在地
 
-**0.0.8x — Pure Managed Bounded FLV v1 Demux Parser — Implemented**
+**0.0.8y — Parser-to-Decoder Composition Architecture Review — Accepted**
 
-0.0.8vのcontainer-neutral contract上に、最初のreal container parserをpure managedで実装しました。
+0.0.8x parserからdecoder境界への接続方法をreviewしました。
 
-- input: caller-owned `ReadOnlyMemory<byte>` chunkを有限push
-- progress: consumed byte count＋最大1個の0.0.8v completion
-- carry: splitしたFLV header／tag／previous-tag-sizeの1 recordだけを有限保持
-- framing: signature、version、flags、data offset、tag type／size／stream ID、PreviousTagSizeをstrict validation
-- bootstrap: AVC sequence headerの後にAAC sequence headerを要求し、media前にimmutable sessionを作成
-- metadata: script tagはcount／byte bound内でskip。AMFは解析しない
-- AVC config: avcC reserved bits、NAL length size、SPS／PPS count・type・length・profile／levelを検証
-- SPS: emulation-prevention除去、profile syntax、scaling list、POC、interlace、croppingから寸法を取得
-- video packet: AVCC length walk、FLV timestamp=DTS、signed composition offsetでPTS、frame typeでkeyframe
-- AAC config: AAC-LC、indexed／explicit sample rate、channel configurationを有限解析
-- audio packet: FLV AAC headerを除いたpayload、PTS=DTS、duration unknown
-- duplicate config: byte一致のみbounded skip。変更はfail closed
-- EOS: AVC end-of-sequenceとfinal inputをper-stream EOSへ対応
-- backpressure: active completionをdisposeするまで次Parseを拒否
-- discontinuity: old session／carry／bootstrap／sequence／EOSをresetしてgenerationを更新
-- cleanup: active completion→session→carry／temporary configurationの順でidempotent cleanup
+- FLV session descriptionは既存managed codec-parameter factoryへ安全に写像可能
+- 0.0.8zでsource session参照とvideo／audio parameter leasesをまとめるpure managed bindingを実装
+- bindingはparserやsessionを所有しない
+- current packet boundaryはpayload bytesのみでPTS／DTS／time base／keyframe／sequenceを保持できない
+- existing diagnostic transactionはvideo→audio固定pairで、FLVのinterleaved orderと一致しない
+- decoderがframe drainを要求した場合はactive parser completionを保持する必要がある
+- EOSはexplicit flushとbounded drainを別境界で扱う
+- timestamp-aware packet submissionは後続reviewへ分離
 
-PCP consumer、decoder codec-parameter transfer、packet submission、decode loop、FFmpeg backend activation、Windows device activationは未接続です。
+PCP consumer、packet submission、decode loop、backend activation、Windows device activationは未接続です。
 
 ## CI
 
@@ -31,26 +23,23 @@ PCP consumer、decoder codec-parameter transfer、packet submission、decode loo
 
 ## 最新の入口
 
+- `docs/adr/ADR-0109-parser-decoder-composition-review.md`
+- `docs/reviews/PCN-0117-PARSER-DECODER-COMPOSITION-REVIEW.md`
 - `src/Nova.Playback/PlaybackBoundedFlvParser.cs`
-- `tests/Nova.Playback.Tests/PlaybackBoundedFlvParserTests.cs`
-- `docs/adr/ADR-0108-pure-managed-bounded-flv-parser.md`
-- `docs/reviews/PCN-0116-PURE-MANAGED-BOUNDED-FLV-PARSER-VALIDATION.md`
 - `src/Nova.Playback/PlaybackBoundedDemuxOutputContract.cs`
-- `docs/adr/ADR-0107-first-bounded-container-parser-selection.md`
+- `src/Nova.Playback/PlaybackDecoderFfmpegCodecParameters.cs`
+- `src/Nova.Playback/PlaybackDecoderFfmpegPacketFrameBoundary.cs`
 
 ## 次の作業
 
-0.0.8x parserから既存decoder境界へ進む前に、**parser-to-decoder composition architecture review**を行います。
+**0.0.8z — FLV Session Decoder-Parameter Binding**
 
-- immutable stream descriptionを既存managed codec-parameter ownerへどう渡すか
-- 0.0.8v completionをdisposeする前にpacket submissionをどこまで有限化するか
-- PTS／DTS、EOS、partial failure、native lease、cancellationの所有権
-- parser backpressureを壊さず、decoder側に第2queueを作らないcomposition seam
-- production activationとPCP adapterを引き続き分離すること
+liveなFLV demux sessionを検証し、source session参照、stream IDs、time basesと、既存factoryが所有するH.264／AAC codec-parameter leasesをpure managed bindingへまとめます。
 
 ## 未完了
 
-- parser-to-decoder composition review and implementation
+- FLV session decoder-parameter binding
+- timestamp-aware packet submission review and implementation
 - controlled retained FLV fixture validation
 - PCP-to-parser composition
 - MP4／fragmented MP4 parser
@@ -58,6 +47,6 @@ PCP consumer、decoder codec-parameter transfer、packet submission、decode loo
 - continuous decode、flush、EOS drain
 - duration cutoff
 - complete A/V synchronization
-- FFmpeg activation／distribution
+- runtime distribution decision
 - controlled audible／visible playback
 - GUI、installer、recorder

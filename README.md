@@ -9,31 +9,22 @@ License: **Apache License 2.0**
 
 ## 現在地
 
-**Milestone 0.0.8x — Pure Managed Bounded FLV v1 Demux Parser**
+**Milestone 0.0.8y — Parser-to-Decoder Composition Architecture Review**
 
 診断専用のH.264／AAC経路は、native context openからowned managed frame copy、既存bounded schedulerへの有限ingress、late-aware timed dispatchの有限transactionまで到達しています。本番decoder factoryからは独立しており、FFmpeg backend activationや配布承認を変更していません。
 
-0.0.8vでparser-neutralなdemux output contractを作り、0.0.8wで選択した最初のreal container parserを0.0.8xでpure managed実装しました。
+0.0.8xでpure managed bounded FLV v1 parserを実装し、0.0.8yでは既存decoder境界との安全な接続順序を決定しました。
 
-- caller-owned `ReadOnlyMemory<byte>` chunkを有限push
-- consumed byte countと最大1個のactive 0.0.8v completion
-- splitした1個のFLV recordだけを保持するbounded carry
-- FLV signature／version／flags／data offset／tag／PreviousTagSizeのstrict validation
-- AVC sequence headerの後にAAC sequence headerを要求し、media前にimmutable sessionを作成
-- script tagはbounded skipのみ。AMF metadataは解析しない
-- AVCDecoderConfigurationRecord、SPS／PPS、profile／level、NAL length sizeを検証
-- bounded SPS bit parsingでinterlace／croppingを含む映像寸法を取得
-- AVCC NAL length walkを行い、Annex Bへ変換しない
-- FLV timestampをDTS、signed composition offsetを加えた値をPTS
-- frame typeをkeyframe stateへ対応し、durationはunknownを維持
-- AAC-LC AudioSpecificConfigからindexed／explicit sample rateとchannel countを取得
-- exact duplicate sequence headerはbounded skip、変更はfail closed
-- AVC end-of-sequenceとfinal inputをexplicit per-stream EOSへ対応
-- active completion disposalをparser backpressureに利用
-- explicit discontinuityでold session／carry／bootstrap／sequence／EOSをreset
-- terminal malformed／codec／timestamp failuresをfault latch
+- FLV sessionのH.264／AAC descriptionは既存managed codec-parameter factoryへ正確に写像可能
+- 0.0.8zでsource session参照とvideo／audio parameter leasesを1個のpure managed bindingへまとめる
+- bindingはparserやsource sessionを所有しない
+- current packet boundaryはpayload bytesのみでPTS／DTS／time base／keyframe／sequenceを保持できない
+- older diagnostic transactionはvideo→audio固定pairで、FLVのinterleaved one-event orderを扱えない
+- decoderがframe drainを要求した場合はactive parser completionを保持する必要がある
+- EOSはempty payloadではなくexplicit flushとbounded drainとして設計する
+- timestamp-aware packet submissionとnative packet fieldsは別reviewへ分離
 
-0.0.8x parserはPCP ingress、decoder packet submission、scheduler、native lease、deviceを所有しません。ネットワークとdecoderへの接続は後続の明示review対象です。
+0.0.8yはarchitecture reviewであり、runtime source、tests、PCP ingress、packet submission、backend activationを変更していません。
 
 ## 実装済みの主な領域
 
@@ -67,6 +58,7 @@ License: **Apache License 2.0**
 - bounded diagnostic fixture and adapter
 - pure managed bounded demux output contract
 - pure managed bounded FLV v1 parser
+- parser-to-decoder composition architecture review
 
 詳細:
 
@@ -80,7 +72,8 @@ License: **Apache License 2.0**
 
 PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信アプリではありません。
 
-- parser-to-decoder composition
+- FLV session decoder-parameter binding
+- timestamp-aware packet submission
 - controlled retained FLV fixture validation
 - PCP-to-parser composition
 - MP4／fragmented MP4 parser
@@ -98,11 +91,11 @@ FFmpeg backend activation、runtime bundling／distribution、license approval�
 
 ## 次のマイルストーン
 
-**Parser-to-Decoder Composition Architecture Review**
+**0.0.8z — FLV Session Decoder-Parameter Binding**
 
-0.0.8x parserのimmutable stream descriptionとowned packet／EOS completionを、既存managed codec-parameter ownerとbounded native packet境界へ安全に渡す方法を決定します。
+liveなFLV demux sessionを検証し、source session参照、stream IDs、time basesと、既存factoryが所有するH.264／AAC padded codec-parameter leasesをpure managed bindingへまとめます。
 
-0.0.8v completion backpressure、event順序、payload lifetime、PTS／DTS、EOS、partial failure、cancellation、native lease cleanupを固定し、第2encoded-packet queue、PCP接続、production activationを同じmilestoneへ混ぜません。
+parser、session、packet completion、native contextは所有せず、partial creation failureとaudio→video cleanupをfocused testsで固定します。
 
 ## 必要環境
 

@@ -7,6 +7,19 @@ history at commit `f078dab5372a45a8c577c1c802a697ab72b45c02` and in the associat
 ADR/PCN validation records. This active file keeps the current playback
 integration sequence concise.
 
+### 0.0.8y - Parser-to-Decoder Composition Architecture Review
+
+- Reviewed the 0.0.8x bounded FLV parser against the existing managed codec-parameter, native parameter-transfer, codec-open, and packet/frame boundaries.
+- Confirmed that the immutable H.264／AAC session description maps without information loss to `PlaybackDecoderFfmpegCodecParametersFactory`.
+- Selected a pure managed FLV session decoder-parameter binding as 0.0.8z, retaining exact source-session identity while owning only independently copied padded parameter leases.
+- Required exact FLV container, stream-role, codec, stream-ID, `1/1000` time-base, codec-data, video-dimension, and audio-configuration validation.
+- Rejected direct reuse of the paired diagnostic packet transaction because real FLV emits one interleaved event at a time rather than a fixed video-then-audio pair.
+- Confirmed that the current packet boundary accepts payload bytes only and cannot preserve PTS, DTS, duration, time base, keyframe state, discontinuity, or sequence.
+- Required later decoder-backpressure handling to retain the active parser completion when packet send needs frame drain rather than disposing the native lease or encoded payload.
+- Required EOS to use explicit flush and bounded drain instead of an empty encoded packet.
+- Deferred timestamp-aware AVPacket construction, native ABI additions, packet submission, decode iteration, PCP composition, production activation, and controlled playback.
+- Added ADR-0109 and PCN-0117. Runtime source and tests remain unchanged in this architecture-review milestone.
+
 ### 0.0.8x - Pure Managed Bounded FLV v1 Demux Parser
 
 - Added caller-pushed finite FLV v1 parsing with consumed-byte progress and at most one active 0.0.8v completion per operation.
