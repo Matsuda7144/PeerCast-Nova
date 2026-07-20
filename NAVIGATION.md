@@ -2,23 +2,25 @@
 
 ## 現在地
 
-**0.0.8v — Pure Managed Bounded Demux Output Contract — Implemented**
+**0.0.8w — First Bounded Container Parser Selection Review — Accepted**
 
-container parserより先に、container-neutralなbounded demux output contractをpure managedで実装しました。
+0.0.8v contractの最初のconcrete parserとして、pure managed bounded FLV v1 demux parserを選択しました。
 
-- session: H.264 video 1本＋AAC audio 1本のimmutable owned description
-- stream: stable distinct id、bounded codec data、video／audio configuration、positive rational time base
-- container: FLV／MP4／fragmented MP4をfixed enumで表現
-- timing: PTSとDTSを独立したknown／unknown値として保持し、negative timestampもbound内で維持
-- converter: rational time baseをchecked conversionし、invalid base／limit／magnitudeを明示
-- packet: parser order、per-stream monotonic sequence、owned bounded payload、duration、keyframe、discontinuity
-- EOS: streamごとのpayloadなし明示event。両stream終了後だけfinal EOS
-- bounds: input bytes、packet bytes、codec data、packet count、aggregate owned bytes、skipped records、timestamp magnitude
-- backpressure: active completionをdisposeするまで次のfinite readを`ActiveCompletion`で拒否
-- cleanup: packet payloadを先にclearし、その後audio／video codec dataをclear
-- fail closed: sequence regression、stream mismatch、packet after EOS、contradictory result、undefined enum
+- selection: FLVを先行し、MP4／fragmented MP4は後続reviewへ延期
+- input: seekable fileではなくcaller-owned callback chunkを有限push
+- progress: consumed byte count＋最大1個の0.0.8v completion
+- carry: chunkをまたぐ不完全なheader／tag／previous-tag-sizeだけを有限保持
+- no queue: complete packet、複数tag、caller suffix、output event queueを内部保持しない
+- bootstrap: FLV header、PreviousTagSize0、AVC sequence header、AAC sequence headerをmedia前に要求
+- metadata: script tagはbounded skipのみ。AMFからcodec configurationを合成しない
+- AVC: AVCDecoderConfigurationRecord、bounded SPS dimension parse、AVCC NAL length walk
+- video timing: FLV timestampをDTS、signed composition offsetを加えた値をPTS
+- AAC: AudioSpecificConfigからAAC-LC sample rate／channel countを有限解析
+- EOS: AVC end-of-sequenceとfinal inputを明示EOSへ対応し、flush／drain packetは作らない
+- discontinuity: carryとparser stateをclearし、新しいFLV header／sequence headersを要求
+- commit: 0.0.8v completion構築成功後にだけparser stateを進める
 
-FLV／MP4 parser、decoder packet submission、decode loop、FFmpeg backend activation、Windows device activationは未接続のままです。
+FLV parser runtime、PCP-to-parser composition、decoder packet submission、FFmpeg backend activation、Windows device activationは未接続のままです。
 
 ## CI
 
@@ -26,24 +28,29 @@ FLV／MP4 parser、decoder packet submission、decode loop、FFmpeg backend acti
 
 ## 最新の入口
 
+- `docs/adr/ADR-0107-first-bounded-container-parser-selection.md`
+- `docs/reviews/PCN-0115-FIRST-BOUNDED-CONTAINER-PARSER-SELECTION-REVIEW.md`
 - `src/Nova.Playback/PlaybackBoundedDemuxOutputContract.cs`
 - `tests/Nova.Playback.Tests/PlaybackBoundedDemuxOutputContractTests.cs`
-- `docs/adr/ADR-0106-pure-managed-bounded-demux-output-contract.md`
-- `docs/reviews/PCN-0114-PURE-MANAGED-BOUNDED-DEMUX-OUTPUT-VALIDATION.md`
-- `docs/adr/ADR-0105-bounded-demux-output-contract-review.md`
-- `src/Nova.Playback/PlaybackDecoderFfmpegPacketFrameBoundary.cs`
+- `src/Nova.Network/Pcp/PcpChannelPacket.cs`
+- `src/Nova.Network/Pcp/IPcpChannelPacketConsumer.cs`
+- `src/Nova.Network/Pcp/PcpRelayFanout.cs`
 
 ## 次の作業
 
-0.0.8v contractの上に最初のconcrete bounded container parserを置く前に、FLVとMP4／fragmented MP4のどちらを先に選ぶかarchitecture reviewで決定します。
+**0.0.8x — Pure Managed Bounded FLV v1 Demux Parser**
 
-選定では、PeerCast／HTTP relayで実際に必要なcontainer、non-seekable stream対応、codec configuration、timestamp／DTS、keyframe、EOS、input observation boundsを比較し、production activationとは分離します。
+caller-owned chunk、consumed-byte progress、one incomplete-record carry、FLV structural validation、AVC／AAC sequence-header bootstrap、bounded SPS／AudioSpecificConfig parsing、packet／EOS output、discontinuity resetをpure managed runtimeとfocused testsで実装します。
+
+PCP consumerへの接続、decoder codec-parameter transfer、packet submission、decode loop、production activationは含めません。
 
 ## 未完了
 
-- first bounded container parser selection and implementation
-- bounded FLV／MP4 parser
+- pure managed bounded FLV v1 parser implementation
+- real FLV fixture validation
+- PCP-to-parser composition
 - parser-to-codec-parameter composition
+- MP4／fragmented MP4 parser
 - production decoder ingress
 - continuous decode、flush、EOS drain
 - duration cutoff

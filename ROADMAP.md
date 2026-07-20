@@ -48,32 +48,39 @@
 - 0.0.8t Diagnostic Late-aware Scheduler Dispatch
 - 0.0.8u Bounded Demux Output Contract Review
 - 0.0.8v Pure Managed Bounded Demux Output Contract
+- 0.0.8w First Bounded Container Parser Selection Review
 
-0.0.8v adds the parser-neutral input-side contract required before real container
-work. It owns immutable H.264／AAC stream descriptions and finite packet／EOS
-completions, preserves separate PTS and DTS, enforces sequence and EOS state,
-bounds count and bytes, and uses completion disposal as the read-backpressure
-boundary.
+0.0.8w selects FLV v1 as the first parser behind the 0.0.8v contract. FLV maps
+one H.264 video and one AAC audio stream to sequential callback-driven input,
+exposes DTS plus AVC composition offset for PTS, and avoids the larger box,
+track, sample-table, and fragment state required by MP4／fragmented MP4.
 
 ### Next
 
-Review the first concrete bounded container parser behind the 0.0.8v contract.
-Compare FLV against MP4／fragmented MP4 for PeerCast and HTTP relay use, especially
-non-seekable input, codec configuration, DTS／PTS, keyframe discovery, EOS, and
-finite input observation. Parser selection must remain separate from production
-activation.
+- 0.0.8x Pure Managed Bounded FLV v1 Demux Parser
+
+Implement caller-pushed finite chunks, consumed-byte progress, one bounded
+incomplete-record carry buffer, strict FLV header/tag/previous-size validation,
+AVC and AAC sequence-header bootstrap, bounded SPS and AudioSpecificConfig
+parsing, AVCC packet validation, separate PTS／DTS, keyframe state, discontinuity
+reset, and explicit EOS behind the existing 0.0.8v ownership contract.
+
+Do not connect PCP ingress, decoder codec parameters, packet submission,
+production activation, or Windows output in the same milestone.
 
 ### Later sequence
 
-1. implement the selected bounded container parser behind the shared contract;
-2. review parser-to-codec-parameter and packet-submission composition;
-3. add bounded decode iteration, drain, and EOS handling;
-4. explicitly review production activation and Windows lifecycle;
-5. perform controlled real-media validation.
+1. validate the bounded FLV parser with controlled synthetic and retained test fixtures;
+2. review PCP chunk-to-parser composition and discontinuity ownership;
+3. review parser-to-codec-parameter and packet-submission composition;
+4. add bounded decode iteration, drain, and EOS handling;
+5. explicitly review production activation and Windows lifecycle;
+6. perform controlled real-media validation.
 
 ### Deferred
 
-- unselected bounded FLV／MP4 parser
+- MP4／fragmented MP4 parser
+- F4V, MPEG-2 TS, MKV, and OGG parser support
 - avformat integration
 - production decoder ingress
 - continuous decode、flush、EOS drain

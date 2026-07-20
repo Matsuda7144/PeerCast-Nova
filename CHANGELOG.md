@@ -7,6 +7,19 @@ history at commit `f078dab5372a45a8c577c1c802a697ab72b45c02` and in the associat
 ADR/PCN validation records. This active file keeps the current playback
 integration sequence concise.
 
+### 0.0.8w - First Bounded Container Parser Selection Review
+
+- Compared FLV v1 with MP4／fragmented MP4 against the 0.0.8v parser-neutral contract and the existing callback-scoped sequential PCP input boundary.
+- Selected a pure managed bounded FLV v1 demux parser as 0.0.8x because H.264＋AAC FLV maps directly to the current stream roles, PTS／DTS model, keyframe state, and non-seekable PeerCast path.
+- Required caller-pushed finite chunks, a consumed-byte count, and at most one active 0.0.8v completion per operation.
+- Allowed one bounded incomplete-record carry buffer while rejecting a parser-owned producer queue, complete unreported packet retention, and caller-suffix copying.
+- Required FLV header and previous-tag-size validation, bounded script-tag skipping, AVC／AAC sequence headers before media, and fail-closed handling of malformed or changing configuration.
+- Required bounded AVC configuration and SPS parsing for dimensions, AVCC NAL length validation, FLV DTS plus signed composition offset for PTS, and keyframe mapping from frame type.
+- Required bounded AAC AudioSpecificConfig parsing for AAC-LC sample rate and channels while leaving duration unknown.
+- Required explicit discontinuity reset, final-input truncation detection, per-stream EOS, and state commit only after successful 0.0.8v completion construction.
+- Deferred MP4／fragmented MP4, avformat, PCP composition, decoder submission, production activation, and controlled real-media playback.
+- Added ADR-0107 and PCN-0115. Runtime source and tests remain unchanged in this architecture-review milestone.
+
 ### 0.0.8v - Pure Managed Bounded Demux Output Contract
 
 - Added one container-neutral pure managed demux session with exactly one owned H.264 video description and one owned AAC audio description.
@@ -44,7 +57,7 @@ integration sequence concise.
 
 ### 0.0.8s - Diagnostic Scheduler Dispatch Architecture Review
 
-- Selected `PlaybackLateAwareTimedDispatchBoundary.DispatchOneAsync` as the next finite scheduler-to-output composition seam.
+- Selected `PlaybackLateAwareTimedDispatchBoundary.DispatchOneAsync` as the next scheduler-to-output composition seam.
 - Rejected the older awaited-sink route, the direct untimed Windows adapter, a second queue, and automatic pump or recovery startup for this milestone.
 - Required known, non-negative presentation timestamps before scheduler ingress without synthesizing timestamps or durations.
 - Fixed the safe composition start at the 0.0.8m completion so timing readiness is checked before 0.0.8r detaches ownership.

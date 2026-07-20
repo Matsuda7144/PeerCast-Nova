@@ -9,25 +9,28 @@ License: **Apache License 2.0**
 
 ## 現在地
 
-**Milestone 0.0.8v — Pure Managed Bounded Demux Output Contract**
+**Milestone 0.0.8w — First Bounded Container Parser Selection Review**
 
 診断専用のH.264／AAC経路は、native context openからowned managed frame copy、既存bounded schedulerへの有限ingress、late-aware timed dispatchの有限transactionまで到達しています。本番decoder factoryからは独立しており、FFmpeg backend activationや配布承認を変更していません。
 
-0.0.8vでは、real container parserより先に必要なparser-neutral input contractをpure managedで実装しました。
+0.0.8vでparser-neutralなbounded demux output contractを実装し、0.0.8wでは最初のconcrete parserとしてFLV v1を選択しました。
 
-- H.264 video 1本＋AAC audio 1本のimmutable owned stream description
-- stable distinct stream id、bounded codec data、video／audio configuration、positive rational time base
-- FLV／MP4／fragmented MP4のfixed container enum
-- parser orderを保つfinite packet／EOS event
-- separate known／unknown PTSとDTS、negative timestamp preservation、optional duration
-- video keyframe／non-keyframe／unknown、audio NotApplicable
-- per-stream monotonic sequenceとindependent EOS state
-- input、packet、codec data、packet count、aggregate bytes、skipped records、timestamp magnitudeのhard bounds
-- checked rational timestamp converter
-- active completionをdisposeするまで次readを拒否するcaller-driven backpressure
-- packet payloadを先にclearしてからaudio／video codec dataをclearするidempotent cleanup
+- PeerCast ingressに合うcaller-owned callback chunkを有限push
+- consumed byte countと最大1個のactive 0.0.8v completion
+- split recordだけを保持するone bounded carry buffer
+- FLV header、tag、PreviousTagSizeのstrict validation
+- media前にAVC／AAC sequence headerを要求
+- script metadataはbounded skipのみでcodec configurationには使わない
+- AVCDecoderConfigurationRecordとbounded SPS parsingで映像寸法を取得
+- AVCC NAL length walkを行い、Annex Bへ変換しない
+- FLV timestampをDTS、signed composition offsetを加えた値をPTS
+- AudioSpecificConfigからAAC-LC sample rate／channel countを取得
+- exact duplicate sequence headerはbounded skip、変更はfail closed
+- explicit discontinuityでcarry／bootstrapをreset
+- final inputでtruncationとper-stream EOSを明示
+- 0.0.8v completion構築成功後にだけparser stateをcommit
 
-0.0.8vはcontainer bytesを解析せず、stream、parser、decoder、scheduler、native lease、deviceを所有しません。FLV／MP4 parser、decoder packet submission、decode loop、production activationは後続milestoneです。
+MP4／fragmented MP4は、init segment、box hierarchy、track／sample／fragment stateの範囲が大きいため後続reviewへ延期しました。0.0.8wはarchitecture reviewであり、FLV parser runtime、PCP composition、decoder submission、production activationは追加していません。
 
 ## 実装済みの主な領域
 
@@ -60,6 +63,7 @@ License: **Apache License 2.0**
 - finite continuous pump
 - bounded diagnostic fixture and adapter
 - pure managed bounded demux output contract
+- bounded FLV parser architecture selection
 
 詳細:
 
@@ -73,9 +77,11 @@ License: **Apache License 2.0**
 
 PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信アプリではありません。
 
-- first concrete bounded container parser
-- bounded FLV／MP4 parser
+- pure managed bounded FLV v1 parser
+- controlled FLV fixture validation
+- PCP-to-parser composition
 - parser-to-codec-parameter composition
+- MP4／fragmented MP4 parser
 - production decoder ingress
 - decoded-buffer duration cutoff
 - continuous decode、flush、EOS drain
@@ -90,9 +96,11 @@ FFmpeg backend activation、runtime bundling／distribution、license approval�
 
 ## 次のマイルストーン
 
-0.0.8v contractの上に最初のconcrete bounded container parserを置く前に、FLVとMP4／fragmented MP4のどちらを先に実装するかarchitecture reviewで決定します。
+**0.0.8x — Pure Managed Bounded FLV v1 Demux Parser**
 
-PeerCast／HTTP relayで必要なnon-seekable input、codec configuration、PTS／DTS、keyframe、EOS、finite observation boundsを比較し、production activationやreal-media playbackの承認とは分離します。
+0.0.8wで固定したcaller-chunk、consumed-byte progress、bounded carry、FLV structural validation、AVC／AAC bootstrap、bounded SPS／AudioSpecificConfig解析、packet／EOS出力、discontinuity resetをpure managed runtimeとfocused testsで実装します。
+
+PCP consumerへの接続、decoder codec-parameter transfer、packet submission、decode loop、production activation、Windows output activationは含めません。
 
 ## 必要環境
 
