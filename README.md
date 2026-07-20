@@ -9,25 +9,22 @@ License: **Apache License 2.0**
 
 ## 現在地
 
-**Milestone 0.0.9a — Timestamp-aware Packet Submission Architecture Review**
+**Milestone 0.0.9b — Source-bound Opened Native Decoder Session**
 
-診断専用のH.264／AAC経路は、native context openからowned managed frame copy、既存bounded schedulerへの有限ingress、late-aware timed dispatchの有限transactionまで到達しています。本番decoder factoryからは独立しており、FFmpeg backend activationや配布承認を変更していません。
+0.0.8xでpure managed bounded FLV parser、0.0.8zでexact source-session identityを持つdecoder-parameter bindingを実装しました。0.0.9bでは、そのbindingをopened native H.264/AAC context pairへ有限に接続しました。
 
-0.0.8xでbounded FLV parser、0.0.8zでexact source-session identityを持つdecoder-parameter bindingを実装しました。0.0.9aでは、real FLV eventをopened decoderへ渡すためのownershipとABIの順序を決定しました。
-
-- packet submissionより先にsource-bound opened decoder sessionを作る
-- old diagnostic native leaseはsource identityを持たないためreal FLV pathへ使わない
-- 0.0.9bでvideo contextをcreate／configure／openした後にaudioを同じ順序で処理
-- video／audio contextsはdistinct gate／runtime ownership chainsを持つ
-- parameter bindingと両gate leasesは全resultでconsume
+- exact source-session reference、video/audio stream IDs、time basesをnative work前にsnapshot
+- distinct video／audio ABI gate ownershipを要求
+- H.264 contextのcreate／parameter transfer／open完了後にAACへ進む
+- bindingと両gate leasesをsuccess／failureに関係なくconsume
 - partial configured／opened stateはsuccessとして返さない
-- current packet boundaryはpayload-onlyでPTS／DTS／duration／time base／keyframe／sequenceを保持できない
-- AVPacket field writeは0.0.9c ABI reviewへ分離
-- `NeedFrameDrain`中はactive parser completionを唯一のpending encoded ownerとして保持
-- EOSはempty packetではなくexplicit null-packet flushとbounded drain
-- second encoded queue、hidden retry loop、resident decoder loopを作らない
+- source disposal、context／transfer／open rejection、unexpected faultを明示
+- success sessionはopened contextsだけを所有
+- source demux sessionはnon-owning identity reference
+- cleanupはaudio→video順でidempotent
+- packet submission、AVPacket metadata、flush、drain、PCP ingress、backend activation、outputは未変更
 
-0.0.9aはarchitecture reviewであり、runtime source、tests、native ABI、packet submission、PCP ingress、backend activationを変更していません。
+診断専用のframe copy、conversion、bounded scheduler、late-aware dispatch経路は引き続きproduction decoder factoryから独立しています。FFmpeg backend activationやruntime配布も未承認のままです。
 
 ## 実装済みの主な領域
 
@@ -49,20 +46,15 @@ License: **Apache License 2.0**
 
 - verified FFmpeg runtime locator／leaseとABI gate
 - native decoder context、parameter transfer、codec open、packet/frame境界
-- callback-scoped metadata／plane／sample view
-- owned managed frame copyとcanonical conversion
-- serial awaited sink delivery
+- managed frame copy、conversion、awaited delivery
 - count／byte bounded decoded-frame scheduler
-- diagnostic managed-frame scheduler ingress
-- finite diagnostic late-aware scheduler dispatch
+- finite late-aware scheduler dispatch
 - A/V timing、late-item、recovery、deadline-aware run policy
 - Windows D3D11／WASAPI output境界
-- finite continuous pump
-- bounded diagnostic fixture and adapter
-- pure managed bounded demux output contract
+- bounded demux output contract
 - pure managed bounded FLV v1 parser
-- FLV session decoder-parameter binding
-- timestamp-aware packet submission architecture review
+- exact FLV session decoder-parameter binding
+- source-bound opened native decoder session
 
 詳細:
 
@@ -76,9 +68,8 @@ License: **Apache License 2.0**
 
 PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信アプリではありません。
 
-- source-bound opened native decoder session
 - AVPacket metadata／flush ABI review and implementation
-- finite one-event timestamp-aware submission
+- finite one-event timestamp-aware packet submission
 - controlled retained FLV fixture validation
 - PCP-to-parser composition
 - MP4／fragmented MP4 parser
@@ -86,7 +77,6 @@ PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信�
 - decoded-buffer duration cutoff
 - continuous decode、flush、EOS drain
 - complete A/V synchronization、resampling、drift correction
-- precise multimedia timerとin-flight preemption
 - approved FFmpeg backend activation
 - FFmpeg runtime同梱／再配布
 - controlled audible／visible real-media playback
@@ -96,17 +86,15 @@ FFmpeg backend activation、runtime bundling／distribution、license approval�
 
 ## 次のマイルストーン
 
-**0.0.9b — Source-bound Opened Native Decoder Session**
+**0.0.9c — AVPacket Metadata and Flush ABI Review**
 
-liveな0.0.8z bindingとdistinct video／audio ABI gate leasesをconsumeし、exact source-session reference、stream IDs、time basesと、configured＋opened状態のH.264／AAC contextsを1個のowned sessionへまとめます。
-
-routine Ubuntu CIではinjected operationsを使い、ordering、partial failure、source disposal、gate／runtime ownership、audio→video cleanupを検証します。
+FFmpeg runtime identity、AVPacket layoutまたはverified setter seam、PTS／DTS／duration／time base／keyframe／unknown value／stream mapping、null-packet flush、ABI gate strengtheningをreviewします。major-version一致だけではdirect field writeを承認しません。
 
 ## 必要環境
 
 - .NET SDK 10
 - Windows 11はWindows output境界の対象
-- routine CIはUbuntu
+- routine Linux CIはCircleCI
 
 ## ビルドとテスト
 

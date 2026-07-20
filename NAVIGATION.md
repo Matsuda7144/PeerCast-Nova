@@ -2,49 +2,44 @@
 
 ## 現在地
 
-**0.0.9a — Timestamp-aware Packet Submission Architecture Review — Accepted**
+**0.0.9b — Source-bound Opened Native Decoder Session — Implemented**
 
-0.0.8x demux completionからopened decoderへ進むためのownership／ABI順序をreviewしました。
+0.0.8zのFLV decoder-parameter bindingを、exact source identity付きのopened native H.264/AAC context pairへ接続しました。
 
-- 0.0.8z bindingはexact source identityとH.264／AAC parametersを持つがnative contextsは未作成
-- old diagnostic native leaseはsource session／stream IDs／time basesを保持しないためreal FLV compositionには使わない
-- 0.0.9bでsource-bound opened native decoder sessionを実装
-- video context create→parameter transfer→openの後にaudioを同じ順序で処理
-- bindingとvideo／audio gate leasesをsuccess／failureに関係なくconsume
-- video／audio contextはdistinct gate／runtime ownership chainを持つ
-- current packet boundaryはpayload-onlyでPTS／DTS／duration／time base／keyframe／sequenceを保持できない
-- AVPacket field writeはmajor-version gateだけでは承認せず0.0.9c ABI reviewへ分離
-- `NeedFrameDrain`中はactive parser completionを唯一のpending ownerとして保持
-- EOSはempty payloadではなくexplicit null-packet flush＋bounded drain
-- second encoded-packet queue、hidden retry loop、resident decode loopは追加しない
-
-runtime source、tests、native ABI、packet submission、PCP consumer、backend activationは0.0.9aでは変更していません。
+- source session、stream IDs、time basesをnative work前にsnapshot
+- distinct video／audio ABI gate ownershipを要求
+- H.264 create→parameter transfer→open完了後にAACへ進む
+- bindingと両gateを全resultでconsume
+- partial configured／opened stateをsuccessとして返さない
+- source disposal、context／transfer／open rejection、faultを明示
+- success sessionはopened contextsだけを所有
+- source sessionはnon-owning identity reference
+- cleanupはaudio→video順でidempotent
+- packet submission、AVPacket metadata、flush、drain、PCP composition、backend activationは未変更
 
 ## CI
 
-通常のGitHub ActionsはUbuntuのみです。同一PRの古いrunは自動キャンセルします。失敗時だけbuild log artifactを1日保持します。最終branch headでrestore、Release build、full tests、formatが成功してからmergeします。
+GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして使用します。最終branch headでrestore、Release build、full tests、formatを通してからmergeします。
 
 ## 最新の入口
 
-- `docs/adr/ADR-0111-timestamp-aware-packet-submission-architecture-review.md`
-- `docs/reviews/PCN-0119-TIMESTAMP-AWARE-PACKET-SUBMISSION-ARCHITECTURE-REVIEW.md`
+- `src/Nova.Playback/PlaybackBoundedFlvNativeDecoderSession.cs`
+- `tests/Nova.Playback.Tests/PlaybackBoundedFlvNativeDecoderSessionTests.cs`
+- `docs/adr/ADR-0112-source-bound-opened-native-decoder-session.md`
+- `docs/reviews/PCN-0120-SOURCE-BOUND-OPENED-NATIVE-DECODER-SESSION-VALIDATION.md`
 - `src/Nova.Playback/PlaybackBoundedFlvDecoderParameterBinding.cs`
-- `src/Nova.Playback/PlaybackDiagnosticNativeParameterTransaction.cs`
-- `src/Nova.Playback/PlaybackDecoderFfmpegContextLease.cs`
-- `src/Nova.Playback/PlaybackDecoderFfmpegPacketFrameBoundary.cs`
-- `src/Nova.Playback/PlaybackDecoderFfmpegAbiSymbolGate.cs`
+- `docs/adr/ADR-0111-timestamp-aware-packet-submission-architecture-review.md`
 
 ## 次の作業
 
-**0.0.9b — Source-bound Opened Native Decoder Session**
+**0.0.9c — AVPacket Metadata and Flush ABI Review**
 
-liveな0.0.8z bindingとdistinct video／audio gate leasesをconsumeし、exact source-session reference、stream IDs、time basesと、parameters transferred＋opened状態のH.264／AAC contextsを1個のowned sessionへまとめます。
+FFmpeg runtime identity、AVPacket layoutまたはverified setter seam、PTS／DTS／duration／time base／keyframe／unknown value／stream selection、null-packet flush、ABI gate strengtheningをreviewします。
 
 ## 未完了
 
-- source-bound opened native decoder session
 - AVPacket metadata／flush ABI review
-- metadata-aware packet boundary
+- metadata-aware native packet boundary
 - finite one-event submission and EOS drain state
 - controlled retained FLV fixture validation
 - PCP-to-parser composition
