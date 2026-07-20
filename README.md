@@ -9,23 +9,23 @@ License: **Apache License 2.0**
 
 ## 現在地
 
-**Milestone 0.0.8t — Diagnostic Late-aware Scheduler Dispatch Transaction**
+**Milestone 0.0.8u — Bounded Demux Output Contract Review**
 
 診断専用のH.264／AAC経路は、native context openからowned managed frame copy、既存bounded schedulerへの有限ingress、late-aware timed dispatchの有限transactionまで到達しています。本番decoder factoryからは独立しており、FFmpeg backend activationや配布承認を変更していません。
 
-0.0.8tでは、0.0.8m completionから既存0.0.8r ingressとlate-aware dispatchへ進む有限compositionを追加しました。
+0.0.8uでは、production compositionへ進む前に入力側の欠落を再確認し、次の順序を固定しました。
 
-- copied frameにはknownかつnon-negativeなpresentation timestampが必要
-- fresh schedulerのqueue／drop／delivery／owned byteは全て0から開始
-- video sequence 0、audio sequence 1、discontinuity Noneを維持
-- accepted frameごとに最大1回、合計最大2回だけdispatch
-- VideoProcessed、VideoDropConsumed、AudioProcessedだけをconsumeとして確定
-- retained、recovery、reset、device、environment、cancel、failureでは暗黙retryしない
-- partial時はaccepted数、consumed数、outstanding media、last resultを保持
-- cleanup時はscheduler-owned frameを先にdisposeしてからnative leaseを解放
-- continuous pumpやaudio recoveryを暗黙に開始しない
+- repositoryには一般FLV／MP4 demux contractやparserがまだ存在しない
+- fixed diagnostic fixtureをreal containerやproduction ingressの代替にしない
+- 先にcontainer-neutralなpure managed bounded demux output contractを実装する
+- stream descriptionにはH.264／AAC codec data、stable stream id、time baseを含める
+- packetにはowned payload、PTSとDTS、duration、keyframe、discontinuityを含める
+- PTS／DTSやunknown／zeroを混同せず、欠落値を合成しない
+- packet count、payload、aggregate bytes、codec data、input、timestamp conversionをboundする
+- caller-driven finite readをbackpressure境界とし、resident readerやparser-owned queueを作らない
+- concrete parser、decoder composition、activation、real-media validationは後続の別milestoneとする
 
-Cross-platform testsはdispatchを注入し、D3D11、WASAPI、FFmpeg、decoder factoryをactivationしていません。
+0.0.8uはarchitecture reviewであり、runtime source、container parser、production activationは追加していません。
 
 ## 実装済みの主な領域
 
@@ -56,6 +56,7 @@ Cross-platform testsはdispatchを注入し、D3D11、WASAPI、FFmpeg、decoder 
 - A/V timing、late-item、recovery、deadline-aware run policy
 - Windows D3D11／WASAPI output境界
 - finite continuous pump
+- bounded diagnostic fixture and adapter
 
 詳細:
 
@@ -69,10 +70,11 @@ Cross-platform testsはdispatchを注入し、D3D11、WASAPI、FFmpeg、decoder 
 
 PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信アプリではありません。
 
-- bounded FLV／MP4 demux
+- pure managed bounded demux output contract
+- bounded FLV／MP4 parser
 - production decoder ingress
 - decoded-buffer duration cutoff
-- continuous decode、flush、EOS
+- continuous decode、flush、EOS drain
 - complete A/V synchronization、resampling、drift correction
 - precise multimedia timerとin-flight preemption
 - approved FFmpeg backend activation
@@ -84,7 +86,9 @@ FFmpeg backend activation、runtime bundling／distribution、license approval�
 
 ## 次のマイルストーン
 
-0.0.8dから0.0.8tまでの有限診断経路を再確認し、bounded demuxまたはproduction compositionへ進む前に残る前提条件を整理します。activation、distribution、実device作成、real-media playbackの承認は別の明示的判断として維持します。
+**0.0.8v — Pure Managed Bounded Demux Output Contract**
+
+container parserやnative callを追加せず、immutable stream description、packet／EOS event、separate PTS／DTS、keyframe、discontinuity、count／byte bounds、caller-driven finite-read backpressure、owned completion cleanupをpure managed contractとfocused testsで実装します。
 
 ## 必要環境
 

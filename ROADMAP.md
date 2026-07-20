@@ -46,25 +46,36 @@
 - 0.0.8r Managed Frame Scheduler Ingress
 - 0.0.8s Scheduler Dispatch Architecture Review
 - 0.0.8t Diagnostic Late-aware Scheduler Dispatch
+- 0.0.8u Bounded Demux Output Contract Review
 
-0.0.8t implements the finite diagnostic composition from the 0.0.8m completion
-through the existing 0.0.8r ingress and late-aware dispatch seam. It requires
-known non-negative presentation timestamps, a fresh scheduler, at most two
-dispatch calls, explicit partial outcomes, and scheduler-first cleanup before
-native lease release.
+0.0.8u confirms that production composition must not depend on the fixed diagnostic
+fixture. The next input-side foundation is a container-neutral, pure managed,
+bounded demux output contract carrying stream descriptions, owned packet payloads,
+separate PTS and DTS, keyframe and discontinuity state, and explicit EOS.
 
 ### Next
 
-Review the completed finite diagnostic path through scheduler ingress and
-late-aware dispatch before selecting bounded demux or production composition.
-The review must keep activation, distribution, real-device creation, and
-real-media playback claims separate from the verified orchestration boundaries.
+- 0.0.8v Pure Managed Bounded Demux Output Contract
+
+Implement immutable H.264／AAC stream descriptions and finite packet／EOS
+completions with caller-driven backpressure, checked count and byte limits,
+idempotent ownership cleanup, and fixed fail-closed results. Do not parse FLV or
+MP4 and do not change an activation path.
+
+### Later sequence
+
+1. one bounded container parser behind the shared contract;
+2. codec-parameter and packet-submission composition review;
+3. bounded decode iteration, drain, and EOS handling;
+4. explicit production activation and Windows lifecycle review;
+5. controlled real-media validation.
 
 ### Deferred
 
-- bounded FLV／MP4 demux
+- bounded FLV／MP4 parser
+- avformat integration
 - production decoder ingress
-- continuous decode、flush、EOS
+- continuous decode、flush、EOS drain
 - duration cutoff
 - complete synchronization
 - controlled audible／visible playback

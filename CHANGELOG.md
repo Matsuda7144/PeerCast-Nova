@@ -7,6 +7,17 @@ history at commit `f078dab5372a45a8c577c1c802a697ab72b45c02` and in the associat
 ADR/PCN validation records. This active file keeps the current playback
 integration sequence concise.
 
+### 0.0.8u - Bounded Demux Output Contract Review
+
+- Reviewed the finite diagnostic path through scheduler ingress and late-aware dispatch before production composition.
+- Confirmed that the repository has no general FLV／MP4 demux contract and that the fixed diagnostic fixture cannot represent real container packet ordering, DTS, keyframes, stream changes, or EOS.
+- Selected a container-neutral pure managed bounded demux output contract as the next milestone before any concrete parser or activation wiring.
+- Required immutable H.264／AAC stream descriptions, distinct stream identifiers, bounded codec data, rational time bases, and independently known or unknown PTS and DTS.
+- Required bounded packet count, payload bytes, aggregate owned bytes, skipped records, input observation, and timestamp conversion with checked allocation.
+- Fixed caller-driven finite reads as the backpressure boundary and rejected a parser-owned producer queue or resident reader.
+- Deferred FLV／MP4 parsing, avformat integration, production decoder ingress, continuous decode, flush, EOS drain, activation, and controlled real-media playback.
+- Added ADR-0105 and PCN-0113. Production FFmpeg and Windows output activation remain unchanged and unapproved.
+
 ### 0.0.8t - Diagnostic Late-aware Scheduler Dispatch Transaction
 
 - Added a finite diagnostic composition from the 0.0.8m managed-frame completion through the existing 0.0.8r scheduler ingress and late-aware timed dispatch seam.
@@ -44,7 +55,7 @@ integration sequence concise.
 ### 0.0.8q - Bounded Scheduler Aggregate Byte Budget
 
 - Added an aggregate owned-byte budget independent from frame-count capacity.
-- Accounted queued, output-reserved, and `RunOneAsync` in-flight managed frames until scheduler ownership ends.
+- Accounted queued, reserved, and in-flight frames until ownership ends.
 - Added checked plane-buffer aggregation, fixed single-frame oversize rejection, and `OwnedByteCount` snapshots.
 - Applied `DropOldest`, `DropIncoming`, and `Reject` when either count or byte limits would be exceeded.
 - Allowed `DropOldest` to remove multiple unreserved frames while protecting output reservations.
