@@ -47,32 +47,33 @@
 - 0.0.8s Scheduler Dispatch Architecture Review
 - 0.0.8t Diagnostic Late-aware Scheduler Dispatch
 - 0.0.8u Bounded Demux Output Contract Review
+- 0.0.8v Pure Managed Bounded Demux Output Contract
 
-0.0.8u confirms that production composition must not depend on the fixed diagnostic
-fixture. The next input-side foundation is a container-neutral, pure managed,
-bounded demux output contract carrying stream descriptions, owned packet payloads,
-separate PTS and DTS, keyframe and discontinuity state, and explicit EOS.
+0.0.8v adds the parser-neutral input-side contract required before real container
+work. It owns immutable H.264／AAC stream descriptions and finite packet／EOS
+completions, preserves separate PTS and DTS, enforces sequence and EOS state,
+bounds count and bytes, and uses completion disposal as the read-backpressure
+boundary.
 
 ### Next
 
-- 0.0.8v Pure Managed Bounded Demux Output Contract
-
-Implement immutable H.264／AAC stream descriptions and finite packet／EOS
-completions with caller-driven backpressure, checked count and byte limits,
-idempotent ownership cleanup, and fixed fail-closed results. Do not parse FLV or
-MP4 and do not change an activation path.
+Review the first concrete bounded container parser behind the 0.0.8v contract.
+Compare FLV against MP4／fragmented MP4 for PeerCast and HTTP relay use, especially
+non-seekable input, codec configuration, DTS／PTS, keyframe discovery, EOS, and
+finite input observation. Parser selection must remain separate from production
+activation.
 
 ### Later sequence
 
-1. one bounded container parser behind the shared contract;
-2. codec-parameter and packet-submission composition review;
-3. bounded decode iteration, drain, and EOS handling;
-4. explicit production activation and Windows lifecycle review;
-5. controlled real-media validation.
+1. implement the selected bounded container parser behind the shared contract;
+2. review parser-to-codec-parameter and packet-submission composition;
+3. add bounded decode iteration, drain, and EOS handling;
+4. explicitly review production activation and Windows lifecycle;
+5. perform controlled real-media validation.
 
 ### Deferred
 
-- bounded FLV／MP4 parser
+- unselected bounded FLV／MP4 parser
 - avformat integration
 - production decoder ingress
 - continuous decode、flush、EOS drain

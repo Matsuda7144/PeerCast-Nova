@@ -7,6 +7,19 @@ history at commit `f078dab5372a45a8c577c1c802a697ab72b45c02` and in the associat
 ADR/PCN validation records. This active file keeps the current playback
 integration sequence concise.
 
+### 0.0.8v - Pure Managed Bounded Demux Output Contract
+
+- Added one container-neutral pure managed demux session with exactly one owned H.264 video description and one owned AAC audio description.
+- Added stable stream identifiers, fixed container and codec enums, bounded codec data, media configuration, and positive rational time bases.
+- Added finite packet and EOS events with monotonic per-stream sequences, owned payloads, separate known／unknown PTS and DTS, optional duration, keyframe state, and discontinuity.
+- Added checked rational timestamp conversion with negative timestamp preservation and explicit invalid-base, invalid-limit, and magnitude failures.
+- Added caller-selected limits beneath hard project limits for input bytes, packet payload, codec data, packet count, aggregate owned bytes, skipped records, timestamp magnitude, and time-base components.
+- Added one-active-completion backpressure: the next finite read is rejected until payload ownership is disposed.
+- Added explicit independent stream EOS and final EOS only after both streams end; packets after EOS and contradictory terminal states fail closed.
+- Added idempotent scheduler-independent cleanup that clears active packet data before audio and video codec data.
+- Added focused pure managed tests without FLV／MP4 parsing, native calls, decoder submission, production activation, or Windows device activation.
+- Added ADR-0106 and PCN-0114. Concrete parser selection and decoder composition remain later reviewed milestones.
+
 ### 0.0.8u - Bounded Demux Output Contract Review
 
 - Reviewed the finite diagnostic path through scheduler ingress and late-aware dispatch before production composition.

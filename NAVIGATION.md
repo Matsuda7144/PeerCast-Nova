@@ -2,22 +2,23 @@
 
 ## 現在地
 
-**0.0.8u — Bounded Demux Output Contract Review — Accepted**
+**0.0.8v — Pure Managed Bounded Demux Output Contract — Implemented**
 
-0.0.8dから0.0.8tまでの有限診断経路を再確認し、production compositionより先にcontainer-neutralなbounded demux output contractを置く方針を固定しました。
+container parserより先に、container-neutralなbounded demux output contractをpure managedで実装しました。
 
-- 現状: 一般FLV／MP4 demux contractとparserは未実装
-- diagnostic fixture: H.264 packet 1個＋AAC packet 1個だけで、real containerの代替にはしない
-- stream description: H.264 video 1本＋AAC audio 1本、stable stream id、codec data、time base
-- packet: stream id、media kind、sequence、owned payload、PTS／DTS、duration、keyframe、discontinuity
-- timing: PTSとDTSを分離し、unknownをzeroへ変換しない
-- EOS: payloadなしの明示event
-- bounds: input、packet count、packet bytes、aggregate owned bytes、codec data、skipped records、timestamp conversion
-- backpressure: caller-driven finite read。resident readerとparser-owned producer queueなし
-- ownership: success completionがpayload／codec dataを所有し、disposeで全解放
-- parser order: pure managed contract → one bounded container parser → decoder composition review
+- session: H.264 video 1本＋AAC audio 1本のimmutable owned description
+- stream: stable distinct id、bounded codec data、video／audio configuration、positive rational time base
+- container: FLV／MP4／fragmented MP4をfixed enumで表現
+- timing: PTSとDTSを独立したknown／unknown値として保持し、negative timestampもbound内で維持
+- converter: rational time baseをchecked conversionし、invalid base／limit／magnitudeを明示
+- packet: parser order、per-stream monotonic sequence、owned bounded payload、duration、keyframe、discontinuity
+- EOS: streamごとのpayloadなし明示event。両stream終了後だけfinal EOS
+- bounds: input bytes、packet bytes、codec data、packet count、aggregate owned bytes、skipped records、timestamp magnitude
+- backpressure: active completionをdisposeするまで次のfinite readを`ActiveCompletion`で拒否
+- cleanup: packet payloadを先にclearし、その後audio／video codec dataをclear
+- fail closed: sequence regression、stream mismatch、packet after EOS、contradictory result、undefined enum
 
-FFmpeg backend activation、Windows device activation、production decoder ingressは未承認・未接続のままです。
+FLV／MP4 parser、decoder packet submission、decode loop、FFmpeg backend activation、Windows device activationは未接続のままです。
 
 ## CI
 
@@ -25,23 +26,24 @@ FFmpeg backend activation、Windows device activation、production decoder ingre
 
 ## 最新の入口
 
-- `src/Nova.Playback/PlaybackDiagnosticLateAwareSchedulerDispatchTransaction.cs`
-- `src/Nova.Playback/BoundedDiagnosticPlaybackFixture.cs`
-- `src/Nova.Playback/PlaybackDiagnosticFixtureAdapter.cs`
-- `src/Nova.Playback/PlaybackDecoderFfmpegPacketFrameBoundary.cs`
+- `src/Nova.Playback/PlaybackBoundedDemuxOutputContract.cs`
+- `tests/Nova.Playback.Tests/PlaybackBoundedDemuxOutputContractTests.cs`
+- `docs/adr/ADR-0106-pure-managed-bounded-demux-output-contract.md`
+- `docs/reviews/PCN-0114-PURE-MANAGED-BOUNDED-DEMUX-OUTPUT-VALIDATION.md`
 - `docs/adr/ADR-0105-bounded-demux-output-contract-review.md`
-- `docs/reviews/PCN-0113-BOUNDED-DEMUX-OUTPUT-CONTRACT-REVIEW.md`
+- `src/Nova.Playback/PlaybackDecoderFfmpegPacketFrameBoundary.cs`
 
 ## 次の作業
 
-**0.0.8v — Pure Managed Bounded Demux Output Contract**
+0.0.8v contractの上に最初のconcrete bounded container parserを置く前に、FLVとMP4／fragmented MP4のどちらを先に選ぶかarchitecture reviewで決定します。
 
-container parserやnative callを追加せず、stream description、packet／EOS event、PTS／DTS、keyframe、discontinuity、count／byte bounds、ownership、finite-read backpressureをpure managed contractとfocused testsで実装します。
+選定では、PeerCast／HTTP relayで実際に必要なcontainer、non-seekable stream対応、codec configuration、timestamp／DTS、keyframe、EOS、input observation boundsを比較し、production activationとは分離します。
 
 ## 未完了
 
-- bounded demux output contract implementation
+- first bounded container parser selection and implementation
 - bounded FLV／MP4 parser
+- parser-to-codec-parameter composition
 - production decoder ingress
 - continuous decode、flush、EOS drain
 - duration cutoff

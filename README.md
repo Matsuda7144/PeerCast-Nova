@@ -9,23 +9,25 @@ License: **Apache License 2.0**
 
 ## 現在地
 
-**Milestone 0.0.8u — Bounded Demux Output Contract Review**
+**Milestone 0.0.8v — Pure Managed Bounded Demux Output Contract**
 
 診断専用のH.264／AAC経路は、native context openからowned managed frame copy、既存bounded schedulerへの有限ingress、late-aware timed dispatchの有限transactionまで到達しています。本番decoder factoryからは独立しており、FFmpeg backend activationや配布承認を変更していません。
 
-0.0.8uでは、production compositionへ進む前に入力側の欠落を再確認し、次の順序を固定しました。
+0.0.8vでは、real container parserより先に必要なparser-neutral input contractをpure managedで実装しました。
 
-- repositoryには一般FLV／MP4 demux contractやparserがまだ存在しない
-- fixed diagnostic fixtureをreal containerやproduction ingressの代替にしない
-- 先にcontainer-neutralなpure managed bounded demux output contractを実装する
-- stream descriptionにはH.264／AAC codec data、stable stream id、time baseを含める
-- packetにはowned payload、PTSとDTS、duration、keyframe、discontinuityを含める
-- PTS／DTSやunknown／zeroを混同せず、欠落値を合成しない
-- packet count、payload、aggregate bytes、codec data、input、timestamp conversionをboundする
-- caller-driven finite readをbackpressure境界とし、resident readerやparser-owned queueを作らない
-- concrete parser、decoder composition、activation、real-media validationは後続の別milestoneとする
+- H.264 video 1本＋AAC audio 1本のimmutable owned stream description
+- stable distinct stream id、bounded codec data、video／audio configuration、positive rational time base
+- FLV／MP4／fragmented MP4のfixed container enum
+- parser orderを保つfinite packet／EOS event
+- separate known／unknown PTSとDTS、negative timestamp preservation、optional duration
+- video keyframe／non-keyframe／unknown、audio NotApplicable
+- per-stream monotonic sequenceとindependent EOS state
+- input、packet、codec data、packet count、aggregate bytes、skipped records、timestamp magnitudeのhard bounds
+- checked rational timestamp converter
+- active completionをdisposeするまで次readを拒否するcaller-driven backpressure
+- packet payloadを先にclearしてからaudio／video codec dataをclearするidempotent cleanup
 
-0.0.8uはarchitecture reviewであり、runtime source、container parser、production activationは追加していません。
+0.0.8vはcontainer bytesを解析せず、stream、parser、decoder、scheduler、native lease、deviceを所有しません。FLV／MP4 parser、decoder packet submission、decode loop、production activationは後続milestoneです。
 
 ## 実装済みの主な領域
 
@@ -57,6 +59,7 @@ License: **Apache License 2.0**
 - Windows D3D11／WASAPI output境界
 - finite continuous pump
 - bounded diagnostic fixture and adapter
+- pure managed bounded demux output contract
 
 詳細:
 
@@ -70,8 +73,9 @@ License: **Apache License 2.0**
 
 PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信アプリではありません。
 
-- pure managed bounded demux output contract
+- first concrete bounded container parser
 - bounded FLV／MP4 parser
+- parser-to-codec-parameter composition
 - production decoder ingress
 - decoded-buffer duration cutoff
 - continuous decode、flush、EOS drain
@@ -86,9 +90,9 @@ FFmpeg backend activation、runtime bundling／distribution、license approval�
 
 ## 次のマイルストーン
 
-**0.0.8v — Pure Managed Bounded Demux Output Contract**
+0.0.8v contractの上に最初のconcrete bounded container parserを置く前に、FLVとMP4／fragmented MP4のどちらを先に実装するかarchitecture reviewで決定します。
 
-container parserやnative callを追加せず、immutable stream description、packet／EOS event、separate PTS／DTS、keyframe、discontinuity、count／byte bounds、caller-driven finite-read backpressure、owned completion cleanupをpure managed contractとfocused testsで実装します。
+PeerCast／HTTP relayで必要なnon-seekable input、codec configuration、PTS／DTS、keyframe、EOS、finite observation boundsを比較し、production activationやreal-media playbackの承認とは分離します。
 
 ## 必要環境
 
