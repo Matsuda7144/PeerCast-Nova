@@ -7,6 +7,19 @@ history at commit `f078dab5372a45a8c577c1c802a697ab72b45c02` and in the associat
 ADR/PCN validation records. This active file keeps the current playback
 integration sequence concise.
 
+### 0.0.8z - FLV Session Decoder-Parameter Binding
+
+- Added a pure managed adapter from one live bounded FLV demux session to the existing managed FFmpeg codec-parameter ownership boundary.
+- Required exact FLV container, video stream 0 H.264, audio stream 1 AAC, distinct identifiers, and `1/1000` time bases.
+- Passed exact parser-owned video dimensions, audio configuration, AVCDecoderConfigurationRecord, and AudioSpecificConfig through the existing validating factory.
+- Created video parameters before audio parameters and disposed partial video ownership when audio creation failed.
+- Added a binding that owns only independently copied padded video/audio parameter leases while retaining a non-owning exact source-session reference.
+- Snapshotted stream identifiers and time bases for later identity-aware packet composition.
+- Kept parameter ownership valid after later source-session disposal and kept binding disposal independent from parser/session lifetime.
+- Added fixed invalid-session, source-disposed, video-rejected, audio-rejected, and fault results with fail-closed undefined-result cleanup.
+- Added audio-before-video idempotent cleanup and focused cross-platform tests.
+- Added ADR-0110 and PCN-0118 without packet copy, native context creation, codec open, PCP composition, backend activation, or Windows output changes.
+
 ### 0.0.8y - Parser-to-Decoder Composition Architecture Review
 
 - Reviewed the 0.0.8x bounded FLV parser against the existing managed codec-parameter, native parameter-transfer, codec-open, and packet/frame boundaries.

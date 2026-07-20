@@ -51,33 +51,37 @@
 - 0.0.8w First Bounded Container Parser Selection Review
 - 0.0.8x Pure Managed Bounded FLV v1 Demux Parser
 - 0.0.8y Parser-to-Decoder Composition Architecture Review
+- 0.0.8z FLV Session Decoder-Parameter Binding
 
-0.0.8y confirms that FLV session descriptions can enter the existing managed
-codec-parameter ownership boundary without information loss. It also confirms
-that the older paired packet transaction cannot consume real parser output
-because it lacks event-order, timing, decoder-backpressure, and EOS semantics.
+0.0.8z maps one exact live FLV session into independently owned padded H.264 and
+AAC codec-parameter leases. The binding preserves source-session identity,
+stream IDs, and time bases while owning neither parser nor session. It performs
+no native call and consumes no packet completion.
 
 ### Next
 
-- 0.0.8z FLV Session Decoder-Parameter Binding
+Review timestamp-aware one-event packet submission and ownership.
 
-Implement a pure managed adapter that validates one live FLV session and creates
-independent H.264 and AAC padded codec-parameter leases through the existing
-factory. The binding retains the source session reference and immutable stream
-IDs and time bases, but owns neither parser nor session.
+The review must decide:
 
-Do not create native contexts, transfer parameters, open codecs, submit packets,
-or change backend activation in the same milestone.
+- exact source-session identity against the 0.0.8z binding;
+- context selection from stream ID and media role;
+- parser-order preservation without video/audio pairing;
+- PTS, DTS, duration, time base, keyframe flags, discontinuity, and sequence;
+- active parser-completion retention when decoder send requires frame drain;
+- bounded receive/retry state and explicit cancellation cleanup;
+- EOS as explicit flush and bounded drain rather than empty encoded payload;
+- any AVPacket ABI or native-symbol requirements under separate review;
+- no second encoded-packet queue or resident decode loop.
 
 ### Later sequence
 
-1. review timestamp-aware one-event packet submission and native packet fields;
-2. implement bounded packet-send, frame-drain retry, and EOS ownership;
-3. validate parser and composition with a retained controlled FLV fixture;
-4. review PCP chunk-to-parser composition and discontinuity ownership;
-5. add bounded decode iteration and drain;
-6. explicitly review production activation and Windows lifecycle;
-7. perform controlled real-media validation.
+1. implement the approved timestamp-aware packet boundary;
+2. validate parser and composition with a retained controlled FLV fixture;
+3. review PCP chunk-to-parser composition and discontinuity ownership;
+4. add bounded decode iteration and drain;
+5. explicitly review production activation and Windows lifecycle;
+6. perform controlled real-media validation.
 
 ### Deferred
 

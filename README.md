@@ -9,22 +9,25 @@ License: **Apache License 2.0**
 
 ## 現在地
 
-**Milestone 0.0.8y — Parser-to-Decoder Composition Architecture Review**
+**Milestone 0.0.8z — FLV Session Decoder-Parameter Binding**
 
 診断専用のH.264／AAC経路は、native context openからowned managed frame copy、既存bounded schedulerへの有限ingress、late-aware timed dispatchの有限transactionまで到達しています。本番decoder factoryからは独立しており、FFmpeg backend activationや配布承認を変更していません。
 
-0.0.8xでpure managed bounded FLV v1 parserを実装し、0.0.8yでは既存decoder境界との安全な接続順序を決定しました。
+0.0.8xでpure managed bounded FLV v1 parserを実装し、0.0.8yのreviewを受けて、0.0.8zではparser sessionを既存managed codec-parameter ownership境界へ接続しました。
 
-- FLV sessionのH.264／AAC descriptionは既存managed codec-parameter factoryへ正確に写像可能
-- 0.0.8zでsource session参照とvideo／audio parameter leasesを1個のpure managed bindingへまとめる
-- bindingはparserやsource sessionを所有しない
-- current packet boundaryはpayload bytesのみでPTS／DTS／time base／keyframe／sequenceを保持できない
-- older diagnostic transactionはvideo→audio固定pairで、FLVのinterleaved one-event orderを扱えない
-- decoderがframe drainを要求した場合はactive parser completionを保持する必要がある
-- EOSはempty payloadではなくexplicit flushとbounded drainとして設計する
-- timestamp-aware packet submissionとnative packet fieldsは別reviewへ分離
+- liveなFLV demux sessionだけを受理
+- video 0 H.264／audio 1 AACとexact `1/1000` time baseを検証
+- parser由来width／height／avcCからvideo parameter leaseを作成
+- parser由来sample rate／channel count／AudioSpecificConfigからaudio parameter leaseを作成
+- existing factoryがcodec dataを再検証し、FFmpeg padding付き独立copyを所有
+- exact source-session referenceをnon-owningで保持
+- stream IDsとtime basesをimmutable metadataとして保持
+- video作成後にaudioを作成し、partial failureではvideoを破棄
+- binding成功後にsource sessionが破棄されてもparameter copiesは維持
+- bindingはparser／session／packet completionを所有しない
+- audio→video順のidempotent cleanup
 
-0.0.8yはarchitecture reviewであり、runtime source、tests、PCP ingress、packet submission、backend activationを変更していません。
+0.0.8zはnative runtime、context、parameter transfer、codec open、packet submission、PCP ingress、scheduler、deviceを所有しません。
 
 ## 実装済みの主な領域
 
@@ -59,6 +62,7 @@ License: **Apache License 2.0**
 - pure managed bounded demux output contract
 - pure managed bounded FLV v1 parser
 - parser-to-decoder composition architecture review
+- FLV session decoder-parameter binding
 
 詳細:
 
@@ -72,7 +76,6 @@ License: **Apache License 2.0**
 
 PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信アプリではありません。
 
-- FLV session decoder-parameter binding
 - timestamp-aware packet submission
 - controlled retained FLV fixture validation
 - PCP-to-parser composition
@@ -91,11 +94,11 @@ FFmpeg backend activation、runtime bundling／distribution、license approval�
 
 ## 次のマイルストーン
 
-**0.0.8z — FLV Session Decoder-Parameter Binding**
+**Timestamp-aware Packet Submission Architecture Review**
 
-liveなFLV demux sessionを検証し、source session参照、stream IDs、time basesと、既存factoryが所有するH.264／AAC padded codec-parameter leasesをpure managed bindingへまとめます。
+0.0.8vの1 event completionと0.0.8z bindingのexact source identityを照合し、parser order、context selection、PTS／DTS／time base、keyframe、sequence、decoder backpressure、EOS flush／drainを情報損失なく扱う有限境界を決定します。
 
-parser、session、packet completion、native contextは所有せず、partial creation failureとaudio→video cleanupをfocused testsで固定します。
+既存payload-only packet APIやvideo→audio固定transactionをそのまま再利用せず、active parser completionを必要な間だけ保持し、第2encoded-packet queueを作らない設計にします。
 
 ## 必要環境
 

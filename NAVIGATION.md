@@ -2,20 +2,24 @@
 
 ## 現在地
 
-**0.0.8y — Parser-to-Decoder Composition Architecture Review — Accepted**
+**0.0.8z — FLV Session Decoder-Parameter Binding — Implemented**
 
-0.0.8x parserからdecoder境界への接続方法をreviewしました。
+0.0.8xのbounded FLV sessionを、既存managed codec-parameter ownership境界へpure managedで接続しました。
 
-- FLV session descriptionは既存managed codec-parameter factoryへ安全に写像可能
-- 0.0.8zでsource session参照とvideo／audio parameter leasesをまとめるpure managed bindingを実装
-- bindingはparserやsessionを所有しない
-- current packet boundaryはpayload bytesのみでPTS／DTS／time base／keyframe／sequenceを保持できない
-- existing diagnostic transactionはvideo→audio固定pairで、FLVのinterleaved orderと一致しない
-- decoderがframe drainを要求した場合はactive parser completionを保持する必要がある
-- EOSはexplicit flushとbounded drainを別境界で扱う
-- timestamp-aware packet submissionは後続reviewへ分離
+- source: liveなFLV demux sessionだけを受理
+- identity: exact source-session referenceをnon-owningで保持
+- stream: video 0 H.264／audio 1 AACを厳密検証
+- time base: video／audioともにexact `1/1000`
+- video parameters: parser由来width／height／avcCを既存factoryへ渡す
+- audio parameters: parser由来sample rate／channel count／AudioSpecificConfigを既存factoryへ渡す
+- ownership: independently copied padded video／audio parameter leasesだけをbindingが所有
+- ordering: video作成後にaudioを作成
+- partial failure: audio失敗時はvideo leaseを破棄
+- source lifetime: bindingはparser／sessionを所有・破棄しない
+- cleanup: audio→video順のidempotent disposal
+- independence: binding成功後にsource sessionが破棄されてもparameter copiesは有効
 
-PCP consumer、packet submission、decode loop、backend activation、Windows device activationは未接続です。
+packet completion、native context、parameter transfer、codec open、packet submission、PCP consumer、backend activationは未接続です。
 
 ## CI
 
@@ -23,22 +27,22 @@ PCP consumer、packet submission、decode loop、backend activation、Windows de
 
 ## 最新の入口
 
+- `src/Nova.Playback/PlaybackBoundedFlvDecoderParameterBinding.cs`
+- `tests/Nova.Playback.Tests/PlaybackBoundedFlvDecoderParameterBindingTests.cs`
+- `docs/adr/ADR-0110-flv-session-decoder-parameter-binding.md`
+- `docs/reviews/PCN-0118-FLV-SESSION-DECODER-PARAMETER-BINDING-VALIDATION.md`
 - `docs/adr/ADR-0109-parser-decoder-composition-review.md`
-- `docs/reviews/PCN-0117-PARSER-DECODER-COMPOSITION-REVIEW.md`
 - `src/Nova.Playback/PlaybackBoundedFlvParser.cs`
-- `src/Nova.Playback/PlaybackBoundedDemuxOutputContract.cs`
 - `src/Nova.Playback/PlaybackDecoderFfmpegCodecParameters.cs`
-- `src/Nova.Playback/PlaybackDecoderFfmpegPacketFrameBoundary.cs`
 
 ## 次の作業
 
-**0.0.8z — FLV Session Decoder-Parameter Binding**
+**Timestamp-aware Packet Submission Architecture Review**
 
-liveなFLV demux sessionを検証し、source session参照、stream IDs、time basesと、既存factoryが所有するH.264／AAC codec-parameter leasesをpure managed bindingへまとめます。
+0.0.8vの1 event completionをexact source bindingへ照合し、parser order、PTS／DTS／time base、keyframe、sequence、decoder backpressure、EOS flush／drainを情報損失なく扱う次の有限境界を決定します。
 
 ## 未完了
 
-- FLV session decoder-parameter binding
 - timestamp-aware packet submission review and implementation
 - controlled retained FLV fixture validation
 - PCP-to-parser composition
