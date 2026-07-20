@@ -2,20 +2,21 @@
 
 ## 現在地
 
-**0.0.8s — Diagnostic Scheduler Dispatch Architecture Review — Accepted**
+**0.0.8t — Diagnostic Late-aware Scheduler Dispatch Transaction — Verified**
 
-0.0.8rでscheduler ownershipへ移した診断frameを、既存timing／late-disposition／Windows output境界へ安全に接続する条件を固定しました。
+0.0.8m completionから既存0.0.8r scheduler ingressとlate-aware timed dispatchへ進む有限診断transactionを追加しました。
 
-- composition seam: `PlaybackLateAwareTimedDispatchBoundary.DispatchOneAsync`
-- source seam: 0.0.8m completionから開始し、timing preflight後に0.0.8r ingressを内部実行
-- copied frame: knownかつnon-negativeなpresentation timestampが必須
-- timestamp synthesis: 不可
-- scheduler: fresh、caller-owned、transaction中はexclusive use
-- initial scheduler snapshot: queue、drop、delivery、owned byteの全値が0
+- preflight: source state、live lease、known/non-negative PTSを検査
+- scheduler: 初期queue／drop／delivery／owned byteが全て0
+- ingress: 既存0.0.8rへ委譲、video sequence 0、audio sequence 1
 - dispatch: accepted frameごとに最大1回、合計最大2回
-- lease: accepted frameが全てconsumeされるか明示cleanupされるまで保持
-- retained／recovery／reset／device／environment／cancel／failureは明示停止
-- continuous pumpとaudio recoveryの自動開始なし
+- consumed: VideoProcessed／VideoDropConsumed／AudioProcessed
+- stopped: retained／wait／recovery／reset／device／environment／cancel／dispose
+- partial: accepted数、consumed数、outstanding media、last resultを保持
+- cleanup: scheduler-owned frameを先にdisposeし、その後native leaseを解放
+- retry: continuous pumpやaudio recoveryの暗黙開始なし
+
+Cross-platform testsではdispatchを注入し、D3D11、WASAPI、FFmpeg、decoder factoryをactivationしていません。
 
 FFmpeg backend activation、Windows device activation、production decoder ingressは未承認・未接続のままです。
 
@@ -25,18 +26,16 @@ FFmpeg backend activation、Windows device activation、production decoder ingre
 
 ## 最新の入口
 
+- `src/Nova.Playback/PlaybackDiagnosticLateAwareSchedulerDispatchTransaction.cs`
+- `tests/Nova.Playback.Tests/PlaybackDiagnosticLateAwareSchedulerDispatchTransactionTests.cs`
 - `src/Nova.Playback/PlaybackDiagnosticManagedFrameSchedulerIngressTransaction.cs`
 - `src/Nova.Playback/PlaybackLateAwareTimedDispatchBoundary.cs`
-- `src/Nova.Playback/PlaybackLateAwareContinuousPumpBoundary.cs`
-- `src/Nova.Playback/PlaybackRecoveryAwarePumpOrchestrator.cs`
-- `docs/adr/ADR-0103-diagnostic-scheduler-dispatch-architecture-review.md`
-- `docs/reviews/PCN-0111-DIAGNOSTIC-SCHEDULER-DISPATCH-ARCHITECTURE-REVIEW.md`
+- `docs/adr/ADR-0104-diagnostic-late-aware-scheduler-dispatch-transaction.md`
+- `docs/reviews/PCN-0112-DIAGNOSTIC-LATE-AWARE-SCHEDULER-DISPATCH-VALIDATION.md`
 
 ## 次の作業
 
-**0.0.8t — Diagnostic Late-aware Scheduler Dispatch Transaction**
-
-0.0.8m completionのtiming readinessを検査し、既存0.0.8r ingressへ委譲した後、accepted frameごとに最大1回だけ既存late-aware dispatchを実行する有限transactionを追加します。consume済みmedia、outstanding media、partial advancement、lease lifetime、cleanupを固定します。
+0.0.8dから0.0.8tまでの有限診断経路を再確認し、bounded demuxまたはproduction compositionへ進む前に残る前提条件を整理します。
 
 ## 未完了
 
@@ -44,6 +43,7 @@ FFmpeg backend activation、Windows device activation、production decoder ingre
 - bounded demux
 - production decoder ingress
 - continuous decode、flush、EOS
+- duration cutoff
 - complete A/V synchronization
 - controlled audible／visible playback
 - GUI、installer、recorder

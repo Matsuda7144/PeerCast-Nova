@@ -45,21 +45,20 @@
 - 0.0.8q Scheduler Aggregate Byte Budget
 - 0.0.8r Managed Frame Scheduler Ingress
 - 0.0.8s Scheduler Dispatch Architecture Review
+- 0.0.8t Diagnostic Late-aware Scheduler Dispatch
 
-0.0.8s selects the existing late-aware timed dispatch as the finite diagnostic
-scheduler-to-output seam. It requires timing preflight before ingress, one fresh
-exclusive scheduler, no timestamp synthesis, at most two dispatch calls, and
-lease retention until every accepted frame is consumed or explicitly cleaned up.
+0.0.8t implements the finite diagnostic composition from the 0.0.8m completion
+through the existing 0.0.8r ingress and late-aware dispatch seam. It requires
+known non-negative presentation timestamps, a fresh scheduler, at most two
+dispatch calls, explicit partial outcomes, and scheduler-first cleanup before
+native lease release.
 
 ### Next
 
-- 0.0.8t Diagnostic Late-aware Scheduler Dispatch Transaction
-
-Start from the 0.0.8m managed-frame completion, validate known non-negative
-presentation timestamps, delegate ownership transfer to 0.0.8r, and attempt one
-existing late-aware dispatch per accepted frame. Track full and partial
-advancement, outstanding media, lease lifetime, cancellation, and cleanup
-without starting the continuous pump or audio recovery.
+Review the completed finite diagnostic path through scheduler ingress and
+late-aware dispatch before selecting bounded demux or production composition.
+The review must keep activation, distribution, real-device creation, and
+real-media playback claims separate from the verified orchestration boundaries.
 
 ### Deferred
 

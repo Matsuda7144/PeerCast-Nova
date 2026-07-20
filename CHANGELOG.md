@@ -7,6 +7,17 @@ history at commit `f078dab5372a45a8c577c1c802a697ab72b45c02` and in the associat
 ADR/PCN validation records. This active file keeps the current playback
 integration sequence concise.
 
+### 0.0.8t - Diagnostic Late-aware Scheduler Dispatch Transaction
+
+- Added a finite diagnostic composition from the 0.0.8m managed-frame completion through the existing 0.0.8r scheduler ingress and late-aware timed dispatch seam.
+- Required known, non-negative presentation timestamps and a fresh zero-snapshot scheduler before ownership transfer.
+- Attempted at most one dispatch per accepted frame and at most two dispatch calls total.
+- Treated video processing, consumed video drop, and audio processing as explicit media consumption.
+- Preserved retained, recovery, reset, device, environment, cancellation, partial-ingress, and failure outcomes without implicit retry.
+- Retained outstanding scheduler ownership and the native lease in an idempotent completion, disposing scheduler-owned frames before releasing the lease.
+- Added focused cross-platform tests through injected dispatch operations without activating D3D11, WASAPI, FFmpeg, or decoder factories.
+- Added ADR-0104 and PCN-0112. Demux, continuous decode, production activation, and controlled audible or visible playback remain outside scope.
+
 ### 0.0.8s - Diagnostic Scheduler Dispatch Architecture Review
 
 - Selected `PlaybackLateAwareTimedDispatchBoundary.DispatchOneAsync` as the next finite scheduler-to-output composition seam.
