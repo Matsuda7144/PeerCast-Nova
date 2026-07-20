@@ -5,6 +5,21 @@
 Detailed history through 0.0.8g remains preserved in Git history at commit
 `f078dab5372a45a8c577c1c802a697ab72b45c02` and in milestone ADR/PCN records.
 
+### 0.0.9j - Bounded Decode Iteration and Per-stream EOS Drain Review
+
+- Reviewed decoded output after the 0.0.9i source-bound packet／flush composition.
+- Confirmed that the current production `Advance` uses a state-only receive that frees a successful native frame before its data can be preserved.
+- Selected one future source-bound receive authority that performs exactly one native receive and copies exactly one managed frame in the same callback-scoped operation.
+- Required one active decoded completion across the generation with exact source, generation, stream, media, decoded sequence, and discontinuity identity.
+- Required retained packet／flush retry only after a produced frame has been accepted; frame backpressure keeps both decoded and encoded ownership pending.
+- Separated ordinary post-accept receive from the awaited PCP callback and limited each caller-driven operation to one frame.
+- Distinguished parser EOS, accepted null-packet flush, flush-accepted drain, and decoder EOF.
+- Required independent video／audio drain to EOF and rejected flush acceptance alone as full decoded completion.
+- Defined mode-specific `NeedMoreInput`: normal after ordinary packet drain, no-progress failure during retained-send relief or accepted-flush drain.
+- Defined frame-count／byte budgets, cancellation rules, discontinuity generation replacement, and decoded-frame-first cleanup.
+- Selected 0.0.9k Source-bound One-frame Receive and EOS Drain Boundary.
+- Added ADR-0120 and PCN-0128 without changing runtime source or tests.
+
 ### 0.0.9i - Finite Awaited PCP-to-FLV Composition Boundary
 
 - Added a serialized awaited `IPcpChannelPacketConsumer` in `Nova.Playback`.
@@ -35,7 +50,7 @@ Detailed history through 0.0.8g remains preserved in Git history at commit
 ### 0.0.9g - One-event Final EOS Sequencing
 
 - Added a finite FLV parser facade for future production composition.
-- Delegated ordinary parsing to the existing bounded FLV parser without changing packet payload, timing, or keyframe behavior.
+- Delegated ordinary packet parsing to the existing bounded FLV parser without changing packet payload, timing, or keyframe behavior.
 - Latched final input only after all caller bytes were consumed and rejected incomplete final carry as truncated.
 - Emitted video then audio EOS as separate source-owned completions through the exact parser-created source session.
 - Preserved explicit per-stream EOS and emitted only the still-open stream during finalization.
@@ -80,7 +95,7 @@ Detailed history through 0.0.8g remains preserved in Git history at commit
 - Required exact source identity, stream ID, media kind, codec role, keyframe role, and snapshotted time base before native work.
 - Mapped integral PTS, DTS, duration, stream index, time base, and keyframe state without implicit rescaling.
 - Mapped unknown PTS/DTS to `AV_NOPTS_VALUE` and unknown duration to `0`; rejected negative duration and non-integral conversion.
-- Allocated FFmpeg-owned packet and padded payload storage and wrote only the reviewed FFmpeg 8 x64 metadata prefix.
+- Allocated FFmpeg-owned packet and padded payload storage and wrote only the reviewed FFmpeg 8 x64 packet metadata prefix.
 - Issued at most one packet send or null flush per operation.
 - Retained native packet plus active parser completion on packet `EAGAIN`, and retained per-stream EOS completion on flush `EAGAIN`.
 - Preserved source finite-read backpressure and packet-before-parser idempotent cleanup.
