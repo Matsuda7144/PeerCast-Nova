@@ -9,26 +9,26 @@ License: **Apache License 2.0**
 
 ## 現在地
 
-**Milestone 0.0.9j — Bounded Decode Iteration and Per-stream EOS Drain Review**
+**Milestone 0.0.9k — Source-bound One-frame Receive and EOS Drain Boundary**
 
-0.0.9iのsource-bound packet／flush compositionからdecoded frameを失わずに受け取る方法と、video／audioを独立してdecoder EOFまでdrainする有限contractをレビューしました。runtime decode iteration自体は次の0.0.9kへ分離しています。
+exact FLV source sessionとopened native decoder sessionを1世代として所有し、成功したnative frameを失わず1つのmanaged decoded completionへ移す有限boundaryを実装しました。
 
-- 現行production `Advance`のstate-only receiveは成功した一時`AVFrame`をreturn前に解放するため、second receiveでは同じframeをcopyできない
-- 次のboundaryをexact decoder generation唯一のproduction receive authorityにする
-- 1 public operationは最大1回の`avcodec_receive_frame`と最大1つのmanaged frame ownership transferだけを行う
-- callback-scoped native frameから既存managed frame copyまでを同じreceive内で完了し、native pointerを保持しない
-- copied frameはexact source、generation、stream、media、independent decoded sequence、discontinuityを持つowned completionになる
+- 1 public receive operationは最大1回のcallback-scoped native receive／managed copy
+- state-only receive後のsecond receiveを廃し、同じcallback内でframe ownershipを確立
+- decoded completionはexact source、decoder／discontinuity generation、stream、media、independent sequence、managed bytesを保持
 - generation全体でactive decoded completionは最大1件
-- retained packet／flushはproduced frameが受理・解放された後だけ最大1回retry
-- frame backpressure中はdecoded frameとencoded submissionの両ownershipを保持し、新しいparser／PCP inputを停止
-- packet acceptance後の通常receiveはcaller-drivenで1回1frame、`NeedMoreInput`は正常な有限終了
-- parser EOS、null flush acceptance、flush drain、decoder EOFを別状態として扱う
-- accepted flush後はvideo／audioを別々にdrainし、各contextのEOFでのみstream完了
+- ordinary、pending packet／flush relief、accepted-flush drainを固定modeで分離
+- retained packet／flush retryはproduced relief frame completion解放後の別操作で最大1回
+- repeated `EAGAIN`は次の1-frame receiveと次の1-retryを要求
+- ordinary `NeedMoreInput`は正常な有限終了
 - relief／flush drain中の`NeedMoreInput`はno-progress failure
-- frame count／managed byte budget、cancellation、discontinuity replacement、decoded-frame-first cleanupを要求
-- second decoded queue、resident drain loop、double receive、`avcodec_flush_buffers`によるEOS処理なし
+- accepted video／audio flushを独立して1回1frameでdecoder EOFまでdrain
+- per-frame limitとreusable frame-count／managed-byte budgetを実装
+- cancellation、undefined／contradictory result、frame identity、native failureをfail closed
+- active decoded frame→submission→native audio→videoのcleanup順
+- second decoded queue、resident loop、production activation、scheduler／output wiringなし
 
-診断専用のmanaged frame copy、conversion、bounded scheduler、late-aware dispatch経路は引き続きproduction decoder factoryから独立しています。FFmpeg backend activationやruntime配布も未承認のままです。
+診断専用のmanaged conversion、bounded scheduler、late-aware dispatch、Windows output境界は引き続きproduction decoder factoryから独立しています。FFmpeg backend activationやruntime配布も未承認のままです。
 
 ## 実装済みの主な領域
 
@@ -65,7 +65,8 @@ License: **Apache License 2.0**
 - controlled retained FLV fixture validation
 - one-event final EOS parser façade
 - finite awaited PCP-to-FLV composition boundary
-- reviewed bounded decode iteration and independent per-stream EOS drain contract
+- bounded decode iteration and independent EOS drain review
+- source-bound one-frame managed receive and EOS drain boundary
 
 詳細:
 
@@ -79,8 +80,8 @@ License: **Apache License 2.0**
 
 PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信アプリではありません。
 
-- source-bound one-frame receive and per-stream EOS drain implementation
-- decoded-frame conversion／scheduler ingress／delivery for the real FLV path
+- 0.0.9k boundaryとawaited PCP-to-FLV generationのcomposition
+- real FLV decoded completionのconversion／scheduler ingress／delivery
 - production generation factory and decoder ingress activation
 - MP4／fragmented MP4 parser
 - decoded-buffer duration cutoff
@@ -95,9 +96,9 @@ FFmpeg backend activation、runtime bundling／distribution、license approval�
 
 ## 次のマイルストーン
 
-**0.0.9k — Source-bound One-frame Receive and EOS Drain Boundary**
+**0.0.9l — Awaited Decoded Completion Composition Review**
 
-exact source-bound decoder generationに1回1frameのmanaged receive boundaryを追加します。pending packet／flush relief、ordinary post-accept receive、video／audio independent flush drainを同じ有限contractで実装し、source／generation identity、decoded sequence、active-completion backpressure、mode-specific no-progress、frame／byte budget、cancellation、failure、discontinuity、cleanupをcross-platform focused testで検証します。production backend activation、scheduler／output wiring、audible／visible playbackはまだ追加しません。
+0.0.9iのawaited PCP-to-FLV composition generationを0.0.9kのsource-bound receive authorityへ接続する設計をレビューします。callback内のretained-send relief、callback外のordinary receive／flush drain、decoded completion consumer backpressure、既存conversion／bounded schedulerへの所有権移譲、shared budget、cancellation、discontinuity replacement、cleanup順を確定し、runtime composition実装は次のmilestoneへ分離します。
 
 ## 必要環境
 

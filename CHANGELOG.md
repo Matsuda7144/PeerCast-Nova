@@ -5,6 +5,22 @@
 Detailed history through 0.0.8g remains preserved in Git history at commit
 `f078dab5372a45a8c577c1c802a697ab72b45c02` and in milestone ADR/PCN records.
 
+### 0.0.9k - Source-bound One-frame Receive and EOS Drain Boundary
+
+- Added one exact source-bound decode generation that owns an opened native decoder session and one dedicated finite packet-submission state machine.
+- Replaced state-only relief observation with a staged progress adapter so a successful native receive is copied exactly once before any retained retry.
+- Performed at most one callback-scoped native receive and managed-frame copy per public receive operation.
+- Added one source／generation／stream／media-bound decoded completion with independent checked video／audio sequence and managed-byte ownership.
+- Allowed only one active decoded completion across the generation and committed sequence only after completion construction and work-budget acceptance.
+- Added explicit ordinary, pending-submission relief, and accepted-flush drain modes.
+- Retried retained packet／flush ownership only after the produced relief completion was released, with repeated `EAGAIN` requiring another frame and another finite retry operation.
+- Drained accepted video and audio flushes independently one frame per call until each decoder EOF.
+- Treated ordinary `NeedMoreInput` as normal and relief／flush-drain `NeedMoreInput` as terminal no progress.
+- Added per-frame managed-byte limits, reusable frame-count／byte budgets, cancellation handling, fixed snapshots, and decoded-frame-first cleanup.
+- Added eighteen focused cross-platform tests plus ADR-0121 and PCN-0129.
+- Isolated CA1068 with a file-scoped documented analyzer setting and corrected the test fixture to use the required final `EndOfStream` source result for the second per-stream EOS.
+- Restored the routine CircleCI configuration after diagnostics and kept PCP composition wiring, scheduler delivery, production activation, FFmpeg distribution, and audible／visible playback unchanged.
+
 ### 0.0.9j - Bounded Decode Iteration and Per-stream EOS Drain Review
 
 - Reviewed decoded output after the 0.0.9i source-bound packet／flush composition.
@@ -50,7 +66,7 @@ Detailed history through 0.0.8g remains preserved in Git history at commit
 ### 0.0.9g - One-event Final EOS Sequencing
 
 - Added a finite FLV parser facade for future production composition.
-- Delegated ordinary packet parsing to the existing bounded FLV parser without changing packet payload, timing, or keyframe behavior.
+- Delegated ordinary parsing to the existing bounded FLV parser without changing packet payload, timing, or keyframe behavior.
 - Latched final input only after all caller bytes were consumed and rejected incomplete final carry as truncated.
 - Emitted video then audio EOS as separate source-owned completions through the exact parser-created source session.
 - Preserved explicit per-stream EOS and emitted only the still-open stream during finalization.

@@ -53,33 +53,32 @@
 - 0.0.9h PCP Chunk-to-FLV Parser Composition Review
 - 0.0.9i Finite Awaited PCP-to-FLV Composition Boundary
 - 0.0.9j Bounded Decode Iteration and Per-stream EOS Drain Review
+- 0.0.9k Source-bound One-frame Receive and EOS Drain Boundary
 
-0.0.9j confirms that the current state-only production receive frees a successful temporary native frame before later ownership can be established. The next implementation must replace that receive path with one sole source-bound receive authority that performs one native receive and one managed-frame copy in the same callback-scoped operation. It separates pending-send relief, ordinary post-accept receive, and independent flush drain while preserving exact source identity, one active decoded completion, finite work budgets, and decoded-frame-first cleanup.
+0.0.9k adds one generation-owned source-bound receive authority. It performs one callback-scoped native receive and managed copy per operation, returns one exact owned decoded completion, coordinates retained packet／flush retry only after frame release, and drains accepted video／audio flushes independently to decoder EOF without a second decoded queue or resident loop.
 
-### Next: 0.0.9k Source-bound One-frame Receive and EOS Drain Boundary
+### Next: 0.0.9l Awaited Decoded Completion Composition Review
 
-Implement one generation-owned finite boundary that:
+Review the connection between the 0.0.9i awaited PCP-to-FLV composition and the 0.0.9k source-bound receive boundary. The review must define:
 
-- validates exact source session, decoder generation, stream ID, media kind, codec role, and drain state before native access;
-- becomes the sole production receive authority for both source-bound contexts;
-- calls `avcodec_receive_frame` at most once per public operation;
-- copies one successful callback-scoped native frame into one owned managed decoded completion without a second receive;
-- assigns independent checked per-stream decoded sequences only after completion construction;
-- permits at most one active decoded completion across the generation;
-- accepts a produced relief frame before retrying one retained packet or flush at most once;
-- blocks parser input and later PCP packets while decoded or encoded ownership remains pending;
-- treats ordinary post-accept `NeedMoreInput` as normal finite completion;
-- treats relief or flush-drain `NeedMoreInput` as no-progress failure;
-- drains accepted video and audio flushes independently one frame per call until each decoder EOF;
-- bounds relief frame count, decoder advances, one-frame bytes, and cumulative managed bytes;
-- handles cancellation, undefined state, metadata／data／allocation／native failures, source disposal, and discontinuity fail closed;
-- disposes active decoded frame before submission state, then native session audio before video;
-- adds no decoded-frame queue, resident loop, production activation, output wiring, or playback claim.
+- replacement of the current `PlaybackPcpFlvCompositionGeneration` submission-only ownership with the 0.0.9k generation boundary;
+- exact factory ownership for source session, parameter binding, ABI gates, native session, submission state, and decoded receive state;
+- how retained packet／flush relief is driven inside the awaited PCP callback without returning while callback memory remains required;
+- how ordinary post-accept receive and accepted-flush drain are driven outside the packet callback through finite caller operations;
+- the decoded-completion consumer contract and whether managed ownership is retained, consumed, rejected, or transferred;
+- composition with existing managed conversion and bounded scheduler ingress without a second decoded queue;
+- shared frame-count／managed-byte budgets across callback relief and caller-driven drain;
+- parser, encoded submission, decoded completion, scheduler, and native-session backpressure ordering;
+- cancellation, stop, terminal failure, source disposal, and discontinuity generation replacement;
+- decoded completion, scheduler ownership, submission, native session, parser, and factory cleanup order;
+- scope separation from production ABI-gate acquisition, backend activation, Windows output lifecycle, and playback claims.
+
+The review should remain documentation-only. Runtime composition and decoded delivery must be implemented and validated in later milestones.
 
 ### Later sequence
 
-1. connect source-bound managed decoded completions to conversion and bounded scheduler ingress;
-2. add awaited real-FLV decoded-frame delivery and output lifecycle composition;
+1. implement awaited PCP／FLV／decode composition using the 0.0.9k boundary;
+2. add real-FLV decoded completion conversion and bounded scheduler ingress／delivery;
 3. add a production generation factory and review backend activation／Windows lifecycle;
 4. perform controlled real-media validation.
 
@@ -88,7 +87,7 @@ Implement one generation-owned finite boundary that:
 - MP4／fragmented MP4 parser
 - avformat integration
 - production generation factory and backend activation
-- decoded-frame conversion／scheduler ingress／delivery for the real FLV path
+- real-FLV decoded conversion／scheduler ingress／delivery
 - discontinuity reset and `avcodec_flush_buffers`
 - duration cutoff
 - complete synchronization

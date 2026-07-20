@@ -17,3 +17,8 @@ csharp_style_namespace_declarations = file_scoped:suggestion
 csharp_style_var_for_built_in_types = false:suggestion
 csharp_style_var_when_type_is_apparent = true:suggestion
 dotnet_diagnostic.IDE0005.severity = warning
+
+[src/Nova.Playback/PlaybackSourceBoundOneFrameDecodeBoundary.cs]
+# Ordinary one-frame calls accept cancellation without a budget. The optional reusable
+# cumulative budget intentionally remains a named trailing argument for bounded outer loops.
+dotnet_diagnostic.CA1068.severity = none
