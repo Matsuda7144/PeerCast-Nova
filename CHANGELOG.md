@@ -5,6 +5,20 @@
 Detailed history through 0.0.8g remains preserved in Git history at commit
 `f078dab5372a45a8c577c1c802a697ab72b45c02` and in milestone ADR/PCN records.
 
+### 0.0.9d - Metadata-aware Native Packet and Flush Boundary
+
+- Added one finite source-bound operation for exactly one bounded FLV packet or per-stream EOS completion.
+- Required exact source identity, stream ID, media kind, codec role, keyframe role, and snapshotted time base before native work.
+- Mapped integral PTS, DTS, duration, stream index, time base, and keyframe state without implicit rescaling.
+- Mapped unknown PTS/DTS to `AV_NOPTS_VALUE` and unknown duration to `0`; rejected negative duration and non-integral conversion.
+- Allocated FFmpeg-owned packet and padded payload storage and wrote only the reviewed FFmpeg 8 x64 metadata prefix.
+- Issued at most one packet send or null flush per operation.
+- Retained native packet plus active parser completion on packet `EAGAIN`, and retained per-stream EOS completion on flush `EAGAIN`.
+- Preserved source finite-read backpressure and packet-before-parser idempotent cleanup.
+- Accepted first-stream EOS from `PacketsAvailable` and final-stream EOS from `EndOfStream` completions.
+- Added fourteen focused tests plus ADR-0114 and PCN-0122.
+- Kept receive iteration, hidden retry, second encoded queue, PCP composition, backend activation, FFmpeg distribution, and output unchanged.
+
 ### 0.0.9c - AVPacket Metadata and Flush ABI Review
 
 - Approved one future metadata-aware native packet／flush boundary only for the exact verified FFmpeg 8 runtime identity.

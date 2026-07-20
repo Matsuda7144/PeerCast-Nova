@@ -46,41 +46,39 @@
 - 0.0.9a Timestamp-aware Packet Submission Architecture Review
 - 0.0.9b Source-bound Opened Native Decoder Session
 - 0.0.9c AVPacket Metadata and Flush ABI Review
+- 0.0.9d Metadata-aware Native Packet and Flush Boundary
 
-0.0.9c approves a future packet boundary only under the exact verified FFmpeg 8 runtime identity. Packet storage must come from FFmpeg allocation APIs, only the reviewed decoding metadata prefix may be written, EOS is a null packet send, and `EAGAIN` retains the active parser completion without a second queue or hidden retry.
+0.0.9d connects one exact source-owned FLV packet or per-stream EOS completion to one finite FFmpeg packet send or null flush. It preserves exact metadata, validates source／stream／time-base identity, uses FFmpeg-owned padded storage, retains packet and parser ownership under `EAGAIN`, and introduces no receive loop, hidden retry, or second encoded queue.
 
-### Next: 0.0.9d Metadata-aware Native Packet and Flush Boundary
+### Next: 0.0.9e Finite One-event Packet Submission State Machine
 
-Implement one finite boundary that:
+Implement one finite caller-visible state machine that:
 
-- consumes one source-bound opened decoder session reference without taking parser ownership;
-- validates exact source, stream ID, media kind, and time base;
-- allocates one FFmpeg-owned padded packet and copies one parser-owned payload;
-- maps PTS, DTS, duration, stream index, time base, and keyframe state exactly;
-- maps unknown timestamps to `AV_NOPTS_VALUE` and unknown duration to `0`;
-- performs at most one native packet-send or null-flush call;
-- returns explicit success, output-required, EOF, rejection, and fault states;
-- retains packet and parser-completion ownership on `EAGAIN`;
-- releases packet state before parser completion on cleanup;
-- adds no receive loop, second encoded queue, retry loop, PCP wiring, or activation.
+- owns exactly one active parser completion at a time;
+- begins with one 0.0.9d packet send or null flush attempt;
+- performs at most one explicitly bounded frame receive progress step per operation;
+- retries a retained packet or pending flush only after receive progress;
+- preserves source, stream, media kind, sequence, and per-stream EOS identity;
+- returns explicit submitted, output-available, more-input, drain-required, EOF, rejection, and fault transitions;
+- consumes parser completion only after accepted native progress;
+- adds no resident loop, sleep, spin, hidden retry, second encoded queue, PCP wiring, or activation.
 
 ### Later sequence
 
-1. implement a finite one-event submission state machine retaining the active parser completion under frame-drain pressure;
-2. validate with a retained controlled FLV fixture;
-3. review PCP chunk-to-parser composition and discontinuity ownership;
-4. add bounded decode iteration and per-stream EOS drain;
-5. review production activation and Windows lifecycle;
-6. perform controlled real-media validation.
+1. validate the finite state machine with a retained controlled FLV fixture;
+2. review PCP chunk-to-parser composition and discontinuity ownership;
+3. add bounded decode iteration and per-stream EOS drain;
+4. review production activation and Windows lifecycle;
+5. perform controlled real-media validation.
 
 ### Deferred
 
-- one-event submission state machine
+- controlled retained FLV fixture validation
 - PCP-to-parser composition
 - MP4／fragmented MP4 parser
 - avformat integration
 - production decoder ingress
-- continuous decode、flush、EOS drain
+- continuous decode and per-stream EOS drain
 - discontinuity reset and `avcodec_flush_buffers`
 - duration cutoff
 - complete synchronization
