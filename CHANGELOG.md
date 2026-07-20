@@ -5,6 +5,20 @@
 Detailed history through 0.0.8g remains preserved in Git history at commit
 `f078dab5372a45a8c577c1c802a697ab72b45c02` and in milestone ADR/PCN records.
 
+### 0.0.9i - Finite Awaited PCP-to-FLV Composition Boundary
+
+- Added a serialized awaited `IPcpChannelPacketConsumer` in `Nova.Playback`.
+- Kept PCP packet payload memory callback-scoped and advanced a local suffix offset only by exact parser `ConsumedByteCount`.
+- Supported multiple FLV records in one callback and one split record through the existing bounded parser carry without another encoded queue.
+- Created one exact parser-source-bound decoder generation after `StreamDescriptionAvailable` through an injected factory.
+- Passed every source-owned packet or per-stream EOS completion through the finite one-event submission state machine before resuming callback suffix input.
+- Bounded parser operations and decoder advances independently and failed closed on no progress, accounting contradiction, identity／sequence／generation mismatch, rejected submission, undefined state, and work-limit exhaustion.
+- Added separate explicit `CompleteInputAsync` for video-then-audio EOS and never inferred EOS from empty input, transport closure, reconnect, stop, timeout, cancellation, or failure.
+- Replaced the submission state machine and native session before explicit parser discontinuity reset.
+- Exposed fixed enum state, bounded counters, fixed-message terminal failure, and idempotent ordered cleanup.
+- Added thirteen focused cross-platform tests plus ADR-0119 and PCN-0127.
+- Kept production ABI-gate acquisition, backend activation, decoded-frame drain／ownership, scheduler ingress, output wiring, runtime distribution, and audible／visible playback unchanged.
+
 ### 0.0.9h - PCP Chunk-to-FLV Parser Composition Review
 
 - Reviewed the awaited PCP packet callback through the 0.0.9g parser facade and 0.0.9e submission state machine.

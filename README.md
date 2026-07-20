@@ -9,25 +9,24 @@ License: **Apache License 2.0**
 
 ## 現在地
 
-**Milestone 0.0.9h — PCP Chunk-to-FLV Parser Composition Review**
+**Milestone 0.0.9i — Finite Awaited PCP-to-FLV Composition Boundary**
 
-awaited PCP packet callbackから0.0.9g one-event FLV parser façadeと0.0.9e source-bound submission state machineまでの有限compositionをレビューしました。runtime wiringはまだ追加せず、callback memory、suffix、decoder backpressure、finalization、discontinuity、generation ownershipを先に確定しています。
+awaited PCP packet callbackからone-event FLV parser façade、exact source-bound decoder generation、finite packet-submission state machineまでを1つのserialized boundaryとして接続しました。
 
-- PCP readerはconsumerをawaitし、callback完了までpayload memoryを保持
-- payloadは借用のみで、callback完了後にpacket／memoryを保持しない
-- callbackを開いたまま処理し、caller suffixを別queueへコピーしない
-- local suffix offsetはparserの`ConsumedByteCount`だけで前進
-- parser completionがprefixで返った場合は、そのcompletionを処理後に同じcallback suffixを再開
-- parser／decoder completionがactiveな間は新しいparser inputと次のPCP Atomを停止
-- decoder `EAGAIN`はbounded state-machine `Advance`だけで進行
-- no receive progress、work budget超過、contradictory accountingはfail closed
-- exact PCP channel／session／packet sequenceとexact parser-created source generationを要求
-- `StreamDescriptionAvailable`後にbinding、native session、fresh state machineを1 generationとして作成
-- transport close、reconnect、stop、timeout、cancellation、failureをEOSと推測しない
-- ownerが別の明示finalization操作でvideo／audio EOSを送る
-- explicit discontinuityはretained submission、state machine、native session解放後にparserをreset
-- reconnectだけではparser／decoder generationをresetしない
-- second encoded queue、caller-suffix retention、resident loop、production activationなし
+- `PlaybackPcpFlvCompositionBoundary`が`IPcpChannelPacketConsumer`を実装
+- exact PCP channel ID／session ID／packet sequenceを検証
+- callback payloadは借用のみで、callback完了後にpacket／memoryを保持しない
+- callback内local suffix offsetはparserの`ConsumedByteCount`だけで前進
+- 1 callback内の複数FLV recordとbounded parser carryによるsplit recordを処理
+- parser completionを処理してから同じcallback suffixを再開
+- `StreamDescriptionAvailable`後にinjected factoryからexact source-bound generationを作成
+- generationはfinite submission state machineとnative sessionを所有し、parser sourceは非所有参照
+- packet／flush `EAGAIN`は明示frame progress後のbounded `Advance`だけで進行
+- no progress、accounting矛盾、identity／sequence／generation不一致、work limit超過をfail closed
+- `CompleteInputAsync`だけがvideo／audio EOSを開始し、transport状態やempty packetをEOSと推測しない
+- explicit discontinuityではold state machine／native session解放後にparser generationを置換
+- fixed enum snapshot、fixed-message failure、idempotent ordered cleanup
+- second encoded queue、resident loop、production backend activation、decoded output wiringなし
 
 診断専用のframe copy、conversion、bounded scheduler、late-aware dispatch経路は引き続きproduction decoder factoryから独立しています。FFmpeg backend activationやruntime配布も未承認のままです。
 
@@ -65,7 +64,7 @@ awaited PCP packet callbackから0.0.9g one-event FLV parser façadeと0.0.9e so
 - finite one-event packet submission state machine
 - controlled retained FLV fixture validation
 - one-event final EOS parser façade
-- reviewed awaited PCP-to-FLV composition contract
+- finite awaited PCP-to-FLV composition boundary
 
 詳細:
 
@@ -79,12 +78,11 @@ awaited PCP packet callbackから0.0.9g one-event FLV parser façadeと0.0.9e so
 
 PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信アプリではありません。
 
-- finite awaited PCP-to-FLV composition implementation
-- MP4／fragmented MP4 parser
-- production decoder ingress
+- bounded decode iteration and per-stream EOS drain
 - decoded-frame ownership and delivery for the real FLV path
+- production generation factory and decoder ingress
+- MP4／fragmented MP4 parser
 - decoded-buffer duration cutoff
-- continuous decode and per-stream EOS drain
 - discontinuity-time native reset semantics
 - complete A/V synchronization、resampling、drift correction
 - approved FFmpeg backend activation
@@ -96,9 +94,9 @@ FFmpeg backend activation、runtime bundling／distribution、license approval�
 
 ## 次のマイルストーン
 
-**0.0.9i — Finite Awaited PCP-to-FLV Composition Boundary**
+**0.0.9j — Bounded Decode Iteration and Per-stream EOS Drain Review**
 
-`IPcpChannelPacketConsumer`を実装するserialized boundaryを追加し、callback内local suffix offset、exact identity／sequence、injected decoder-generation factory、bounded parser／decoder transitions、別操作の明示finalization、discontinuity generation replacement、fixed terminal snapshot、ordered cleanupをcross-platform focused testで実装・検証します。production backend activation、decoded-frame delivery、output wiringはまだ追加しません。
+0.0.9iでacceptedになったpacket／flush transitionからdecoded frameを受け取る有限iterationをレビューします。per-stream receive、packet acceptance後の追加出力、independent EOS drain、native-frame ownership、no-progress、operation budget、cancellation、discontinuity reset、cleanup順を先に確定し、runtime実装は次のmilestoneへ分離します。
 
 ## 必要環境
 

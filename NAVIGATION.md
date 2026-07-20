@@ -2,25 +2,24 @@
 
 ## 現在地
 
-**0.0.9h — PCP Chunk-to-FLV Parser Composition Review — Reviewed**
+**0.0.9i — Finite Awaited PCP-to-FLV Composition Boundary — Implemented**
 
-awaited PCP packet callbackから0.0.9g one-event FLV parser façadeと0.0.9e submission state machineまでの有限compositionをレビューし、callback memory、suffix、decoder backpressure、finalization、discontinuity、generation ownershipを確定しました。
+awaited PCP packet callbackからone-event FLV parser façade、exact source-bound decoder generation、finite submission state machineまでを1つのserialized boundaryとして接続しました。
 
-- PCP readerはconsumer callbackをawaitし、その完了までpacket payloadを保持
-- callback payloadは借用のみで、callback完了後に保持しない
-- compositionはcallbackを開いたまま処理し、caller suffixを別queueへコピーしない
-- local offsetはparserの`ConsumedByteCount`だけで前進
-- parser completionがprefixで返った場合はcompletion処理後に同じcallback suffixを再開
-- parser／decoder completionがactiveな間は新しいparser inputと次のPCP Atomを停止
-- decoder `EAGAIN`はbounded `Advance`でのみ進行
-- `NoReceiveProgress`、work budget超過、undefined resultはfail closed
-- exact PCP channel／session／packet sequenceとexact parser-created source generationを要求
-- `StreamDescriptionAvailable`後にbinding、native session、fresh state machineを1 generationとして作成
-- transport close、reconnect、stop、timeout、cancellation、failureをEOSと推測しない
-- ownerが別の明示finalization操作でvideo／audio EOSを1件ずつ送る
-- explicit discontinuityではretained submission、state machine、native sessionを解放後にparserをreset
-- reconnectだけではparser／decoder generationをresetしない
-- second encoded queue、caller-suffix retention、resident loop、runtime wiringなし
+- `PlaybackPcpFlvCompositionBoundary`が`IPcpChannelPacketConsumer`を実装
+- exact PCP channel ID／session ID／packet sequenceを検証
+- callback payloadは借用のみで、callback完了後にpacket／memoryを保持しない
+- callback内local offsetはparserの`ConsumedByteCount`だけで前進
+- 1 callback内の複数FLV recordと、既存bounded carryによるsplit recordを処理
+- parser completionを処理してから同じcallback suffixを再開
+- `StreamDescriptionAvailable`後にinjected factoryからexact source-bound generationを作成
+- generationはfinite submission state machineとnative sessionを所有し、parser sourceは非所有参照
+- packet／flush `EAGAIN`は明示frame progress後のbounded `Advance`だけで進行
+- no progress、accounting矛盾、identity／sequence／generation不一致、work limit超過をfail closed
+- `CompleteInputAsync`だけがvideo／audio EOSを開始し、transport状態やempty packetをEOSと推測しない
+- explicit discontinuityではold state machine／native sessionを解放後にparser generationを置換
+- fixed enum snapshot、fixed-message failure、idempotent ordered cleanup
+- second encoded queue、resident loop、production backend activation、decoded output wiringなし
 
 ## CI
 
@@ -28,13 +27,14 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 ## 最新の入口
 
-- `docs/adr/ADR-0118-pcp-chunk-to-flv-parser-composition.md`
-- `docs/reviews/PCN-0126-PCP-CHUNK-TO-FLV-PARSER-COMPOSITION-REVIEW.md`
-- `src/Nova.Network/Pcp/PcpChannelStreamReader.cs`
-- `src/Nova.Network/Pcp/IPcpChannelPacketConsumer.cs`
-- `src/Nova.Network/Pcp/PcpChannelPacket.cs`
+- `src/Nova.Playback/PlaybackPcpFlvCompositionBoundary.cs`
+- `tests/Nova.Playback.Tests/PlaybackPcpFlvCompositionBoundaryTests.cs`
+- `tests/Nova.Playback.Tests/PlaybackPcpFlvCompositionFlushBackpressureTests.cs`
+- `docs/adr/ADR-0119-finite-awaited-pcp-to-flv-composition-boundary.md`
+- `docs/reviews/PCN-0127-FINITE-AWAITED-PCP-TO-FLV-COMPOSITION-VALIDATION.md`
 - `src/Nova.Playback/PlaybackOneEventFinalEosFlvParser.cs`
 - `src/Nova.Playback/PlaybackFiniteOneEventPacketSubmissionStateMachine.cs`
+- `src/Nova.Network/Pcp/PcpChannelStreamReader.cs`
 
 ## ADR／PCN索引の永久欠番
 
@@ -44,18 +44,17 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 ## 次の作業
 
-**0.0.9i — Finite Awaited PCP-to-FLV Composition Boundary**
+**0.0.9j — Bounded Decode Iteration and Per-stream EOS Drain Review**
 
-`IPcpChannelPacketConsumer`を実装するserialized boundaryを追加し、callback内local suffix offset、injected generation factory、bounded parser／decoder transitions、別操作の明示finalization、discontinuity generation replacement、fixed terminal snapshot、ordered cleanupをcross-platform focused testで実装・検証します。production backend activation、decoded-frame delivery、output wiringは追加しません。
+0.0.9iでacceptedになったpacket／flush transitionからdecoded frameを受け取る有限iterationをレビューします。per-stream frame receive、packet acceptance後の追加出力、video／audio independent EOS drain、frame ownership、no-progress、operation budget、cancellation、discontinuity reset、cleanup順を先に確定し、runtime実装は後続milestoneへ分離します。
 
 ## 未完了
 
-- finite awaited PCP-to-FLV composition implementation
-- bounded decode iteration and per-stream EOS drain
+- bounded decode iteration and per-stream EOS drain review／implementation
 - decoded-frame ownership and delivery for the real FLV path
+- production generation factory and backend activation
 - MP4／fragmented MP4 parser
-- production decoder ingress
-- discontinuity-time native reset semantics
+- discontinuity-time `avcodec_flush_buffers` semantics
 - duration cutoff
 - complete A/V synchronization
 - runtime distribution decision
