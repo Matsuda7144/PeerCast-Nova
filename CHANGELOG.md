@@ -5,6 +5,19 @@
 Detailed history through 0.0.8g remains preserved in Git history at commit
 `f078dab5372a45a8c577c1c802a697ab72b45c02` and in milestone ADR/PCN records.
 
+### 0.0.9f - Controlled Retained FLV Fixture Validation
+
+- Added one controlled in-memory FLV fixture using the real bounded FLV parser and exact parser-created source session.
+- Passed real source-owned completions through the source-bound native-session identity and 0.0.9e state machine with injected native results.
+- Preserved video／audio interleave, independent per-stream sequence, AVCC／AAC payload, DTS, signed composition-time PTS, and keyframe state.
+- Verified packet and flush `EAGAIN` retention without a second encoded copy or hidden retry loop.
+- Verified retained parser backpressure returns `ActiveCompletion` with zero consumed bytes.
+- Verified each retained transition performs one receive and one retry only.
+- Verified explicit video EOS followed by final audio EOS reaches independent flush acceptance.
+- Recorded that an unpartitioned final completion containing both EOS events is rejected fail closed before native submission.
+- Selected 0.0.9g One-event Final EOS Sequencing before PCP composition.
+- Added two focused tests plus ADR-0116 and PCN-0124 without changing parser runtime behavior or production activation.
+
 ### 0.0.9e - Finite One-event Packet Submission State Machine
 
 - Added one finite state machine over exactly one 0.0.9d packet or per-stream EOS completion.
@@ -51,7 +64,7 @@ Detailed history through 0.0.8g remains preserved in Git history at commit
 - Added one finite factory from a live FLV parameter binding plus distinct video/audio ABI gate leases into one opened H.264/AAC decoder session.
 - Snapshotted exact source-session identity, stream IDs, and time bases before native work.
 - Completed video context creation, parameter transfer, and codec open before beginning audio.
-- Consumed the binding and both gates on every result and returned no partial success state.
+- Consumed the binding and both gates on every result and returned no partial configured or opened success state.
 - Failed closed on invalid configuration, source disposal, context rejection, parameter-transfer rejection, codec-open rejection, and faults.
 - Added audio-before-video idempotent cleanup without owning the parser or source demux session.
 - Added six focused injected-operation tests and fixed one CS9124 test-only compiler issue.

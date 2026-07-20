@@ -48,21 +48,24 @@
 - 0.0.9c AVPacket Metadata and Flush ABI Review
 - 0.0.9d Metadata-aware Native Packet and Flush Boundary
 - 0.0.9e Finite One-event Packet Submission State Machine
+- 0.0.9f Controlled Retained FLV Fixture Validation
 
-0.0.9e coordinates one exact source-owned packet or per-stream EOS completion through one initial send／flush and finite retained backpressure transitions. Each `Advance` performs at most one frame receive and, only after progress, at most one retry. Sequence and flush state commit only after native acceptance, and repeated `EAGAIN` retains the original completion without another encoded queue.
+0.0.9f connects controlled real FLV bytes through the bounded parser, exact source identity, and finite one-event state machine. It validates packet interleave, timing, keyframe state, retained packet／flush backpressure, one-receive／one-retry bounds, and separately emitted per-stream EOS without native activation.
 
-### Next: 0.0.9f Controlled Retained FLV Fixture Validation
+The validation also confirms that ordinary final input currently aggregates video and audio EOS into one completion. That completion is rejected fail closed by the one-event state machine and must be sequenced before PCP composition.
 
-Add one controlled composition fixture that:
+### Next: 0.0.9g One-event Final EOS Sequencing
 
-- uses the real bounded FLV parser output completion and exact source session;
-- binds the matching source-bound opened native decoder session through injected native operations;
-- preserves actual FLV packet order, audio／video interleave, PTS／DTS, keyframe, and sequence;
-- proves parser backpressure while a packet or flush remains retained;
-- exercises one-receive／one-retry transitions without a resident loop;
-- covers first-stream and final-stream EOS ordering;
-- records bounded observation and ownership cleanup;
-- adds no PCP wiring, production activation, FFmpeg distribution, decoded-frame delivery, or playback claim.
+Update final FLV parser progress so that:
+
+- one operation emits at most one source-owned per-stream EOS event;
+- when both streams remain open, video EOS is emitted first and audio EOS remains pending;
+- the next final operation emits the remaining audio EOS and completes finalization;
+- an already-ended stream is never emitted again;
+- per-stream sequence commits only with successful completion construction;
+- active-completion backpressure remains unchanged;
+- no detached EOS completion, copied queue, resident loop, or hidden retry is introduced;
+- controlled dual-EOS rejection becomes a successful one-event finalization path.
 
 ### Later sequence
 
@@ -74,7 +77,6 @@ Add one controlled composition fixture that:
 
 ### Deferred
 
-- controlled retained FLV fixture validation
 - PCP-to-parser composition
 - MP4／fragmented MP4 parser
 - avformat integration
