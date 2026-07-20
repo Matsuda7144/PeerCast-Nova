@@ -44,15 +44,22 @@
 - 0.0.8p Playback Cutover Review
 - 0.0.8q Scheduler Aggregate Byte Budget
 - 0.0.8r Managed Frame Scheduler Ingress
+- 0.0.8s Scheduler Dispatch Architecture Review
 
-0.0.8r transfers copied video then audio into the existing scheduler with fixed
-sequences 0 and 1. Partial acceptance preserves the native lease required by
-accepted frames. Atomic two-stream enqueue is not claimed.
+0.0.8s selects the existing late-aware timed dispatch as the finite diagnostic
+scheduler-to-output seam. It requires timing preflight before ingress, one fresh
+exclusive scheduler, no timestamp synthesis, at most two dispatch calls, and
+lease retention until every accepted frame is consumed or explicitly cleaned up.
 
 ### Next
 
-Review a finite diagnostic dispatch from scheduler ownership into the existing
-timing and output boundaries.
+- 0.0.8t Diagnostic Late-aware Scheduler Dispatch Transaction
+
+Start from the 0.0.8m managed-frame completion, validate known non-negative
+presentation timestamps, delegate ownership transfer to 0.0.8r, and attempt one
+existing late-aware dispatch per accepted frame. Track full and partial
+advancement, outstanding media, lease lifetime, cancellation, and cleanup
+without starting the continuous pump or audio recovery.
 
 ### Deferred
 

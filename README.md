@@ -9,22 +9,23 @@ License: **Apache License 2.0**
 
 ## 現在地
 
-**Milestone 0.0.8q — Bounded Scheduler Aggregate Byte Budget**
+**Milestone 0.0.8s — Diagnostic Scheduler Dispatch Architecture Review**
 
-診断専用のH.264／AAC経路は、native context openからmanaged frame copy、format conversion、awaited sink callbackまで到達しています。本番decoder factoryからは独立しており、FFmpeg backend activationや配布承認を変更していません。
+診断専用のH.264／AAC経路は、native context openからowned managed frame copy、既存bounded schedulerへの有限ingressまで到達しています。本番decoder factoryからは独立しており、FFmpeg backend activationや配布承認を変更していません。
 
-0.0.8qでは、decoderと既存schedulerを接続する前提として、`BoundedPlaybackScheduler`へaggregate owned-byte budgetを追加しました。
+0.0.8sでは、scheduler ownershipから既存timing／late-disposition／Windows output境界へ進む前に、次の安全条件を固定しました。
 
-- frame数とowned byte数を独立して制限
-- queued、reserved、in-flight frameをownership終了までaccount
-- single-frame oversizeを`FrameTooLarge`で拒否・破棄
-- countまたはbyte上限で既存full policyを適用
-- `DropOldest`はreserved frameを保護しながら複数frameを破棄可能
-- delivery、cancellation、failure、reservation completion、disposeでaccountingを解放
-- snapshotへ`OwnedByteCount`を追加
-- 既存の三引数snapshot constructionは維持
+- `PlaybackLateAwareTimedDispatchBoundary.DispatchOneAsync`を既存composition seamとして再利用
+- 0.0.8m completionでtiming readinessを検査してから0.0.8r ingressへ委譲
+- copied frameにはknownかつnon-negativeなpresentation timestampが必要
+- timestampやdurationを合成しない
+- freshでcaller-ownedのschedulerをtransaction中はexclusive use
+- accepted frameごとに最大1回、合計最大2回だけdispatch
+- 全accepted frameがconsumeされるか明示cleanupされるまでnative leaseを保持
+- retained、recovery、reset、device、environment、cancel、failureをfull successとして隠さない
+- continuous pumpやaudio recoveryを暗黙に開始しない
 
-第二のdecoded queue、decoder ingress、duration cutoffは追加していません。
+0.0.8sはarchitecture reviewであり、runtime wiringやWindows device activationは追加していません。
 
 ## 実装済みの主な領域
 
@@ -50,10 +51,10 @@ License: **Apache License 2.0**
 - owned managed frame copyとcanonical conversion
 - serial awaited sink delivery
 - count／byte bounded decoded-frame scheduler
+- diagnostic managed-frame scheduler ingress
 - A/V timing、late-item、recovery、deadline-aware run policy
 - Windows D3D11／WASAPI output境界
 - finite continuous pump
-- diagnostic H.264／AAC path through awaited sink delivery
 
 詳細:
 
@@ -68,8 +69,10 @@ License: **Apache License 2.0**
 PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信アプリではありません。
 
 - bounded FLV／MP4 demux
-- diagnostic／production decoderからschedulerへのmanaged-frame ingress
+- production decoder ingress
+- diagnostic schedulerからlate-aware outputへのruntime transaction
 - decoded-buffer duration cutoff
+- continuous decode、flush、EOS
 - complete A/V synchronization、resampling、drift correction
 - precise multimedia timerとin-flight preemption
 - approved FFmpeg backend activation
@@ -81,15 +84,15 @@ FFmpeg backend activation、runtime bundling／distribution、license approval�
 
 ## 次のマイルストーン
 
-**0.0.8r — Diagnostic Managed Frame Scheduler Ingress Transaction**
+**0.0.8t — Diagnostic Late-aware Scheduler Dispatch Transaction**
 
-0.0.8mで所有したmanaged frameを既存schedulerへ診断専用の固定順序で渡し、sequence、discontinuity、enqueue result、部分成功時のownershipを固定します。二streamのatomic enqueueは主張しません。
+0.0.8m completionのtiming readinessを検査し、既存0.0.8r ingressへ委譲した後、accepted frameごとに最大1回だけ既存late-aware dispatchを実行する有限transactionを追加します。full／partial advancement、outstanding media、lease lifetime、cancellation、failure、cleanupを明示します。
 
 ## 必要環境
 
 - .NET SDK 10
 - Windows 11はWindows output境界の対象
-- Linux／Windows CI
+- routine CIはUbuntu
 
 ## ビルドとテスト
 

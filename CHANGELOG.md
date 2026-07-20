@@ -7,6 +7,17 @@ history at commit `f078dab5372a45a8c577c1c802a697ab72b45c02` and in the associat
 ADR/PCN validation records. This active file keeps the current playback
 integration sequence concise.
 
+### 0.0.8s - Diagnostic Scheduler Dispatch Architecture Review
+
+- Selected `PlaybackLateAwareTimedDispatchBoundary.DispatchOneAsync` as the next finite scheduler-to-output composition seam.
+- Rejected the older awaited-sink route, the direct untimed Windows adapter, a second queue, and automatic pump or recovery startup for this milestone.
+- Required known, non-negative presentation timestamps before scheduler ingress without synthesizing timestamps or durations.
+- Fixed the safe composition start at the 0.0.8m completion so timing readiness is checked before 0.0.8r detaches ownership.
+- Required one fresh, exclusively used caller-owned scheduler and at most one dispatch attempt per accepted frame.
+- Kept the aggregate native lease until every accepted frame is consumed or explicit idempotent cleanup disposes the remaining scheduler ownership.
+- Preserved explicit partial, retained, recovery, reset, device, environment, cancellation, and failure outcomes.
+- Added ADR-0103 and PCN-0111. Runtime wiring, activation, demux, continuous decode, and controlled audible or visible playback remain outside scope.
+
 ### 0.0.8r - Diagnostic Managed Frame Scheduler Ingress
 
 - Added a finite diagnostic ownership transfer from the 0.0.8m managed-frame completion into the existing bounded scheduler.
