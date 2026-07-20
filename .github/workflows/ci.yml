@@ -8,18 +8,15 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-and-test:
-    name: Build and test (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    name: Build and test (ubuntu-latest)
+    runs-on: ubuntu-latest
     timeout-minutes: 15
-
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - windows-latest
-          - ubuntu-latest
 
     steps:
       - name: Checkout
@@ -34,7 +31,18 @@ jobs:
         run: dotnet restore PeerCast-Nova.sln
 
       - name: Build
-        run: dotnet build PeerCast-Nova.sln --configuration Release --no-restore
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet build PeerCast-Nova.sln --configuration Release --no-restore 2>&1 | tee build.log
+
+      - name: Upload build log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          retention-days: 1
 
       - name: Test
         run: dotnet test PeerCast-Nova.sln --configuration Release --no-build --logger "console;verbosity=normal"

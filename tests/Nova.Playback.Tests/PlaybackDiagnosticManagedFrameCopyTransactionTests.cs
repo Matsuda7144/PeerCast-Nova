@@ -22,10 +22,13 @@ public sealed class PlaybackDiagnosticManagedFrameCopyTransactionTests
         Assert.Equal(
             ["send-video", "receive-video", "send-audio", "receive-audio"],
             events);
+        var retainedVideo = completion.VideoFrame;
 
         completion.Dispose();
 
-        Assert.True(completion.VideoFrame.IsDisposed);
+        Assert.NotNull(retainedVideo);
+        Assert.True(retainedVideo.IsDisposed);
+        Assert.Null(completion.VideoFrame);
         Assert.Equal("dispose-audio", events[^2]);
         Assert.Equal("dispose-video", events[^1]);
     }
@@ -45,11 +48,17 @@ public sealed class PlaybackDiagnosticManagedFrameCopyTransactionTests
         Assert.NotNull(completion.AudioFrame);
         Assert.False(completion.VideoFrame.IsDisposed);
         Assert.False(completion.AudioFrame.IsDisposed);
+        var retainedVideo = completion.VideoFrame;
+        var retainedAudio = completion.AudioFrame;
 
         completion.Dispose();
 
-        Assert.True(completion.VideoFrame.IsDisposed);
-        Assert.True(completion.AudioFrame.IsDisposed);
+        Assert.NotNull(retainedVideo);
+        Assert.NotNull(retainedAudio);
+        Assert.True(retainedVideo.IsDisposed);
+        Assert.True(retainedAudio.IsDisposed);
+        Assert.Null(completion.VideoFrame);
+        Assert.Null(completion.AudioFrame);
         Assert.True(completion.IsDisposed);
     }
 

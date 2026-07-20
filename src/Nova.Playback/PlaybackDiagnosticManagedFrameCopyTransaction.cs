@@ -59,6 +59,9 @@ internal sealed class PlaybackDiagnosticManagedFrameCopyOperations :
 
 public sealed class PlaybackDiagnosticManagedFrameCopyTransactionCompletion : IDisposable
 {
+    private PlaybackDecoderFfmpegManagedFrame? _videoFrame;
+    private PlaybackDecoderFfmpegManagedFrame? _audioFrame;
+    private PlaybackDiagnosticNativeDecoderLease? _lease;
     private int _disposed;
 
     internal PlaybackDiagnosticManagedFrameCopyTransactionCompletion(
@@ -71,25 +74,44 @@ public sealed class PlaybackDiagnosticManagedFrameCopyTransactionCompletion : ID
     {
         Result = result;
         VideoState = videoState;
-        VideoFrame = videoFrame;
+        _videoFrame = videoFrame;
         AudioState = audioState;
-        AudioFrame = audioFrame;
-        Lease = lease;
+        _audioFrame = audioFrame;
+        _lease = lease;
     }
 
     public PlaybackDiagnosticManagedFrameCopyTransactionResult Result { get; }
 
     public PlaybackDecoderFfmpegManagedFrameCopyResult? VideoState { get; }
 
-    public PlaybackDecoderFfmpegManagedFrame? VideoFrame { get; }
+    public PlaybackDecoderFfmpegManagedFrame? VideoFrame => _videoFrame;
 
     public PlaybackDecoderFfmpegManagedFrameCopyResult? AudioState { get; }
 
-    public PlaybackDecoderFfmpegManagedFrame? AudioFrame { get; }
+    public PlaybackDecoderFfmpegManagedFrame? AudioFrame => _audioFrame;
 
-    public PlaybackDiagnosticNativeDecoderLease? Lease { get; }
+    public PlaybackDiagnosticNativeDecoderLease? Lease => _lease;
 
     public bool IsDisposed => Volatile.Read(ref _disposed) != 0;
+
+    internal bool TryDetachOwnership(
+        out PlaybackDecoderFfmpegManagedFrame? videoFrame,
+        out PlaybackDecoderFfmpegManagedFrame? audioFrame,
+        out PlaybackDiagnosticNativeDecoderLease? lease)
+    {
+        videoFrame = null;
+        audioFrame = null;
+        lease = null;
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return false;
+        }
+
+        videoFrame = Interlocked.Exchange(ref _videoFrame, null);
+        audioFrame = Interlocked.Exchange(ref _audioFrame, null);
+        lease = Interlocked.Exchange(ref _lease, null);
+        return true;
+    }
 
     public void Dispose()
     {
@@ -98,9 +120,9 @@ public sealed class PlaybackDiagnosticManagedFrameCopyTransactionCompletion : ID
             return;
         }
 
-        AudioFrame?.Dispose();
-        VideoFrame?.Dispose();
-        Lease?.Dispose();
+        Interlocked.Exchange(ref _audioFrame, null)?.Dispose();
+        Interlocked.Exchange(ref _videoFrame, null)?.Dispose();
+        Interlocked.Exchange(ref _lease, null)?.Dispose();
     }
 }
 

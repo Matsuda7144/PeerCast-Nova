@@ -7,6 +7,18 @@ history at commit `f078dab5372a45a8c577c1c802a697ab72b45c02` and in the associat
 ADR/PCN validation records. This active file keeps the current playback
 integration sequence concise.
 
+### 0.0.8r - Diagnostic Managed Frame Scheduler Ingress
+
+- Added a finite diagnostic ownership transfer from the 0.0.8m managed-frame completion into the existing bounded scheduler.
+- Attempted video before audio with fixed sequences 0 and 1 and discontinuity `None`.
+- Skipped streams that returned `NeedMoreInput`.
+- Cleared detached source references so later source disposal cannot destroy scheduler-owned frames.
+- Preserved the aggregate native lease after partial acceptance when an accepted frame still requires it.
+- Reported video rejection, audio rejection, partial acceptance, and faults without claiming atomic two-stream enqueue.
+- Reduced routine GitHub Actions to Ubuntu only and cancelled superseded runs on the same PR.
+- Added one-day build-log artifacts only on build failure.
+- Added ADR-0102 and PCN-0110. Demux, continuous decode, production activation, and FFmpeg distribution remain outside scope.
+
 ### 0.0.8q - Bounded Scheduler Aggregate Byte Budget
 
 - Added an aggregate owned-byte budget independent from frame-count capacity.
