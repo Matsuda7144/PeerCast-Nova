@@ -47,27 +47,28 @@
 - 0.0.9b Source-bound Opened Native Decoder Session
 - 0.0.9c AVPacket Metadata and Flush ABI Review
 - 0.0.9d Metadata-aware Native Packet and Flush Boundary
+- 0.0.9e Finite One-event Packet Submission State Machine
 
-0.0.9d connects one exact source-owned FLV packet or per-stream EOS completion to one finite FFmpeg packet send or null flush. It preserves exact metadata, validates source／stream／time-base identity, uses FFmpeg-owned padded storage, retains packet and parser ownership under `EAGAIN`, and introduces no receive loop, hidden retry, or second encoded queue.
+0.0.9e coordinates one exact source-owned packet or per-stream EOS completion through one initial send／flush and finite retained backpressure transitions. Each `Advance` performs at most one frame receive and, only after progress, at most one retry. Sequence and flush state commit only after native acceptance, and repeated `EAGAIN` retains the original completion without another encoded queue.
 
-### Next: 0.0.9e Finite One-event Packet Submission State Machine
+### Next: 0.0.9f Controlled Retained FLV Fixture Validation
 
-Implement one finite caller-visible state machine that:
+Add one controlled composition fixture that:
 
-- owns exactly one active parser completion at a time;
-- begins with one 0.0.9d packet send or null flush attempt;
-- performs at most one explicitly bounded frame receive progress step per operation;
-- retries a retained packet or pending flush only after receive progress;
-- preserves source, stream, media kind, sequence, and per-stream EOS identity;
-- returns explicit submitted, output-available, more-input, drain-required, EOF, rejection, and fault transitions;
-- consumes parser completion only after accepted native progress;
-- adds no resident loop, sleep, spin, hidden retry, second encoded queue, PCP wiring, or activation.
+- uses the real bounded FLV parser output completion and exact source session;
+- binds the matching source-bound opened native decoder session through injected native operations;
+- preserves actual FLV packet order, audio／video interleave, PTS／DTS, keyframe, and sequence;
+- proves parser backpressure while a packet or flush remains retained;
+- exercises one-receive／one-retry transitions without a resident loop;
+- covers first-stream and final-stream EOS ordering;
+- records bounded observation and ownership cleanup;
+- adds no PCP wiring, production activation, FFmpeg distribution, decoded-frame delivery, or playback claim.
 
 ### Later sequence
 
-1. validate the finite state machine with a retained controlled FLV fixture;
-2. review PCP chunk-to-parser composition and discontinuity ownership;
-3. add bounded decode iteration and per-stream EOS drain;
+1. review PCP chunk-to-parser composition and discontinuity ownership;
+2. add bounded decode iteration and per-stream EOS drain;
+3. add decoded-frame ownership and delivery for the real FLV path;
 4. review production activation and Windows lifecycle;
 5. perform controlled real-media validation.
 
@@ -79,6 +80,7 @@ Implement one finite caller-visible state machine that:
 - avformat integration
 - production decoder ingress
 - continuous decode and per-stream EOS drain
+- decoded-frame ownership and delivery for the real FLV path
 - discontinuity reset and `avcodec_flush_buffers`
 - duration cutoff
 - complete synchronization

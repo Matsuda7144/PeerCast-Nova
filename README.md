@@ -9,22 +9,22 @@ License: **Apache License 2.0**
 
 ## 現在地
 
-**Milestone 0.0.9d — Metadata-aware Native Packet and Flush Boundary**
+**Milestone 0.0.9e — Finite One-event Packet Submission State Machine**
 
-0.0.9cで確定したexact FFmpeg 8 ABI境界に従い、1つのsource-owned FLV packetまたはper-stream EOSをopened native decoder sessionへ渡す有限境界を実装しました。
+0.0.9dのmetadata-aware packet／flush completionを1つだけ保持し、初回send、bounded frame receive progress、retained retry、sequence／EOS commitを明示する有限state machineを実装しました。
 
-- exact source identity、stream ID、media kind、codec role、time baseをnative work前に検証
-- known PTS／DTS／durationをexact packet time baseへintegral mapping
-- unknown PTS／DTSは`AV_NOPTS_VALUE`、unknown durationは`0`
-- video keyframeだけを`AV_PKT_FLAG_KEY`へmapping
-- FFmpeg-owned packetと64-byte zero padding付きpayloadを確保
-- reviewed FFmpeg 8 x64 metadata prefixだけを書き込み
-- 1操作につきpacket sendまたは`avcodec_send_packet(context, NULL)`を1回だけ実行
-- packet `EAGAIN`ではnative packet＋active parser completionを保持
-- flush `EAGAIN`ではactive per-stream EOS completionを保持
-- first-stream EOSの`PacketsAvailable`とfinal-stream EOSの`EndOfStream`を処理
-- cleanupはpacket ownershipを先に、parser completionを後に解放
-- receive loop、hidden retry、second encoded queue、PCP composition、backend activationは未追加
+- `Begin`はpacket sendまたはnull flushを1回だけ実行
+- `EAGAIN`ではnative packet／flush状態とactive parser completionを保持
+- `Advance`はframe receiveを最大1回だけ実行
+- frame progress後だけretained packet／flushを最大1回再試行
+- repeated `EAGAIN`でもactive submissionとencoded payload copyは1つだけ
+- per-stream sequenceはnative acceptance後だけcommit
+- video／audioのflush acceptedとdecoder EOFを独立管理
+- accepted flush／EOF後の同一stream inputを拒否
+- source mismatch、duplicate sequence、concurrent inputをnative work前に拒否
+- cancellation／failure／disposeはpacket-first cleanup
+- source sessionとnative decoder sessionは非所有
+- resident loop、decoded-frame delivery、PCP composition、backend activationは未追加
 
 診断専用のframe copy、conversion、bounded scheduler、late-aware dispatch経路は引き続きproduction decoder factoryから独立しています。FFmpeg backend activationやruntime配布も未承認のままです。
 
@@ -59,6 +59,7 @@ License: **Apache License 2.0**
 - source-bound opened native decoder session
 - exact AVPacket metadata／flush ABI decision
 - metadata-aware native packet／flush boundary
+- finite one-event packet submission state machine
 
 詳細:
 
@@ -72,11 +73,11 @@ License: **Apache License 2.0**
 
 PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信アプリではありません。
 
-- finite one-event packet submission state machine
 - controlled retained FLV fixture validation
 - PCP-to-parser composition
 - MP4／fragmented MP4 parser
 - production decoder ingress
+- decoded-frame ownership and delivery for the real FLV path
 - decoded-buffer duration cutoff
 - continuous decode and per-stream EOS drain
 - discontinuity reset semantics
@@ -90,9 +91,9 @@ FFmpeg backend activation、runtime bundling／distribution、license approval�
 
 ## 次のマイルストーン
 
-**0.0.9e — Finite One-event Packet Submission State Machine**
+**0.0.9f — Controlled Retained FLV Fixture Validation**
 
-1つのactive parser completionを保持したまま、0.0.9dのpacket send／null flush、最大1回のbounded frame receive progress、retained packet／flush retry、success／output-required／EOFのownership transitionを明示する有限state machineを実装します。resident loop、sleep、spin、second encoded queue、PCP composition、backend activationは追加しません。
+bounded FLV parserの実completion、source-bound native session、0.0.9e state machineをcontrolled fixtureで接続し、packet order、PTS／DTS、keyframe、audio／video interleave、parser backpressure、retained retry、per-stream EOSをproduction activationなしで検証します。
 
 ## 必要環境
 

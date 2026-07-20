@@ -5,6 +5,20 @@
 Detailed history through 0.0.8g remains preserved in Git history at commit
 `f078dab5372a45a8c577c1c802a697ab72b45c02` and in milestone ADR/PCN records.
 
+### 0.0.9e - Finite One-event Packet Submission State Machine
+
+- Added one finite state machine over exactly one 0.0.9d packet or per-stream EOS completion.
+- Split work into one initial `Begin` send／flush and one bounded `Advance` receive-plus-optional-retry transition.
+- Performed at most one frame receive and at most one retained packet／flush retry per advance.
+- Retried only after explicit frame progress and surfaced no-progress without a hidden loop.
+- Retained the original native packet／flush completion and parser backpressure across repeated `EAGAIN`.
+- Committed per-stream sequence and flush state only after native acceptance.
+- Tracked independent video／audio flush acceptance and decoder EOF and rejected later input for ended streams.
+- Rejected source mismatch, non-increasing sequence, concurrent input, invalid stream identity, and post-flush packets before native work.
+- Added cancellation, terminal-failure, and idempotent packet-first cleanup without owning source or decoder sessions.
+- Added fifteen focused tests plus ADR-0115 and PCN-0123.
+- Kept resident decode, decoded-frame delivery, second encoded queues, PCP composition, backend activation, FFmpeg distribution, and playback unchanged.
+
 ### 0.0.9d - Metadata-aware Native Packet and Flush Boundary
 
 - Added one finite source-bound operation for exactly one bounded FLV packet or per-stream EOS completion.
