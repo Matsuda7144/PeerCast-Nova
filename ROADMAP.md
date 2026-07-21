@@ -55,30 +55,31 @@
 - 0.0.9j Bounded Decode Iteration and Per-stream EOS Drain Review
 - 0.0.9k Source-bound One-frame Receive and EOS Drain Boundary
 - 0.0.9l Awaited Decoded Completion Composition Review
+- 0.0.9m Finite Awaited Decoded Completion Composition Boundary
 
-0.0.9l selects one future awaited PCP／FLV／decode generation that owns the 0.0.9k boundary as its sole submission and receive authority. Decoded completion settlement blocks parser and encoded retry while incomplete, required relief stays inside the PCP callback, ordinary receive and accepted-flush drain remain finite caller operations, and the existing bounded scheduler remains the only decoded queue.
+0.0.9m adds one serialized awaited composition from callback-scoped PCP payload through the real bounded FLV parser and the 0.0.9k source-bound decode generation. The decode boundary is the sole packet-submission and native-receive authority; no parallel submission machine or decoded queue is added.
 
-The review also separates stream-local decoded identity from the scheduler's cross-media order. A generation-wide downstream sequence commits only after accepted ownership transfer, and scheduler-owned frames remain bound to the matching decoder generation and context lifetime.
+Retained packet／flush relief stays inside the open PCP callback or explicit finalization operation. Each cycle performs one native receive, one awaited exact-completion settlement, completion release, and one retry-only transition. Repeated `EAGAIN` remains bounded by shared decode-operation, frame-count, and managed-byte budgets.
 
-### Next: 0.0.9m Finite Awaited Decoded Completion Composition Boundary
+Ordinary receive and accepted-flush drain remain caller-driven one-frame operations outside the packet callback. Encoded finalization, independent video／audio flush acceptance, per-stream decoder EOF, and full decoder drain remain distinct states.
 
-Implement the reviewed composition with injected cross-platform operations:
+### Next: 0.0.9n Decoded Completion Transfer and Scheduler Ingress Review
 
-- replace the current generation's separate native-session／submission ownership with one `PlaybackSourceBoundOneFrameDecodeBoundary`;
-- add one generation-scoped awaited decoded-completion settlement seam;
-- hold the PCP callback open across one-frame relief, settlement, completion release, and one retry-only transition;
-- repeat retained packet／flush relief only under shared frame-count, managed-byte, decoder-advance, and parser-operation budgets;
-- block parser suffix and later PCP input while decoded or encoded ownership remains active;
-- add serialized ordinary receive outside the PCP callback with normal `NeedMoreInput`;
-- keep explicit encoded finalization separate from independent one-frame video／audio drain to decoder EOF;
-- expose fixed accepting, input-finalized, decoder-drained, faulted, and disposed state without claiming downstream playback completion;
-- handle cancellation, consumer rejection, source disposal, no progress, work limits, and discontinuity fail closed;
-- dispose active settlement／decoded completion before decode-boundary ownership;
-- add no real scheduler adapter, output device activation, second decoded queue, resident task, or production backend claim.
+Review the ownership seam from the 0.0.9m decoded completion into the existing bounded scheduler:
+
+- define one-shot managed-frame detachment so accepted transfer survives source-completion disposal;
+- preserve exact source／decoder-generation／discontinuity-generation／stream-local sequence identity;
+- assign a separate checked generation-wide cross-media scheduler sequence only after accepted transfer;
+- reject sequence commit on dropped, rejected, cancelled, or faulted transfer;
+- keep scheduler-owned frame and matching native context alive until delivery, drop, or explicit cleanup ends ownership;
+- define partial transfer failure and cleanup without adding a second decoded queue;
+- dispose old-generation queued frames before old decode/native ownership on discontinuity;
+- separate scheduler ingress from awaited delivery and output-device lifecycle;
+- keep the review documentation-only before runtime transfer implementation.
 
 ### Later sequence
 
-1. add one-shot decoded-frame transfer and real-FLV bounded scheduler ingress using a generation-wide cross-media sequence;
+1. implement one-shot decoded-frame transfer and real-FLV bounded scheduler ingress;
 2. add generation-matched awaited scheduler delivery and output lifecycle composition;
 3. add a production generation factory and review ABI-gate acquisition／backend activation／Windows lifecycle;
 4. perform controlled real-media validation.

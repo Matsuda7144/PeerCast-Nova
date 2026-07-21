@@ -5,6 +5,25 @@
 Detailed history through 0.0.8g remains preserved in Git history at commit
 `f078dab5372a45a8c577c1c802a697ab72b45c02` and in milestone ADR/PCN records.
 
+### 0.0.9m - Finite Awaited Decoded Completion Composition Boundary
+
+- Added `PlaybackPcpFlvAwaitedDecodeCompositionBoundary` as a serialized finite composition from callback-scoped PCP payload through the real bounded FLV parser and the 0.0.9k source-bound decode generation.
+- Kept the existing 0.0.9i boundary unchanged for compatibility and comparison while making the 0.0.9k boundary the new generation's sole packet-submission and native-receive authority.
+- Advanced callback payload suffix only by exact parser `ConsumedByteCount` and completed each source-owned parser event before resuming the same PCP callback.
+- Held retained packet／flush relief inside the open callback or explicit-finalization operation.
+- Performed one native receive, one awaited exact-completion settlement, completion release, and one retry-only transition per relief cycle.
+- Blocked parser suffix, later PCP input, and retained retry while decoded settlement remained incomplete.
+- Bounded repeated `EAGAIN` by shared decode-operation, decoded-frame-count, and managed-byte budgets.
+- Added one injected generation-scoped settlement seam and accepted only `Consumed` in this milestone; transferable scheduler ownership remains deferred.
+- Revalidated exact source, decoder／discontinuity generation, media, stream, decoded sequence, managed bytes, frame liveness, and media role before and after settlement.
+- Added callback-external one-frame ordinary receive and accepted-flush drain operations.
+- Kept encoded finalization, independent video／audio flush acceptance, per-stream decoder EOF, and full decoder drain as distinct states.
+- Replaced the old settlement and decode generation before parser discontinuity reset and new generation creation.
+- Added eleven focused cross-platform tests for callback blocking, retry ordering, repeated relief, settlement rejection, cumulative budgets, ordinary receive, explicit finalization, independent drain, cancellation, discontinuity, and identity failure.
+- Added ADR-0123 and PCN-0131 and documented a narrow CA2250 rationale for subordinate-enum／linked-stop cancellation translation after cleanup.
+- Used temporary compiler/analyzer status-encoding workflows to isolate CS1026 and CA2250, then restored the routine CircleCI configuration byte-for-byte.
+- Kept scheduler ownership transfer, production generation factory, backend activation, Windows output lifecycle, FFmpeg distribution, and audible／visible playback unchanged.
+
 ### 0.0.9l - Awaited Decoded Completion Composition Review
 
 - Reviewed the ownership connection from the awaited PCP／FLV composition to the source-bound one-frame receive and EOS-drain boundary.
@@ -74,7 +93,7 @@ Detailed history through 0.0.8g remains preserved in Git history at commit
 - Required active parser／decoder completion and decoder `EAGAIN` to pause new parser and PCP input.
 - Required bounded state-machine `Advance` transitions; no receive progress and operation-budget exhaustion fail closed.
 - Required exact PCP channel／session／packet-sequence identity and exact parser-created source generation.
-- Separated owner-invoked finalization because the packet-consumer interface has no EOS callback; transport close, reconnect, stop, timeout, cancellation, and failure are not EOS.
+- Separated owner-invoked finalization because the packet-consumer interface has no EOS callback; transport close, reconnect, stop, timeout, cancellation, or failure are not EOS.
 - Defined discontinuity generation replacement and ordered state-machine, native-session, parser, and generation cleanup.
 - Selected 0.0.9i Finite Awaited PCP-to-FLV Composition Boundary.
 - Added ADR-0118 and PCN-0126 without changing runtime source or tests.

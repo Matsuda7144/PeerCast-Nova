@@ -2,24 +2,25 @@
 
 ## 現在地
 
-**0.0.9l — Awaited Decoded Completion Composition Review — Reviewed**
+**0.0.9m — Finite Awaited Decoded Completion Composition Boundary — Implemented**
 
-0.0.9iのawaited PCP／FLV compositionを0.0.9kのsource-bound one-frame decode boundaryへ安全に置き換え、decoded completionをsettleしてからencoded retry／parser suffixを再開する所有権契約を確定しました。
+real bounded FLV parserと0.0.9k source-bound one-frame decode boundaryを、callback-scoped PCP payloadからcaller-driven EOS drainまで1つのserialized finite compositionとして接続しました。
 
-- future generationは別々のnative session＋submission machineを持たず、0.0.9k boundaryを唯一のsubmission／receive authorityとして所有
-- decoded completion settlementはasync operationの未完了そのものをbackpressureとして表現
-- settlement完了はconsumed、transferred、rejected、cancelled、faultedの固定結果
-- packet／flush reliefではPCP callbackまたはexplicit finalizationを開いたまま、1 receive→1 settlement→completion release→1 retry-only transition
-- repeated `EAGAIN`はshared frame／byte／advance budget内で次の有限cycleを要求
-- parser suffix、新しいPCP packet、別receiveはactive decoded ownership中に進めない
-- ordinary post-accept receiveはcallback外の1回1frame caller operation
-- accepted flush後のvideo／audio drainもcallback外で独立して1回1frame、各decoder EOFまで継続
-- encoded input finalized、decoder drained、downstream ownership remainingを別状態として扱う
-- `BoundedPlaybackScheduler`だけをdecoded queueとして再利用し、composition queueを追加しない
-- 0.0.9kのvideo／audio別sequenceとは別に、scheduler用generation-wide cross-media sequenceをchecked commit
-- scheduler transferにはone-shot managed-frame detachが必要で、accepted transfer後はcompletion disposalがscheduler-owned bufferを消さない
-- queued frameは同じdecoder generationのcontext lifetimeに束縛し、discontinuity時はold scheduler ownershipをnative sessionより先に解放
-- cleanupはactive settlement→decoded completion→scheduler ownership→decode boundary→parser／source→factory
+- `PlaybackPcpFlvAwaitedDecodeCompositionBoundary`を新規追加し、既存0.0.9i boundaryは比較／互換用に維持
+- generationは0.0.9k boundaryを唯一のpacket submission／native receive authorityとして所有
+- PCP payload offsetはparserのexact `ConsumedByteCount`だけで前進
+- retained packet／flush reliefはcallbackまたはexplicit finalization内で完結
+- 1 relief cycleは最大1 receive→1 awaited settlement→completion release→1 retry-only transition
+- settlement未完了中はcallback、parser suffix、retained retryが進まない
+- repeated `EAGAIN`はshared decode-operation／frame-count／managed-byte budget内で次の有限cycleを要求
+- 0.0.9m settlementはexact completionをawaitし、`Consumed`だけを成功として受理
+- ordinary receiveとaccepted-flush drainはcallback外の1回1frame operation
+- parser finalization、video／audio flush acceptance、各decoder EOF、full drainを別状態として保持
+- videoとaudioを独立してdrainし、両decoder EOF後だけ`DecodersDrained`
+- discontinuityはold settlement→decode generation→native audio→videoの順で解放して新generationを作成
+- parser／decode／settlementを1 semaphoreで直列化し、second queue／resident loopなし
+- 11 focused cross-platform testsでcallback blocking、retry ordering、budget、cancellation、EOS drain、replacementを検証
+- CA2250はsubordinate enum／linked stopをcleanup後に変換するため、対象runtime fileだけ理由付きで抑制
 
 ## CI
 
@@ -27,13 +28,13 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 ## 最新の入口
 
-- `docs/adr/ADR-0122-awaited-decoded-completion-composition.md`
-- `docs/reviews/PCN-0130-AWAITED-DECODED-COMPLETION-COMPOSITION-REVIEW.md`
-- `src/Nova.Playback/PlaybackPcpFlvCompositionBoundary.cs`
+- `src/Nova.Playback/PlaybackPcpFlvAwaitedDecodeCompositionBoundary.cs`
+- `tests/Nova.Playback.Tests/PlaybackPcpFlvAwaitedDecodeCompositionBoundaryTests.cs`
+- `tests/Nova.Playback.Tests/PlaybackPcpFlvAwaitedDecodeCompositionTestSupport.cs`
+- `docs/adr/ADR-0123-finite-awaited-decoded-completion-composition.md`
+- `docs/reviews/PCN-0131-FINITE-AWAITED-DECODED-COMPLETION-COMPOSITION-VALIDATION.md`
 - `src/Nova.Playback/PlaybackSourceBoundOneFrameDecodeBoundary.cs`
-- `src/Nova.Playback/PlaybackDecoderFfmpegAwaitedSinkDelivery.cs`
-- `src/Nova.Playback/PlaybackDiagnosticManagedFrameSchedulerIngressTransaction.cs`
-- `src/Nova.Playback/BoundedPlaybackScheduler.cs`
+- `src/Nova.Playback/PlaybackPcpFlvCompositionBoundary.cs`
 
 ## ADR／PCN索引の永久欠番
 
@@ -43,14 +44,14 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 ## 次の作業
 
-**0.0.9m — Finite Awaited Decoded Completion Composition Boundary**
+**0.0.9n — Decoded Completion Transfer and Scheduler Ingress Review**
 
-`PlaybackPcpFlvCompositionGeneration`を0.0.9k boundary所有へ置き換え、注入式awaited settlement seamを追加します。PCP callback内のretained packet／flush relief、callback外のordinary receive、explicit finalizationとvideo／audio drain、shared work budget、cancellation、discontinuity、cleanupをcross-platform fake consumerで検証します。real scheduler ingress／sink deliveryとproduction ABI-gate acquisitionは後続へ分離します。
+0.0.9mのawaited-consumption契約を弱めず、decoded completionからmanaged frameをone-shotでdetachして既存`BoundedPlaybackScheduler`へ移譲する契約をレビューします。stream-local decoded sequenceとgeneration-wide cross-media scheduler sequenceを分離し、accepted／rejected transfer、native context lifetime、partial failure、discontinuity時のold-generation queue cleanupを先に固定します。
 
 ## 未完了
 
-- finite awaited PCP／FLV／decode composition implementation
-- real FLV decoded completionのscheduler ingress／awaited delivery
+- decoded completion one-shot transfer／bounded scheduler ingress
+- real FLV decoded scheduler delivery and output lifecycle
 - production generation factory and backend activation
 - MP4／fragmented MP4 parser
 - discontinuity-time `avcodec_flush_buffers` semantics

@@ -22,3 +22,9 @@ dotnet_diagnostic.IDE0005.severity = warning
 # Ordinary one-frame calls accept cancellation without a budget. The optional reusable
 # cumulative budget intentionally remains a named trailing argument for bounded outer loops.
 dotnet_diagnostic.CA1068.severity = none
+
+[src/Nova.Playback/PlaybackPcpFlvAwaitedDecodeCompositionBoundary.cs]
+# Cancellation can arrive as a subordinate fixed enum or through the linked stop token.
+# The composition must latch terminal cleanup before translating either source outward,
+# so a direct ThrowIfCancellationRequested replacement cannot preserve this contract.
+dotnet_diagnostic.CA2250.severity = none
