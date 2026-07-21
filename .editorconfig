@@ -28,3 +28,9 @@ dotnet_diagnostic.CA1068.severity = none
 # The composition must latch terminal cleanup before translating either source outward,
 # so a direct ThrowIfCancellationRequested replacement cannot preserve this contract.
 dotnet_diagnostic.CA2250.severity = none
+
+[src/Nova.Playback/PlaybackProductionDecoderGenerationFactory.cs]
+# Pre-admission cancellation and disposal return a fixed creation result without mutating
+# the lifecycle snapshot. Keep that result construction on the factory instance beside the
+# stateful Finish path so the distinction remains explicit and reviewable.
+dotnet_diagnostic.CA1822.severity = none

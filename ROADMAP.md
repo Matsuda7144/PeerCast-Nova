@@ -61,30 +61,29 @@
 - 0.0.9p Generation-matched Scheduler Delivery and Output Lifecycle Review
 - 0.0.9q Finite Generation-matched Scheduler Delivery and Output Lifecycle Boundary
 - 0.0.9r Production Decoder Generation Factory and Activation Review
+- 0.0.9s Policy-gated Production Decoder Generation Factory Boundary
 
-0.0.9q implements one finite generation boundary that reserves one scheduler item, validates exact identity, selects the matching H.264／AAC context, performs timing and managed adaptation／conversion, maps result-aware Windows output, and completes ownership as retained, delivered, or dropped.
+0.0.9r defined how production composition may build the 0.0.9q generation. Policy must pass before runtime-path observation, video and audio require independent verified runtime／ABI gate／context chains, source ownership remains external, and Windows activation remains application-owned.
 
-0.0.9r defines how production composition may build that generation. Policy must pass before runtime-path observation. The current candidate remains pending. Video and audio require independent verified runtime／ABI gate／context chains, the FLV source remains borrowed, Windows activation remains application-owned, and replacement fully stops the old generation before constructing the new one.
+0.0.9s implements that construction transaction. The public factory returns `LicenseReviewPending` for the unchanged pinned candidate. Under approved injected conditions it creates exact FLV binding, distinct runtime／gate chains, one complete source-bound native session, one-frame decode, fresh bounded scheduler, generation timing, and 0.0.9q delivery as one caller-owned product. Partial failure unwinds only untransferred ownership in reverse order.
 
-### Next: 0.0.9s Policy-gated Production Decoder Generation Factory Boundary
+### Next: 0.0.9t Production Generation Ingress and Replacement Composition Review
 
-Implement one finite production generation factory that:
+Review how the 0.0.9s product connects to the existing awaited PCP／FLV path:
 
-- evaluates candidate provenance before filesystem or native work;
-- returns `LicenseReviewPending` for the current pinned candidate;
-- accepts only one explicit host-installed directory and exact pinned inventory;
-- creates an exact managed FLV parameter binding;
-- independently acquires video and audio runtime／ABI gate chains;
-- opens one complete source-bound H.264／AAC native session;
-- creates one decode boundary, fresh bounded scheduler, generation timing, and 0.0.9q delivery boundary;
-- returns only one complete owning generation product;
-- borrows the source session and application-owned Windows buffer processor;
-- unwinds partial ownership in reverse order;
-- adds no resident loop, fallback runtime, download, hidden retry, or second queue.
+- create a generation only after exact parser source description is available;
+- settle each source-bound decoded completion through one-shot scheduler transfer;
+- keep PCP callback backpressure until transfer ownership is resolved;
+- run caller-driven finite scheduler delivery outside the packet callback;
+- stop and await the old generation before parser discontinuity reset;
+- create the replacement generation only after old scheduler／decode／native ownership is gone;
+- keep application-owned Windows resources outside generation replacement;
+- define terminal failure, cancellation, and no-rollback behavior;
+- add no resident loop, second queue, hidden retry, or overlapping generations.
 
 ### Later sequence
 
-1. review and implement controlled production composition around the factory;
+1. implement the reviewed production ingress／replacement composition;
 2. make an explicit license／backend registration and distribution decision;
 3. connect bounded decode ingress and finite delivery under an application-owned Windows lifecycle;
 4. perform controlled real-media validation.

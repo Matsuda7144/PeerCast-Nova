@@ -5,6 +5,24 @@
 Detailed history through 0.0.8g remains preserved in Git history at commit
 `f078dab5372a45a8c577c1c802a697ab72b45c02` and in milestone ADR/PCN records.
 
+### 0.0.9s - Policy-gated Production Decoder Generation Factory Boundary
+
+- Added `PlaybackProductionDecoderGenerationFactory` as one serialized finite construction boundary for the complete 0.0.9q generation.
+- Evaluated candidate provenance and backend policy before FLV binding, runtime-path observation, ABI loading, or native work.
+- Preserved the pinned FFmpeg candidate as `LicenseReview.Pending`, so public production creation returns `LicenseReviewPending` without observing the supplied path.
+- Required Approved injected provenance plus explicit third-party and native-code policy permission before construction.
+- Acquired independent video and audio verified-runtime leases and ABI gates and rejected shared identities.
+- Constructed exact FLV binding, complete H.264／AAC native session, one-frame decode, fresh bounded scheduler, generation timing, and 0.0.9q delivery in fixed order.
+- Returned only one complete caller-owned `PlaybackProductionDecoderGeneration` and exposed finite transfer, one-item delivery, reset, and stop operations.
+- Kept source sessions and application-owned Windows output boundaries as non-owning borrows.
+- Unwound only untransferred partial ownership in reverse order with reference-deduplicated cleanup.
+- Serialized creation and made factory disposal cancel and await active construction without owning completed products.
+- Added fixed policy, runtime, ABI, ownership, native-session, generation, cancellation, disposal, and fault results.
+- Added ten focused cross-platform tests plus ADR-0129 and PCN-0137.
+- Isolated one intentional CA1822 case and fixture-only call-log assertions through temporary status-encoding CircleCI jobs, then restored the routine configuration byte-for-byte.
+- Selected 0.0.9t Production Generation Ingress and Replacement Composition Review.
+- Kept candidate approval, normal backend registration, production PCP ingress composition, Windows activation, FFmpeg distribution, continuous pumping, and audible／visible playback unchanged.
+
 ### 0.0.9r - Production Decoder Generation Factory and Activation Review
 
 - Reviewed production ownership from policy and verified runtime acquisition through independent video／audio ABI gate／context chains into the complete 0.0.9q generation.

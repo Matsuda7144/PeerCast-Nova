@@ -9,25 +9,25 @@ License: **Apache License 2.0**
 
 ## 現在地
 
-**Milestone 0.0.9r — Production Decoder Generation Factory and Activation Review**
+**Milestone 0.0.9s — Policy-gated Production Decoder Generation Factory Boundary**
 
-0.0.9qで完成した有限decode／scheduler delivery generationを、verified FFmpeg runtime、ABI gate、FLV parameter binding、source-bound native session、timing、application-owned Windows outputへ安全に構築・置換するproduction factory契約を確定しました。runtime実装は0.0.9sへ分離しています。
+0.0.9rで確定した契約をruntimeへ実装し、policyからexact FLV binding、独立したvideo／audio runtime・ABI gate、source-bound native session、decode、bounded scheduler、timing、0.0.9q deliveryまでを一つのcomplete generation productへ構築する有限factoryを追加しました。
 
-- production policyはruntime path確認やnative loadより先に評価
-- pinned FFmpeg candidateは現在も`LicenseReview.Pending`で、production creationはfail closed
-- provenance、license review、backend registrationをこのレビューでは変更しない
-- runtimeはcallerが明示した固定ドライブ上のexact pinned inventoryだけを使用
-- `PATH`、registry、隣接directory、network search、download、展開、bundlingは行わない
-- video／audioは独立した2本のruntime→ABI gate→context ownership chainを使用
-- context disposalが親gateとruntime leaseを消費するため、runtime lease共有を禁止
-- exact FLV parameter bindingからcomplete H.264／AAC native sessionを作り、partial productを返さない
-- decode boundary、fresh bounded scheduler、generation timing、0.0.9q deliveryを一つのgeneration productへ統合
-- source demux sessionはparser／composition ownerからborrowし、generationはdisposeしない
-- Windows activation／binding／stream initialization／buffer processingはapplication ownerが保持
-- replacementはold generationを完全停止・cleanupしてからnew generationを作成
-- resident pump、hidden retry、fallback runtime、second queueを追加しない
+- candidate provenanceとbackend policyをbinding／filesystem observation／native workより先に評価
+- pinned FFmpeg candidateは引き続き`LicenseReview.Pending`
+- public production factoryは現在`LicenseReviewPending`を返し、runtime pathへ触れない
+- approvedな注入条件でもthird-party／native-code policyの許可を必須化
+- callerが明示した固定ドライブ上のexact pinned inventoryだけを使用
+- video／audioへ独立した2本のruntime→ABI gate→context ownership chainを構築
+- shared runtime／shared gateを参照同一性で拒否
+- FLV binding→native session→decode→fresh scheduler→timing→0.0.9q deliveryを順序固定
+- partial productを返さず、失敗時は未移譲ownershipだけを逆順cleanup
+- source sessionとWindows output buffer boundaryはapplication ownerからborrow
+- returned generationはfinite transfer／one-item delivery／reset／stopを公開
+- factory disposalはactive creationをcancel／awaitし、completed generationはdisposeしない
+- fallback runtime、download、bundling、resident loop、hidden retry、second queueなし
 
-現在の法的状態ではproduction factoryがnative resourceを取得することはありません。0.0.9rはownershipとactivation policyのレビューであり、FFmpeg承認、backend activation、runtime配布、Windows device activation、audible／visible playbackを実施していません。
+現在の法的状態ではdefault production operationsがFFmpeg native resourceを取得することはありません。通常backend登録、production PCP ingress composition、generation replacement orchestration、Windows device activation、runtime配布、audible／visible playbackはまだ実施していません。
 
 ## 実装済みの主な領域
 
@@ -70,6 +70,7 @@ License: **Apache License 2.0**
 - generation-wide scheduler ingress ownership boundary
 - finite generation-matched scheduler delivery／output lifecycle boundary
 - production generation factory／activation architecture review
+- policy-gated production decoder generation factory boundary
 
 詳細:
 
@@ -83,7 +84,7 @@ License: **Apache License 2.0**
 
 PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信アプリではありません。
 
-- policy-gated production generation factory implementation
+- production generation ingress and replacement composition
 - FFmpeg candidate license approval and normal backend registration
 - production decoder ingress activation
 - Windows application／window／device lifecycle composition
@@ -99,9 +100,9 @@ FFmpeg backend activation、runtime bundling／distribution、license approval�
 
 ## 次のマイルストーン
 
-**0.0.9s — Policy-gated Production Decoder Generation Factory Boundary**
+**0.0.9t — Production Generation Ingress and Replacement Composition Review**
 
-license／backend policyをfilesystem observationより先に適用し、approvedな注入条件下だけでexact FLV binding、独立したvideo／audio runtime・ABI gate、source-bound native session、decode boundary、bounded scheduler、timing、0.0.9q deliveryをcomplete generation productへ構築します。production candidateの`Pending`状態、Windows outputのapplication ownership、runtime非同梱方針は維持します。
+0.0.9s factory productを既存のawaited PCP／FLV compositionへどう注入し、decoded completionをschedulerへtransferし、caller-driven finite deliveryを実行するかをレビューします。old generation停止、source／parser discontinuity、new generation作成、失敗時のterminal state、application-owned Windows lifecycleとの境界を確定し、runtime composition実装は後続へ分離します。
 
 ## 必要環境
 
