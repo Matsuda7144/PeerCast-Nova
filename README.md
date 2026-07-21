@@ -9,25 +9,25 @@ License: **Apache License 2.0**
 
 ## 現在地
 
-**Milestone 0.0.9q — Finite Generation-matched Scheduler Delivery and Output Lifecycle Boundary**
+**Milestone 0.0.9r — Production Decoder Generation Factory and Activation Review**
 
-0.0.9pで確定したownership契約をruntimeへ実装し、scheduler-owned real decoded frameを同じsource-bound decoder generationのcontext、timing、conversion、result-aware Windows outputへ接続する有限境界を追加しました。
+0.0.9qで完成した有限decode／scheduler delivery generationを、verified FFmpeg runtime、ABI gate、FLV parameter binding、source-bound native session、timing、application-owned Windows outputへ安全に構築・置換するproduction factory契約を確定しました。runtime実装は0.0.9sへ分離しています。
 
-- exact source、decoder／discontinuity generation、scheduler sequence、media role、frame livenessをreservation中に再検証
-- native video／audio context ownershipはsource-bound sessionだけに維持
-- videoは同じsessionのH.264 context、audioは同じsessionのAAC contextだけを使用
-- 一回のcaller-driven operationでreserve→validate→reset／timing→adapt／convert→output→completion
-- scheduler reservation completionを`Retained / Delivered / Dropped`へ型付き拡張
-- 旧`Complete(bool)` APIを互換維持
-- 明示video dropはdeliveryではなくdropとしてaccounting
-- `WouldBlock`、initialization／binding／resize、audio recovery、cancellationは同じframeを保持
-- device lossはreservationを保持してreset-requiredへ遷移
-- replacement generationの最初の`DecoderReset`をreset成功後に一度だけacknowledge
-- active delivery中は後続completionをdetachしない
-- `StopAsync`はactive deliveryをcancel／awaitしてからscheduler ownershipとdecode／native ownershipをcleanup
-- second decoded queue、resident pump、hidden retry、二重context ownershipを追加しない
+- production policyはruntime path確認やnative loadより先に評価
+- pinned FFmpeg candidateは現在も`LicenseReview.Pending`で、production creationはfail closed
+- provenance、license review、backend registrationをこのレビューでは変更しない
+- runtimeはcallerが明示した固定ドライブ上のexact pinned inventoryだけを使用
+- `PATH`、registry、隣接directory、network search、download、展開、bundlingは行わない
+- video／audioは独立した2本のruntime→ABI gate→context ownership chainを使用
+- context disposalが親gateとruntime leaseを消費するため、runtime lease共有を禁止
+- exact FLV parameter bindingからcomplete H.264／AAC native sessionを作り、partial productを返さない
+- decode boundary、fresh bounded scheduler、generation timing、0.0.9q deliveryを一つのgeneration productへ統合
+- source demux sessionはparser／composition ownerからborrowし、generationはdisposeしない
+- Windows activation／binding／stream initialization／buffer processingはapplication ownerが保持
+- replacementはold generationを完全停止・cleanupしてからnew generationを作成
+- resident pump、hidden retry、fallback runtime、second queueを追加しない
 
-診断専用のawaited sink delivery、late-aware dispatch、Windows output境界と互換性を維持したまま、real decoded scheduler ownershipの有限delivery経路まで到達しました。production generation factory、ABI-gate acquisition、backend activation、device lifecycle、runtime配布、audible／visible playbackにはまだ接続していません。
+現在の法的状態ではproduction factoryがnative resourceを取得することはありません。0.0.9rはownershipとactivation policyのレビューであり、FFmpeg承認、backend activation、runtime配布、Windows device activation、audible／visible playbackを実施していません。
 
 ## 実装済みの主な領域
 
@@ -68,8 +68,8 @@ License: **Apache License 2.0**
 - finite awaited PCP／FLV／decode composition boundary
 - exact-active one-shot decoded completion detach
 - generation-wide scheduler ingress ownership boundary
-- generation-matched scheduler delivery／output lifecycle review
 - finite generation-matched scheduler delivery／output lifecycle boundary
+- production generation factory／activation architecture review
 
 詳細:
 
@@ -83,14 +83,14 @@ License: **Apache License 2.0**
 
 PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信アプリではありません。
 
-- production generation factory and decoder ingress activation
-- ABI-gate acquisition and backend policy activation
+- policy-gated production generation factory implementation
+- FFmpeg candidate license approval and normal backend registration
+- production decoder ingress activation
 - Windows application／window／device lifecycle composition
 - MP4／fragmented MP4 parser
 - decoded-buffer duration cutoff
 - discontinuity-time native reset semantics
 - complete A/V synchronization、resampling、drift correction
-- approved FFmpeg backend activation
 - FFmpeg runtime同梱／再配布
 - controlled audible／visible real-media playback
 - GUI、window message loop、installer、recorder
@@ -99,9 +99,9 @@ FFmpeg backend activation、runtime bundling／distribution、license approval�
 
 ## 次のマイルストーン
 
-**0.0.9r — Production Decoder Generation Factory and Activation Review**
+**0.0.9s — Policy-gated Production Decoder Generation Factory Boundary**
 
-verified runtime locator／lease、video／audio ABI gate、FLV decoder parameter binding、source-bound native session、decode／scheduler generation、timing、Windows output lifecycleをproduction factoryがどう取得・所有・置換するかをレビューします。backend activation、license gate、failure rollback、discontinuity replacement、application-owned device resourcesの境界を確定し、runtime factory実装は後続へ分離します。
+license／backend policyをfilesystem observationより先に適用し、approvedな注入条件下だけでexact FLV binding、独立したvideo／audio runtime・ABI gate、source-bound native session、decode boundary、bounded scheduler、timing、0.0.9q deliveryをcomplete generation productへ構築します。production candidateの`Pending`状態、Windows outputのapplication ownership、runtime非同梱方針は維持します。
 
 ## 必要環境
 

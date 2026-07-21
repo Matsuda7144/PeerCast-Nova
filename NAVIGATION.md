@@ -2,23 +2,22 @@
 
 ## 現在地
 
-**0.0.9q — Finite Generation-matched Scheduler Delivery and Output Lifecycle Boundary — Implemented**
+**0.0.9r — Production Decoder Generation Factory and Activation Review — Completed**
 
-0.0.9pで確定したownership契約をruntimeへ実装し、scheduler-owned real decoded frameを同じsource-bound decoder generationのcontext、timing、managed conversion、result-aware Windows outputへ接続する有限境界を追加しました。
+0.0.9qのcomplete finite generationをproductionで構築・置換するownership、policy、activation境界を確定しました。runtime factory実装は0.0.9sへ分離しています。
 
-- exact source、decoder／discontinuity generation、scheduler sequence、media role、frame livenessをreservation中に検証
-- source-bound native sessionをvideo／audio contextの唯一のownerとして維持
-- matching H.264／AAC contextだけでadapt／convert
-- caller-driven one-item deliveryのみ。resident loop／hidden retryなし
-- reservation completionを`Retained / Delivered / Dropped`へ型付き拡張
-- 旧boolean completionとの互換を維持
-- late videoはdrop accounting、late audioはrecovery-required retention
-- `WouldBlock`、initialization／binding／resize、cancellationはframeを保持
-- device lossはframeを保持してreset-requiredへ遷移
-- first-frame `DecoderReset`はtiming／output reset成功後に一度だけacknowledge
-- active delivery中の後続completion detachを禁止
-- async stopはdeliveryをcancel／awaitしてからscheduler→decode boundary→native sessionの順にcleanup
-- production factory、backend activation、Windows device lifecycleは追加しない
+- license／backend policyをruntime path確認とnative workより先に適用
+- pinned candidateは`LicenseReview.Pending`のまま維持し、production creationをfail closed
+- explicit host-installed exact pinned runtimeだけを使用
+- `PATH`／registry／network search、download、extraction、bundlingなし
+- video／audioに独立したruntime→ABI gate→context chainを要求
+- shared runtime lease／shared gateを禁止
+- exact FLV bindingからcomplete native sessionだけを返す
+- decode、fresh scheduler、timing、0.0.9q deliveryを一つのgeneration productへ統合
+- source demux sessionとWindows output environmentは非所有borrow
+- old generationを完全停止してからreplacementを作成
+- normal backend registration、license approval、device activationは変更しない
+- resident loop、hidden retry、fallback runtime、second queueなし
 
 ## CI
 
@@ -26,17 +25,16 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 ## 最新の入口
 
-- `docs/adr/ADR-0127-finite-generation-matched-scheduler-delivery-output-lifecycle-boundary.md`
-- `docs/reviews/PCN-0135-FINITE-GENERATION-MATCHED-SCHEDULER-DELIVERY-OUTPUT-LIFECYCLE-BOUNDARY.md`
-- `src/Nova.Playback/PlaybackGenerationMatchedSchedulerDeliveryBoundary.cs`
-- `src/Nova.Playback/PlaybackDecodedCompletionSchedulerIngressBoundary.cs`
-- `src/Nova.Playback/PlaybackSourceBoundOneFrameDecodeBoundary.cs`
+- `docs/adr/ADR-0128-production-decoder-generation-factory-activation-review.md`
+- `docs/reviews/PCN-0136-PRODUCTION-DECODER-GENERATION-FACTORY-ACTIVATION-REVIEW.md`
+- `src/Nova.Playback/PlaybackFfmpegBackendCandidate.cs`
+- `src/Nova.Playback/PlaybackDecoderBackendPolicy.cs`
+- `src/Nova.Playback/PlaybackDecoderBackendInstalledRuntimeLocator.cs`
+- `src/Nova.Playback/PlaybackDecoderFfmpegAbiSymbolGate.cs`
+- `src/Nova.Playback/PlaybackDecoderFfmpegContextLease.cs`
 - `src/Nova.Playback/PlaybackBoundedFlvNativeDecoderSession.cs`
-- `src/Nova.Playback/BoundedPlaybackScheduler.cs`
-- `src/Nova.Playback/PlaybackDecoderFfmpegDecodedOutputAdapter.cs`
-- `src/Nova.Playback/PlaybackDecoderFfmpegManagedFormatConversion.cs`
-- `src/Nova.Playback/PlaybackWindowsOutputBufferProcessingBoundary.cs`
-- `tests/Nova.Playback.Tests/PlaybackGenerationMatchedSchedulerDeliveryBoundaryTests.cs`
+- `src/Nova.Playback/PlaybackGenerationMatchedSchedulerDeliveryBoundary.cs`
+- `src/Nova.Playback/PlaybackWindowsOutputActivationBoundary.cs`
 
 ## ADR／PCN索引の永久欠番
 
@@ -46,14 +44,15 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 ## 次の作業
 
-**0.0.9r — Production Decoder Generation Factory and Activation Review**
+**0.0.9s — Policy-gated Production Decoder Generation Factory Boundary**
 
-verified runtime locator／lease、ABI gate、FLV parameter binding、source-bound native session、decode／scheduler delivery generation、timing、Windows output lifecycleをproduction factoryがどう取得・所有・置換するかをレビューします。backend activation、license gate、failure rollback、discontinuity cleanup、application-owned device resourcesの境界を確定します。
+policy-first fail-closed、exact managed binding、独立したvideo／audio runtime・ABI gate chain、complete native session、decode／scheduler／timing／0.0.9q delivery product、reverse rollbackを一つの有限factoryへ実装します。production candidateの`Pending`状態とapplication-owned Windows resourcesは維持します。
 
 ## 未完了
 
-- production generation factory and backend activation
-- ABI-gate acquisition and license-policy composition
+- policy-gated production generation factory implementation
+- FFmpeg license approval and backend registration
+- controlled production decode ingress composition
 - Windows application／window／device lifecycle
 - MP4／fragmented MP4 parser
 - discontinuity-time `avcodec_flush_buffers` semantics

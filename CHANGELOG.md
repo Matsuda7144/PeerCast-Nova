@@ -5,6 +5,21 @@
 Detailed history through 0.0.8g remains preserved in Git history at commit
 `f078dab5372a45a8c577c1c802a697ab72b45c02` and in milestone ADR/PCN records.
 
+### 0.0.9r - Production Decoder Generation Factory and Activation Review
+
+- Reviewed production ownership from policy and verified runtime acquisition through independent video／audio ABI gate／context chains into the complete 0.0.9q generation.
+- Required license／backend policy evaluation before runtime-path observation or native work.
+- Preserved the pinned FFmpeg candidate as `LicenseReview.Pending`, so current production creation remains fail closed.
+- Required two independently verified runtime leases and two distinct ABI gate leases because each context disposal consumes its own parent gate and runtime chain.
+- Kept runtime acquisition explicit, host-installed, fixed-drive, and pinned-inventory-only without `PATH`, registry, network search, download, extraction, or bundling.
+- Defined complete-product-only construction from exact FLV parameter binding through native session, decode boundary, fresh bounded scheduler, generation timing, and 0.0.9q delivery.
+- Kept the FLV source session and Windows activation／binding／stream environment as non-owning application borrows.
+- Defined reverse partial-failure cleanup and stop-old-before-create-new discontinuity replacement without overlap, revival, or rollback.
+- Kept `PlaybackDecoderBackendFactory`, candidate provenance, normal backend registration, and distribution decisions unchanged.
+- Selected 0.0.9s Policy-gated Production Decoder Generation Factory Boundary.
+- Added ADR-0128 and PCN-0136 without changing runtime source or tests.
+- Kept backend activation, Windows device activation, runtime distribution, continuous pumping, and audible／visible playback unavailable.
+
 ### 0.0.9q - Finite Generation-matched Scheduler Delivery and Output Lifecycle Boundary
 
 - Added `PlaybackGenerationMatchedSchedulerDeliveryBoundary` as one finite owner of the exact source-bound decode generation, 0.0.9o scheduler ingress, and one-item delivery lifecycle.

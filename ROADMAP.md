@@ -60,35 +60,40 @@
 - 0.0.9o One-shot Decoded Completion Transfer and Scheduler Ingress Boundary
 - 0.0.9p Generation-matched Scheduler Delivery and Output Lifecycle Review
 - 0.0.9q Finite Generation-matched Scheduler Delivery and Output Lifecycle Boundary
+- 0.0.9r Production Decoder Generation Factory and Activation Review
 
-0.0.9o adds explicit attached／detached／disposed ownership to the source-bound decoded completion and requires the exact active decode boundary to authorize one-shot detach. One generation-scoped ingress validates stream-local video／audio identity, assigns a separate monotonic cross-media scheduler sequence, and commits the first accepted `DecoderReset` only after scheduler ownership.
+0.0.9q implements one finite generation boundary that reserves one scheduler item, validates exact identity, selects the matching H.264／AAC context, performs timing and managed adaptation／conversion, maps result-aware Windows output, and completes ownership as retained, delivered, or dropped.
 
-0.0.9p selects reservation-based delivery as the production scheduler exit. It requires exact media-context selection from the same source-bound native session, a result-aware canonical output seam, typed delivered／dropped／retained reservation completion, one-shot reset admission, and asynchronous cancellation／reservation cleanup before native-context disposal. Device-wide Windows activation and stream ownership remain external.
+0.0.9r defines how production composition may build that generation. Policy must pass before runtime-path observation. The current candidate remains pending. Video and audio require independent verified runtime／ABI gate／context chains, the FLV source remains borrowed, Windows activation remains application-owned, and replacement fully stops the old generation before constructing the new one.
 
-0.0.9q implements that contract. One finite generation boundary reserves one scheduler item, validates exact identity, selects the matching H.264／AAC context, performs timing and managed adaptation／conversion, maps result-aware Windows output, and completes ownership as retained, delivered, or dropped. Replacement reset is acknowledged once, explicit video drop has separate accounting, and asynchronous stop waits for reservation release before scheduler and native decoder cleanup.
+### Next: 0.0.9s Policy-gated Production Decoder Generation Factory Boundary
 
-### Next: 0.0.9r Production Decoder Generation Factory and Activation Review
+Implement one finite production generation factory that:
 
-Review how production composition creates and replaces the completed source-bound decode／scheduler delivery generation:
-
-- acquire the exact verified FFmpeg runtime lease and distinct video／audio ABI gates;
-- enforce license and backend activation policy before native work;
-- create FLV decoder parameter binding and source-bound native session without partial success;
-- create decode, scheduler ingress, timing, and finite output delivery ownership as one generation;
-- borrow application-owned Windows activation／binding／stream resources;
-- define failure rollback and discontinuity replacement order;
-- keep each construction and replacement operation finite.
+- evaluates candidate provenance before filesystem or native work;
+- returns `LicenseReviewPending` for the current pinned candidate;
+- accepts only one explicit host-installed directory and exact pinned inventory;
+- creates an exact managed FLV parameter binding;
+- independently acquires video and audio runtime／ABI gate chains;
+- opens one complete source-bound H.264／AAC native session;
+- creates one decode boundary, fresh bounded scheduler, generation timing, and 0.0.9q delivery boundary;
+- returns only one complete owning generation product;
+- borrows the source session and application-owned Windows buffer processor;
+- unwinds partial ownership in reverse order;
+- adds no resident loop, fallback runtime, download, hidden retry, or second queue.
 
 ### Later sequence
 
-1. implement the reviewed production decoder generation factory;
-2. connect bounded decode ingress and finite delivery through controlled production composition;
-3. perform controlled real-media validation.
+1. review and implement controlled production composition around the factory;
+2. make an explicit license／backend registration and distribution decision;
+3. connect bounded decode ingress and finite delivery under an application-owned Windows lifecycle;
+4. perform controlled real-media validation.
 
 ### Deferred
 
 - MP4／fragmented MP4 parser
 - avformat integration
+- production license approval and backend registration
 - discontinuity reset and `avcodec_flush_buffers`
 - duration cutoff
 - independent audio recovery generation changes
