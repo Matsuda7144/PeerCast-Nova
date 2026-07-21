@@ -64,36 +64,41 @@
 - 0.0.9s Policy-gated Production Decoder Generation Factory Boundary
 - 0.0.9t Production Generation Ingress and Replacement Composition Review
 - 0.0.9u Finite Production Generation Ingress and Replacement Composition Boundary
+- 0.0.9v FFmpeg Candidate License, Backend Registration, and Distribution Review
 
 0.0.9s implements the policy-gated complete generation factory. The public path remains `LicenseReviewPending`; approved injected conditions create exact FLV binding, distinct video／audio runtime and ABI ownership, source-bound decode, bounded scheduler, timing, and result-aware delivery as one caller-owned product.
 
-0.0.9t established that the existing consumed-settlement composition cannot directly host scheduler transfer because successful transfer detaches and consumes the decoded completion.
+0.0.9u implements the dedicated production owner. It serializes awaited PCP／FLV parsing, source-bound submission and receive, one-shot scheduler transfer, caller-driven delivery, explicit reset, stop, and discontinuity replacement.
 
-0.0.9u implements the dedicated production owner. It serializes awaited PCP／FLV parsing, source-bound submission and receive, one-shot scheduler transfer, caller-driven delivery, explicit reset, stop, and discontinuity replacement. It never touches a completion after `Transferred`, preserves retained scheduler reservations, and fully stops the old generation before parser reset and replacement creation.
+0.0.9v accepts the exact BtbN `win64-lgpl-shared` candidate class in principle for external dynamic use. Nova permanently keeps FFmpeg binaries outside the default Apache-2.0 distribution, prohibits implicit discovery and automatic acquisition, rejects GPL／nonfree variants, places production registration at the application composition root, and requires a checksum-verified host manifest so users can authorize compatible modified LGPL builds. Candidate state remains `Pending` until those compliance requirements are implemented.
 
-### Next: 0.0.9v FFmpeg Candidate License, Backend Registration, and Distribution Review
+### Next: 0.0.9w External LGPL Runtime Compliance and User Replacement Boundary
 
-Review the unchanged pinned external FFmpeg candidate and decide:
+Implement one finite compliance boundary that:
 
-- exact build provenance and retained hashes／inventory;
-- applicable LGPL version and optional component implications;
-- whether the recorded build is compatible with the intended dynamic-loading model;
-- notice, license-copy, relinking, source-offer, and corresponding-source obligations;
-- whether host-installed use may be approved without project redistribution;
-- whether normal backend registration may be enabled independently from bundling;
-- whether bundling／redistribution must remain prohibited or needs a separate artifact pipeline;
-- how approval, rejection, and unresolved evidence map to fixed fail-closed policy results;
-- which ADR evidence is required before changing `LicenseReview.Pending`.
+- represents the reviewed built-in candidate and a host-supplied candidate with bounded immutable manifests;
+- accepts only `LGPL-3.0-or-later` and rejects GPL, nonfree, unknown, or undefined license classes;
+- requires exact DLL roles, recognizable filenames, one SHA-256 per DLL, and the reviewed FFmpeg ABI major;
+- rejects duplicate／missing roles, traversal, inconsistent manifests, wrong ABI, missing files, and checksum mismatch before native loading;
+- composes with the existing explicit-directory runtime locator, retained handles, and ABI symbol gate;
+- keeps `PATH`, registry, conventional-directory, network, download, extraction, update, and fallback discovery absent;
+- includes verbatim GPLv3 and LGPLv3 texts in distributable output;
+- includes a prominent FFmpeg third-party notice and user-readable replacement instructions;
+- permits a user to authorize an interface-compatible modified shared build through their own verified manifest;
+- proves that replacement support does not disable integrity verification;
+- proves that bundled, GPL, nonfree, and implicit-discovery paths remain impossible;
+- changes the built-in candidate from `Pending` to `Approved` only after all compliance tests pass.
 
 ### Later sequence
 
-1. apply the explicit candidate license／registration decision;
-2. connect approved composition under an application-owned Windows lifecycle;
-3. perform controlled real-media decode and output validation;
+1. connect the approved external runtime under the application-owned Windows lifecycle;
+2. perform controlled retained-fixture and real-media decode validation;
+3. perform controlled Windows audio／video output validation;
 4. expand user-facing lifecycle and packaging only after the preceding gates pass.
 
 ### Deferred
 
+- FFmpeg binary bundling or Nova-hosted runtime pack
 - MP4／fragmented MP4 parser
 - avformat integration
 - discontinuity reset and `avcodec_flush_buffers`
@@ -110,13 +115,15 @@ Routine Linux CI uses CircleCI while GitHub Actions usage is exhausted. Final br
 
 - retain `net10.0`
 - avoid speculative production dependencies
-- keep FFmpeg host-installed and dynamically loaded until an explicit distribution decision
+- keep FFmpeg host-installed and dynamically loaded
+- do not bundle, mirror, rehost, download, or install FFmpeg in the default distribution
+- preserve explicit-directory and checksum／ABI verification for user replacements
 - record provenance and redistribution permission for third-party assets
 
 ## 0.1.0 Genesis gate
 
 - bounded demux and production composition
-- approved runtime／distribution decision
+- approved external runtime compliance and replacement boundary
 - finite decoded buffering and output lifecycle
 - controlled audible／visible verification
 - user-facing application and packaging

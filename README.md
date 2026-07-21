@@ -9,28 +9,26 @@ License: **Apache License 2.0**
 
 ## 現在地
 
-**Milestone 0.0.9u — Finite Production Generation Ingress and Replacement Composition Boundary**
+**Milestone 0.0.9v — FFmpeg Candidate License, Backend Registration, and Distribution Review**
 
-0.0.9tで確定した契約をruntimeへ実装し、awaited PCP／FLV input、source-bound decode、one-shot scheduler transfer、caller-driven delivery、explicit reset、stop-old-before-parser-reset replacementを一つのproduction専用有限境界へ統合しました。
+0.0.9uで完成したproduction compositionを実際のFFmpeg runtimeへ接続する前に、pinned BtbN `win64-lgpl-shared` candidateのlicense class、配布、利用者による差し替え、production登録位置をレビューしました。
 
-- 既存`PlaybackPcpFlvAwaitedDecodeCompositionBoundary`は診断・比較用として変更しない
-- production専用`PlaybackProductionPcpFlvCompositionBoundary`を追加
-- parser、generation creator、最大1個のcomplete generationを一つのownerへ統合
-- Windows output buffer boundaryはapplication ownerからborrow
-- decode snapshot、one-event submission、one-frame receiveだけをassembly-internalにforward
-- raw decode、native context、ABI gate、runtime lease、Windows resourceを公開しない
-- packet、finalization、receive／drain、transfer、delivery、reset、replacement、stopを一つのoperation gateで直列化
-- decoded completionは事前検証後に一度だけtransfer
-- `Transferred`後はcompletionへ再アクセス／disposeしない
-- deliveryはPCP callback外から一項目ずつcaller-drivenで実行
-- retained output状態はscheduler reservationを保持
-- scheduler admission rejectionはterminalで、capacity polling／hidden retry／second queueなし
-- discontinuityはold generationの`StopAsync`完了後だけparser resetへ進む
-- old／new overlap、old revival、rollback、partial packet commitなし
-- asynchronous stopはgeneration→parser／source→factoryの順にcleanup
-- pinned FFmpeg candidateは引き続き`LicenseReview.Pending`
+- reviewed candidateはLGPLv3 shared-library build class
+- GPL variant／nonfree variantは対象外で、引き続き拒否
+- Novaの既定配布物にはFFmpeg executable／DLL／archiveを一切含めない
+- NovaはFFmpegをmirror／rehost／download／extract／install／updateしない
+- user／application hostが一つのexplicit runtime directoryを供給
+- `PATH`、registry、system directory、conventional locationを探索しない
+- shared DLLのfilename、SHA-256、ABI major、required symbolsをfail closedで検証
+- built-in fixed manifestだけを唯一のruntime identityにはしない
+- 利用者がinterface-compatible modified LGPL buildを明示承認できるhost-owned manifestを次に実装
+- checksum検証を無効化せず、差し替え自由とsupply-chain integrityを両立
+- production FFmpegはgeneric `PlaybackDecoderBackendFactory`へ登録しない
+- application composition rootがpolicy、manifest、runtime directory、source generation、borrowed Windows outputを明示して構築
+- bundling／binary rehostingは別ADRとcomplete corresponding-source compliance archiveなしでは禁止
+- H.264／AAC等のpatent clearanceはこのcopyright-license reviewの対象外
 
-public default compositionはstream description後のgeneration作成時に`LicenseReviewPending`でfail closedします。通常backend登録、FFmpeg配布、Windows device activation、audible／visible playbackはまだ実施していません。
+この構成は法的に採用可能なarchitecture classとして確定しました。ただし、GPLv3／LGPLv3本文、third-party notice、利用者向けreplacement手順、host-manifest validationがまだruntimeへ実装されていないため、pinned candidateは引き続き`LicenseReview.Pending`です。
 
 ## 実装済みの主な領域
 
@@ -76,6 +74,8 @@ public default compositionはstream description後のgeneration作成時に`Lice
 - policy-gated production decoder generation factory boundary
 - production generation ingress／replacement composition architecture review
 - finite production generation ingress／replacement composition boundary
+- FFmpeg candidate license／registration／distribution architecture review
+- external-only LGPL runtime compliance policy
 
 詳細:
 
@@ -84,15 +84,18 @@ public default compositionはstream description後のgeneration作成時に`Lice
 - [ROADMAP.md](ROADMAP.md)
 - [docs/adr](docs/adr)
 - [docs/reviews](docs/reviews)
+- [FFmpeg external runtime compliance policy](docs/legal/FFMPEG-EXTERNAL-RUNTIME-COMPLIANCE.md)
 
 ## まだ完了していないもの
 
 PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信アプリではありません。
 
-- FFmpeg candidate license approval and normal backend registration
-- FFmpeg runtime distribution decision
-- production decoder ingress activation under approved provenance
+- external LGPL runtime compliance and user-replacement boundary
+- GPLv3／LGPLv3 license text and third-party notice packaging
+- pinned candidate `LicenseReview.Approved` transition
+- approved production decoder ingress activation
 - Windows application／window／device lifecycle composition
+- controlled real-media decode and output validation
 - MP4／fragmented MP4 parser
 - decoded-buffer duration cutoff
 - discontinuity-time native reset semantics
@@ -100,13 +103,13 @@ PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信�
 - controlled audible／visible real-media playback
 - GUI、window message loop、installer、recorder
 
-FFmpeg backend activation、runtime bundling／distribution、license approvalは、ADRで明示的に承認されるまで未承認です。
+FFmpeg binary bundling／redistributionは既定方針として禁止です。別runtime packを将来検討する場合は、新しいADRとexact corresponding source／build／notice compliance archiveが必要です。
 
 ## 次のマイルストーン
 
-**0.0.9v — FFmpeg Candidate License, Backend Registration, and Distribution Review**
+**0.0.9w — External LGPL Runtime Compliance and User Replacement Boundary**
 
-現在`LicenseReview.Pending`のpinned external FFmpeg candidateについて、正確なbuild provenance、LGPL／optional component条件、dynamic linking、source／notice提供、host-installed運用、通常backend登録、bundling／redistributionの可否をレビューします。法的・配布判断をarchitectureと分離して記録し、承認されない経路は引き続きfail closedに保ちます。
+bounded built-in／host runtime manifestを実装し、`LGPL-3.0-or-later`、exact DLL role／filename／SHA-256／ABI major／required symbolsを検証します。GPLv3／LGPLv3本文、third-party notice、replacement手順を配布物へ追加し、利用者がinterface-compatible modified buildを自分のmanifestで承認できることをtestします。これらが通過した後だけpinned candidateを`LicenseReview.Approved`へ変更します。
 
 ## 必要環境
 
@@ -135,7 +138,8 @@ dotnet format PeerCast-Nova.sln --verify-no-changes --no-restore
 - native pointer、handle、HRESULTをpublic contractへ漏らさない
 - 実装していない機能を完了扱いしない
 - 第三者assetはprovenanceとredistribution permissionを記録する
+- LGPL replacement freedomとruntime integrityを明示manifestで両立する
 
 ## ライセンス
 
-PeerCast Novaは[Apache License 2.0](LICENSE)で公開されています。
+PeerCast Novaは[Apache License 2.0](LICENSE)で公開されています。FFmpegはNovaのApache License 2.0には含まれず、外部runtimeとして別のlicense termsに従います。

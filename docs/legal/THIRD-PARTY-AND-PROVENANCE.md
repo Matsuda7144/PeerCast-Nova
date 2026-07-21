@@ -100,3 +100,32 @@ ADR-0052 hardens this host-provided route by retaining verified DLL handles
 and local-directory guard handles until the next gate finishes. This is an
 integrity boundary only: it does not load FFmpeg, approve its license, or
 change the remaining attribution and license-access obligations.
+
+Milestone 0.0.9v completes the license and distribution architecture review.
+The exact BtbN `win64-lgpl-shared` build class is acceptable in principle for
+external dynamic use because it selects LGPLv3 shared libraries and excludes
+the GPL and nonfree build variants.
+
+The permanent default distribution decision is:
+
+- Nova does not bundle, mirror, rehost, download, extract, update, or install
+  FFmpeg binaries;
+- the user or application host supplies one explicit runtime directory;
+- production policy permits third-party native code only when bundling remains
+  disabled;
+- GPL and nonfree FFmpeg variants remain prohibited;
+- production registration occurs at the application composition root, not
+  through the generic `PlaybackDecoderBackendFactory`;
+- a third party that redistributes FFmpeg with Nova is independently responsible
+  for the complete binary／source compliance package.
+
+The current fixed built-in DLL inventory is not by itself a complete LGPLv3
+replacement mechanism. Before changing `LicenseReview.Pending`, Nova must add a
+host-owned manifest route that lets a user authorize an interface-compatible
+modified LGPL build while preserving exact filename, checksum, ABI-major, and
+symbol verification.
+
+Activated distributions must also include prominent FFmpeg notice material,
+verbatim GPLv3 and LGPLv3 texts, runtime replacement instructions, and no term
+that forbids reverse engineering for debugging modifications to the LGPL
+library. See `FFMPEG-EXTERNAL-RUNTIME-COMPLIANCE.md`, ADR-0132, and PCN-0140.

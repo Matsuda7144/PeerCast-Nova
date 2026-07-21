@@ -5,6 +5,28 @@
 Detailed history through 0.0.8g remains preserved in Git history at commit
 `f078dab5372a45a8c577c1c802a697ab72b45c02` and in milestone ADR/PCN records.
 
+### 0.0.9v - FFmpeg Candidate License, Backend Registration, and Distribution Review
+
+- Reviewed the exact pinned BtbN `win64-lgpl-shared` FFmpeg 8.1 candidate, archive identity, checksum, build variant, and license class.
+- Confirmed that the reviewed class uses LGPLv3 shared libraries and is distinct from BtbN GPL and nonfree variants.
+- Accepted external dynamic use as the permanent default architecture while keeping Nova source and binaries under Apache License 2.0.
+- Prohibited FFmpeg executables, DLLs, headers, import libraries, and archives from Nova release, installer, update, and source artifacts.
+- Prohibited mirroring, rehosting, automatic download, extraction, installation, update, fallback, `PATH`, registry, and implicit-directory discovery.
+- Kept one explicit user／host-supplied runtime directory with exact filename, checksum, ABI-major, and required-symbol verification.
+- Identified that a built-in fixed hash inventory cannot remain the only activated LGPL replacement route.
+- Selected a host-owned manifest that lets users authorize an interface-compatible modified LGPL build without disabling integrity verification.
+- Required activated distributions to include prominent FFmpeg notice material, verbatim GPLv3／LGPLv3 texts, and user-readable replacement instructions.
+- Required Nova terms to preserve reverse engineering for debugging modifications to the LGPL library.
+- Rejected production registration through generic `PlaybackDecoderBackendFactory`; selected explicit application-composition-root registration.
+- Required production policy to allow third-party native code while keeping bundled code disabled.
+- Recorded that a third party redistributing Nova with FFmpeg binaries is independently responsible for exact corresponding source, build configuration, patches, notices, and source availability.
+- Required any future Nova-hosted runtime pack to pass a separate ADR and complete binary／source compliance archive.
+- Recorded that BtbN daily asset retention is not part of Nova's runtime availability contract.
+- Kept codec patent clearance outside this copyright-license architecture review.
+- Added ADR-0132, PCN-0140, and `FFMPEG-EXTERNAL-RUNTIME-COMPLIANCE.md` without changing runtime source or tests.
+- Kept the pinned candidate `LicenseReview.Pending` until license packaging, host-manifest validation, and replacement tests are implemented.
+- Selected 0.0.9w External LGPL Runtime Compliance and User Replacement Boundary.
+
 ### 0.0.9u - Finite Production Generation Ingress and Replacement Composition Boundary
 
 - Added `PlaybackProductionPcpFlvCompositionBoundary` as one serialized production owner from awaited PCP／FLV input through decode, scheduler transfer, caller-driven delivery, reset, and replacement.
