@@ -5,6 +5,22 @@
 Detailed history through 0.0.8g remains preserved in Git history at commit
 `f078dab5372a45a8c577c1c802a697ab72b45c02` and in milestone ADR/PCN records.
 
+### 0.0.9l - Awaited Decoded Completion Composition Review
+
+- Reviewed the ownership connection from the awaited PCP／FLV composition to the source-bound one-frame receive and EOS-drain boundary.
+- Selected one future generation owner containing the 0.0.9k decode boundary rather than a parallel native session and submission state machine.
+- Defined an injected awaited decoded-completion settlement seam where incomplete async work is the backpressure signal and completed outcomes are consumed, transferred, rejected, cancelled, or faulted.
+- Required retained packet／flush relief to keep the PCP callback or explicit-finalization operation open until one decoded completion is settled and one retry-only transition completes.
+- Kept ordinary post-accept receive and accepted-flush drain outside the packet callback as serialized one-frame caller operations.
+- Separated encoded-input finalization, independent video／audio decoder EOF, and remaining downstream scheduler ownership.
+- Reused `BoundedPlaybackScheduler` as the only decoded queue and rejected another composition-owned queue or resident pump.
+- Identified that 0.0.9k stream-local video／audio sequences cannot directly satisfy the scheduler's single cross-media sequence; selected a separate checked generation-wide downstream-admission sequence committed only after accepted transfer.
+- Required one-shot managed-frame detachment for scheduler ownership and generation-matched context lifetime for queued frames.
+- Required explicit discontinuity to dispose active decoded ownership and old scheduler frames before the old decode boundary and native session.
+- Defined shared relief frame／byte budgets, cancellation commit rules, terminal failure behavior, and decoded-completion／scheduler／decode-boundary／parser／factory cleanup order.
+- Selected 0.0.9m Finite Awaited Decoded Completion Composition Boundary.
+- Added ADR-0122 and PCN-0130 without changing runtime source or tests.
+
 ### 0.0.9k - Source-bound One-frame Receive and EOS Drain Boundary
 
 - Added one exact source-bound decode generation that owns an opened native decoder session and one dedicated finite packet-submission state machine.
@@ -58,7 +74,7 @@ Detailed history through 0.0.8g remains preserved in Git history at commit
 - Required active parser／decoder completion and decoder `EAGAIN` to pause new parser and PCP input.
 - Required bounded state-machine `Advance` transitions; no receive progress and operation-budget exhaustion fail closed.
 - Required exact PCP channel／session／packet-sequence identity and exact parser-created source generation.
-- Separated owner-invoked finalization because the packet-consumer contract has no EOS callback; transport close, reconnect, stop, timeout, cancellation, and failure are not EOS.
+- Separated owner-invoked finalization because the packet-consumer interface has no EOS callback; transport close, reconnect, stop, timeout, cancellation, and failure are not EOS.
 - Defined discontinuity generation replacement and ordered state-machine, native-session, parser, and generation cleanup.
 - Selected 0.0.9i Finite Awaited PCP-to-FLV Composition Boundary.
 - Added ADR-0118 and PCN-0126 without changing runtime source or tests.
@@ -81,7 +97,7 @@ Detailed history through 0.0.8g remains preserved in Git history at commit
 ### 0.0.9f - Controlled Retained FLV Fixture Validation
 
 - Added one controlled in-memory FLV fixture using the real bounded FLV parser and exact parser-created source session.
-- Passed real source-owned completions through the source-bound native-session identity and 0.0.9e state machine with injected native results.
+- Passed real source-owned parser completions through the source-bound native-session identity and 0.0.9e state machine with injected native results.
 - Preserved video／audio interleave, independent per-stream sequence, AVCC／AAC payload, DTS, signed composition-time PTS, and keyframe state.
 - Verified packet and flush `EAGAIN` retention without a second encoded copy or hidden retry loop.
 - Verified retained parser backpressure returns `ActiveCompletion` with zero consumed bytes.

@@ -9,26 +9,27 @@ License: **Apache License 2.0**
 
 ## 現在地
 
-**Milestone 0.0.9k — Source-bound One-frame Receive and EOS Drain Boundary**
+**Milestone 0.0.9l — Awaited Decoded Completion Composition Review**
 
-exact FLV source sessionとopened native decoder sessionを1世代として所有し、成功したnative frameを失わず1つのmanaged decoded completionへ移す有限boundaryを実装しました。
+0.0.9iのawaited PCP／FLV compositionと0.0.9kのsource-bound one-frame decode boundaryを接続する所有権・backpressure設計を確定しました。runtime composition自体は次の0.0.9mへ分離しています。
 
-- 1 public receive operationは最大1回のcallback-scoped native receive／managed copy
-- state-only receive後のsecond receiveを廃し、同じcallback内でframe ownershipを確立
-- decoded completionはexact source、decoder／discontinuity generation、stream、media、independent sequence、managed bytesを保持
-- generation全体でactive decoded completionは最大1件
-- ordinary、pending packet／flush relief、accepted-flush drainを固定modeで分離
-- retained packet／flush retryはproduced relief frame completion解放後の別操作で最大1回
-- repeated `EAGAIN`は次の1-frame receiveと次の1-retryを要求
-- ordinary `NeedMoreInput`は正常な有限終了
-- relief／flush drain中の`NeedMoreInput`はno-progress failure
-- accepted video／audio flushを独立して1回1frameでdecoder EOFまでdrain
-- per-frame limitとreusable frame-count／managed-byte budgetを実装
-- cancellation、undefined／contradictory result、frame identity、native failureをfail closed
-- active decoded frame→submission→native audio→videoのcleanup順
-- second decoded queue、resident loop、production activation、scheduler／output wiringなし
+- future generationは0.0.9k boundaryを唯一のpacket submission／native receive authorityとして所有
+- old generationの別submission state machine／native session併存を禁止
+- decoded completion settlementのasync未完了状態をそのままbackpressureとして使用
+- reliefではPCP callbackを開いたまま1 receive→1 settlement→release→1 retry-only transition
+- settlement中はparser suffix、新しいPCP packet、別receive、retained retryを停止
+- repeated `EAGAIN`はshared frame／managed-byte／advance budget内で次の有限cycleを要求
+- ordinary post-accept receiveはcallback外で1回1frame、`NeedMoreInput`は正常
+- accepted flush後のvideo／audio drainもcallback外で独立し、各decoder EOFまで1回1frame
+- encoded input finalized、decoder drained、downstream ownership remainingを別状態として保持
+- `BoundedPlaybackScheduler`だけをdecoded queueとして再利用し、second queueを追加しない
+- video／audio別decoded sequenceをschedulerへ直接使わず、cross-media generation-wide sequenceを別commit
+- scheduler ownership transferにはone-shot managed-frame detachが必要
+- queued managed frameは同じdecoder generationのcontext lifetimeに束縛
+- discontinuity時はactive completion／old scheduler framesをdecode boundary／native sessionより先に解放
+- direct awaited sink deliveryとscheduler transferを同じframeへ二重適用しない
 
-診断専用のmanaged conversion、bounded scheduler、late-aware dispatch、Windows output境界は引き続きproduction decoder factoryから独立しています。FFmpeg backend activationやruntime配布も未承認のままです。
+診断専用のmanaged conversion、bounded scheduler、awaited sink delivery、late-aware dispatch、Windows output境界は実装済みですが、real FLV compositionとproduction decoder factoryにはまだ接続されていません。FFmpeg backend activationやruntime配布も未承認です。
 
 ## 実装済みの主な領域
 
@@ -67,6 +68,7 @@ exact FLV source sessionとopened native decoder sessionを1世代として所�
 - finite awaited PCP-to-FLV composition boundary
 - bounded decode iteration and independent EOS drain review
 - source-bound one-frame managed receive and EOS drain boundary
+- awaited decoded completion composition review
 
 詳細:
 
@@ -80,8 +82,8 @@ exact FLV source sessionとopened native decoder sessionを1世代として所�
 
 PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信アプリではありません。
 
-- 0.0.9k boundaryとawaited PCP-to-FLV generationのcomposition
-- real FLV decoded completionのconversion／scheduler ingress／delivery
+- finite awaited PCP／FLV／decode composition implementation
+- real FLV decoded completionのscheduler ingress／awaited delivery
 - production generation factory and decoder ingress activation
 - MP4／fragmented MP4 parser
 - decoded-buffer duration cutoff
@@ -96,9 +98,9 @@ FFmpeg backend activation、runtime bundling／distribution、license approval�
 
 ## 次のマイルストーン
 
-**0.0.9l — Awaited Decoded Completion Composition Review**
+**0.0.9m — Finite Awaited Decoded Completion Composition Boundary**
 
-0.0.9iのawaited PCP-to-FLV composition generationを0.0.9kのsource-bound receive authorityへ接続する設計をレビューします。callback内のretained-send relief、callback外のordinary receive／flush drain、decoded completion consumer backpressure、既存conversion／bounded schedulerへの所有権移譲、shared budget、cancellation、discontinuity replacement、cleanup順を確定し、runtime composition実装は次のmilestoneへ分離します。
+`PlaybackPcpFlvCompositionGeneration`を0.0.9k boundary所有へ置き換え、注入式awaited settlement seamを実装します。PCP callback内のretained packet／flush relief、callback外のordinary receive、explicit finalizationとvideo／audio drain、shared work budget、cancellation、discontinuity、ordered cleanupをcross-platform fake consumerで検証します。real scheduler transfer、production ABI-gate acquisition、backend／output activation、audible／visible playbackは後続です。
 
 ## 必要環境
 
