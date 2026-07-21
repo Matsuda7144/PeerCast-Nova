@@ -9,28 +9,26 @@ License: **Apache License 2.0**
 
 ## 現在地
 
-**Milestone 0.0.9m — Finite Awaited Decoded Completion Composition Boundary**
+**Milestone 0.0.9n — Decoded Completion Transfer and Scheduler Ingress Review**
 
-callback-scoped PCP payloadをreal bounded FLV parserへ渡し、0.0.9k source-bound one-frame decode boundaryでpacket submission、retained relief、ordinary receive、independent EOS drainまで有限に接続しました。
+0.0.9mで生成されるsource-bound decoded completionを、既存`BoundedPlaybackScheduler`へ安全に移譲するownership契約を確定しました。runtime transfer自体は次の0.0.9oへ分離しています。
 
-- 新しい`PlaybackPcpFlvAwaitedDecodeCompositionBoundary`を追加し、既存0.0.9i boundaryは互換／比較用に維持
-- generationは0.0.9k boundaryを唯一のpacket submission／native receive authorityとして所有
-- PCP callback payload offsetはparserのexact `ConsumedByteCount`だけで前進
-- retained packet／flush reliefはcallbackまたはexplicit finalizationを開いたまま処理
-- 1 cycleは最大1 native receive→1 awaited settlement→completion release→1 retry-only transition
-- settlement未完了中はparser suffix、新しいPCP input、retained retryを停止
-- repeated `EAGAIN`はshared decode-operation／frame-count／managed-byte budget内で繰り返す
-- decoded completionはexact source、decoder／discontinuity generation、media、stream、sequence、managed bytesをawait前後に再検証
-- 0.0.9m settlementは`Consumed`だけを成功として受理し、frame transferは後続へ分離
-- ordinary post-accept receiveはcallback外の1回1frame operation
-- accepted-flush video／audio drainもcallback外で独立して各decoder EOFまで進行
-- encoded input finalized、stream flush accepted、per-stream EOF、both decoders drainedを別状態として保持
-- cancellation、settlement rejection、no progress、work-limit、identity／sequence mismatchをfail closed
-- discontinuityはold settlement／decode generationを解放してからparser resetとnew generation作成
-- second encoded queue、decoded queue、resident loop、background pumpなし
-- 11 focused cross-platform testsでcallback blocking、retry ordering、budget、cancellation、EOS drain、replacementを検証
+- scheduler `Enqueue`はaccepted／rejectedを問わずincoming frameを消費または破棄
+- enqueue後のrollback、frame再構築、retryを禁止
+- exact active completionだけがmanaged frameをone-shot detach可能
+- detach前にsource、decoder／discontinuity generation、media、stream、sequence、managed bytes、frame livenessを検証
+- detach後のcompletion disposalはscheduler-owned frameを破棄しない
+- accepted transferは`Enqueued`／`EnqueuedAfterDroppingOldest`のみ
+- その他のenqueue結果はgeneration terminal
+- video／audio別stream-local sequenceはidentityとして維持
+- scheduler用generation-wide cross-media sequenceはaccepted enqueue後だけcommit
+- replacement generationの最初のaccepted frameだけ`DecoderReset`
+- scheduler queue／reservationが残る間、matching decoder context lifetimeをgeneration側が保持
+- discontinuity時はactive completion→scheduler ownership→decode boundary／native sessionの順でcleanup
+- direct awaited consumptionとscheduler transferを同じframeへ二重適用しない
+- second decoded queue、resident pump、production output activationは追加しない
 
-診断専用のmanaged conversion、bounded scheduler、awaited sink delivery、late-aware dispatch、Windows output境界は実装済みですが、real FLV decoded frameのscheduler ownership transferとproduction decoder factoryにはまだ接続されていません。FFmpeg backend activationやruntime配布も未承認です。
+診断専用のmanaged conversion、bounded scheduler、awaited sink delivery、late-aware dispatch、Windows output境界は実装済みですが、real FLV decoded frameのone-shot scheduler ingressとproduction decoder factoryにはまだ接続されていません。FFmpeg backend activationやruntime配布も未承認です。
 
 ## 実装済みの主な領域
 
@@ -67,10 +65,9 @@ callback-scoped PCP payloadをreal bounded FLV parserへ渡し、0.0.9k source-b
 - controlled retained FLV fixture validation
 - one-event final EOS parser façade
 - finite awaited PCP-to-FLV composition boundary
-- bounded decode iteration and independent EOS drain review
-- source-bound one-frame managed receive and EOS drain boundary
-- awaited decoded completion composition review
+- source-bound one-frame managed receive and independent EOS drain
 - finite awaited PCP／FLV／decode composition boundary
+- decoded completion transfer／scheduler ingress architecture review
 
 詳細:
 
@@ -84,8 +81,8 @@ callback-scoped PCP payloadをreal bounded FLV parserへ渡し、0.0.9k source-b
 
 PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信アプリではありません。
 
-- decoded completion one-shot transfer／bounded scheduler ingress
-- real FLV decoded scheduler delivery and output lifecycle
+- one-shot decoded completion transfer／bounded scheduler ingress implementation
+- generation-matched scheduler delivery and output lifecycle
 - production generation factory and decoder ingress activation
 - MP4／fragmented MP4 parser
 - decoded-buffer duration cutoff
@@ -100,9 +97,9 @@ FFmpeg backend activation、runtime bundling／distribution、license approval�
 
 ## 次のマイルストーン
 
-**0.0.9n — Decoded Completion Transfer and Scheduler Ingress Review**
+**0.0.9o — One-shot Decoded Completion Transfer and Scheduler Ingress Boundary**
 
-0.0.9mのawaited-consumption契約を維持しながら、decoded completionからmanaged frameをone-shotでdetachして既存`BoundedPlaybackScheduler`へ移す所有権契約をレビューします。video／audio別のstream-local sequenceとscheduler用generation-wide cross-media sequenceを分離し、accepted／rejected transfer、native context lifetime、partial failure、discontinuity時のold-generation queue cleanupを実装前に固定します。
+`PlaybackSourceBoundDecodedFrameCompletion`へgeneration-controlled one-shot detachを追加し、既存`BoundedPlaybackScheduler`へ1回だけownershipを移譲します。cross-media sequence、first-frame `DecoderReset`、accepted／rejected enqueue、matching context lifetime、cancellation、discontinuity cleanupをcross-platform focused testで検証します。
 
 ## 必要環境
 

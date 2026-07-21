@@ -56,40 +56,39 @@
 - 0.0.9k Source-bound One-frame Receive and EOS Drain Boundary
 - 0.0.9l Awaited Decoded Completion Composition Review
 - 0.0.9m Finite Awaited Decoded Completion Composition Boundary
+- 0.0.9n Decoded Completion Transfer and Scheduler Ingress Review
 
-0.0.9m adds one serialized awaited composition from callback-scoped PCP payload through the real bounded FLV parser and the 0.0.9k source-bound decode generation. The decode boundary is the sole packet-submission and native-receive authority; no parallel submission machine or decoded queue is added.
+0.0.9n confirms that scheduler enqueue is an irreversible ownership boundary: every result consumes or disposes the incoming frame. The future adapter therefore validates first, detaches once, enqueues once, and never rolls back or reconstructs a rejected frame.
 
-Retained packet／flush relief stays inside the open PCP callback or explicit finalization operation. Each cycle performs one native receive, one awaited exact-completion settlement, completion release, and one retry-only transition. Repeated `EAGAIN` remains bounded by shared decode-operation, frame-count, and managed-byte budgets.
+Stream-local video／audio decoded sequences remain source identity. A separate checked generation-wide cross-media sequence and first-frame `DecoderReset` marker commit only after accepted scheduler ownership. Queued frames remain bound to the matching decoder generation and context lifetime.
 
-Ordinary receive and accepted-flush drain remain caller-driven one-frame operations outside the packet callback. Encoded finalization, independent video／audio flush acceptance, per-stream decoder EOF, and full decoder drain remain distinct states.
+### Next: 0.0.9o One-shot Decoded Completion Transfer and Scheduler Ingress Boundary
 
-### Next: 0.0.9n Decoded Completion Transfer and Scheduler Ingress Review
+Implement the reviewed boundary with injected cross-platform operations:
 
-Review the ownership seam from the 0.0.9m decoded completion into the existing bounded scheduler:
-
-- define one-shot managed-frame detachment so accepted transfer survives source-completion disposal;
-- preserve exact source／decoder-generation／discontinuity-generation／stream-local sequence identity;
-- assign a separate checked generation-wide cross-media scheduler sequence only after accepted transfer;
-- reject sequence commit on dropped, rejected, cancelled, or faulted transfer;
-- keep scheduler-owned frame and matching native context alive until delivery, drop, or explicit cleanup ends ownership;
-- define partial transfer failure and cleanup without adding a second decoded queue;
-- dispose old-generation queued frames before old decode/native ownership on discontinuity;
-- separate scheduler ingress from awaited delivery and output-device lifecycle;
-- keep the review documentation-only before runtime transfer implementation.
+- add exact-active-completion one-shot managed-frame detach;
+- prevent completion disposal from clearing a transferred frame;
+- validate source／decoder-generation／discontinuity-generation／stream identity before detach;
+- enqueue exactly once into the existing `BoundedPlaybackScheduler`;
+- accept only `Enqueued` and `EnqueuedAfterDroppingOldest`;
+- commit one generation-wide cross-media sequence only after accepted ownership;
+- apply `DecoderReset` only to the first accepted replacement-generation frame;
+- fail the generation on rejected, dropped, invalid, disposed, or sequence-rejected enqueue;
+- retain matching decoder context ownership while scheduler frames or reservations remain;
+- dispose scheduler ownership before decode／native ownership on discontinuity;
+- add no second decoded queue, frame reconstruction, resident pump, or output activation.
 
 ### Later sequence
 
-1. implement one-shot decoded-frame transfer and real-FLV bounded scheduler ingress;
-2. add generation-matched awaited scheduler delivery and output lifecycle composition;
-3. add a production generation factory and review ABI-gate acquisition／backend activation／Windows lifecycle;
-4. perform controlled real-media validation.
+1. add generation-matched awaited scheduler delivery and output lifecycle composition;
+2. add a production generation factory and review ABI-gate acquisition／backend activation／Windows lifecycle;
+3. perform controlled real-media validation.
 
 ### Deferred
 
 - MP4／fragmented MP4 parser
 - avformat integration
 - production generation factory and backend activation
-- real-FLV scheduler ingress／awaited delivery
 - discontinuity reset and `avcodec_flush_buffers`
 - duration cutoff
 - complete synchronization

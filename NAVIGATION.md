@@ -2,25 +2,22 @@
 
 ## 現在地
 
-**0.0.9m — Finite Awaited Decoded Completion Composition Boundary — Implemented**
+**0.0.9n — Decoded Completion Transfer and Scheduler Ingress Review — Reviewed**
 
-real bounded FLV parserと0.0.9k source-bound one-frame decode boundaryを、callback-scoped PCP payloadからcaller-driven EOS drainまで1つのserialized finite compositionとして接続しました。
+0.0.9mのsource-bound decoded completionを既存`BoundedPlaybackScheduler`へ安全に移譲する所有権契約を確定しました。
 
-- `PlaybackPcpFlvAwaitedDecodeCompositionBoundary`を新規追加し、既存0.0.9i boundaryは比較／互換用に維持
-- generationは0.0.9k boundaryを唯一のpacket submission／native receive authorityとして所有
-- PCP payload offsetはparserのexact `ConsumedByteCount`だけで前進
-- retained packet／flush reliefはcallbackまたはexplicit finalization内で完結
-- 1 relief cycleは最大1 receive→1 awaited settlement→completion release→1 retry-only transition
-- settlement未完了中はcallback、parser suffix、retained retryが進まない
-- repeated `EAGAIN`はshared decode-operation／frame-count／managed-byte budget内で次の有限cycleを要求
-- 0.0.9m settlementはexact completionをawaitし、`Consumed`だけを成功として受理
-- ordinary receiveとaccepted-flush drainはcallback外の1回1frame operation
-- parser finalization、video／audio flush acceptance、各decoder EOF、full drainを別状態として保持
-- videoとaudioを独立してdrainし、両decoder EOF後だけ`DecodersDrained`
-- discontinuityはold settlement→decode generation→native audio→videoの順で解放して新generationを作成
-- parser／decode／settlementを1 semaphoreで直列化し、second queue／resident loopなし
-- 11 focused cross-platform testsでcallback blocking、retry ordering、budget、cancellation、EOS drain、replacementを検証
-- CA2250はsubordinate enum／linked stopをcleanup後に変換するため、対象runtime fileだけ理由付きで抑制
+- scheduler `Enqueue`は成功／拒否を問わずincoming frameを消費または破棄するため、enqueue後のrollbackを禁止
+- exact active completionだけがmanaged frameをone-shot detach可能
+- detach前にsource、decoder／discontinuity generation、media、stream、sequence、managed bytes、frame livenessを検証
+- completion disposalはdetach後のscheduler-owned frameを破棄しない
+- scheduler ingressは1 frameにつき1回だけenqueueし、再構築／retryなし
+- accepted transferは`Enqueued`または`EnqueuedAfterDroppingOldest`だけ
+- rejected／dropped／invalid／sequence-rejected transferはgeneration terminal
+- video／audio別stream-local sequenceはidentityとして保持し、scheduler用cross-media sequenceを別管理
+- downstream sequenceと最初の`DecoderReset` markerはaccepted enqueue後だけcommit
+- queued frameが残る間、matching decoder-generation context lifetimeをgeneration側が保持
+- discontinuity時はadmission close→active completion→scheduler queue／reservation→decode boundary／native sessionの順で解放
+- direct awaited consumptionとscheduler transferを同じframeへ二重適用しない
 
 ## CI
 
@@ -28,13 +25,12 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 ## 最新の入口
 
+- `docs/adr/ADR-0124-decoded-completion-transfer-scheduler-ingress.md`
+- `docs/reviews/PCN-0132-DECODED-COMPLETION-TRANSFER-SCHEDULER-INGRESS-REVIEW.md`
 - `src/Nova.Playback/PlaybackPcpFlvAwaitedDecodeCompositionBoundary.cs`
-- `tests/Nova.Playback.Tests/PlaybackPcpFlvAwaitedDecodeCompositionBoundaryTests.cs`
-- `tests/Nova.Playback.Tests/PlaybackPcpFlvAwaitedDecodeCompositionTestSupport.cs`
-- `docs/adr/ADR-0123-finite-awaited-decoded-completion-composition.md`
-- `docs/reviews/PCN-0131-FINITE-AWAITED-DECODED-COMPLETION-COMPOSITION-VALIDATION.md`
 - `src/Nova.Playback/PlaybackSourceBoundOneFrameDecodeBoundary.cs`
-- `src/Nova.Playback/PlaybackPcpFlvCompositionBoundary.cs`
+- `src/Nova.Playback/PlaybackDiagnosticManagedFrameSchedulerIngressTransaction.cs`
+- `src/Nova.Playback/BoundedPlaybackScheduler.cs`
 
 ## ADR／PCN索引の永久欠番
 
@@ -44,14 +40,14 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 ## 次の作業
 
-**0.0.9n — Decoded Completion Transfer and Scheduler Ingress Review**
+**0.0.9o — One-shot Decoded Completion Transfer and Scheduler Ingress Boundary**
 
-0.0.9mのawaited-consumption契約を弱めず、decoded completionからmanaged frameをone-shotでdetachして既存`BoundedPlaybackScheduler`へ移譲する契約をレビューします。stream-local decoded sequenceとgeneration-wide cross-media scheduler sequenceを分離し、accepted／rejected transfer、native context lifetime、partial failure、discontinuity時のold-generation queue cleanupを先に固定します。
+`PlaybackSourceBoundDecodedFrameCompletion`へgeneration-controlled one-shot detachを追加し、注入式scheduler ingressでcross-media sequence、first-frame reset marker、accepted／rejected ownership、context lifetime、discontinuity cleanupをcross-platform focused testへ落とします。
 
 ## 未完了
 
-- decoded completion one-shot transfer／bounded scheduler ingress
-- real FLV decoded scheduler delivery and output lifecycle
+- one-shot decoded completion transfer／bounded scheduler ingress implementation
+- generation-matched scheduler delivery and output lifecycle
 - production generation factory and backend activation
 - MP4／fragmented MP4 parser
 - discontinuity-time `avcodec_flush_buffers` semantics
