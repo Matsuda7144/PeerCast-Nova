@@ -9,26 +9,28 @@ License: **Apache License 2.0**
 
 ## 現在地
 
-**Milestone 0.0.9t — Production Generation Ingress and Replacement Composition Review**
+**Milestone 0.0.9u — Finite Production Generation Ingress and Replacement Composition Boundary**
 
-0.0.9sのcomplete generation productをawaited PCP／FLV経路へ接続する契約をレビューし、既存のconsumed-settlement compositionを直接差し替えず、production専用境界を後続実装する方針を確定しました。
+0.0.9tで確定した契約をruntimeへ実装し、awaited PCP／FLV input、source-bound decode、one-shot scheduler transfer、caller-driven delivery、explicit reset、stop-old-before-parser-reset replacementを一つのproduction専用有限境界へ統合しました。
 
-- 既存settlementは`Consumed`後もcompletion ownershipを保持する前提
-- production `Transfer`はframeをdetachしcompletionを消費するため、その後の再検証／disposeを禁止
 - 既存`PlaybackPcpFlvAwaitedDecodeCompositionBoundary`は診断・比較用として変更しない
-- production productへexact decode snapshot、one-event submission、one-frame receiveを内部forward
-- raw decode boundary、native session、context、runtime leaseをcompositionへ公開しない
+- production専用`PlaybackProductionPcpFlvCompositionBoundary`を追加
+- parser、generation creator、最大1個のcomplete generationを一つのownerへ統合
+- Windows output buffer boundaryはapplication ownerからborrow
+- decode snapshot、one-event submission、one-frame receiveだけをassembly-internalにforward
+- raw decode、native context、ABI gate、runtime lease、Windows resourceを公開しない
 - packet、finalization、receive／drain、transfer、delivery、reset、replacement、stopを一つのoperation gateで直列化
-- decoded completionは事前検証後に一度だけtransferし、`Transferred`後は触れない
+- decoded completionは事前検証後に一度だけtransfer
+- `Transferred`後はcompletionへ再アクセス／disposeしない
 - deliveryはPCP callback外から一項目ずつcaller-drivenで実行
-- wait／WouldBlock／initialization／binding／resize／audio recovery／clock／reset要求はreservationを保持して外へ返す
-- scheduler admission rejectionはterminalで、capacity polling、hidden retry、second queueを追加しない
-- discontinuityはold generationを`StopAsync`で完全停止してからparser resetとnew generation creationへ進む
-- old／new generationの重複、旧generation復活、rollback、partial packet commitなし
-- Windows output lifecycleはapplication-ownedのまま維持し、新generation情報だけをsnapshotへcopy
+- retained output状態はscheduler reservationを保持
+- scheduler admission rejectionはterminalで、capacity polling／hidden retry／second queueなし
+- discontinuityはold generationの`StopAsync`完了後だけparser resetへ進む
+- old／new overlap、old revival、rollback、partial packet commitなし
+- asynchronous stopはgeneration→parser／source→factoryの順にcleanup
 - pinned FFmpeg candidateは引き続き`LicenseReview.Pending`
 
-0.0.9tはarchitecture reviewであり、runtime sourceとtestsは変更していません。production composition実装、通常backend登録、Windows device activation、runtime配布、audible／visible playbackはまだ実施していません。
+public default compositionはstream description後のgeneration作成時に`LicenseReviewPending`でfail closedします。通常backend登録、FFmpeg配布、Windows device activation、audible／visible playbackはまだ実施していません。
 
 ## 実装済みの主な領域
 
@@ -73,6 +75,7 @@ License: **Apache License 2.0**
 - production generation factory／activation architecture review
 - policy-gated production decoder generation factory boundary
 - production generation ingress／replacement composition architecture review
+- finite production generation ingress／replacement composition boundary
 
 詳細:
 
@@ -86,15 +89,14 @@ License: **Apache License 2.0**
 
 PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信アプリではありません。
 
-- finite production generation ingress and replacement composition implementation
 - FFmpeg candidate license approval and normal backend registration
-- production decoder ingress activation
+- FFmpeg runtime distribution decision
+- production decoder ingress activation under approved provenance
 - Windows application／window／device lifecycle composition
 - MP4／fragmented MP4 parser
 - decoded-buffer duration cutoff
 - discontinuity-time native reset semantics
 - complete A/V synchronization、resampling、drift correction
-- FFmpeg runtime同梱／再配布
 - controlled audible／visible real-media playback
 - GUI、window message loop、installer、recorder
 
@@ -102,9 +104,9 @@ FFmpeg backend activation、runtime bundling／distribution、license approval�
 
 ## 次のマイルストーン
 
-**0.0.9u — Finite Production Generation Ingress and Replacement Composition Boundary**
+**0.0.9v — FFmpeg Candidate License, Backend Registration, and Distribution Review**
 
-production専用PCP／FLV compositionを実装し、0.0.9s productへone-event submission／one-frame receiveを内部forwardします。decoded completionを一度だけschedulerへtransferし、caller-driven one-item delivery、explicit reset、asynchronous stop、old-stop-before-parser-reset replacementを一つの直列化された有限境界へ統合します。
+現在`LicenseReview.Pending`のpinned external FFmpeg candidateについて、正確なbuild provenance、LGPL／optional component条件、dynamic linking、source／notice提供、host-installed運用、通常backend登録、bundling／redistributionの可否をレビューします。法的・配布判断をarchitectureと分離して記録し、承認されない経路は引き続きfail closedに保ちます。
 
 ## 必要環境
 

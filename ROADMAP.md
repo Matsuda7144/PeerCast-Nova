@@ -63,43 +63,39 @@
 - 0.0.9r Production Decoder Generation Factory and Activation Review
 - 0.0.9s Policy-gated Production Decoder Generation Factory Boundary
 - 0.0.9t Production Generation Ingress and Replacement Composition Review
+- 0.0.9u Finite Production Generation Ingress and Replacement Composition Boundary
 
 0.0.9s implements the policy-gated complete generation factory. The public path remains `LicenseReviewPending`; approved injected conditions create exact FLV binding, distinct video／audio runtime and ABI ownership, source-bound decode, bounded scheduler, timing, and result-aware delivery as one caller-owned product.
 
-0.0.9t establishes that the existing consumed-settlement composition cannot directly host that product. Production scheduler transfer consumes and detaches decoded ownership, so a new production-specific composition must forward finite encoded ingress through the singular generation owner, never touch a completion after `Transferred`, keep delivery caller-driven, and stop the old generation before parser discontinuity disposes its borrowed source.
+0.0.9t established that the existing consumed-settlement composition cannot directly host scheduler transfer because successful transfer detaches and consumes the decoded completion.
 
-### Next: 0.0.9u Finite Production Generation Ingress and Replacement Composition Boundary
+0.0.9u implements the dedicated production owner. It serializes awaited PCP／FLV parsing, source-bound submission and receive, one-shot scheduler transfer, caller-driven delivery, explicit reset, stop, and discontinuity replacement. It never touches a completion after `Transferred`, preserves retained scheduler reservations, and fully stops the old generation before parser reset and replacement creation.
 
-Implement one production-specific boundary that:
+### Next: 0.0.9v FFmpeg Candidate License, Backend Registration, and Distribution Review
 
-- keeps the existing consumed-settlement composition unchanged;
-- owns one parser, one dedicated production factory, and at most one production generation;
-- borrows one application-owned Windows output boundary;
-- internally forwards exact decode snapshot, one-event submission, and one-frame receive through the production product;
-- serializes packet input, finalization, receive／drain, transfer, one-item delivery, reset, replacement, and stop;
-- validates a decoded completion before one transfer attempt;
-- treats `Transferred` as final ownership settlement and never accesses the completion afterward;
-- maps retained output states without consuming the scheduler reservation;
-- exposes caller-driven one-item delivery and explicit finite reset outside the PCP callback;
-- treats rejected scheduler admission as terminal without capacity polling or hidden retry;
-- asynchronously stops the old generation before parser discontinuity reset;
-- creates the replacement only after a new exact parser source description exists;
-- forbids overlapping generations, old-generation revival, rollback, and partial packet commit;
-- uses one ordered asynchronous terminal cleanup path;
-- adds no resident loop, fallback runtime, device activation, or second queue.
+Review the unchanged pinned external FFmpeg candidate and decide:
+
+- exact build provenance and retained hashes／inventory;
+- applicable LGPL version and optional component implications;
+- whether the recorded build is compatible with the intended dynamic-loading model;
+- notice, license-copy, relinking, source-offer, and corresponding-source obligations;
+- whether host-installed use may be approved without project redistribution;
+- whether normal backend registration may be enabled independently from bundling;
+- whether bundling／redistribution must remain prohibited or needs a separate artifact pipeline;
+- how approval, rejection, and unresolved evidence map to fixed fail-closed policy results;
+- which ADR evidence is required before changing `LicenseReview.Pending`.
 
 ### Later sequence
 
-1. validate the finite production composition with approved injected ownership and retained FLV fixtures;
-2. make an explicit license／backend registration and distribution decision;
-3. connect the composition under an application-owned Windows lifecycle;
-4. perform controlled real-media validation.
+1. apply the explicit candidate license／registration decision;
+2. connect approved composition under an application-owned Windows lifecycle;
+3. perform controlled real-media decode and output validation;
+4. expand user-facing lifecycle and packaging only after the preceding gates pass.
 
 ### Deferred
 
 - MP4／fragmented MP4 parser
 - avformat integration
-- production license approval and backend registration
 - discontinuity reset and `avcodec_flush_buffers`
 - duration cutoff
 - independent audio recovery generation changes
@@ -114,7 +110,7 @@ Routine Linux CI uses CircleCI while GitHub Actions usage is exhausted. Final br
 
 - retain `net10.0`
 - avoid speculative production dependencies
-- keep FFmpeg host-installed and dynamically loaded
+- keep FFmpeg host-installed and dynamically loaded until an explicit distribution decision
 - record provenance and redistribution permission for third-party assets
 
 ## 0.1.0 Genesis gate

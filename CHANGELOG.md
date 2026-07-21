@@ -5,6 +5,26 @@
 Detailed history through 0.0.8g remains preserved in Git history at commit
 `f078dab5372a45a8c577c1c802a697ab72b45c02` and in milestone ADR/PCN records.
 
+### 0.0.9u - Finite Production Generation Ingress and Replacement Composition Boundary
+
+- Added `PlaybackProductionPcpFlvCompositionBoundary` as one serialized production owner from awaited PCP／FLV input through decode, scheduler transfer, caller-driven delivery, reset, and replacement.
+- Kept `PlaybackPcpFlvAwaitedDecodeCompositionBoundary` unchanged for diagnostic and consumed-settlement comparison.
+- Added an assembly-internal lifetime-checked forwarding bridge for exact decode snapshot, one-event submission, and one-frame receive through the singular 0.0.9s generation owner.
+- Kept raw decode, native contexts, ABI gates, verified runtime leases, and Windows resources outside the public composition surface.
+- Serialized packet input, explicit finalization, ordinary receive, flush drain, transfer, one-item delivery, reset, replacement, terminal cleanup, and stop through one operation gate.
+- Validated decoded completion identity, generation, media, stream, sequence, frame role, and managed bytes before exactly one scheduler transfer attempt.
+- Treated `Transferred` as final ownership settlement and prohibited all later completion access or disposal.
+- Preserved scheduler reservations through wait, `WouldBlock`, initialization／binding／resize, audio recovery, clock-not-started, and reset-required delivery results.
+- Made scheduler admission rejection terminal without capacity polling, frame reconstruction, hidden retry, or a second queue.
+- Required old-generation `StopAsync` completion before parser discontinuity reset and replacement source／generation creation.
+- Forbade overlapping generations, old-generation revival, rollback, and partial discontinuity-packet commit.
+- Added ordered asynchronous terminal and stop cleanup while preserving the borrowed application-owned Windows output boundary.
+- Added copied parser／generation／work／transfer／delivery／format snapshots without exposing native or OS resources.
+- Added ten focused cross-platform tests plus ADR-0131 and PCN-0139.
+- Isolated intentional CA1068, CA1822, and CA2250 contracts through SARIF status probes, added narrow file-scoped rationale, and restored routine CircleCI byte-for-byte.
+- Selected 0.0.9v FFmpeg Candidate License, Backend Registration, and Distribution Review.
+- Kept the pinned candidate `LicenseReview.Pending`, normal backend registration, FFmpeg distribution, Windows device activation, resident pumping, and audible／visible playback unavailable.
+
 ### 0.0.9t - Production Generation Ingress and Replacement Composition Review
 
 - Reviewed the exact seam from awaited PCP／FLV parsing and source-bound decode into the complete 0.0.9s scheduler-delivery generation.

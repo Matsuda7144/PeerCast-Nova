@@ -34,3 +34,16 @@ dotnet_diagnostic.CA2250.severity = none
 # the lifecycle snapshot. Keep that result construction on the factory instance beside the
 # stateful Finish path so the distinction remains explicit and reviewable.
 dotnet_diagnostic.CA1822.severity = none
+
+[src/Nova.Playback/PlaybackProductionDecoderGenerationIngressForwarding.cs]
+# Forwarding must preserve the exact one-frame decode signature, where the optional reusable
+# cumulative budget follows cancellation for compatibility with the owned decode boundary.
+dotnet_diagnostic.CA1068.severity = none
+
+[src/Nova.Playback/PlaybackProductionPcpFlvCompositionBoundary.cs]
+# Fixed terminal exceptions are created beside the composition lifecycle rather than as a
+# detached utility, keeping the public result translation explicit at every operation seam.
+dotnet_diagnostic.CA1822.severity = none
+# Cancellation can originate from subordinate fixed results or the linked stop token. The
+# composition must finish terminal cleanup before translating cancellation to the caller.
+dotnet_diagnostic.CA2250.severity = none
