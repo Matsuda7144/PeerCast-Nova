@@ -62,30 +62,37 @@
 - 0.0.9q Finite Generation-matched Scheduler Delivery and Output Lifecycle Boundary
 - 0.0.9r Production Decoder Generation Factory and Activation Review
 - 0.0.9s Policy-gated Production Decoder Generation Factory Boundary
+- 0.0.9t Production Generation Ingress and Replacement Composition Review
 
-0.0.9r defined how production composition may build the 0.0.9q generation. Policy must pass before runtime-path observation, video and audio require independent verified runtime／ABI gate／context chains, source ownership remains external, and Windows activation remains application-owned.
+0.0.9s implements the policy-gated complete generation factory. The public path remains `LicenseReviewPending`; approved injected conditions create exact FLV binding, distinct video／audio runtime and ABI ownership, source-bound decode, bounded scheduler, timing, and result-aware delivery as one caller-owned product.
 
-0.0.9s implements that construction transaction. The public factory returns `LicenseReviewPending` for the unchanged pinned candidate. Under approved injected conditions it creates exact FLV binding, distinct runtime／gate chains, one complete source-bound native session, one-frame decode, fresh bounded scheduler, generation timing, and 0.0.9q delivery as one caller-owned product. Partial failure unwinds only untransferred ownership in reverse order.
+0.0.9t establishes that the existing consumed-settlement composition cannot directly host that product. Production scheduler transfer consumes and detaches decoded ownership, so a new production-specific composition must forward finite encoded ingress through the singular generation owner, never touch a completion after `Transferred`, keep delivery caller-driven, and stop the old generation before parser discontinuity disposes its borrowed source.
 
-### Next: 0.0.9t Production Generation Ingress and Replacement Composition Review
+### Next: 0.0.9u Finite Production Generation Ingress and Replacement Composition Boundary
 
-Review how the 0.0.9s product connects to the existing awaited PCP／FLV path:
+Implement one production-specific boundary that:
 
-- create a generation only after exact parser source description is available;
-- settle each source-bound decoded completion through one-shot scheduler transfer;
-- keep PCP callback backpressure until transfer ownership is resolved;
-- run caller-driven finite scheduler delivery outside the packet callback;
-- stop and await the old generation before parser discontinuity reset;
-- create the replacement generation only after old scheduler／decode／native ownership is gone;
-- keep application-owned Windows resources outside generation replacement;
-- define terminal failure, cancellation, and no-rollback behavior;
-- add no resident loop, second queue, hidden retry, or overlapping generations.
+- keeps the existing consumed-settlement composition unchanged;
+- owns one parser, one dedicated production factory, and at most one production generation;
+- borrows one application-owned Windows output boundary;
+- internally forwards exact decode snapshot, one-event submission, and one-frame receive through the production product;
+- serializes packet input, finalization, receive／drain, transfer, one-item delivery, reset, replacement, and stop;
+- validates a decoded completion before one transfer attempt;
+- treats `Transferred` as final ownership settlement and never accesses the completion afterward;
+- maps retained output states without consuming the scheduler reservation;
+- exposes caller-driven one-item delivery and explicit finite reset outside the PCP callback;
+- treats rejected scheduler admission as terminal without capacity polling or hidden retry;
+- asynchronously stops the old generation before parser discontinuity reset;
+- creates the replacement only after a new exact parser source description exists;
+- forbids overlapping generations, old-generation revival, rollback, and partial packet commit;
+- uses one ordered asynchronous terminal cleanup path;
+- adds no resident loop, fallback runtime, device activation, or second queue.
 
 ### Later sequence
 
-1. implement the reviewed production ingress／replacement composition;
+1. validate the finite production composition with approved injected ownership and retained FLV fixtures;
 2. make an explicit license／backend registration and distribution decision;
-3. connect bounded decode ingress and finite delivery under an application-owned Windows lifecycle;
+3. connect the composition under an application-owned Windows lifecycle;
 4. perform controlled real-media validation.
 
 ### Deferred

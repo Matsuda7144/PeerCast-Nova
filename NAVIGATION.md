@@ -2,25 +2,26 @@
 
 ## 現在地
 
-**0.0.9s — Policy-gated Production Decoder Generation Factory Boundary — Implemented**
+**0.0.9t — Production Generation Ingress and Replacement Composition Review — Completed**
 
-0.0.9rで確定したpolicy-first ownership契約をruntimeへ実装し、approvedな注入条件下だけでcomplete source-bound decode／scheduler-delivery generationを構築する有限factoryを追加しました。
+0.0.9s generation productをawaited PCP／FLV経路へ接続するownership、transfer、delivery、replacement、terminal cleanup契約を確定しました。runtime実装は0.0.9uへ分離しています。
 
-- provenance／backend policyをbinding・filesystem・native workより先に評価
-- pinned candidateは`LicenseReview.Pending`のまま維持
-- public production creationは`LicenseReviewPending`でfail closed
-- explicit host-installed exact pinned runtimeだけを使用
-- video／audioに独立したruntime→ABI gate→context chainを作成
-- shared runtime／shared gateを参照同一性で拒否
-- exact FLV bindingからcomplete native sessionだけを返す
-- decode、fresh bounded scheduler、timing、0.0.9q deliveryを一つのgeneration productへ統合
-- partial failureは未移譲ownershipだけを逆順・重複排除cleanup
-- source demux sessionとWindows output boundaryは非所有borrow
-- returned productはfinite transfer／delivery／reset／stopを公開
-- factory disposalはactive creationをcancel／await
-- completed generationはcaller ownershipでfactory非所有
-- normal backend registration、license approval、device activationは変更しない
-- resident loop、hidden retry、fallback runtime、second queueなし
+- consumed settlementとscheduler transferのownership契約が非互換
+- `Transferred`後のcompletion再検証／disposeを禁止
+- 既存awaited decode compositionは診断・比較用として変更しない
+- production専用compositionを新設する方針
+- production productへdecode snapshot／submission／one-frame receiveを内部forward
+- raw decode／native／runtime ownerを外へ公開しない
+- packet、receive／drain、transfer、delivery、reset、replacement、stopを一つのgateで直列化
+- caller-driven deliveryは一予約ずつ、PCP callback外で実行
+- retained output resultはscheduler reservationを保持
+- scheduler rejectionはterminalで、hidden capacity retryやsecond queueなし
+- discontinuityはold generation停止完了後にparser reset
+- new generationはreplacement source description後だけ作成
+- overlap、old revival、rollback、partial packet commitなし
+- source parserとWindows outputはapplication ownershipを維持
+- pinned candidateは`LicenseReview.Pending`のまま
+- runtime source／tests変更なし
 
 ## CI
 
@@ -28,17 +29,14 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 ## 最新の入口
 
-- `docs/adr/ADR-0129-policy-gated-production-decoder-generation-factory-boundary.md`
-- `docs/reviews/PCN-0137-POLICY-GATED-PRODUCTION-DECODER-GENERATION-FACTORY-BOUNDARY.md`
+- `docs/adr/ADR-0130-production-generation-ingress-replacement-composition-review.md`
+- `docs/reviews/PCN-0138-PRODUCTION-GENERATION-INGRESS-REPLACEMENT-COMPOSITION-REVIEW.md`
 - `src/Nova.Playback/PlaybackProductionDecoderGenerationFactory.cs`
-- `tests/Nova.Playback.Tests/PlaybackProductionDecoderGenerationFactoryTests.cs`
-- `src/Nova.Playback/PlaybackFfmpegBackendCandidate.cs`
-- `src/Nova.Playback/PlaybackDecoderBackendPolicy.cs`
-- `src/Nova.Playback/PlaybackDecoderBackendInstalledRuntimeLocator.cs`
-- `src/Nova.Playback/PlaybackDecoderFfmpegAbiSymbolGate.cs`
-- `src/Nova.Playback/PlaybackBoundedFlvNativeDecoderSession.cs`
-- `src/Nova.Playback/PlaybackSourceBoundOneFrameDecodeBoundary.cs`
+- `src/Nova.Playback/PlaybackPcpFlvAwaitedDecodeCompositionBoundary.cs`
+- `src/Nova.Playback/PlaybackOneEventFinalEosFlvParser.cs`
+- `src/Nova.Playback/PlaybackDecodedCompletionSchedulerIngressBoundary.cs`
 - `src/Nova.Playback/PlaybackGenerationMatchedSchedulerDeliveryBoundary.cs`
+- `src/Nova.Playback/PlaybackSourceBoundOneFrameDecodeBoundary.cs`
 - `src/Nova.Playback/PlaybackWindowsOutputBufferProcessingBoundary.cs`
 
 ## ADR／PCN索引の永久欠番
@@ -49,13 +47,13 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 ## 次の作業
 
-**0.0.9t — Production Generation Ingress and Replacement Composition Review**
+**0.0.9u — Finite Production Generation Ingress and Replacement Composition Boundary**
 
-0.0.9s generation productをawaited PCP／FLV compositionへ注入し、decoded completion transfer、finite delivery、old generation停止、parser discontinuity、new generation creationをどう直列化するかレビューします。application-owned Windows lifecycle、terminal failure、cancellation、replacement rollback禁止の境界を確定します。
+production専用compositionを実装し、0.0.9s productへexact one-event submission／one-frame receiveを内部forwardします。一度だけのdecoded transfer、caller-driven one-item delivery、explicit reset、asynchronous stop、old-stop-before-parser-reset replacementを一つの有限境界へ統合します。
 
 ## 未完了
 
-- production generation ingress and replacement composition
+- finite production generation ingress and replacement composition implementation
 - FFmpeg license approval and backend registration
 - controlled production decoder ingress activation
 - Windows application／window／device lifecycle

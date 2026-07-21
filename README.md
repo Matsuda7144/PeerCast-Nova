@@ -9,25 +9,26 @@ License: **Apache License 2.0**
 
 ## 現在地
 
-**Milestone 0.0.9s — Policy-gated Production Decoder Generation Factory Boundary**
+**Milestone 0.0.9t — Production Generation Ingress and Replacement Composition Review**
 
-0.0.9rで確定した契約をruntimeへ実装し、policyからexact FLV binding、独立したvideo／audio runtime・ABI gate、source-bound native session、decode、bounded scheduler、timing、0.0.9q deliveryまでを一つのcomplete generation productへ構築する有限factoryを追加しました。
+0.0.9sのcomplete generation productをawaited PCP／FLV経路へ接続する契約をレビューし、既存のconsumed-settlement compositionを直接差し替えず、production専用境界を後続実装する方針を確定しました。
 
-- candidate provenanceとbackend policyをbinding／filesystem observation／native workより先に評価
+- 既存settlementは`Consumed`後もcompletion ownershipを保持する前提
+- production `Transfer`はframeをdetachしcompletionを消費するため、その後の再検証／disposeを禁止
+- 既存`PlaybackPcpFlvAwaitedDecodeCompositionBoundary`は診断・比較用として変更しない
+- production productへexact decode snapshot、one-event submission、one-frame receiveを内部forward
+- raw decode boundary、native session、context、runtime leaseをcompositionへ公開しない
+- packet、finalization、receive／drain、transfer、delivery、reset、replacement、stopを一つのoperation gateで直列化
+- decoded completionは事前検証後に一度だけtransferし、`Transferred`後は触れない
+- deliveryはPCP callback外から一項目ずつcaller-drivenで実行
+- wait／WouldBlock／initialization／binding／resize／audio recovery／clock／reset要求はreservationを保持して外へ返す
+- scheduler admission rejectionはterminalで、capacity polling、hidden retry、second queueを追加しない
+- discontinuityはold generationを`StopAsync`で完全停止してからparser resetとnew generation creationへ進む
+- old／new generationの重複、旧generation復活、rollback、partial packet commitなし
+- Windows output lifecycleはapplication-ownedのまま維持し、新generation情報だけをsnapshotへcopy
 - pinned FFmpeg candidateは引き続き`LicenseReview.Pending`
-- public production factoryは現在`LicenseReviewPending`を返し、runtime pathへ触れない
-- approvedな注入条件でもthird-party／native-code policyの許可を必須化
-- callerが明示した固定ドライブ上のexact pinned inventoryだけを使用
-- video／audioへ独立した2本のruntime→ABI gate→context ownership chainを構築
-- shared runtime／shared gateを参照同一性で拒否
-- FLV binding→native session→decode→fresh scheduler→timing→0.0.9q deliveryを順序固定
-- partial productを返さず、失敗時は未移譲ownershipだけを逆順cleanup
-- source sessionとWindows output buffer boundaryはapplication ownerからborrow
-- returned generationはfinite transfer／one-item delivery／reset／stopを公開
-- factory disposalはactive creationをcancel／awaitし、completed generationはdisposeしない
-- fallback runtime、download、bundling、resident loop、hidden retry、second queueなし
 
-現在の法的状態ではdefault production operationsがFFmpeg native resourceを取得することはありません。通常backend登録、production PCP ingress composition、generation replacement orchestration、Windows device activation、runtime配布、audible／visible playbackはまだ実施していません。
+0.0.9tはarchitecture reviewであり、runtime sourceとtestsは変更していません。production composition実装、通常backend登録、Windows device activation、runtime配布、audible／visible playbackはまだ実施していません。
 
 ## 実装済みの主な領域
 
@@ -71,6 +72,7 @@ License: **Apache License 2.0**
 - finite generation-matched scheduler delivery／output lifecycle boundary
 - production generation factory／activation architecture review
 - policy-gated production decoder generation factory boundary
+- production generation ingress／replacement composition architecture review
 
 詳細:
 
@@ -84,7 +86,7 @@ License: **Apache License 2.0**
 
 PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信アプリではありません。
 
-- production generation ingress and replacement composition
+- finite production generation ingress and replacement composition implementation
 - FFmpeg candidate license approval and normal backend registration
 - production decoder ingress activation
 - Windows application／window／device lifecycle composition
@@ -100,9 +102,9 @@ FFmpeg backend activation、runtime bundling／distribution、license approval�
 
 ## 次のマイルストーン
 
-**0.0.9t — Production Generation Ingress and Replacement Composition Review**
+**0.0.9u — Finite Production Generation Ingress and Replacement Composition Boundary**
 
-0.0.9s factory productを既存のawaited PCP／FLV compositionへどう注入し、decoded completionをschedulerへtransferし、caller-driven finite deliveryを実行するかをレビューします。old generation停止、source／parser discontinuity、new generation作成、失敗時のterminal state、application-owned Windows lifecycleとの境界を確定し、runtime composition実装は後続へ分離します。
+production専用PCP／FLV compositionを実装し、0.0.9s productへone-event submission／one-frame receiveを内部forwardします。decoded completionを一度だけschedulerへtransferし、caller-driven one-item delivery、explicit reset、asynchronous stop、old-stop-before-parser-reset replacementを一つの直列化された有限境界へ統合します。
 
 ## 必要環境
 

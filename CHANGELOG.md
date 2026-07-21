@@ -5,6 +5,24 @@
 Detailed history through 0.0.8g remains preserved in Git history at commit
 `f078dab5372a45a8c577c1c802a697ab72b45c02` and in milestone ADR/PCN records.
 
+### 0.0.9t - Production Generation Ingress and Replacement Composition Review
+
+- Reviewed the exact seam from awaited PCP／FLV parsing and source-bound decode into the complete 0.0.9s scheduler-delivery generation.
+- Identified that the existing consumed-settlement composition cannot directly host production transfer because `Transferred` detaches the frame and consumes the completion.
+- Prohibited post-transfer completion validation or disposal and kept the existing consumed-settlement boundary unchanged for diagnostics and comparison.
+- Selected a new production-specific composition with internal lifetime-checked forwarding for decode snapshot, one-event submission, and one-frame receive through the singular generation owner.
+- Required packet input, finalization, receive／drain, transfer, one-item delivery, reset, replacement, and stop to serialize through one composition operation gate.
+- Kept decoded transfer one-shot and made rejected scheduler admission terminal without capacity polling, hidden retry, or a second queue.
+- Kept delivery caller-driven outside the PCP callback and retained scheduler ownership through wait, output backpressure, initialization／binding／resize, audio recovery, clock, and reset requirements.
+- Required asynchronous old-generation stop before parser discontinuity disposes the borrowed source session.
+- Required replacement generation creation only after a new exact parser source description and forbade overlap, old-generation revival, rollback, or partial packet commit.
+- Kept Windows activation／binding／stream and device recovery application-owned and required snapshots to copy only generation and parser-derived stream configuration.
+- Defined one ordered asynchronous terminal cleanup path: close admission, cancel／await operation, stop generation, dispose parser／source, dispose dedicated factory, preserve borrowed output.
+- Preserved the pinned FFmpeg candidate as `LicenseReview.Pending`, normal backend registration unchanged, and default production creation fail closed before runtime observation.
+- Selected 0.0.9u Finite Production Generation Ingress and Replacement Composition Boundary.
+- Added ADR-0130 and PCN-0138 without changing runtime source or tests.
+- Kept backend activation, Windows device activation, FFmpeg distribution, continuous pumping, and audible／visible playback unavailable.
+
 ### 0.0.9s - Policy-gated Production Decoder Generation Factory Boundary
 
 - Added `PlaybackProductionDecoderGenerationFactory` as one serialized finite construction boundary for the complete 0.0.9q generation.
