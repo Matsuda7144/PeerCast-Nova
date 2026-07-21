@@ -9,27 +9,25 @@ License: **Apache License 2.0**
 
 ## 現在地
 
-**Milestone 0.0.9y — Finite Approved External Runtime and Windows Lifecycle Activation Boundary**
+**Milestone 0.0.9z — Controlled Retained-Fixture Production Activation Validation**
 
-0.0.9wで承認したexact built-in external LGPL FFmpeg runtimeまたは明示的にhostがattestするunreviewed replacement routeを、0.0.6t〜0.0.6xのWindows 11 D3D11／WASAPI output境界へ接続する有限application lifecycleを実装しました。
+0.0.9fのcontrolled FLV fixtureを0.0.9y finite application lifecycleへ接続し、real bounded parser、real production composition、source-bound decode、decoded-completion transfer、retained scheduler ownership、generation-matched output admissionを一つのcross-platform integration harnessで検証しました。
 
-- application-owned output dispatcher／owner threadとpositive opaque window tokenを借用
-- playback側ではwindow、dispatcher thread、queue、message pump、timer、resident loopを作成しない
-- manifest／backend policy／runtime-directory syntax／window token／canonical formatsをnative access前に検証
-- resource-free probe後、activation／binding／stream／bufferの全native operationをdispatcher経由に限定
-- exact parser stream descriptionとdecoder generation取得後にvideo bind → audio bind → video initialize → audio initialize
-- binding／stream／buffer generationがactive decoder generationと一致するまでdeliveryを拒否
-- 0.0.9q generation-matched scheduler deliveryを唯一のproduction scheduler-output ownerとして維持
-- async video／audio processingとgeneration resetをdispatcher-backed production pathへ接続
-- discontinuity replacementで固定reset／reconfiguration orderを実行しdeviceは再作成しない
-- `WouldBlock`／wait／binding／initialization／resize等はcaller-visibleでscheduler ownershipを保持
-- retained resizeは明示same-generation resize後にcallerがdeliveryを再試行
-- device lossはterminalで、production composition停止後にbuffer → stream → binding → activationをowner thread上で解放
-- normal stop、active-operation cancellation、partial construction cleanupをidempotentに固定
-- borrowed dispatcherとwindow tokenはcleanup後もapplication ownershipを維持
-- cross-platform injected tests 10件とroutine CircleCI gateで検証
+- controlled real FLV bootstrapからexact parser source sessionとdecoder generation 0を作成
+- production snapshotから320×240 videoと48 kHz stereo audio構成を導出
+- lifecycle outputをactive decoder generation 0へ構成して`Ready`へ移行
+- interleaved video／audio packetでaudio submit `EAGAIN`を保持
+- one receive → one managed audio frame → one scheduler transfer → one retained retry
+- second encoded／decoded queue、hidden loop、automatic retryなし
+- first deliveryの`RetainedWouldBlock`でscheduler ownershipを維持
+- caller-driven second deliveryで`AudioDelivered`をcommit
+- discontinuity bootstrapでgeneration 0 stop完了後にgeneration 1を作成
+- output-ready generationを0から1へreconfigureして再び`Ready`
+- normal stopはproduction-firstで、borrowed dispatcherとwindow tokenを維持
+- physical Windows activation、real FFmpeg loading、real native decodeは別gateとして未検証
+- routine CircleCIでrestore、Release build with analyzers、full tests、format verification成功
 
-このmilestoneは有限lifecycle implementationです。physical Windows device、application window／message loop、controlled retained real fixture、real-media decode／output、audible／visible playbackはまだ検証していません。
+このmilestoneはcomplete managed production seamのcontrolled validationです。physical COM／D3D11／WASAPI、実FFmpeg runtime、application window／message loop、audible／visible playbackはまだ検証していません。
 
 ## 実装済みの主な領域
 
@@ -84,6 +82,7 @@ License: **Apache License 2.0**
 - finite approved-runtime Windows lifecycle activation boundary
 - generation-matched initial／replacement output configuration
 - explicit retained resize and terminal device-loss teardown
+- controlled retained-fixture production lifecycle integration validation
 
 詳細:
 
@@ -99,8 +98,9 @@ License: **Apache License 2.0**
 
 PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信アプリではありません。
 
-- controlled retained-fixture production activation validation
-- controlled real-media decode and output validation
+- controlled real external-runtime decode activation review
+- controlled real FFmpeg native decode validation
+- controlled Windows video／audio output validation
 - Windows application window／message-loop implementation
 - application-provided dispatcher implementation
 - legal／about surfaceからのFFmpeg notice表示
@@ -115,9 +115,9 @@ FFmpeg binary bundling／redistributionは既定方針として禁止です。�
 
 ## 次のマイルストーン
 
-**0.0.9z — Controlled Retained-Fixture Production Activation Validation**
+**0.0.10a — Controlled Real External-Runtime Decode Activation Review**
 
-保持済みcontrolled FLV fixtureと明示的なverified external runtime環境を使い、0.0.9y lifecycleのpolicy admission、runtime verification、exact stream description、production generation creation、output-configuration admissionまでを有限手順で検証します。physical Windows outputとaudible／visible playbackは後続gateとして分離します。
+exact approved built-in runtimeをcontrolled Windows環境で実際にactivateする前に、fixture provenance、runtime-directory custody、Windows runner、native decode evidence、cleanup、artifact非配布、failure evidenceをレビューします。physical video rendering／audio outputは後続gateとして分離します。
 
 ## 必要環境
 
@@ -151,6 +151,7 @@ dotnet format PeerCast-Nova.sln --verify-no-changes --no-restore
 - Windows native resourceはowner threadで所有しproduction decode pathはdispatcher-backed portだけを借用する
 - output generationはactive decoder generationと一致させる
 - device lossは旧generation revivalなしのterminal lifecycle resultとして扱う
+- controlled fixture validationをphysical native activationの証拠へ読み替えない
 
 ## ライセンス
 

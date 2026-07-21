@@ -5,6 +5,24 @@
 Detailed history through 0.0.8g remains preserved in Git history at commit
 `f078dab5372a45a8c577c1c802a697ab72b45c02` and in milestone ADR/PCN records.
 
+### 0.0.9z - Controlled Retained-Fixture Production Activation Validation
+
+- Added a controlled cross-platform integration harness around the real finite application lifecycle and real production PCP／FLV composition.
+- Fed real bounded FLV bootstrap and interleaved packet bytes through the real parser-created source session and source-bound generation.
+- Derived exact 320×240 video and 48 kHz stereo audio configuration from the real production snapshot and admitted output at decoder generation 0.
+- Injected one audio packet `EAGAIN`, then proved exactly one receive, one managed-frame completion, one scheduler transfer, and one retained packet retry.
+- Preserved one retained frame through caller-visible `RetainedWouldBlock` without a hidden delivery retry.
+- Committed a later caller-driven `AudioDelivered` result and released the retained scheduler ownership exactly once.
+- Validated real discontinuity replacement: generation 0 stopped completely before generation／discontinuity 1 creation.
+- Reconfigured lifecycle output-ready generation from 0 to 1 and returned to `Ready` only after exact snapshot agreement.
+- Preserved production-first normal stop and kept the borrowed application dispatcher and window token outside cleanup ownership.
+- Kept physical Windows activation, actual ABI／runtime loading, native FFmpeg receive, application window creation, and audible／visible playback injected and unclaimed.
+- Added two focused cross-platform integration tests plus ADR-0136 and PCN-0144.
+- Advanced README, ROADMAP, NAVIGATION, and CHANGELOG through 0.0.9z.
+- Passed routine CircleCI restore, Release build with analyzers, full solution tests, and format verification on the controlled integration head.
+- Selected 0.0.10a Controlled Real External-Runtime Decode Activation Review.
+
+
 ### 0.0.9y - Finite Approved External Runtime and Windows Lifecycle Activation Boundary
 
 - Added `IPlaybackWindowsOutputDispatcher` as the explicit application-owned owner-thread invocation contract without a playback-owned thread, queue, message pump, timer, or resident loop.
@@ -26,6 +44,7 @@ Detailed history through 0.0.8g remains preserved in Git history at commit
 - Passed routine CircleCI restore, Release build with analyzers, full solution tests, and format verification on the implementation and focused-test head.
 - Selected 0.0.9z Controlled Retained-Fixture Production Activation Validation.
 - Kept physical Windows output activation, application window／message loop, retained real-runtime fixture validation, real-media output, audible／visible playback, GUI, and FFmpeg binary distribution unavailable.
+
 ### 0.0.9x - Approved External Runtime and Windows Lifecycle Activation Review
 
 - Reviewed the exact connection from the approved built-in FFmpeg production route and explicit host-attested unreviewed replacement route to the existing Windows 11 D3D11／WASAPI output boundaries.

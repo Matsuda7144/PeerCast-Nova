@@ -39,7 +39,7 @@
 - parser-to-decoder composition review
 - exact FLV session decoder-parameter binding
 
-## 0.0.9 Source-bound Native Decoder and Packet Ownership — In Progress
+## 0.0.9 Source-bound Native Decoder and Packet Ownership — Complete
 
 ### Completed
 
@@ -68,33 +68,36 @@
 - 0.0.9w External LGPL Runtime Compliance and User Replacement Boundary
 - 0.0.9x Approved External Runtime and Windows Lifecycle Activation Review
 - 0.0.9y Finite Approved External Runtime and Windows Lifecycle Activation Boundary
+- 0.0.9z Controlled Retained-Fixture Production Activation Validation
 
 0.0.9u implements the dedicated production owner from awaited PCP／FLV input through source-bound decode, scheduler transfer, caller-driven delivery, explicit reset, stop, and discontinuity replacement.
 
 0.0.9w implements the corrected external LGPL compliance gate. It approves only the exact built-in candidate, records host replacements as `HostDeclared`／`HostAttested`／`Unreviewed`, requires `AllowHostAttestedRuntime`, preserves exact runtime verification, includes readable legal／provenance／release-guard material, and adds no bundling or discovery.
 
-0.0.9x reviews the missing application lifecycle above that production entry and the existing Windows output stack. It selects one application-provided owner-thread dispatcher, keeps window／message-loop ownership outside playback, retains the 0.0.9q generation-matched scheduler as the sole production delivery authority, uses the active decoder generation for output configuration, makes resize explicit, and makes device loss terminal for the first implementation.
+0.0.9y implements the finite application lifecycle above that production entry and the existing Windows output stack. It adds the explicit dispatcher contract, pure preflight, owner-thread activation and output operations, generation-matched initial／replacement configuration, explicit retained resize, terminal device loss, production-first stop, active-operation cancellation, and partial-construction cleanup without creating a window, thread, queue, loop, retry, fallback, or FFmpeg distribution path.
 
-0.0.9y implements that finite lifecycle. It adds the explicit dispatcher contract, pure preflight, owner-thread activation and output operations, generation-matched initial／replacement configuration, explicit retained resize, terminal device loss, production-first stop, active-operation cancellation, partial-construction cleanup, and ten injected cross-platform tests without creating a window, thread, queue, loop, retry, fallback, or FFmpeg distribution path.
+0.0.9z connects controlled real FLV bytes through the real parser, production composition, source-bound decode, decoded-completion transfer, scheduler ownership, and the 0.0.9y lifecycle. It proves exact stream-derived output configuration, one receive／one transfer／one retained retry relief, caller-visible `WouldBlock`, later committed delivery, stop-old-before-create-new discontinuity replacement, output-generation reconfiguration, and production-first cleanup without physical Windows or real FFmpeg activation.
 
-### Next: 0.0.9z Controlled Retained-Fixture Production Activation Validation
+## 0.0.10 Controlled Native Activation and Output Evidence — In Progress
 
-Validate the 0.0.9y lifecycle against one controlled retained fixture and explicit verified external-runtime environment:
+### Next: 0.0.10a Controlled Real External-Runtime Decode Activation Review
 
-- use the exact built-in approved manifest or a deliberately constructed explicit host-attested test manifest;
-- preserve one explicit runtime directory with checksum, ABI, dependency, and symbol verification;
-- perform policy and pure-configuration admission before runtime access;
-- feed the retained FLV bootstrap and bounded media packets through the finite lifecycle;
-- prove exact parser stream description and decoder-generation creation;
-- prove output-configuration admission is blocked until exact dimensions and audio parameters exist;
-- prove no hidden delivery loop, retry, runtime search, download, fallback, or second scheduler appears;
-- record fixture identity, runtime identity, deterministic results, and cleanup order;
-- keep physical D3D11／WASAPI output, application window creation, and audible／visible playback outside this validation unless separately authorized.
+Define the evidence and ownership gate for the first controlled activation of the exact built-in approved external runtime:
+
+- identify one retained media fixture with committed provenance and checksum;
+- identify one exact external runtime directory matching the approved manifest;
+- keep runtime binaries outside repository, release, CI artifact, installer, and cache publication;
+- select an explicit Windows runner and application-owned dispatcher／window environment;
+- define expected runtime verification, ABI, symbol, context-open, packet, frame, and cleanup evidence;
+- define how native frame bytes and metadata are inspected without claiming physical output;
+- define cancellation, failure, retained ownership, and terminal cleanup evidence;
+- prohibit runtime search, download, extraction, fallback, rehosting, or silent candidate replacement;
+- keep physical D3D11／WASAPI rendering and audible／visible playback in later milestones.
 
 ### Later sequence
 
-1. perform controlled real-media decode validation;
-2. perform controlled Windows audio／video output validation;
+1. implement controlled real external-runtime native decode validation;
+2. review and implement controlled Windows audio／video output validation;
 3. add the application window／message loop and user-facing lifecycle;
 4. expand packaging only after the preceding gates pass.
 
@@ -127,6 +130,7 @@ Routine Linux CI uses CircleCI while GitHub Actions usage is exhausted. Final br
 - keep Windows native output resources under one owner thread
 - keep output generation equal to the active decoder generation
 - make device loss terminal unless a later ADR defines a new complete lifecycle
+- distinguish controlled managed integration from physical native activation evidence
 - record provenance and redistribution permission for third-party assets
 
 ## 0.1.0 Genesis gate
@@ -135,5 +139,6 @@ Routine Linux CI uses CircleCI while GitHub Actions usage is exhausted. Final br
 - exact built-in approval and explicit host-attested replacement boundary
 - finite application-owned Windows lifecycle composition
 - finite decoded buffering and output lifecycle
+- controlled real native decode evidence
 - controlled audible／visible verification
 - user-facing application and packaging
