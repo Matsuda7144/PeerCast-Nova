@@ -57,30 +57,26 @@
 - 0.0.9l Awaited Decoded Completion Composition Review
 - 0.0.9m Finite Awaited Decoded Completion Composition Boundary
 - 0.0.9n Decoded Completion Transfer and Scheduler Ingress Review
+- 0.0.9o One-shot Decoded Completion Transfer and Scheduler Ingress Boundary
 
-0.0.9n confirms that scheduler enqueue is an irreversible ownership boundary: every result consumes or disposes the incoming frame. The future adapter therefore validates first, detaches once, enqueues once, and never rolls back or reconstructs a rejected frame.
+0.0.9o adds explicit attached／detached／disposed ownership to the source-bound decoded completion and requires the exact active decode boundary to authorize one-shot detach. Completion disposal after detach releases decode backpressure without disposing the transferred frame.
 
-Stream-local video／audio decoded sequences remain source identity. A separate checked generation-wide cross-media sequence and first-frame `DecoderReset` marker commit only after accepted scheduler ownership. Queued frames remain bound to the matching decoder generation and context lifetime.
+One generation-scoped ingress validates stream-local video／audio identity, assigns a separate monotonic cross-media scheduler sequence, applies `DecoderReset` only to the first accepted replacement-generation frame, and commits counters only after accepted scheduler ownership. Cancellation before detach changes no ownership or sequence state. Rejection and contradiction are terminal, with scheduler frames disposed before matching decoder-context lifetime.
 
-### Next: 0.0.9o One-shot Decoded Completion Transfer and Scheduler Ingress Boundary
+### Next: 0.0.9p Generation-matched Scheduler Delivery and Output Lifecycle Review
 
-Implement the reviewed boundary with injected cross-platform operations:
+Review the ownership connection from the 0.0.9o scheduler ingress through the existing reservation, late-aware dispatch, conversion, awaited sink, and Windows output boundaries:
 
-- add exact-active-completion one-shot managed-frame detach;
-- prevent completion disposal from clearing a transferred frame;
-- validate source／decoder-generation／discontinuity-generation／stream identity before detach;
-- enqueue exactly once into the existing `BoundedPlaybackScheduler`;
-- accept only `Enqueued` and `EnqueuedAfterDroppingOldest`;
-- commit one generation-wide cross-media sequence only after accepted ownership;
-- apply `DecoderReset` only to the first accepted replacement-generation frame;
-- fail the generation on rejected, dropped, invalid, disposed, or sequence-rejected enqueue;
-- retain matching decoder context ownership while scheduler frames or reservations remain;
-- dispose scheduler ownership before decode／native ownership on discontinuity;
-- add no second decoded queue, frame reconstruction, resident pump, or output activation.
+- select one generation owner for scheduler, matching decoder-context lifetime, reservations, and output work;
+- define delivery／drop／late／stop／discontinuity／output-failure completion semantics;
+- preserve one finite caller-driven dispatch operation rather than a resident output loop;
+- dispose active decoded completion before scheduler ownership, then scheduler reservations／frames before decode／native ownership;
+- prevent old-generation frames from using replacement-generation decoder contexts or output reservations;
+- keep backend activation, runtime distribution, and audible／visible playback outside review scope.
 
 ### Later sequence
 
-1. add generation-matched awaited scheduler delivery and output lifecycle composition;
+1. implement the reviewed generation-matched scheduler delivery and output lifecycle composition;
 2. add a production generation factory and review ABI-gate acquisition／backend activation／Windows lifecycle;
 3. perform controlled real-media validation.
 

@@ -163,8 +163,13 @@ public sealed record PlaybackSourceBoundOneFrameDecodeOperation(
 
 public sealed class PlaybackSourceBoundDecodedFrameCompletion : IDisposable, IAsyncDisposable
 {
+    private const int FrameAttached = 0;
+    private const int FrameDetached = 1;
+    private const int FrameDisposed = 2;
+
     private PlaybackSourceBoundOneFrameDecodeBoundary? _owner;
     private PlaybackDecoderFfmpegManagedFrame? _frame;
+    private int _frameState;
 
     internal PlaybackSourceBoundDecodedFrameCompletion(
         PlaybackSourceBoundOneFrameDecodeBoundary owner,
@@ -208,22 +213,60 @@ public sealed class PlaybackSourceBoundDecodedFrameCompletion : IDisposable, IAs
     {
         get
         {
+            ObjectDisposedException.ThrowIf(
+                Volatile.Read(ref _frameState) != FrameAttached,
+                this);
             var value = Volatile.Read(ref _frame);
             ObjectDisposedException.ThrowIf(value is null, this);
             return value;
         }
     }
 
-    public bool IsDisposed => Volatile.Read(ref _frame) is null;
+    public bool IsDisposed => Volatile.Read(ref _frameState) == FrameDisposed;
+
+    internal bool HasFrameOwnership =>
+        Volatile.Read(ref _frameState) == FrameAttached &&
+        Volatile.Read(ref _frame) is not null;
 
     internal PlaybackSourceBoundOneFrameDecodeMode Mode { get; }
 
     public bool ReferencesSourceSession(PlaybackBoundedDemuxSession? sourceSession) =>
         ReferenceEquals(SourceSession, sourceSession);
 
+    internal bool TryDetachFrame(out PlaybackDecoderFfmpegManagedFrame? frame)
+    {
+        frame = null;
+        if (!HasFrameOwnership)
+        {
+            return false;
+        }
+
+        var owner = Volatile.Read(ref _owner);
+        return owner is not null && owner.TryDetachCompletion(this, out frame);
+    }
+
+    internal bool TryDetachFrameFromOwner(
+        PlaybackSourceBoundOneFrameDecodeBoundary owner,
+        out PlaybackDecoderFfmpegManagedFrame? frame)
+    {
+        frame = null;
+        if (!ReferenceEquals(Volatile.Read(ref _owner), owner) ||
+            Interlocked.CompareExchange(ref _frameState, FrameDetached, FrameAttached) !=
+                FrameAttached)
+        {
+            return false;
+        }
+
+        frame = Interlocked.Exchange(ref _frame, null);
+        return frame is not null;
+    }
+
     public void Dispose()
     {
-        var frame = Interlocked.Exchange(ref _frame, null);
+        var previousState = Interlocked.Exchange(ref _frameState, FrameDisposed);
+        var frame = previousState == FrameAttached
+            ? Interlocked.Exchange(ref _frame, null)
+            : null;
         var owner = Interlocked.Exchange(ref _owner, null);
         try
         {
@@ -637,6 +680,82 @@ public sealed class PlaybackSourceBoundOneFrameDecodeBoundary : IDisposable, IAs
     {
         Dispose();
         return ValueTask.CompletedTask;
+    }
+
+    internal bool TryDetachCompletion(
+        PlaybackSourceBoundDecodedFrameCompletion completion,
+        out PlaybackDecoderFfmpegManagedFrame? frame)
+    {
+        frame = null;
+        lock (_sync)
+        {
+            if (_state != PlaybackSourceBoundOneFrameDecodeState.Accepting ||
+                !ReferenceEquals(_activeCompletion, completion) ||
+                completion.IsDisposed ||
+                !completion.HasFrameOwnership ||
+                !completion.ReferencesSourceSession(_sourceSession) ||
+                completion.DecoderGeneration != _decoderGeneration ||
+                completion.DiscontinuityGeneration != _discontinuityGeneration ||
+                !Enum.IsDefined(completion.MediaKind) ||
+                !Enum.IsDefined(completion.Mode) ||
+                completion.ManagedByteCount < 1 ||
+                completion.ManagedByteCount > _options.MaximumManagedFrameBytes)
+            {
+                return false;
+            }
+
+            var expectedStreamId = completion.MediaKind switch
+            {
+                PlaybackBoundedDemuxMediaKind.Video => _sourceSession.Video.StreamId,
+                PlaybackBoundedDemuxMediaKind.Audio => _sourceSession.Audio.StreamId,
+                _ => -1,
+            };
+            var expectedSequence = completion.MediaKind switch
+            {
+                PlaybackBoundedDemuxMediaKind.Video when _nextVideoSequence > 0 =>
+                    _nextVideoSequence - 1,
+                PlaybackBoundedDemuxMediaKind.Audio when _nextAudioSequence > 0 =>
+                    _nextAudioSequence - 1,
+                _ => -1,
+            };
+            if (completion.StreamId != expectedStreamId ||
+                completion.Sequence != expectedSequence)
+            {
+                return false;
+            }
+
+            PlaybackDecoderFfmpegManagedFrame expectedFrame;
+            try
+            {
+                expectedFrame = completion.Frame;
+            }
+            catch (ObjectDisposedException)
+            {
+                return false;
+            }
+
+            if (expectedFrame.IsDisposed ||
+                expectedFrame.Metadata.MediaKind != MapFrameMediaKind(completion.MediaKind) ||
+                !TryGetManagedByteCount(expectedFrame, out var managedByteCount) ||
+                managedByteCount != completion.ManagedByteCount)
+            {
+                return false;
+            }
+
+            if (!completion.TryDetachFrameFromOwner(this, out frame))
+            {
+                return false;
+            }
+
+            if (ReferenceEquals(frame, expectedFrame))
+            {
+                return true;
+            }
+
+            frame?.Dispose();
+            frame = null;
+            return false;
+        }
     }
 
     internal void ReleaseCompletion(PlaybackSourceBoundDecodedFrameCompletion completion)

@@ -5,6 +5,22 @@
 Detailed history through 0.0.8g remains preserved in Git history at commit
 `f078dab5372a45a8c577c1c802a697ab72b45c02` and in milestone ADR/PCN records.
 
+### 0.0.9o - One-shot Decoded Completion Transfer and Scheduler Ingress Boundary
+
+- Added explicit attached／detached／disposed ownership states to `PlaybackSourceBoundDecodedFrameCompletion`.
+- Added generation-controlled one-shot detach authorized by the exact active `PlaybackSourceBoundOneFrameDecodeBoundary`.
+- Revalidated source, decoder／discontinuity generation, media, stream, stream-local sequence, completion mode, managed bytes, frame liveness, and frame role before detach.
+- Ensured completion disposal after detach releases decode backpressure without disposing the transferred managed frame.
+- Added `PlaybackDecodedCompletionSchedulerIngressBoundary` as one generation-scoped owner of the existing bounded scheduler and matching decoder-context lifetime.
+- Kept independent video／audio source sequences as identity and assigned a separate monotonic cross-media scheduler sequence.
+- Committed source-admission sequence, scheduler sequence, accepted-transfer count, and first-frame `DecoderReset` only after accepted scheduler ownership.
+- Preserved completion ownership, sequence state, and reset state on cancellation before detach.
+- Made invalid completion, repeated transfer, sequence exhaustion, rejected／undefined enqueue, and enqueue exception terminal without rollback, frame reconstruction, or retry.
+- Disposed scheduler frames before matching decoder-context lifetime on terminal cleanup and normal disposal.
+- Added eleven focused cross-platform tests plus ADR-0125 and PCN-0133.
+- Used temporary compiler／analyzer status-encoding CircleCI workflows to isolate CA1512 and nullable test diagnostics before restoring the routine merge gate.
+- Kept direct awaited settlement, generation-matched scheduler delivery, production generation factory, backend activation, Windows output lifecycle, FFmpeg distribution, and audible／visible playback unchanged.
+
 ### 0.0.9m - Finite Awaited Decoded Completion Composition Boundary
 
 - Added `PlaybackPcpFlvAwaitedDecodeCompositionBoundary` as a serialized finite composition from callback-scoped PCP payload through the real bounded FLV parser and the 0.0.9k source-bound decode generation.
@@ -87,7 +103,7 @@ Detailed history through 0.0.8g remains preserved in Git history at commit
 
 ### 0.0.9h - PCP Chunk-to-FLV Parser Composition Review
 
-- Reviewed the awaited PCP packet callback through the 0.0.9g parser facade and 0.0.9e submission state machine.
+- Reviewed the awaited PCP packet callback through the 0.0.9g parser facade and the 0.0.9e submission state machine.
 - Selected callback-held, zero-suffix-copy composition: keep `ConsumeAsync` incomplete until all payload bytes are consumed or copied into bounded parser carry.
 - Required exact `ConsumedByteCount` offset accounting and completion-before-suffix processing.
 - Required active parser／decoder completion and decoder `EAGAIN` to pause new parser and PCP input.

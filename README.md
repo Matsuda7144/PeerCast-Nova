@@ -9,26 +9,26 @@ License: **Apache License 2.0**
 
 ## 現在地
 
-**Milestone 0.0.9n — Decoded Completion Transfer and Scheduler Ingress Review**
+**Milestone 0.0.9o — One-shot Decoded Completion Transfer and Scheduler Ingress Boundary**
 
-0.0.9mで生成されるsource-bound decoded completionを、既存`BoundedPlaybackScheduler`へ安全に移譲するownership契約を確定しました。runtime transfer自体は次の0.0.9oへ分離しています。
+0.0.9nで確定したownership契約をruntimeへ実装し、source-bound decoded completionから既存`BoundedPlaybackScheduler`へmanaged frameを1回だけ移譲する境界を追加しました。
 
-- scheduler `Enqueue`はaccepted／rejectedを問わずincoming frameを消費または破棄
+- completion ownershipをattached／detached／disposedで明示
+- exact active decode boundaryだけがone-shot detachを承認
+- detach前にsource、decoder／discontinuity generation、media、stream、stream-local sequence、managed bytes、frame livenessを再検証
+- detach後のcompletion disposalはdecode backpressureだけを解放し、scheduler-owned frameを破棄しない
+- scheduler ingressはvalidate→detach→enqueueを1回だけ実行
 - enqueue後のrollback、frame再構築、retryを禁止
-- exact active completionだけがmanaged frameをone-shot detach可能
-- detach前にsource、decoder／discontinuity generation、media、stream、sequence、managed bytes、frame livenessを検証
-- detach後のcompletion disposalはscheduler-owned frameを破棄しない
 - accepted transferは`Enqueued`／`EnqueuedAfterDroppingOldest`のみ
-- その他のenqueue結果はgeneration terminal
 - video／audio別stream-local sequenceはidentityとして維持
 - scheduler用generation-wide cross-media sequenceはaccepted enqueue後だけcommit
 - replacement generationの最初のaccepted frameだけ`DecoderReset`
-- scheduler queue／reservationが残る間、matching decoder context lifetimeをgeneration側が保持
-- discontinuity時はactive completion→scheduler ownership→decode boundary／native sessionの順でcleanup
-- direct awaited consumptionとscheduler transferを同じframeへ二重適用しない
+- cancellation before detachはownership、sequence、reset markerを変更しない
+- rejected／undefined／invalid／exhausted／exception pathはgeneration terminal
+- scheduler ownershipをmatching decoder context lifetimeより先にcleanup
 - second decoded queue、resident pump、production output activationは追加しない
 
-診断専用のmanaged conversion、bounded scheduler、awaited sink delivery、late-aware dispatch、Windows output境界は実装済みですが、real FLV decoded frameのone-shot scheduler ingressとproduction decoder factoryにはまだ接続されていません。FFmpeg backend activationやruntime配布も未承認です。
+診断専用のmanaged conversion、bounded scheduler、awaited sink delivery、late-aware dispatch、Windows output境界は実装済みです。0.0.9oでreal decoded frameのone-shot scheduler ingress境界まで到達しましたが、generation-matched scheduler delivery、production decoder factory、FFmpeg backend activation、runtime配布、audible／visible playbackにはまだ接続していません。
 
 ## 実装済みの主な領域
 
@@ -68,6 +68,8 @@ License: **Apache License 2.0**
 - source-bound one-frame managed receive and independent EOS drain
 - finite awaited PCP／FLV／decode composition boundary
 - decoded completion transfer／scheduler ingress architecture review
+- exact-active one-shot decoded completion detach
+- generation-wide scheduler ingress ownership boundary
 
 詳細:
 
@@ -81,7 +83,6 @@ License: **Apache License 2.0**
 
 PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信アプリではありません。
 
-- one-shot decoded completion transfer／bounded scheduler ingress implementation
 - generation-matched scheduler delivery and output lifecycle
 - production generation factory and decoder ingress activation
 - MP4／fragmented MP4 parser
@@ -97,9 +98,9 @@ FFmpeg backend activation、runtime bundling／distribution、license approval�
 
 ## 次のマイルストーン
 
-**0.0.9o — One-shot Decoded Completion Transfer and Scheduler Ingress Boundary**
+**0.0.9p — Generation-matched Scheduler Delivery and Output Lifecycle Review**
 
-`PlaybackSourceBoundDecodedFrameCompletion`へgeneration-controlled one-shot detachを追加し、既存`BoundedPlaybackScheduler`へ1回だけownershipを移譲します。cross-media sequence、first-frame `DecoderReset`、accepted／rejected enqueue、matching context lifetime、cancellation、discontinuity cleanupをcross-platform focused testで検証します。
+0.0.9oのscheduler-owned frameとmatching decoder context lifetimeを、既存のreservation、late-aware dispatch、managed conversion、awaited sink、Windows output境界へどう接続するかをレビューします。delivery、drop、stop、discontinuity、output failureのownershipとcleanup順を確定し、runtime compositionは次の実装マイルストーンへ分離します。
 
 ## 必要環境
 

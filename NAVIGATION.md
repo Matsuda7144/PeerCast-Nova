@@ -2,22 +2,21 @@
 
 ## 現在地
 
-**0.0.9n — Decoded Completion Transfer and Scheduler Ingress Review — Reviewed**
+**0.0.9o — One-shot Decoded Completion Transfer and Scheduler Ingress Boundary — Implemented**
 
-0.0.9mのsource-bound decoded completionを既存`BoundedPlaybackScheduler`へ安全に移譲する所有権契約を確定しました。
+0.0.9nで確定したownership契約をruntimeへ落とし、exact active decoded completionから既存`BoundedPlaybackScheduler`へmanaged frameを1回だけ移譲する境界を追加しました。
 
-- scheduler `Enqueue`は成功／拒否を問わずincoming frameを消費または破棄するため、enqueue後のrollbackを禁止
-- exact active completionだけがmanaged frameをone-shot detach可能
-- detach前にsource、decoder／discontinuity generation、media、stream、sequence、managed bytes、frame livenessを検証
-- completion disposalはdetach後のscheduler-owned frameを破棄しない
-- scheduler ingressは1 frameにつき1回だけenqueueし、再構築／retryなし
-- accepted transferは`Enqueued`または`EnqueuedAfterDroppingOldest`だけ
-- rejected／dropped／invalid／sequence-rejected transferはgeneration terminal
-- video／audio別stream-local sequenceはidentityとして保持し、scheduler用cross-media sequenceを別管理
-- downstream sequenceと最初の`DecoderReset` markerはaccepted enqueue後だけcommit
-- queued frameが残る間、matching decoder-generation context lifetimeをgeneration側が保持
-- discontinuity時はadmission close→active completion→scheduler queue／reservation→decode boundary／native sessionの順で解放
-- direct awaited consumptionとscheduler transferを同じframeへ二重適用しない
+- completion ownershipをattached／detached／disposedの3状態で管理
+- exact active decode boundaryがsource、decoder／discontinuity generation、media、stream、stream-local sequence、managed bytes、frame roleを再検証してdetachを承認
+- detach後のcompletion disposalはdecode backpressureだけを解放し、scheduler-owned frameを破棄しない
+- scheduler ingressはvalidate→detach→enqueueを1回だけ実行し、rollback／reconstruction／retryなし
+- video／audio別stream-local sequenceはidentityとして保持
+- scheduler用generation-wide sequenceはaccepted enqueue後だけcommit
+- replacement generationの最初のaccepted frameだけ`DecoderReset`
+- cancellation before detachはcompletion ownershipとreset markerを維持
+- rejected／undefined／invalid／exhausted／exception pathはgeneration terminal
+- terminal／discontinuity cleanupはscheduler ownership→matching decoder context lifetimeの順
+- second decoded queue、resident loop、production delivery／output activationは追加しない
 
 ## CI
 
@@ -25,12 +24,12 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 ## 最新の入口
 
-- `docs/adr/ADR-0124-decoded-completion-transfer-scheduler-ingress.md`
-- `docs/reviews/PCN-0132-DECODED-COMPLETION-TRANSFER-SCHEDULER-INGRESS-REVIEW.md`
-- `src/Nova.Playback/PlaybackPcpFlvAwaitedDecodeCompositionBoundary.cs`
+- `docs/adr/ADR-0125-one-shot-decoded-completion-scheduler-ingress-boundary.md`
+- `docs/reviews/PCN-0133-ONE-SHOT-DECODED-COMPLETION-SCHEDULER-INGRESS-BOUNDARY.md`
+- `src/Nova.Playback/PlaybackDecodedCompletionSchedulerIngressBoundary.cs`
 - `src/Nova.Playback/PlaybackSourceBoundOneFrameDecodeBoundary.cs`
-- `src/Nova.Playback/PlaybackDiagnosticManagedFrameSchedulerIngressTransaction.cs`
 - `src/Nova.Playback/BoundedPlaybackScheduler.cs`
+- `tests/Nova.Playback.Tests/PlaybackDecodedCompletionSchedulerIngressBoundaryTests.cs`
 
 ## ADR／PCN索引の永久欠番
 
@@ -40,13 +39,12 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 ## 次の作業
 
-**0.0.9o — One-shot Decoded Completion Transfer and Scheduler Ingress Boundary**
+**0.0.9p — Generation-matched Scheduler Delivery and Output Lifecycle Review**
 
-`PlaybackSourceBoundDecodedFrameCompletion`へgeneration-controlled one-shot detachを追加し、注入式scheduler ingressでcross-media sequence、first-frame reset marker、accepted／rejected ownership、context lifetime、discontinuity cleanupをcross-platform focused testへ落とします。
+scheduler-owned frame、generation-matched decoder context lifetime、reservation、late-aware dispatch、awaited sink／Windows output lifecycleをどのgeneration ownerで接続するかをレビューします。delivery完了、drop、stop、discontinuity、output failureのownershipとcleanup順を確定し、runtime compositionは次の実装マイルストーンへ分離します。
 
 ## 未完了
 
-- one-shot decoded completion transfer／bounded scheduler ingress implementation
 - generation-matched scheduler delivery and output lifecycle
 - production generation factory and backend activation
 - MP4／fragmented MP4 parser
