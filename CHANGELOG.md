@@ -5,6 +5,27 @@
 Detailed history through 0.0.8g remains preserved in Git history at commit
 `f078dab5372a45a8c577c1c802a697ab72b45c02` and in milestone ADR/PCN records.
 
+### 0.0.9y - Finite Approved External Runtime and Windows Lifecycle Activation Boundary
+
+- Added `IPlaybackWindowsOutputDispatcher` as the explicit application-owned owner-thread invocation contract without a playback-owned thread, queue, message pump, timer, or resident loop.
+- Added `PlaybackApprovedExternalRuntimeWindowsLifecycleBoundary` as one finite owner above probe, activation, binding, stream, buffer, and external-runtime production composition.
+- Validated exact built-in approval or explicit host-attested policy, fixed-drive runtime-directory syntax, positive window token, canonical formats, and bounded configuration before probe, dispatcher, runtime-path, or native access.
+- Routed activation, binding, initialization, processing, reset, resize, and teardown through the borrowed output dispatcher.
+- Preserved the 0.0.9q generation-matched scheduler as the sole production scheduler-output authority and changed only the output execution seam.
+- Blocked delivery until an exact parser stream description exists and binding, stream, and buffer snapshots match the active decoder generation.
+- Added fixed initial video-bind／audio-bind／video-initialize／audio-initialize ordering.
+- Added fixed replacement ordering: audio buffer reset, video buffer reset, audio stream reset, video stream reset, binding reset, video bind, audio bind, video initialize, audio initialize.
+- Preserved scheduler ownership through wait, `WouldBlock`, initialization, binding, resize, audio recovery, clock-not-started, and reset-required results without hidden retry.
+- Added explicit same-generation retained video resize with caller-driven later delivery.
+- Made binding／stream／buffer device loss terminal for the complete lifecycle with production-first teardown and no in-place device recreation, reconnect, fallback, revival, or rollback.
+- Added idempotent stop, active-operation cancellation, partial-construction cleanup, and preservation of the borrowed dispatcher and window token.
+- Added copied lifecycle, generation, bounded stream-configuration, probe, activation, binding, stream, and buffer snapshots without exposing native or OS objects.
+- Added ten cross-platform injected tests covering policy preflight, initial order, configuration admission, replacement order, retained resize, terminal device loss, idempotent stop, active cancellation, and activation-failure cleanup.
+- Added ADR-0135 and PCN-0143 and advanced README, ROADMAP, and NAVIGATION.
+- Documented narrow file-scoped CA1068, CA1859, and CA1861 rationale and restored routine CircleCI configuration after diagnostics.
+- Passed routine CircleCI restore, Release build with analyzers, full solution tests, and format verification on the implementation and focused-test head.
+- Selected 0.0.9z Controlled Retained-Fixture Production Activation Validation.
+- Kept physical Windows output activation, application window／message loop, retained real-runtime fixture validation, real-media output, audible／visible playback, GUI, and FFmpeg binary distribution unavailable.
 ### 0.0.9x - Approved External Runtime and Windows Lifecycle Activation Review
 
 - Reviewed the exact connection from the approved built-in FFmpeg production route and explicit host-attested unreviewed replacement route to the existing Windows 11 D3D11／WASAPI output boundaries.

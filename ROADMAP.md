@@ -67,6 +67,7 @@
 - 0.0.9v FFmpeg Candidate License, Backend Registration, and Distribution Review
 - 0.0.9w External LGPL Runtime Compliance and User Replacement Boundary
 - 0.0.9x Approved External Runtime and Windows Lifecycle Activation Review
+- 0.0.9y Finite Approved External Runtime and Windows Lifecycle Activation Boundary
 
 0.0.9u implements the dedicated production owner from awaited PCP／FLV input through source-bound decode, scheduler transfer, caller-driven delivery, explicit reset, stop, and discontinuity replacement.
 
@@ -74,36 +75,28 @@
 
 0.0.9x reviews the missing application lifecycle above that production entry and the existing Windows output stack. It selects one application-provided owner-thread dispatcher, keeps window／message-loop ownership outside playback, retains the 0.0.9q generation-matched scheduler as the sole production delivery authority, uses the active decoder generation for output configuration, makes resize explicit, and makes device loss terminal for the first implementation.
 
-### Next: 0.0.9y Finite Approved External Runtime and Windows Lifecycle Activation Boundary
+0.0.9y implements that finite lifecycle. It adds the explicit dispatcher contract, pure preflight, owner-thread activation and output operations, generation-matched initial／replacement configuration, explicit retained resize, terminal device loss, production-first stop, active-operation cancellation, partial-construction cleanup, and ten injected cross-platform tests without creating a window, thread, queue, loop, retry, fallback, or FFmpeg distribution path.
 
-Implement one finite lifecycle owner that:
+### Next: 0.0.9z Controlled Retained-Fixture Production Activation Validation
 
-- accepts the exact approved built-in manifest or an explicitly allowed host-attested unreviewed manifest and one explicit runtime directory;
-- accepts an application-owned output dispatcher and positive window token without owning either;
-- validates backend policy and pure configuration before OS work;
-- runs the resource-free Windows adapter probe;
-- dispatches COM／D3D11／WASAPI activation to the owner thread;
-- constructs binding, stream-initialization, and buffer-processing boundaries around the singular activation owner;
-- adds a minimal dispatcher-backed process／reset output port for asynchronous production delivery;
-- generalizes the generation delivery seam only enough to consume that port without adding another scheduler path;
-- creates the external runtime production composition borrowing the output port;
-- accepts input before stream configuration but blocks delivery until an exact parser stream description exists;
-- binds and initializes output with the exact active decoder generation;
-- resets and reconfigures output state before delivering a discontinuity replacement generation;
-- preserves scheduler ownership through `WouldBlock`, timing wait, initialization, binding, and resize requirements;
-- handles resize explicitly at the current generation;
-- treats device loss as terminal, stops production first, then tears down output on the owner dispatcher;
-- preserves the application window and dispatcher during cleanup;
-- adds no playback-owned thread, queue, timer, message pump, resident loop, hidden retry, or fallback;
-- proves ownership, ordering, cancellation, partial cleanup, and idempotent stop through injected cross-platform tests.
+Validate the 0.0.9y lifecycle against one controlled retained fixture and explicit verified external-runtime environment:
+
+- use the exact built-in approved manifest or a deliberately constructed explicit host-attested test manifest;
+- preserve one explicit runtime directory with checksum, ABI, dependency, and symbol verification;
+- perform policy and pure-configuration admission before runtime access;
+- feed the retained FLV bootstrap and bounded media packets through the finite lifecycle;
+- prove exact parser stream description and decoder-generation creation;
+- prove output-configuration admission is blocked until exact dimensions and audio parameters exist;
+- prove no hidden delivery loop, retry, runtime search, download, fallback, or second scheduler appears;
+- record fixture identity, runtime identity, deterministic results, and cleanup order;
+- keep physical D3D11／WASAPI output, application window creation, and audible／visible playback outside this validation unless separately authorized.
 
 ### Later sequence
 
-1. perform controlled retained-fixture production activation validation;
-2. perform controlled real-media decode validation;
-3. perform controlled Windows audio／video output validation;
-4. add the application window／message loop and user-facing lifecycle;
-5. expand packaging only after the preceding gates pass.
+1. perform controlled real-media decode validation;
+2. perform controlled Windows audio／video output validation;
+3. add the application window／message loop and user-facing lifecycle;
+4. expand packaging only after the preceding gates pass.
 
 ### Deferred
 
@@ -132,6 +125,8 @@ Routine Linux CI uses CircleCI while GitHub Actions usage is exhausted. Final br
 - do not convert host attestation into Nova review approval
 - keep application window and output dispatcher externally owned
 - keep Windows native output resources under one owner thread
+- keep output generation equal to the active decoder generation
+- make device loss terminal unless a later ADR defines a new complete lifecycle
 - record provenance and redistribution permission for third-party assets
 
 ## 0.1.0 Genesis gate

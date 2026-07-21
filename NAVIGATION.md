@@ -2,25 +2,26 @@
 
 ## 現在地
 
-**0.0.9x — Approved External Runtime and Windows Lifecycle Activation Review — Completed**
+**0.0.9y — Finite Approved External Runtime and Windows Lifecycle Activation Boundary — Implemented**
 
-exact built-in approved external FFmpeg production routeと、explicit host-attested unreviewed replacement route、既存Windows output境界をapplication-owned lifecycleへ接続するownershipと順序を確定しました。
+ADR-0134で確定したapplication-owned lifecycleを実装し、exact built-in approvedまたはexplicit host-attested external FFmpeg production routeを既存Windows 11 D3D11／WASAPI output境界へ有限かつowner-thread-safeに接続しました。
 
-- applicationがwindow、message loop、dispatcher／output owner threadを所有
-- playback lifecycleがprobe、COM／D3D11／WASAPI activation、binding、stream、buffer、production compositionを所有
-- windowはopaque tokenとして借用し、playback側では作成／破棄しない
-- activation resourceへの全アクセスとteardownをowner-thread dispatcher経由に限定
-- playback-owned thread／queue／message pump／timer／resident loopなし
-- 0.0.9q generation-matched deliveryを唯一のproduction scheduler-output ownerとして維持
-- 旧0.0.6y scheduler adapterをproduction経路へ追加しない
-- exact stream description後にactive decoder generationでoutputを初期化
-- discontinuity replacementは同じdevice上でoutput generationをreconfigure
-- resizeは明示操作、retained itemを消費しない
-- device lossは初回lifecycle implementationではterminal
-- stopはproduction composition後にbuffer → stream → binding → activation
-- FFmpeg external-only／explicit-directory／verified／unbundled policyを維持
-- host manifestは`HostDeclared`／`HostAttested`／`Unreviewed`でありNova approvalではない
-- 0.0.9x自体のruntime source／tests変更なし
+- application-owned dispatcherとpositive opaque window tokenを借用
+- playback側ではwindow、thread、queue、message pump、timer、resident loopを作成しない
+- pure preflightをprobe、dispatcher、runtime path、native accessより先に実行
+- probe → owner-thread activation → binding／stream／buffer → production compositionの固定順序
+- exact parser stream description後にactive decoder generationでvideo／audio outputを構成
+- 0.0.9q generation-matched schedulerを唯一のproduction delivery ownerとして維持
+- async production delivery／resetをdispatcher-backed output pathへ限定
+- discontinuity replacementでaudio buffer → video buffer → audio stream → video stream → bindingをreset
+- new generationをvideo bind → audio bind → video initialize → audio initializeの順に構成
+- `WouldBlock`／wait／binding／initialization／resize等はcaller-visibleでscheduler itemを保持
+- resizeはsame-generation explicit operationでありhidden retryなし
+- device lossはterminal、production-firstでoutputをowner thread上で解放
+- stop／cancellation／partial construction cleanupをidempotentに固定
+- borrowed dispatcher／window tokenをcleanup対象外として維持
+- cross-platform injected tests 10件で順序、ownership、cancellation、partial cleanupを検証
+- routine CircleCIでrestore、Release build with analyzers、full tests、format verification成功
 
 ## CI
 
@@ -28,26 +29,24 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 ## 最新の入口
 
+- `docs/adr/ADR-0135-finite-approved-external-runtime-windows-lifecycle-activation-boundary.md`
+- `docs/reviews/PCN-0143-FINITE-APPROVED-EXTERNAL-RUNTIME-WINDOWS-LIFECYCLE-ACTIVATION-BOUNDARY.md`
+- `src/Nova.Playback/PlaybackApprovedExternalRuntimeWindowsLifecycleBoundary.cs`
+- `src/Nova.Playback/PlaybackApprovedExternalRuntimeWindowsLifecycleOperations.cs`
+- `src/Nova.Playback/PlaybackDispatcherBackedProductionGeneration.cs`
+- `src/Nova.Playback/PlaybackWindowsOutputDispatcher.cs`
+- `tests/Nova.Playback.Tests/PlaybackApprovedExternalRuntimeWindowsLifecycleBoundaryTests.cs`
+- `tests/Nova.Playback.Tests/PlaybackApprovedExternalRuntimeWindowsLifecycleFailureTests.cs`
 - `docs/adr/ADR-0134-approved-external-runtime-windows-lifecycle-activation-review.md`
 - `docs/reviews/PCN-0142-APPROVED-EXTERNAL-RUNTIME-WINDOWS-LIFECYCLE-ACTIVATION-REVIEW.md`
 - `docs/adr/ADR-0133-external-lgpl-runtime-compliance-user-replacement-boundary.md`
 - `docs/reviews/PCN-0141-EXTERNAL-LGPL-RUNTIME-COMPLIANCE-USER-REPLACEMENT-BOUNDARY.md`
-- `docs/legal/FFMPEG-EXTERNAL-RUNTIME-COMPLIANCE.md`
-- `THIRD-PARTY-LICENSES/FFmpeg/PROVENANCE.md`
-- `THIRD-PARTY-LICENSES/FFmpeg/NOVA-DISTRIBUTION-GUARD.md`
 - `src/Nova.Playback/PlaybackFfmpegExternalRuntimeProductionComposition.cs`
 - `src/Nova.Playback/PlaybackGenerationMatchedSchedulerDeliveryBoundary.cs`
-- `src/Nova.Playback/PlaybackWindowsOutputAdapterSelection.cs`
 - `src/Nova.Playback/PlaybackWindowsOutputActivationBoundary.cs`
 - `src/Nova.Playback/PlaybackWindowsOutputResourceBindingBoundary.cs`
 - `src/Nova.Playback/PlaybackWindowsOutputStreamInitializationBoundary.cs`
 - `src/Nova.Playback/PlaybackWindowsOutputBufferProcessingBoundary.cs`
-- `docs/adr/ADR-0069-WINDOWS-OUTPUT-ADAPTER-SELECTION.md`
-- `docs/adr/ADR-0070-WINDOWS-OUTPUT-ACTIVATION-BOUNDARY.md`
-- `docs/adr/ADR-0071-WINDOWS-OUTPUT-RESOURCE-BINDING-BOUNDARY.md`
-- `docs/adr/ADR-0072-WINDOWS-OUTPUT-STREAM-INITIALIZATION-BOUNDARY.md`
-- `docs/adr/ADR-0073-WINDOWS-OUTPUT-BUFFER-PROCESSING-BOUNDARY.md`
-- `docs/adr/ADR-0074-WINDOWS-OUTPUT-SCHEDULER-ADAPTER-BOUNDARY.md`
 
 ## ADR／PCN索引の永久欠番
 
@@ -57,17 +56,16 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 ## 次の作業
 
-**0.0.9y — Finite Approved External Runtime and Windows Lifecycle Activation Boundary**
+**0.0.9z — Controlled Retained-Fixture Production Activation Validation**
 
-application-owned dispatcherとwindow tokenを借用する一つの有限lifecycle ownerを実装します。exact built-in approvedまたはexplicit host-attested runtimeを対象に、initial stream configuration、discontinuity output generation reconfiguration、retained resize／backpressure、terminal device loss、production-first stop、owner-thread teardownをcross-platform injected testsで固定します。
+保持済みのcontrolled FLV fixtureと明示runtime環境を使い、0.0.9y lifecycleのproduction activationを有限手順で検証します。runtime verification、exact stream description、generation creation、output-configuration admissionまでを対象とし、physical Windows outputやaudible／visible playbackは別gateとして残します。
 
 ## 未完了
 
-- approved／host-attested runtime Windows lifecycle implementation
-- output owner-thread dispatcher adapter
-- controlled production retained-fixture validation
+- controlled retained-fixture production activation validation
 - controlled real-media decode／output validation
 - Windows application window／message loop
+- application dispatcher implementation
 - GUI legal／about surface
 - MP4／fragmented MP4 parser
 - discontinuity-time `avcodec_flush_buffers` semantics

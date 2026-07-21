@@ -47,3 +47,18 @@ dotnet_diagnostic.CA1822.severity = none
 # Cancellation can originate from subordinate fixed results or the linked stop token. The
 # composition must finish terminal cleanup before translating cancellation to the caller.
 dotnet_diagnostic.CA2250.severity = none
+
+[src/Nova.Playback/PlaybackApprovedExternalRuntimeWindowsLifecycleBoundary.cs]
+# The private serialization helper keeps cancellation beside the delegated operation so each
+# public finite call reads as operation, cancellation, then lifecycle admission policy.
+dotnet_diagnostic.CA1068.severity = none
+
+[src/Nova.Playback/PlaybackDispatcherBackedProductionGeneration.cs]
+# The nullable local is intentionally held through the delivery-operations interface because
+# cleanup owns only that contract and must remain symmetric with the standard generation path.
+dotnet_diagnostic.CA1859.severity = none
+
+[tests/Nova.Playback.Tests/PlaybackApprovedExternalRuntimeWindowsLifecycleBoundaryTests.cs]
+# Fixed inline order assertions keep each ADR-0134 lifecycle proof adjacent to the operation
+# under test; the arrays are short, immutable expectations rather than shared test state.
+dotnet_diagnostic.CA1861.severity = none
