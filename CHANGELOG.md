@@ -5,6 +5,22 @@
 Detailed history through 0.0.8g remains preserved in Git history at commit
 `f078dab5372a45a8c577c1c802a697ab72b45c02` and in milestone ADR/PCN records.
 
+### 0.0.9q - Finite Generation-matched Scheduler Delivery and Output Lifecycle Boundary
+
+- Added `PlaybackGenerationMatchedSchedulerDeliveryBoundary` as one finite owner of the exact source-bound decode generation, 0.0.9o scheduler ingress, and one-item delivery lifecycle.
+- Required exact source, decoder／discontinuity generation, scheduler sequence, media role, frame liveness, and matching context role before output.
+- Kept the source-bound native session as the sole video／audio context owner and selected only the matching H.264 or AAC context.
+- Added one caller-driven reserve→reset／timing→adapt／convert→result-aware output→completion operation without a resident loop or hidden retry.
+- Added typed scheduler reservation completion for retained, delivered, and dropped ownership while preserving the existing boolean API.
+- Counted deliberate late-video removal as a scheduler drop rather than a delivery.
+- Retained frames through `WouldBlock`, initialization／binding／resize requirements, audio recovery, cancellation, clock-not-started, and device loss.
+- Added one-shot replacement-generation `DecoderReset` admission after successful timing／output reset and preserved the marker on cancellation or failure.
+- Prevented decoded-completion detach while a scheduler delivery remained active.
+- Added asynchronous stop that cancels and awaits active delivery before scheduler, decode-boundary, and native-session cleanup.
+- Added ten focused cross-platform tests plus ADR-0127 and PCN-0135.
+- Passed the initial routine CircleCI restore, Release build with analyzers, full test suite, and format verification without diagnostic configuration changes.
+- Kept production generation factory, ABI-gate acquisition, backend activation, Windows device lifecycle, FFmpeg distribution, continuous pumping, and audible／visible playback unchanged.
+
 ### 0.0.9p - Generation-matched Scheduler Delivery and Output Lifecycle Review
 
 - Reviewed the ownership connection from the 0.0.9o scheduler ingress through reservation, exact FFmpeg context selection, managed conversion, timing, and output lifecycle.

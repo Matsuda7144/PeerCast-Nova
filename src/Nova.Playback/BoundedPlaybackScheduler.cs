@@ -521,29 +521,56 @@ public sealed class BoundedPlaybackScheduler : IDisposable
         return false;
     }
 
-    private void CompleteOutput(ScheduledFrame scheduled, bool consume)
+    private void CompleteOutput(
+        ScheduledFrame scheduled,
+        PlaybackSchedulerOutputCompletion completion)
     {
+        if (!Enum.IsDefined(completion))
+        {
+            completion = PlaybackSchedulerOutputCompletion.Retained;
+        }
+
         lock (_sync)
         {
             if (!ReferenceEquals(_outputReservation, scheduled))
             {
                 return;
             }
+
             _outputReservation = null;
-            if (consume || _isDisposed != 0)
+            if (completion != PlaybackSchedulerOutputCompletion.Retained || _isDisposed != 0)
             {
                 Remove(scheduled, dispose: true, countDrop: false);
-                if (consume) IncrementSaturated(ref _deliveryCount);
+                if (completion == PlaybackSchedulerOutputCompletion.Delivered)
+                {
+                    IncrementSaturated(ref _deliveryCount);
+                }
+                else if (completion == PlaybackSchedulerOutputCompletion.Dropped)
+                {
+                    IncrementSaturated(ref _dropCount);
+                }
             }
         }
+
         _runGate.Release();
     }
 
-    internal void CompleteReservedIdentity(object scheduledIdentity, bool consume)
+    internal void CompleteReservedIdentity(
+        object scheduledIdentity,
+        PlaybackSchedulerOutputCompletion completion)
     {
         if (scheduledIdentity is ScheduledFrame scheduled)
-            CompleteOutput(scheduled, consume);
+        {
+            CompleteOutput(scheduled, completion);
+        }
     }
+
+    internal void CompleteReservedIdentity(object scheduledIdentity, bool consume) =>
+        CompleteReservedIdentity(
+            scheduledIdentity,
+            consume
+                ? PlaybackSchedulerOutputCompletion.Delivered
+                : PlaybackSchedulerOutputCompletion.Retained);
 
     private void Remove(ScheduledFrame scheduled, bool dispose, bool countDrop)
     {
@@ -621,13 +648,23 @@ internal enum PlaybackSchedulerOutputKind
     Audio,
 }
 
+internal enum PlaybackSchedulerOutputCompletion
+{
+    Retained,
+    Delivered,
+    Dropped,
+}
+
 internal sealed class PlaybackSchedulerOutputReservation : IDisposable
 {
     private BoundedPlaybackScheduler? _scheduler;
     private readonly object _scheduledIdentity;
 
-    internal PlaybackSchedulerOutputReservation(BoundedPlaybackScheduler scheduler,
-        object scheduledIdentity, PlaybackDecoderFfmpegManagedFrame frame, long sequence,
+    internal PlaybackSchedulerOutputReservation(
+        BoundedPlaybackScheduler scheduler,
+        object scheduledIdentity,
+        PlaybackDecoderFfmpegManagedFrame frame,
+        long sequence,
         PlaybackDecodedFrameDiscontinuityKind discontinuity)
     {
         _scheduler = scheduler;
@@ -641,12 +678,25 @@ internal sealed class PlaybackSchedulerOutputReservation : IDisposable
     public long Sequence { get; }
     public PlaybackDecodedFrameDiscontinuityKind Discontinuity { get; }
 
-    public void Complete(bool consume)
+    public void Complete(PlaybackSchedulerOutputCompletion completion)
     {
+        if (!Enum.IsDefined(completion))
+        {
+            completion = PlaybackSchedulerOutputCompletion.Retained;
+        }
+
         var scheduler = Interlocked.Exchange(ref _scheduler, null);
         if (scheduler is not null)
-            scheduler.CompleteReservedIdentity(_scheduledIdentity, consume);
+        {
+            scheduler.CompleteReservedIdentity(_scheduledIdentity, completion);
+        }
     }
 
-    public void Dispose() => Complete(consume: false);
+    public void Complete(bool consume) =>
+        Complete(
+            consume
+                ? PlaybackSchedulerOutputCompletion.Delivered
+                : PlaybackSchedulerOutputCompletion.Retained);
+
+    public void Dispose() => Complete(PlaybackSchedulerOutputCompletion.Retained);
 }

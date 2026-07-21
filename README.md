@@ -9,23 +9,25 @@ License: **Apache License 2.0**
 
 ## 現在地
 
-**Milestone 0.0.9p — Generation-matched Scheduler Delivery and Output Lifecycle Review**
+**Milestone 0.0.9q — Finite Generation-matched Scheduler Delivery and Output Lifecycle Boundary**
 
-0.0.9oでschedulerへ移譲したreal decoded frameを、同じdecoder generationのcontextとoutput lifecycleへ安全に接続するownership契約を確定しました。runtime実装は0.0.9qへ分離しています。
+0.0.9pで確定したownership契約をruntimeへ実装し、scheduler-owned real decoded frameを同じsource-bound decoder generationのcontext、timing、conversion、result-aware Windows outputへ接続する有限境界を追加しました。
 
-- production deliveryはdestructiveな`RunOneAsync`ではなくscheduler reservation経路へ一本化
-- 一回のcaller-driven delivery operationでreserve→generation検証→context選択→timing／reset admission→conversion→output→reservation completion
-- video frameは同じnative sessionのvideo context、audio frameは同じsessionのaudio contextだけを使用
-- source-bound native sessionを唯一のcontext ownerとし、二重のcontext lifetime ownershipを禁止
-- result-aware canonical output seamで`WouldBlock`、initialization／binding／resize、device loss、recoveryを表現
-- reservation completionを`Delivered / Dropped / Retained`へ分離し、明示dropをdeliveryとして数えない
-- replacement generationの最初の`DecoderReset`を成功したreset admission後に一度だけacknowledge
-- cancellationやretryable outputではreservationとreset markerを維持
-- active deliveryをcancel／awaitしてからscheduler frame、decode boundary、native contextをcleanup
-- Windows activation、binding、stream initialization、COM／OS handle ownershipはapplication owner側に維持
-- second decoded queue、resident pump、hidden retry、二重output pathは追加しない
+- exact source、decoder／discontinuity generation、scheduler sequence、media role、frame livenessをreservation中に再検証
+- native video／audio context ownershipはsource-bound sessionだけに維持
+- videoは同じsessionのH.264 context、audioは同じsessionのAAC contextだけを使用
+- 一回のcaller-driven operationでreserve→validate→reset／timing→adapt／convert→output→completion
+- scheduler reservation completionを`Retained / Delivered / Dropped`へ型付き拡張
+- 旧`Complete(bool)` APIを互換維持
+- 明示video dropはdeliveryではなくdropとしてaccounting
+- `WouldBlock`、initialization／binding／resize、audio recovery、cancellationは同じframeを保持
+- device lossはreservationを保持してreset-requiredへ遷移
+- replacement generationの最初の`DecoderReset`をreset成功後に一度だけacknowledge
+- active delivery中は後続completionをdetachしない
+- `StopAsync`はactive deliveryをcancel／awaitしてからscheduler ownershipとdecode／native ownershipをcleanup
+- second decoded queue、resident pump、hidden retry、二重context ownershipを追加しない
 
-診断専用のawaited sink delivery、managed conversion、late-aware dispatch、Windows output境界は既に存在します。0.0.9pではそれらをそのまま混在させず、generation-matchedなreservation deliveryへ統合する契約を選択しました。production generation composite、backend activation、runtime配布、audible／visible playbackはまだ未実装です。
+診断専用のawaited sink delivery、late-aware dispatch、Windows output境界と互換性を維持したまま、real decoded scheduler ownershipの有限delivery経路まで到達しました。production generation factory、ABI-gate acquisition、backend activation、device lifecycle、runtime配布、audible／visible playbackにはまだ接続していません。
 
 ## 実装済みの主な領域
 
@@ -66,7 +68,8 @@ License: **Apache License 2.0**
 - finite awaited PCP／FLV／decode composition boundary
 - exact-active one-shot decoded completion detach
 - generation-wide scheduler ingress ownership boundary
-- generation-matched scheduler delivery／output lifecycle architecture review
+- generation-matched scheduler delivery／output lifecycle review
+- finite generation-matched scheduler delivery／output lifecycle boundary
 
 詳細:
 
@@ -80,8 +83,9 @@ License: **Apache License 2.0**
 
 PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信アプリではありません。
 
-- finite generation-matched scheduler delivery and output lifecycle implementation
 - production generation factory and decoder ingress activation
+- ABI-gate acquisition and backend policy activation
+- Windows application／window／device lifecycle composition
 - MP4／fragmented MP4 parser
 - decoded-buffer duration cutoff
 - discontinuity-time native reset semantics
@@ -95,9 +99,9 @@ FFmpeg backend activation、runtime bundling／distribution、license approval�
 
 ## 次のマイルストーン
 
-**0.0.9q — Finite Generation-matched Scheduler Delivery and Output Lifecycle Boundary**
+**0.0.9r — Production Decoder Generation Factory and Activation Review**
 
-exact source-bound decode generation、0.0.9o scheduler ingress、one-item reservation、matching FFmpeg context conversion、result-aware canonical output、one-shot `DecoderReset` admission、`Delivered / Dropped / Retained` completion、async cleanupを一つの有限generation boundaryへ実装します。Windows device activationとproduction factoryは後続へ残します。
+verified runtime locator／lease、video／audio ABI gate、FLV decoder parameter binding、source-bound native session、decode／scheduler generation、timing、Windows output lifecycleをproduction factoryがどう取得・所有・置換するかをレビューします。backend activation、license gate、failure rollback、discontinuity replacement、application-owned device resourcesの境界を確定し、runtime factory実装は後続へ分離します。
 
 ## 必要環境
 

@@ -59,28 +59,29 @@
 - 0.0.9n Decoded Completion Transfer and Scheduler Ingress Review
 - 0.0.9o One-shot Decoded Completion Transfer and Scheduler Ingress Boundary
 - 0.0.9p Generation-matched Scheduler Delivery and Output Lifecycle Review
+- 0.0.9q Finite Generation-matched Scheduler Delivery and Output Lifecycle Boundary
 
 0.0.9o adds explicit attached／detached／disposed ownership to the source-bound decoded completion and requires the exact active decode boundary to authorize one-shot detach. One generation-scoped ingress validates stream-local video／audio identity, assigns a separate monotonic cross-media scheduler sequence, and commits the first accepted `DecoderReset` only after scheduler ownership.
 
 0.0.9p selects reservation-based delivery as the production scheduler exit. It requires exact media-context selection from the same source-bound native session, a result-aware canonical output seam, typed delivered／dropped／retained reservation completion, one-shot reset admission, and asynchronous cancellation／reservation cleanup before native-context disposal. Device-wide Windows activation and stream ownership remain external.
 
-### Next: 0.0.9q Finite Generation-matched Scheduler Delivery and Output Lifecycle Boundary
+0.0.9q implements that contract. One finite generation boundary reserves one scheduler item, validates exact identity, selects the matching H.264／AAC context, performs timing and managed adaptation／conversion, maps result-aware Windows output, and completes ownership as retained, delivered, or dropped. Replacement reset is acknowledged once, explicit video drop has separate accounting, and asynchronous stop waits for reservation release before scheduler and native decoder cleanup.
 
-Implement one finite generation owner that composes the source-bound decode generation and 0.0.9o scheduler ingress with one-item scheduler delivery:
+### Next: 0.0.9r Production Decoder Generation Factory and Activation Review
 
-- keep native video／audio context ownership singular inside the source-bound session;
-- reserve at most one scheduler item per caller operation;
-- validate exact source, decoder／discontinuity generation, scheduler sequence, media role, and context liveness;
-- use only the matching video or audio FFmpeg context for callback-scoped adaptation／conversion;
-- call one injected result-aware canonical output operation;
-- explicitly complete the reservation as delivered, dropped, or retained;
-- acknowledge the first replacement-generation `DecoderReset` only after successful reset admission;
-- cancel and await active delivery before scheduler and decode／native cleanup;
-- add no resident output loop, hidden retry, or second decoded queue.
+Review how production composition creates and replaces the completed source-bound decode／scheduler delivery generation:
+
+- acquire the exact verified FFmpeg runtime lease and distinct video／audio ABI gates;
+- enforce license and backend activation policy before native work;
+- create FLV decoder parameter binding and source-bound native session without partial success;
+- create decode, scheduler ingress, timing, and finite output delivery ownership as one generation;
+- borrow application-owned Windows activation／binding／stream resources;
+- define failure rollback and discontinuity replacement order;
+- keep each construction and replacement operation finite.
 
 ### Later sequence
 
-1. add a production generation factory and review ABI-gate acquisition／backend activation／Windows device lifecycle;
+1. implement the reviewed production decoder generation factory;
 2. connect bounded decode ingress and finite delivery through controlled production composition;
 3. perform controlled real-media validation.
 
@@ -88,7 +89,6 @@ Implement one finite generation owner that composes the source-bound decode gene
 
 - MP4／fragmented MP4 parser
 - avformat integration
-- production generation factory and backend activation
 - discontinuity reset and `avcodec_flush_buffers`
 - duration cutoff
 - independent audio recovery generation changes
