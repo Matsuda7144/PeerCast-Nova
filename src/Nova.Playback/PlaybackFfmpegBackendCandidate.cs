@@ -1,8 +1,8 @@
 namespace PeerCast.Nova.Playback;
 
 /// <summary>
-/// Pinned external build candidate. This is provenance data only: no FFmpeg
-/// binary is bundled or loaded, and license review intentionally remains pending.
+/// Pinned external LGPL shared-build candidate. No FFmpeg binary is bundled,
+/// downloaded, installed, or redistributed by PeerCast Nova.
 /// </summary>
 public static class PlaybackFfmpegBackendCandidate
 {
@@ -21,6 +21,6 @@ public static class PlaybackFfmpegBackendCandidate
     public static PlaybackDecoderBackendProvenance Provenance { get; } = new(
         PlaybackDecoderBackendOrigin.ThirdParty,
         PlaybackDecoderBackendDistribution.OptionalExternal,
-        PlaybackDecoderBackendLicenseReview.Pending,
+        PlaybackDecoderBackendLicenseReview.Approved,
         ContainsNativeCode: true);
 }

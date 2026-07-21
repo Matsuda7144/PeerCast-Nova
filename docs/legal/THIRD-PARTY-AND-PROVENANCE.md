@@ -81,25 +81,21 @@ an FFmpeg build. An exact build and compliance plan remain required separately.
 
 Milestone 0.0.6b pins one BtbN FFmpeg 8.1 LGPL shared Windows candidate for
 technical evaluation. Its archive is not distributed with Nova and its runtime
-provenance remains `Pending`. Pinning and technical verification do not
-constitute legal approval.
+provenance initially remains `Pending`. Pinning and technical verification do
+not by themselves constitute legal approval.
 
 Milestone 0.0.6c pins the five shared libraries required by the proposed runtime
 boundary. The inventory is technical integrity evidence only; the libraries are
-not bundled, activated, or approved for redistribution.
+not bundled or approved for redistribution.
 
 ADR-0051 fixes the current distribution policy: Nova does not bundle or
 redistribute FFmpeg. A user or host supplies one explicit installation directory,
 and Nova uses the verified libraries only through dynamic linking. Nova does not
-search `PATH`, the registry, or conventional install locations. This avoids a
-Nova FFmpeg-binary redistribution route but does not complete LGPLv3 review.
-Copyright/attribution display and a usable means to access the applicable license
-text remain required product tasks before activation can be approved.
+search `PATH`, the registry, or conventional install locations.
 
 ADR-0052 hardens this host-provided route by retaining verified DLL handles
 and local-directory guard handles until the next gate finishes. This is an
-integrity boundary only: it does not load FFmpeg, approve its license, or
-change the remaining attribution and license-access obligations.
+integrity boundary and does not change the no-bundling policy.
 
 Milestone 0.0.9v completes the license and distribution architecture review.
 The exact BtbN `win64-lgpl-shared` build class is acceptable in principle for
@@ -119,13 +115,29 @@ The permanent default distribution decision is:
 - a third party that redistributes FFmpeg with Nova is independently responsible
   for the complete binary／source compliance package.
 
-The current fixed built-in DLL inventory is not by itself a complete LGPLv3
-replacement mechanism. Before changing `LicenseReview.Pending`, Nova must add a
-host-owned manifest route that lets a user authorize an interface-compatible
-modified LGPL build while preserving exact filename, checksum, ABI-major, and
-symbol verification.
+Milestone 0.0.9w implements the remaining compliance and replacement conditions.
+`PlaybackFfmpegExternalRuntimeManifest` now provides immutable built-in and
+host-supplied manifest routes. Both routes accept only `LGPL-3.0-or-later`,
+require the five reviewed DLL roles, recognizable filenames, ABI majors,
+positive lengths, and SHA-256 digests, and pass through the existing retained
+runtime, dependency, ABI, and required-symbol boundaries.
 
-Activated distributions must also include prominent FFmpeg notice material,
-verbatim GPLv3 and LGPLv3 texts, runtime replacement instructions, and no term
-that forbids reverse engineering for debugging modifications to the LGPL
-library. See `FFMPEG-EXTERNAL-RUNTIME-COMPLIANCE.md`, ADR-0132, and PCN-0140.
+The user or application host can authorize an interface-compatible modified
+LGPL build with `CreateHostSupplied`. Replacement does not disable integrity
+verification: the selected files remain bound to the host-provided lengths and
+hashes, and later byte changes fail with a digest mismatch.
+
+The exact reviewed built-in candidate is now `LicenseReview.Approved` for this
+external-only route. Approval does not authorize bundling, mirroring, rehosting,
+automatic acquisition, GPL or nonfree variants, or generic backend registration.
+Application policy must still explicitly allow third-party native code and keep
+bundled code disabled.
+
+Activated CLI build and publish output includes `THIRD-PARTY-LICENSES/FFmpeg`
+with a prominent notice, replacement instructions, verbatim LGPLv3 text, a
+deterministic GPLv3 text archive, and fixed text hashes. Nova terms do not
+prohibit reverse engineering performed to debug modifications to the LGPL
+library.
+
+See `FFMPEG-EXTERNAL-RUNTIME-COMPLIANCE.md`, ADR-0132, ADR-0133, PCN-0140,
+and PCN-0141.

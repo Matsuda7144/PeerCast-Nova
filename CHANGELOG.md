@@ -5,6 +5,29 @@
 Detailed history through 0.0.8g remains preserved in Git history at commit
 `f078dab5372a45a8c577c1c802a697ab72b45c02` and in milestone ADR/PCN records.
 
+### 0.0.9w - External LGPL Runtime Compliance and User Replacement Boundary
+
+- Added `PlaybackFfmpegExternalRuntimeManifest` with immutable built-in and host-supplied origins.
+- Accepted only `LGPL-3.0-or-later` and exactly five reviewed FFmpeg shared-library roles.
+- Required recognizable filenames, reviewed ABI majors, positive lengths, and SHA-256 digests for `avcodec`, `avformat`, `avutil`, `swresample`, and `swscale`.
+- Rejected GPL, nonfree, LGPL-2.1, unknown, duplicate, missing, renamed, case-variant, path-bearing, wrong-ABI, invalid-length, and invalid-digest manifests.
+- Kept runtime paths, URLs, commands, scripts, archives, download instructions, installation instructions, and fallback locations outside the manifest contract.
+- Added `CreateHostSupplied` so a user or application host can authorize an interface-compatible modified LGPL build.
+- Preserved exact checksum verification for host replacements and proved later byte changes produce a digest mismatch.
+- Added `PlaybackFfmpegExternalRuntimeGenerationFactory` as a manifest-specific adapter over the existing production generation factory.
+- Added `PlaybackFfmpegExternalRuntimeComposition` as the application-composition-root entry for the approved route.
+- Reused the existing explicit-directory locator, retained directory and DLL handles, exact inventory verifier, PE dependency gate, ABI-major gate, and required-symbol gate.
+- Kept generic backend registration, implicit discovery, network access, download, extraction, installation, update, fallback, resident pumping, second queues, and Windows resource ownership absent.
+- Changed the exact reviewed BtbN candidate from `LicenseReview.Pending` to `LicenseReview.Approved`.
+- Kept production policy explicit: third-party and native code must be allowed while bundled code remains disabled.
+- Added `THIRD-PARTY-LICENSES/FFmpeg` with a prominent notice, runtime replacement instructions, verbatim LGPLv3 text, deterministic GPLv3 text archive, extraction instructions, and fixed text hashes.
+- Copied the complete FFmpeg legal directory into `Nova.Cli` build and publish output.
+- Added focused manifest, replacement-integrity, policy, legal-text, notice, packaging, candidate-transition, and integration-probe tests.
+- Updated obsolete pending-review probe expectations so approved candidates reach the explicit runtime gate.
+- Added ADR-0133 and PCN-0141 and advanced the project ledgers.
+- Selected 0.0.9x Approved External Runtime and Windows Lifecycle Activation Review.
+- Kept FFmpeg binary bundling／redistribution, Windows application lifecycle activation, controlled real-media decode／output validation, and audible／visible playback unavailable.
+
 ### 0.0.9v - FFmpeg Candidate License, Backend Registration, and Distribution Review
 
 - Reviewed the exact pinned BtbN `win64-lgpl-shared` FFmpeg 8.1 candidate, archive identity, checksum, build variant, and license class.

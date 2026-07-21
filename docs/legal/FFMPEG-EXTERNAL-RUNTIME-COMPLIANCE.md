@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document records the PeerCast Nova project policy for using an FFmpeg runtime without changing the Apache License 2.0 license of Nova source code and without redistributing FFmpeg binaries.
+This document records the PeerCast Nova project policy and implemented engineering boundary for using an FFmpeg runtime without changing the Apache License 2.0 license of Nova source code and without redistributing FFmpeg binaries.
 
 It is an engineering compliance record, not legal advice.
 
@@ -12,13 +12,14 @@ Nova may use an FFmpeg runtime only through an external shared-library architect
 
 - the runtime is supplied by the user or application host;
 - Nova receives one explicit installation directory;
-- Nova loads recognizable `avcodec`, `avutil`, `swresample`, `swscale`, and related reviewed DLL names from that directory only;
-- the runtime is an LGPLv3 shared build;
-- the runtime is not configured with `--enable-gpl`;
-- the runtime is not configured with `--enable-nonfree`;
+- Nova loads only the reviewed recognizable shared DLL names from that directory;
+- the runtime is declared `LGPL-3.0-or-later`;
+- GPL and nonfree configurations are rejected;
 - the runtime major version and required ABI symbols match the reviewed boundary;
-- every loaded DLL is verified against an explicit host-owned manifest;
+- every loaded DLL is verified against one immutable built-in or host-owned manifest;
 - no FFmpeg binary is included in a Nova source, build, release, installer, or update artifact.
+
+Milestone 0.0.9w implements this architecture through `PlaybackFfmpegExternalRuntimeManifest`, `PlaybackFfmpegExternalRuntimeGenerationFactory`, and `PlaybackFfmpegExternalRuntimeComposition`.
 
 ## Reviewed built-in candidate
 
@@ -34,8 +35,9 @@ The built-in technical candidate is:
 | License class | `LGPL-3.0-or-later` |
 | Distribution | Optional external, host supplied |
 | Linking | Shared DLL runtime loading |
+| Runtime review | `Approved` |
 
-The built-in identity is a reviewed convenience manifest. It is not a binary bundled by Nova and is not the only permitted user replacement after the replacement boundary is implemented.
+The built-in identity is a reviewed convenience manifest. It is not a binary bundled by Nova and is not the only permitted user replacement.
 
 ## Upstream build evidence
 
@@ -46,7 +48,7 @@ BtbN documents the following variant split:
 - `nonfree`: includes dependencies that produce a nonfree／unredistributable build;
 - `lgpl-shared`: the LGPL dependency set with shared FFmpeg libraries.
 
-The reviewed BtbN scripts currently establish:
+The reviewed BtbN scripts establish:
 
 ```text
 defaults-lgpl.sh:
@@ -58,6 +60,75 @@ defaults-lgpl-shared.sh:
 ```
 
 The project must re-review these upstream scripts and the exact candidate build before changing the pinned candidate or accepting a different built-in manifest.
+
+## Implemented manifest contract
+
+`PlaybackFfmpegExternalRuntimeManifest` has one fixed origin:
+
+- `BuiltInCandidate`; or
+- `HostSupplied`.
+
+It accepts exactly five records:
+
+| Role | Filename | ABI major |
+| --- | --- | ---: |
+| AvCodec | `avcodec-62.dll` | 62 |
+| AvFormat | `avformat-62.dll` | 62 |
+| AvUtil | `avutil-60.dll` | 60 |
+| SwResample | `swresample-6.dll` | 6 |
+| SwScale | `swscale-9.dll` | 9 |
+
+Each record includes a positive file length and one SHA-256 digest. The manifest accepts only the exact license identifier `LGPL-3.0-or-later`.
+
+The manifest contains no runtime directory, path, URL, archive location, command, script, download, extraction, installation, update, or fallback instruction.
+
+Manifest creation fails closed for invalid identities, undefined／duplicate／missing roles, renamed or path-bearing filenames, wrong ABI majors, nonpositive lengths, malformed digests, invalid inventory, GPL, nonfree, LGPL-2.1, and unknown license declarations.
+
+## User replacement contract
+
+A user or application host can authorize an interface-compatible modified LGPL build through:
+
+```text
+PlaybackFfmpegExternalRuntimeManifest.CreateHostSupplied(...)
+```
+
+The host manifest supplies:
+
+- a bounded build ID;
+- a bounded version label;
+- `LGPL-3.0-or-later`;
+- the five fixed roles, filenames, and ABI majors;
+- the exact length and SHA-256 for each selected DLL.
+
+The host, not Nova, selects the trusted modified build. Nova converts the accepted records into the existing runtime inventory and verifies the exact files before native loading.
+
+Replacement support does not disable integrity verification. A byte change after manifest creation produces a digest mismatch.
+
+## Runtime and production registration
+
+Production FFmpeg is not registered through `PlaybackDecoderBackendFactory`.
+
+The application composition root supplies:
+
+- an approved backend policy with third-party and native code enabled;
+- bundled code disabled;
+- one explicit runtime directory;
+- one built-in or host manifest;
+- one exact parser-created FLV source session;
+- decoder and discontinuity generations;
+- one borrowed application-owned Windows output boundary.
+
+`PlaybackFfmpegExternalRuntimeGenerationFactory` passes the selected manifest to the existing production generation factory. Runtime acquisition continues through:
+
+1. explicit-directory location;
+2. retained directory and DLL handles;
+3. exact filename, length, and SHA-256 verification;
+4. PE dependency validation;
+5. reviewed ABI-major validation;
+6. required-symbol validation;
+7. source-bound native session and generation ownership.
+
+`PlaybackFfmpegExternalRuntimeComposition.Create` constructs the existing finite production PCP／FLV composition. It adds no discovery, network access, download, installation, fallback, resident loop, second queue, or Windows resource ownership.
 
 ## Nova binary distribution rules
 
@@ -76,67 +147,28 @@ Nova release engineering must not:
 
 A third party that combines and redistributes Nova with FFmpeg binaries is acting as the FFmpeg binary distributor and must satisfy the applicable source, build, notice, and license obligations independently.
 
-## Nova notice obligations
+## Included legal material
 
-Before an activated FFmpeg-capable Nova binary is published, its distribution must include:
+`THIRD-PARTY-LICENSES/FFmpeg` contains:
 
-1. a prominent notice that the application uses FFmpeg libraries under GNU LGPLv3;
-2. a verbatim copy of GNU LGPLv3;
-3. a verbatim copy of GNU GPLv3, which LGPLv3 incorporates;
-4. the exact built-in candidate provenance and checksum record;
-5. instructions for selecting an explicit runtime directory;
-6. instructions for authorizing an interface-compatible modified replacement through a host manifest;
-7. a statement that FFmpeg is not licensed under Nova's Apache License 2.0;
-8. no term that forbids reverse engineering for debugging modifications to the LGPL library.
+- `NOTICE.md`;
+- `RUNTIME-REPLACEMENT.md`;
+- verbatim `COPYING.LGPLv3`;
+- deterministic `COPYING.GPLv3.gz` and its extraction README;
+- `SHA256SUMS`.
+
+The decoded text hashes are fixed by tests:
+
+| Text | SHA-256 |
+| --- | --- |
+| GPLv3 | `3972DC9744F6499F0F9B2DBF76696F2AE7AD8AF9B23DDE66D6AF86C9DFB36986` |
+| LGPLv3 | `E3A994D82E644B03A792A930F574002658412F62407F5FEE083F2555C5F23118` |
+
+The notice explains that FFmpeg is external LGPL software, is not licensed under Nova's Apache License 2.0, is not bundled by Nova, and may be replaced through the documented host manifest route. Nova terms do not prohibit reverse engineering performed to debug modifications to the LGPL library.
+
+`Nova.Cli` copies the complete legal directory to build and publish output.
 
 A future graphical application must expose the FFmpeg notice and the included license texts through its legal／about surface whenever the FFmpeg backend is available.
-
-## User replacement contract
-
-The current fixed built-in DLL inventory is not by itself the final activated LGPL replacement contract.
-
-The required replacement boundary must accept an explicit host manifest containing:
-
-- a bounded build ID;
-- a bounded version label;
-- the expected FFmpeg ABI major;
-- the required DLL role and exact filename for each library;
-- one SHA-256 for each DLL;
-- `LGPL-3.0-or-later` as the only accepted license class;
-- an explicit host-supplied flag;
-- no network location, download instruction, command line, or executable script.
-
-Nova verifies the host manifest and files before loading. The manifest author, not Nova, decides which modified interface-compatible build to trust. This allows replacement without removing checksum verification or implicit-directory safeguards.
-
-The boundary must reject:
-
-- missing or duplicated roles;
-- unknown or extra runtime roles;
-- invalid filenames or path traversal;
-- undefined license identifiers;
-- GPL or nonfree declarations;
-- wrong ABI major;
-- missing files;
-- checksum mismatches;
-- undefined or missing required symbols;
-- runtime directory changes during acquisition;
-- cancellation or disposal during verification.
-
-## Backend registration policy
-
-Production FFmpeg is not registered through `PlaybackDecoderBackendFactory`.
-
-The production path requires the application composition root to supply:
-
-- an approved backend policy with third-party and native code enabled;
-- bundled code disabled;
-- one runtime directory;
-- one built-in or host manifest;
-- one exact parser-created FLV source session;
-- decoder and discontinuity generations;
-- one borrowed application-owned Windows output boundary.
-
-This is then passed to the dedicated production generation factory and the finite production PCP／FLV composition.
 
 ## Candidate lifecycle
 
@@ -179,3 +211,5 @@ Until that gate is accepted, bundling and rehosting remain prohibited.
 - BtbN LGPL defaults: `https://github.com/BtbN/FFmpeg-Builds/blob/master/variants/defaults-lgpl.sh`
 - BtbN LGPL shared defaults: `https://github.com/BtbN/FFmpeg-Builds/blob/master/variants/defaults-lgpl-shared.sh`
 - BtbN Windows x64 LGPL shared composition: `https://github.com/BtbN/FFmpeg-Builds/blob/master/variants/win64-lgpl-shared.sh`
+
+See ADR-0132, ADR-0133, PCN-0140, and PCN-0141.

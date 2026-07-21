@@ -3,7 +3,7 @@ namespace PeerCast.Nova.Playback.Tests;
 public sealed class PlaybackPipelineIntegrationProbeTests
 {
     [Fact]
-    public async Task RunAsync_PendingLicenseReviewRefusesBeforePathAccess()
+    public async Task RunAsync_ApprovedCandidateReachesRuntimeGateBeforeMediaAccess()
     {
         using var probe = new PlaybackPipelineIntegrationProbe();
 
@@ -13,9 +13,11 @@ public sealed class PlaybackPipelineIntegrationProbeTests
             DiagnosticMediaFile = "Z:\\does-not-exist\\media.bin",
         });
 
-        Assert.Equal(PlaybackPipelineIntegrationProbeResult.LicenseReviewPending, result);
+        Assert.Equal(PlaybackPipelineIntegrationProbeResult.RuntimeRejected, result);
         Assert.Equal(PlaybackPipelineIntegrationProbeState.Idle, probe.Snapshot.State);
-        Assert.Null(probe.Snapshot.CurrentPhase);
+        Assert.Equal(
+            PlaybackPipelineIntegrationPhase.RuntimeDecode,
+            probe.Snapshot.CurrentPhase);
         Assert.Null(probe.Snapshot.LastCompletedPhase);
         Assert.Null(probe.Snapshot.LastStage);
     }

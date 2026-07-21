@@ -9,26 +9,26 @@ License: **Apache License 2.0**
 
 ## 現在地
 
-**Milestone 0.0.9v — FFmpeg Candidate License, Backend Registration, and Distribution Review**
+**Milestone 0.0.9w — External LGPL Runtime Compliance and User Replacement Boundary**
 
-0.0.9uで完成したproduction compositionを実際のFFmpeg runtimeへ接続する前に、pinned BtbN `win64-lgpl-shared` candidateのlicense class、配布、利用者による差し替え、production登録位置をレビューしました。
+0.0.9vで確定した外部LGPL runtime方針を実装し、reviewed built-in candidateと利用者が明示承認するcompatible modified buildを、同じfail-closed runtime境界へ接続しました。
 
-- reviewed candidateはLGPLv3 shared-library build class
-- GPL variant／nonfree variantは対象外で、引き続き拒否
-- Novaの既定配布物にはFFmpeg executable／DLL／archiveを一切含めない
-- NovaはFFmpegをmirror／rehost／download／extract／install／updateしない
-- user／application hostが一つのexplicit runtime directoryを供給
-- `PATH`、registry、system directory、conventional locationを探索しない
-- shared DLLのfilename、SHA-256、ABI major、required symbolsをfail closedで検証
-- built-in fixed manifestだけを唯一のruntime identityにはしない
-- 利用者がinterface-compatible modified LGPL buildを明示承認できるhost-owned manifestを次に実装
-- checksum検証を無効化せず、差し替え自由とsupply-chain integrityを両立
-- production FFmpegはgeneric `PlaybackDecoderBackendFactory`へ登録しない
-- application composition rootがpolicy、manifest、runtime directory、source generation、borrowed Windows outputを明示して構築
-- bundling／binary rehostingは別ADRとcomplete corresponding-source compliance archiveなしでは禁止
-- H.264／AAC等のpatent clearanceはこのcopyright-license reviewの対象外
+- immutableなbuilt-in／host-supplied runtime manifestを実装
+- accepted licenseは`LGPL-3.0-or-later`だけ
+- `avcodec-62.dll`、`avformat-62.dll`、`avutil-60.dll`、`swresample-6.dll`、`swscale-9.dll`を固定role／filename／ABI majorで検証
+- 各DLLのpositive lengthとSHA-256を必須化
+- GPL、nonfree、LGPL-2.1、不明license、重複／欠落role、rename、path traversal、wrong ABI、invalid digestを拒否
+- host manifestによるmodified LGPL buildの差し替えを許可しつつchecksum検証を維持
+- runtimeは一つのexplicit directoryからだけ取得
+- 既存のretained handle、file inventory、PE dependency、ABI、required-symbol gateを再利用
+- production entryはgeneric backend factoryではなく`PlaybackFfmpegExternalRuntimeComposition`
+- pinned BtbN candidateを`LicenseReview.Approved`へ変更
+- GPLv3／LGPLv3本文、FFmpeg notice、runtime replacement手順、text hashを追加
+- `Nova.Cli`のbuild／publish outputへlegal directory全体をコピー
+- FFmpeg binaryのbundling／mirror／rehost／download／extract／install／updateは引き続き禁止
+- runtime discovery、fallback、resident loop、second queue、Windows resource ownershipは追加しない
 
-この構成は法的に採用可能なarchitecture classとして確定しました。ただし、GPLv3／LGPLv3本文、third-party notice、利用者向けreplacement手順、host-manifest validationがまだruntimeへ実装されていないため、pinned candidateは引き続き`LicenseReview.Pending`です。
+これでlicense reviewによるproduction fail-closed状態は解除されました。ただしWindows application／window／device lifecycleを所有して実際のoutput環境へ接続する作業と、controlled real-media decode／output validationはまだ完了していません。
 
 ## 実装済みの主な領域
 
@@ -76,6 +76,10 @@ License: **Apache License 2.0**
 - finite production generation ingress／replacement composition boundary
 - FFmpeg candidate license／registration／distribution architecture review
 - external-only LGPL runtime compliance policy
+- built-in／host-supplied FFmpeg runtime manifest
+- checksum-preserving LGPL user replacement boundary
+- approved external FFmpeg application-composition-root entry
+- GPLv3／LGPLv3 notice and license packaging
 
 詳細:
 
@@ -85,17 +89,17 @@ License: **Apache License 2.0**
 - [docs/adr](docs/adr)
 - [docs/reviews](docs/reviews)
 - [FFmpeg external runtime compliance policy](docs/legal/FFMPEG-EXTERNAL-RUNTIME-COMPLIANCE.md)
+- [FFmpeg distribution legal material](THIRD-PARTY-LICENSES/FFmpeg)
 
 ## まだ完了していないもの
 
 PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信アプリではありません。
 
-- external LGPL runtime compliance and user-replacement boundary
-- GPLv3／LGPLv3 license text and third-party notice packaging
-- pinned candidate `LicenseReview.Approved` transition
-- approved production decoder ingress activation
-- Windows application／window／device lifecycle composition
+- approved external runtimeとapplication-owned Windows lifecycleの接続
+- Windows application／window／adapter／COM／device lifecycle composition
+- controlled retained-fixture production activation validation
 - controlled real-media decode and output validation
+- legal／about surfaceからのFFmpeg notice表示
 - MP4／fragmented MP4 parser
 - decoded-buffer duration cutoff
 - discontinuity-time native reset semantics
@@ -107,9 +111,9 @@ FFmpeg binary bundling／redistributionは既定方針として禁止です。�
 
 ## 次のマイルストーン
 
-**0.0.9w — External LGPL Runtime Compliance and User Replacement Boundary**
+**0.0.9x — Approved External Runtime and Windows Lifecycle Activation Review**
 
-bounded built-in／host runtime manifestを実装し、`LGPL-3.0-or-later`、exact DLL role／filename／SHA-256／ABI major／required symbolsを検証します。GPLv3／LGPLv3本文、third-party notice、replacement手順を配布物へ追加し、利用者がinterface-compatible modified buildを自分のmanifestで承認できることをtestします。これらが通過した後だけpinned candidateを`LicenseReview.Approved`へ変更します。
+承認済みbuilt-in／host manifestと一つのexplicit runtime directoryを、application-owned Windows adapter selection、COM／window activation、resource binding、stream initialization、buffer processingへ接続する順序をレビューします。production compositionがWindows resourceを借用する境界、stop／reset／device loss／discontinuity replacementのownership、controlled Windows validation計画を固定し、実装前に二重所有・隠れたpump・fallback経路を排除します。
 
 ## 必要環境
 
@@ -139,6 +143,7 @@ dotnet format PeerCast-Nova.sln --verify-no-changes --no-restore
 - 実装していない機能を完了扱いしない
 - 第三者assetはprovenanceとredistribution permissionを記録する
 - LGPL replacement freedomとruntime integrityを明示manifestで両立する
+- Windows output resourceはapplication lifecycleが所有しproduction decode pathは借用する
 
 ## ライセンス
 

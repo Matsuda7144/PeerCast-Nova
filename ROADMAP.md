@@ -65,42 +65,45 @@
 - 0.0.9t Production Generation Ingress and Replacement Composition Review
 - 0.0.9u Finite Production Generation Ingress and Replacement Composition Boundary
 - 0.0.9v FFmpeg Candidate License, Backend Registration, and Distribution Review
+- 0.0.9w External LGPL Runtime Compliance and User Replacement Boundary
 
-0.0.9s implements the policy-gated complete generation factory. The public path remains `LicenseReviewPending`; approved injected conditions create exact FLV binding, distinct video／audio runtime and ABI ownership, source-bound decode, bounded scheduler, timing, and result-aware delivery as one caller-owned product.
+0.0.9s implements the policy-gated complete generation factory. Approved provenance plus explicit third-party and native policy creates exact FLV binding, distinct video／audio runtime and ABI ownership, source-bound decode, bounded scheduler, timing, and result-aware delivery as one caller-owned product.
 
 0.0.9u implements the dedicated production owner. It serializes awaited PCP／FLV parsing, source-bound submission and receive, one-shot scheduler transfer, caller-driven delivery, explicit reset, stop, and discontinuity replacement.
 
-0.0.9v accepts the exact BtbN `win64-lgpl-shared` candidate class in principle for external dynamic use. Nova permanently keeps FFmpeg binaries outside the default Apache-2.0 distribution, prohibits implicit discovery and automatic acquisition, rejects GPL／nonfree variants, places production registration at the application composition root, and requires a checksum-verified host manifest so users can authorize compatible modified LGPL builds. Candidate state remains `Pending` until those compliance requirements are implemented.
+0.0.9v accepts the exact BtbN `win64-lgpl-shared` candidate class in principle for external dynamic use. Nova permanently keeps FFmpeg binaries outside the default Apache-2.0 distribution, prohibits implicit discovery and automatic acquisition, rejects GPL／nonfree variants, and places production registration at the application composition root.
 
-### Next: 0.0.9w External LGPL Runtime Compliance and User Replacement Boundary
+0.0.9w implements the compliance gate required by that review. It adds immutable built-in and host manifests, accepts only `LGPL-3.0-or-later`, validates the exact five DLL roles, filenames, lengths, hashes, and ABI majors, preserves every existing runtime and symbol gate for user replacements, packages the required GNU license texts and FFmpeg notice, and changes the exact built-in candidate to `LicenseReview.Approved`.
 
-Implement one finite compliance boundary that:
+### Next: 0.0.9x Approved External Runtime and Windows Lifecycle Activation Review
 
-- represents the reviewed built-in candidate and a host-supplied candidate with bounded immutable manifests;
-- accepts only `LGPL-3.0-or-later` and rejects GPL, nonfree, unknown, or undefined license classes;
-- requires exact DLL roles, recognizable filenames, one SHA-256 per DLL, and the reviewed FFmpeg ABI major;
-- rejects duplicate／missing roles, traversal, inconsistent manifests, wrong ABI, missing files, and checksum mismatch before native loading;
-- composes with the existing explicit-directory runtime locator, retained handles, and ABI symbol gate;
-- keeps `PATH`, registry, conventional-directory, network, download, extraction, update, and fallback discovery absent;
-- includes verbatim GPLv3 and LGPLv3 texts in distributable output;
-- includes a prominent FFmpeg third-party notice and user-readable replacement instructions;
-- permits a user to authorize an interface-compatible modified shared build through their own verified manifest;
-- proves that replacement support does not disable integrity verification;
-- proves that bundled, GPL, nonfree, and implicit-discovery paths remain impossible;
-- changes the built-in candidate from `Pending` to `Approved` only after all compliance tests pass.
+Review one application-owned activation composition that:
+
+- selects one approved built-in or host-supplied manifest;
+- receives one explicit runtime directory without discovery or fallback;
+- owns Windows adapter selection, COM／window activation, device resources, bindings, and stream initialization;
+- creates and borrows one `PlaybackWindowsOutputBufferProcessingBoundary` for the production decode composition;
+- defines exact construction order before encoded input admission;
+- defines stop order across input admission, production generation, scheduler reservations, output processing, streams, bindings, activation, devices, and COM resources;
+- defines explicit reset and device-loss behavior without automatic recovery loops;
+- keeps parser discontinuity replacement separate from application device replacement;
+- prevents duplicate ownership of windows, adapters, devices, events, output buffers, runtime leases, and decoder generations;
+- specifies controlled retained-fixture and real-media Windows validation evidence;
+- keeps audible／visible playback unclaimed until the subsequent implementation and validation milestones pass.
 
 ### Later sequence
 
-1. connect the approved external runtime under the application-owned Windows lifecycle;
-2. perform controlled retained-fixture and real-media decode validation;
-3. perform controlled Windows audio／video output validation;
-4. expand user-facing lifecycle and packaging only after the preceding gates pass.
+1. implement the reviewed application-owned Windows activation composition;
+2. perform controlled retained-fixture production activation validation;
+3. perform controlled real-media decode validation;
+4. perform controlled Windows audio／video output validation;
+5. expand user-facing lifecycle and packaging only after the preceding gates pass.
 
 ### Deferred
 
 - FFmpeg binary bundling or Nova-hosted runtime pack
 - MP4／fragmented MP4 parser
-- avformat integration
+- avformat integration beyond the reviewed runtime inventory
 - discontinuity reset and `avcodec_flush_buffers`
 - duration cutoff
 - independent audio recovery generation changes
@@ -109,7 +112,7 @@ Implement one finite compliance boundary that:
 
 ## CI policy
 
-Routine Linux CI uses CircleCI while GitHub Actions usage is exhausted. Final branch heads must pass restore, Release build, all tests, and format verification. Windows CI remains reserved for explicit milestone or release validation.
+Routine Linux CI uses CircleCI while GitHub Actions usage is exhausted. Final branch heads must pass restore, Release build with analyzers, all tests, and format verification. Windows CI remains reserved for explicit milestone or release validation.
 
 ## Platform and dependency policy
 
@@ -118,12 +121,14 @@ Routine Linux CI uses CircleCI while GitHub Actions usage is exhausted. Final br
 - keep FFmpeg host-installed and dynamically loaded
 - do not bundle, mirror, rehost, download, or install FFmpeg in the default distribution
 - preserve explicit-directory and checksum／ABI verification for user replacements
+- keep Windows output resources application-owned
 - record provenance and redistribution permission for third-party assets
 
 ## 0.1.0 Genesis gate
 
 - bounded demux and production composition
 - approved external runtime compliance and replacement boundary
+- application-owned Windows activation composition
 - finite decoded buffering and output lifecycle
 - controlled audible／visible verification
 - user-facing application and packaging

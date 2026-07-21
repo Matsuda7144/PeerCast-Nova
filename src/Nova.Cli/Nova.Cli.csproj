@@ -1,13 +1,23 @@
 <Project Sdk="Microsoft.NET.Sdk">
+
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <AssemblyName>PeerCast.Nova.Cli</AssemblyName>
-    <RootNamespace>PeerCast.Nova.Cli</RootNamespace>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
   </PropertyGroup>
+
   <ItemGroup>
-    <ProjectReference Include="../Nova.Core/Nova.Core.csproj" />
-    <ProjectReference Include="../Nova.Network/Nova.Network.csproj" />
-    <ProjectReference Include="../Nova.Playback/Nova.Playback.csproj" />
-    <ProjectReference Include="../Nova.Protocol.Pcp/Nova.Protocol.Pcp.csproj" />
+    <ProjectReference Include="..\Nova.Core\Nova.Core.csproj" />
+    <ProjectReference Include="..\Nova.Network\Nova.Network.csproj" />
+    <ProjectReference Include="..\Nova.Playback\Nova.Playback.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\THIRD-PARTY-LICENSES\FFmpeg\**\*"
+          Link="THIRD-PARTY-LICENSES\FFmpeg\%(RecursiveDir)%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

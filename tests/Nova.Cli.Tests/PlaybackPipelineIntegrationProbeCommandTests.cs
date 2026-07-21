@@ -5,7 +5,7 @@ namespace PeerCast.Nova.Cli.Tests;
 public sealed class PlaybackPipelineIntegrationProbeCommandTests
 {
     [Fact]
-    public async Task RunAsync_PendingReviewReturnsFixedResultWithoutPathOutput()
+    public async Task RunAsync_ApprovedCandidateReachesRuntimeGateWithoutPathOutput()
     {
         var result = await PlaybackPipelineIntegrationProbeCommand.RunAsync(
         [
@@ -16,6 +16,6 @@ public sealed class PlaybackPipelineIntegrationProbeCommandTests
             "Z:\\private-media.bin",
         ]);
 
-        Assert.Equal(PlaybackPipelineIntegrationProbeResult.LicenseReviewPending, result);
+        Assert.Equal(PlaybackPipelineIntegrationProbeResult.RuntimeRejected, result);
     }
 }

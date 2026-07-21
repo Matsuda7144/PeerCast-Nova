@@ -231,8 +231,8 @@ public sealed class PlaybackProductionDecoderGeneration : IDisposable, IAsyncDis
 
 /// <summary>
 /// Finite policy-gated factory for one complete source-bound decode, scheduler,
-/// timing, and result-aware output generation. The pinned candidate remains
-/// unavailable while its license review is pending. Windows output resources are
+/// timing, and result-aware output generation. Approved external provenance still
+/// requires explicit host policy and verified runtime acquisition. Windows output resources are
 /// borrowed and never activated or disposed by this boundary.
 /// </summary>
 public sealed class PlaybackProductionDecoderGenerationFactory : IDisposable, IAsyncDisposable
