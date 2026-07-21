@@ -5,6 +5,28 @@
 Detailed history through 0.0.8g remains preserved in Git history at commit
 `f078dab5372a45a8c577c1c802a697ab72b45c02` and in milestone ADR/PCN records.
 
+### 0.0.9x - Approved External Runtime and Windows Lifecycle Activation Review
+
+- Reviewed the exact connection from the approved external FFmpeg production route to the existing Windows 11 D3D11／WASAPI output boundaries.
+- Confirmed that the application owns the window, message loop, and output dispatcher／owner thread.
+- Kept MTA COM, D3D11 device/context, default WASAPI endpoint/client, event handle, binding, stream, and buffer ownership under one playback lifecycle owner.
+- Identified that activation borrows are owner-thread-affine while production delivery resumes asynchronously, so direct concrete output calls do not prove production thread affinity.
+- Selected one explicit application-provided dispatcher for every native activation, binding, initialization, processing, reset, and teardown operation.
+- Prohibited a playback-owned dispatcher thread, command queue, message pump, timer, resident loop, or hidden retry.
+- Kept the 0.0.9q generation-matched scheduler delivery as the sole production scheduler-output authority.
+- Rejected insertion of the older 0.0.6y scheduler adapter into the production route.
+- Required initial output binding and stream initialization only after an exact parser-created stream description exists.
+- Required Windows binding, stream, and buffer generations to match the active decoder generation.
+- Required discontinuity replacement to reconfigure output state to the new decoder generation without recreating D3D11 or WASAPI activation resources.
+- Preserved scheduler ownership through `WouldBlock`, timing wait, initialization, binding, and resize requirements.
+- Selected explicit same-generation video resize with caller-driven delivery retry.
+- Selected terminal complete-lifecycle shutdown for device loss; no in-place device recreation, source reconnect, frame migration, generation revival, or fallback.
+- Fixed normal and terminal cleanup order: stop production composition first, then dispose buffer, stream, binding, and activation on the owner dispatcher.
+- Preserved the application-owned window and dispatcher through playback cleanup.
+- Added ADR-0134 and PCN-0142 without changing runtime source or tests.
+- Selected 0.0.9y Finite Approved External Runtime and Windows Lifecycle Activation Boundary.
+- Kept physical Windows activation, controlled real-media output, audible／visible playback, GUI, and FFmpeg binary distribution unavailable.
+
 ### 0.0.9w - External LGPL Runtime Compliance and User Replacement Boundary
 
 - Added `PlaybackFfmpegExternalRuntimeManifest` with immutable built-in and host-supplied origins.

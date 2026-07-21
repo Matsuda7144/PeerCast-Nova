@@ -2,42 +2,46 @@
 
 ## 現在地
 
-**0.0.9w — External LGPL Runtime Compliance and User Replacement Boundary — Completed**
+**0.0.9x — Approved External Runtime and Windows Lifecycle Activation Review — Completed**
 
-0.0.9vで選択したexternal LGPL runtime方針をruntime、tests、配布legal materialへ実装しました。
+承認済みexternal FFmpeg production routeと既存Windows output境界を、application-owned lifecycleへ接続するownershipと順序を確定しました。
 
-- immutable built-in／host-supplied manifest
-- accepted licenseは`LGPL-3.0-or-later`だけ
-- exact five DLL roles／filenames／ABI majors／lengths／SHA-256
-- GPL／nonfree／unknown／LGPL-2.1／duplicate／missing／renamed／path-bearing／wrong-ABI manifestを拒否
-- user-selected modified LGPL buildをhost manifestで明示承認
-- replacementでもchecksum、PE dependency、ABI、required-symbol検証を維持
-- one explicit runtime directoryのみ使用
-- `PATH`／registry／implicit directory／network／download／fallbackなし
-- production entryは`PlaybackFfmpegExternalRuntimeComposition`
-- generic `PlaybackDecoderBackendFactory`へのproduction登録なし
-- pinned candidateは`LicenseReview.Approved`
-- GPLv3／LGPLv3本文、FFmpeg notice、replacement手順、text hashを収録
-- CLI build／publish outputへlegal directoryをコピー
-- FFmpeg binary bundling／mirror／rehost／download／extract／install／updateは禁止継続
-- Windows lifecycle／device ownershipとcontrolled real-media playbackは未完了
+- applicationがwindow、message loop、dispatcher／output owner threadを所有
+- playback lifecycleがprobe、COM／D3D11／WASAPI activation、binding、stream、buffer、production compositionを所有
+- windowはopaque tokenとして借用し、playback側では作成／破棄しない
+- activation resourceへの全アクセスとteardownをowner-thread dispatcher経由に限定
+- playback-owned thread／queue／message pump／timer／resident loopなし
+- 0.0.9q generation-matched deliveryを唯一のproduction scheduler-output ownerとして維持
+- 旧0.0.6y scheduler adapterをproduction経路へ追加しない
+- exact stream description後にactive decoder generationでoutputを初期化
+- discontinuity replacementは同じdevice上でoutput generationをreconfigure
+- resizeは明示操作、retained itemを消費しない
+- device lossは初回lifecycle implementationではterminal
+- stopはproduction composition後にbuffer → stream → binding → activation
+- FFmpeg external-only／explicit-directory／verified／unbundled policyを維持
+- runtime source／tests変更なし
 
 ## CI
 
-GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして使用します。implementation headでrestore、Release build with analyzers、full solution tests、format verificationが成功しました。最終documentation headも同じgateを通してからmergeします。
+GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして使用します。最終documentation headでrestore、Release build with analyzers、full solution tests、format verificationを通してからmergeします。
 
 ## 最新の入口
 
-- `docs/adr/ADR-0133-external-lgpl-runtime-compliance-user-replacement-boundary.md`
-- `docs/reviews/PCN-0141-EXTERNAL-LGPL-RUNTIME-COMPLIANCE-USER-REPLACEMENT-BOUNDARY.md`
-- `docs/legal/FFMPEG-EXTERNAL-RUNTIME-COMPLIANCE.md`
-- `docs/legal/THIRD-PARTY-AND-PROVENANCE.md`
-- `THIRD-PARTY-LICENSES/FFmpeg/NOTICE.md`
-- `THIRD-PARTY-LICENSES/FFmpeg/RUNTIME-REPLACEMENT.md`
-- `src/Nova.Playback/PlaybackFfmpegExternalRuntimeManifest.cs`
+- `docs/adr/ADR-0134-approved-external-runtime-windows-lifecycle-activation-review.md`
+- `docs/reviews/PCN-0142-APPROVED-EXTERNAL-RUNTIME-WINDOWS-LIFECYCLE-ACTIVATION-REVIEW.md`
 - `src/Nova.Playback/PlaybackFfmpegExternalRuntimeProductionComposition.cs`
-- `src/Nova.Playback/PlaybackFfmpegBackendCandidate.cs`
-- `src/Nova.Playback/PlaybackProductionPcpFlvCompositionBoundary.cs`
+- `src/Nova.Playback/PlaybackGenerationMatchedSchedulerDeliveryBoundary.cs`
+- `src/Nova.Playback/PlaybackWindowsOutputAdapterSelection.cs`
+- `src/Nova.Playback/PlaybackWindowsOutputActivationBoundary.cs`
+- `src/Nova.Playback/PlaybackWindowsOutputResourceBindingBoundary.cs`
+- `src/Nova.Playback/PlaybackWindowsOutputStreamInitializationBoundary.cs`
+- `src/Nova.Playback/PlaybackWindowsOutputBufferProcessingBoundary.cs`
+- `docs/adr/ADR-0069-WINDOWS-OUTPUT-ADAPTER-SELECTION.md`
+- `docs/adr/ADR-0070-WINDOWS-OUTPUT-ACTIVATION-BOUNDARY.md`
+- `docs/adr/ADR-0071-WINDOWS-OUTPUT-RESOURCE-BINDING-BOUNDARY.md`
+- `docs/adr/ADR-0072-WINDOWS-OUTPUT-STREAM-INITIALIZATION-BOUNDARY.md`
+- `docs/adr/ADR-0073-WINDOWS-OUTPUT-BUFFER-PROCESSING-BOUNDARY.md`
+- `docs/adr/ADR-0074-WINDOWS-OUTPUT-SCHEDULER-ADAPTER-BOUNDARY.md`
 
 ## ADR／PCN索引の永久欠番
 
@@ -47,16 +51,17 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 ## 次の作業
 
-**0.0.9x — Approved External Runtime and Windows Lifecycle Activation Review**
+**0.0.9y — Finite Approved External Runtime and Windows Lifecycle Activation Boundary**
 
-承認済みmanifest、explicit runtime directory、application-owned Windows adapter／COM／window／device lifecycle、borrowed output boundary、production compositionの正確な構築・停止・reset・replacement順序をレビューします。controlled retained-fixture／real-media Windows validationの入口を定義し、resource二重所有、implicit fallback、隠れたresident pumpを実装前に排除します。
+application-owned dispatcherとwindow tokenを借用する一つの有限lifecycle ownerを実装します。initial stream configuration、discontinuity output generation reconfiguration、retained resize／backpressure、terminal device loss、production-first stop、owner-thread teardownをcross-platform injected testsで固定します。
 
 ## 未完了
 
-- approved external runtimeとWindows application lifecycleの接続
-- Windows window／adapter／COM／device lifecycle composition
+- approved runtime／Windows lifecycle implementation
+- output owner-thread dispatcher adapter
 - controlled production retained-fixture validation
 - controlled real-media decode／output validation
+- Windows application window／message loop
 - GUI legal／about surface
 - MP4／fragmented MP4 parser
 - discontinuity-time `avcodec_flush_buffers` semantics

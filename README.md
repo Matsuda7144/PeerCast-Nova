@@ -9,26 +9,27 @@ License: **Apache License 2.0**
 
 ## 現在地
 
-**Milestone 0.0.9w — External LGPL Runtime Compliance and User Replacement Boundary**
+**Milestone 0.0.9x — Approved External Runtime and Windows Lifecycle Activation Review**
 
-0.0.9vで確定した外部LGPL runtime方針を実装し、reviewed built-in candidateと利用者が明示承認するcompatible modified buildを、同じfail-closed runtime境界へ接続しました。
+0.0.9wで承認したexternal LGPL FFmpeg runtimeと、0.0.6t〜0.0.6yで分離したWindows 11 D3D11／WASAPI output境界を、application lifecycleへ接続する正確なownershipと順序をレビューしました。
 
-- immutableなbuilt-in／host-supplied runtime manifestを実装
-- accepted licenseは`LGPL-3.0-or-later`だけ
-- `avcodec-62.dll`、`avformat-62.dll`、`avutil-60.dll`、`swresample-6.dll`、`swscale-9.dll`を固定role／filename／ABI majorで検証
-- 各DLLのpositive lengthとSHA-256を必須化
-- GPL、nonfree、LGPL-2.1、不明license、重複／欠落role、rename、path traversal、wrong ABI、invalid digestを拒否
-- host manifestによるmodified LGPL buildの差し替えを許可しつつchecksum検証を維持
-- runtimeは一つのexplicit directoryからだけ取得
-- 既存のretained handle、file inventory、PE dependency、ABI、required-symbol gateを再利用
-- production entryはgeneric backend factoryではなく`PlaybackFfmpegExternalRuntimeComposition`
-- pinned BtbN candidateを`LicenseReview.Approved`へ変更
-- GPLv3／LGPLv3本文、FFmpeg notice、runtime replacement手順、text hashを追加
-- `Nova.Cli`のbuild／publish outputへlegal directory全体をコピー
-- FFmpeg binaryのbundling／mirror／rehost／download／extract／install／updateは引き続き禁止
-- runtime discovery、fallback、resident loop、second queue、Windows resource ownershipは追加しない
+- applicationがwindow、message loop、output dispatcher／owner threadを所有
+- playback lifecycleはadapter probe、COM／D3D11／WASAPI activation、binding、stream、buffer、production compositionを所有
+- windowはopaque positive tokenとして借用し、`Nova.Playback`では作成／破棄しない
+- activation-owned native resourceへの全アクセスをapplication dispatcher経由に限定
+- playback libraryはdispatcher thread、command queue、message pump、timer、resident loopを作らない
+- current production deliveryは0.0.9q generation-matched ownerを継続使用
+- 旧0.0.6y scheduler adapterをproduction経路へ重ねない
+- exact parser stream description取得後に初回binding／stream initializationを実行
+- Windows output generationはactive decoder generationと一致させる
+- discontinuity replacementではdeviceを再作成せずoutput stateだけをnew decoder generationへreconfigure
+- `WouldBlock`／wait／binding／initialization／resizeはscheduler itemを保持したままcaller-visible
+- resizeは同一generationの明示操作、device lossは初回実装ではcomplete lifecycleのterminal result
+- device loss後の自動recreate／source reconnect／generation revival／fallbackは禁止
+- stopはproduction compositionを先に停止し、buffer → stream → binding → activationの順にowner threadで解放
+- FFmpegは引き続きexternal、explicit-directory、checksum／ABI／symbol verified、unbundled
 
-これでlicense reviewによるproduction fail-closed状態は解除されました。ただしWindows application／window／device lifecycleを所有して実際のoutput環境へ接続する作業と、controlled real-media decode／output validationはまだ完了していません。
+このmilestoneはarchitecture reviewです。Windows lifecycle runtime class、dispatcher adapter、physical device activation、controlled real-media outputはまだ実装していません。
 
 ## 実装済みの主な領域
 
@@ -54,12 +55,11 @@ License: **Apache License 2.0**
 - count／byte bounded decoded-frame scheduler
 - finite late-aware scheduler dispatch
 - A/V timing、late-item、recovery、deadline-aware run policy
-- Windows D3D11／WASAPI output境界
+- Windows D3D11／WASAPI probe、activation、binding、stream、buffer境界
 - bounded demux output contract
 - pure managed bounded FLV v1 parser
 - exact FLV session decoder-parameter binding
 - source-bound opened native decoder session
-- exact AVPacket metadata／flush ABI decision
 - metadata-aware native packet／flush boundary
 - finite one-event packet submission state machine
 - controlled retained FLV fixture validation
@@ -70,16 +70,15 @@ License: **Apache License 2.0**
 - exact-active one-shot decoded completion detach
 - generation-wide scheduler ingress ownership boundary
 - finite generation-matched scheduler delivery／output lifecycle boundary
-- production generation factory／activation architecture review
 - policy-gated production decoder generation factory boundary
-- production generation ingress／replacement composition architecture review
 - finite production generation ingress／replacement composition boundary
-- FFmpeg candidate license／registration／distribution architecture review
+- FFmpeg candidate license／registration／distribution review
 - external-only LGPL runtime compliance policy
 - built-in／host-supplied FFmpeg runtime manifest
 - checksum-preserving LGPL user replacement boundary
 - approved external FFmpeg application-composition-root entry
 - GPLv3／LGPLv3 notice and license packaging
+- approved runtime／Windows lifecycle activation architecture review
 
 詳細:
 
@@ -95,25 +94,26 @@ License: **Apache License 2.0**
 
 PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信アプリではありません。
 
-- approved external runtimeとapplication-owned Windows lifecycleの接続
-- Windows application／window／adapter／COM／device lifecycle composition
+- finite approved-runtime Windows lifecycle implementation
+- application-provided owner-thread dispatcher adapter
 - controlled retained-fixture production activation validation
 - controlled real-media decode and output validation
+- Windows application window／message-loop implementation
 - legal／about surfaceからのFFmpeg notice表示
 - MP4／fragmented MP4 parser
 - decoded-buffer duration cutoff
 - discontinuity-time native reset semantics
 - complete A/V synchronization、resampling、drift correction
 - controlled audible／visible real-media playback
-- GUI、window message loop、installer、recorder
+- GUI、installer、recorder
 
 FFmpeg binary bundling／redistributionは既定方針として禁止です。別runtime packを将来検討する場合は、新しいADRとexact corresponding source／build／notice compliance archiveが必要です。
 
 ## 次のマイルストーン
 
-**0.0.9x — Approved External Runtime and Windows Lifecycle Activation Review**
+**0.0.9y — Finite Approved External Runtime and Windows Lifecycle Activation Boundary**
 
-承認済みbuilt-in／host manifestと一つのexplicit runtime directoryを、application-owned Windows adapter selection、COM／window activation、resource binding、stream initialization、buffer processingへ接続する順序をレビューします。production compositionがWindows resourceを借用する境界、stop／reset／device loss／discontinuity replacementのownership、controlled Windows validation計画を固定し、実装前に二重所有・隠れたpump・fallback経路を排除します。
+application-owned dispatcherとwindow tokenを借用し、probe、activation、binding、stream、buffer、approved external runtime production compositionを一つの有限ownerとして実装します。exact stream description後のinitial output configuration、discontinuity generation reconfiguration、retained resize／backpressure、terminal device loss、production-first stopとowner-thread teardownをcross-platform injected testsで固定します。
 
 ## 必要環境
 
@@ -143,7 +143,7 @@ dotnet format PeerCast-Nova.sln --verify-no-changes --no-restore
 - 実装していない機能を完了扱いしない
 - 第三者assetはprovenanceとredistribution permissionを記録する
 - LGPL replacement freedomとruntime integrityを明示manifestで両立する
-- Windows output resourceはapplication lifecycleが所有しproduction decode pathは借用する
+- Windows native resourceはowner threadで所有しproduction decode pathはdispatcher-backed portだけを借用する
 
 ## ライセンス
 
