@@ -42,17 +42,19 @@ Its immutable provenance is:
 | Field | Value |
 | --- | --- |
 | Build project | BtbN/FFmpeg-Builds |
-| Release tag | `autobuild-2026-07-15-14-01` |
-| BtbN commit | `1f74efed63f467dbf0d1e5dd8548bf2188f4ad21` |
-| FFmpeg commit | `94138f6973dd1ac6208ace92148ac0d172455d65` |
-| Build ID | `btbn.ffmpeg.20260715.win64.lgpl-shared` |
-| FFmpeg version | `n8.1.2-22-g94138f6973-20260715` |
-| Asset | `ffmpeg-n8.1-latest-win64-lgpl-shared-8.1.zip` |
-| Archive SHA-256 | `F711E0478C03FD48624C59A0487E0C5D904779A3C67280A0A7B49B0002F12B43` |
+| Release tag | `autobuild-2026-07-21-13-38` |
+| Release time | `2026-07-21T13:38:40Z` |
+| BtbN commit | `8c736b2d6fe5da2a10a8896d01e53bfb0ca4f665` |
+| FFmpeg commit | `703dcc25b91eacd2ab8b8b2fe888dc8d7ab4ad6d` |
+| Build ID | `btbn.ffmpeg.20260721.win64.lgpl-shared` |
+| FFmpeg version | `n8.1.2-29-g703dcc25b9-20260721` |
+| Asset | `ffmpeg-n8.1.2-29-g703dcc25b9-win64-lgpl-shared-8.1.zip` |
+| Archive size | `70,510,808` bytes |
+| Archive SHA-256 | `50764B52D38CB0BAF8AF938C0E4CA886D2C6753B520B2C319B532ED5C17E7CBF` |
 | Declared license class | `LGPL-3.0-or-later` |
 | Distribution | Optional external, not bundled |
 
-Approval applies only to that complete identity and architecture. It does not approve another daily build, a modified build, a host manifest, or redistribution.
+Approval applies only to that complete identity and architecture. The 2026-07-15 candidate remains a superseded audit record and is rejected by the active hashes. Approval does not authorize native activation, another daily build, a modified build, a host manifest, or redistribution.
 
 ### Host-supplied manifest
 
@@ -79,7 +81,7 @@ Without the dedicated host-attestation switch, the route returns `PolicyRejected
 
 ## Manifest and runtime contract
 
-Both manifest origins carry exactly five fixed records:
+Both manifest origins carry exactly five load-role records:
 
 | Role | Filename | ABI major |
 | --- | --- | ---: |
@@ -89,9 +91,9 @@ Both manifest origins carry exactly five fixed records:
 | SwResample | `swresample-6.dll` | 6 |
 | SwScale | `swscale-9.dll` | 9 |
 
-Each record contains a positive file length and a 64-character SHA-256 digest. The manifest contains no runtime directory, path, URL, archive location, downloader, command, script, installation instruction, update instruction, or fallback location.
+Each record contains a positive file length and a 64-character SHA-256 digest. The built-in candidate additionally verifies the complete reviewed ten-file `bin` inventory; its two companion DLLs and three tools are never loaded by Nova. Host-supplied manifests remain exact five-file inventories. The manifest contains no runtime directory, path, URL, archive location, downloader, command, script, installation instruction, update instruction, or fallback location.
 
-Creation fails closed for invalid identities, invalid file counts, undefined or duplicate roles, missing roles, renamed or path-bearing filenames, wrong ABI majors, nonpositive lengths, malformed digests, invalid inventories, and unacceptable declared license classes.
+Creation fails closed for invalid identities, invalid file counts, undefined or duplicate roles, missing roles, renamed or path-bearing filenames, wrong ABI majors, nonpositive lengths, malformed digests, invalid inventories, unacceptable declared license classes, GPL／nonfree enabled, shared disabled, or static enabled.
 
 Accepted files pass through:
 
@@ -107,9 +109,11 @@ Host replacement never disables integrity or native safety gates.
 
 ## Provenance evidence
 
-`THIRD-PARTY-LICENSES/FFmpeg/PROVENANCE.md` records the exact release tag, complete BtbN and FFmpeg commits, asset, checksum, and exact upstream variant definitions.
+`THIRD-PARTY-LICENSES/FFmpeg/PROVENANCE.md` records the exact release tag and time, fixed asset URL, archive size and checksum, complete BtbN and FFmpeg commits, build ID, complete inventory, and superseded identity.
 
-The original 0.0.9w review did not retain verbatim `ffmpeg.exe -buildconf` and `ffmpeg.exe -L` transcripts. The correction records that omission rather than inventing output. Every future built-in candidate update must remain `Pending` until those complete transcripts, archive checksum comparison, extracted inventory, PE dependencies, and dependency-license inventory are retained in the repository.
+The exact `ffmpeg.exe -buildconf` and `ffmpeg.exe -L` transcripts for the active candidate are retained as text. They prove `--enable-shared`, `--disable-static`, and absence of `--enable-gpl`／`--enable-nonfree`. The complete expanded inventory is also retained as text. No FFmpeg executable, DLL, or archive is retained.
+
+The PE dependency allow-list includes `d2d1.dll`, `dwrite.dll`, `iphlpapi.dll`, and `usp10.dll` as Windows system dependencies. They are supplied by Windows, not by Nova or the FFmpeg runtime. Unknown non-system dependencies remain rejected.
 
 ## Nova binary distribution rules
 
@@ -138,6 +142,8 @@ A third party that combines and redistributes Nova with FFmpeg is the FFmpeg bin
 - readable `COPYING.LGPLv3` and `COPYING.GPLv3` texts;
 - deterministic `COPYING.GPLv3.gz` as a duplicate;
 - `SHA256SUMS`.
+- `ffmpeg-candidate-buildconf.txt` and `ffmpeg-candidate-license.txt`;
+- `CANDIDATE-20260721-INVENTORY.txt`.
 
 The fixed text hashes are:
 
@@ -182,4 +188,4 @@ Nova may reconsider a separate runtime pack only through a new ADR that supplies
 - GNU LGPLv3 and GPLv3 texts;
 - BtbN/FFmpeg-Builds repository and exact variant files.
 
-See ADR-0132, amended ADR-0133, PCN-0140, and amended PCN-0141.
+See ADR-0132, amended ADR-0133, ADR-0137, PCN-0140, amended PCN-0141, and PCN-0145.

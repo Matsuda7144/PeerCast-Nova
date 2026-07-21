@@ -39,6 +39,33 @@ public sealed class PlaybackFfmpegExternalRuntimeManifestTests
         Assert.Equal(
             PlaybackFfmpegBackendRuntimeInventory.PinnedCandidate.Files,
             manifest.RuntimeInventory.Files);
+        Assert.Equal(PlaybackFfmpegExternalRuntimeBuildConfiguration.Required, manifest.BuildConfiguration);
+        Assert.Equal(5, manifest.Files.Count);
+        Assert.Equal(10, manifest.RuntimeInventory.Files.Count);
+    }
+
+    [Theory]
+    [InlineData(true, false, true, false)]
+    [InlineData(false, true, true, false)]
+    [InlineData(false, false, false, false)]
+    [InlineData(false, false, true, true)]
+    public void Host_manifest_rejects_disallowed_build_configuration(
+        bool gpl,
+        bool nonfree,
+        bool shared,
+        bool @static)
+    {
+        var creation = PlaybackFfmpegExternalRuntimeManifest.CreateHostSupplied(
+            "host.ffmpeg.8.1",
+            "8.1-custom",
+            PlaybackFfmpegExternalRuntimeManifest.RequiredDeclaredLicenseIdentifier,
+            new(gpl, nonfree, shared, @static),
+            CreateFiles(CreateLibraryBytes()));
+
+        Assert.Equal(
+            PlaybackFfmpegExternalRuntimeManifestResult.ConfigurationRejected,
+            creation.Result);
+        Assert.Null(creation.Manifest);
     }
 
     [Fact]
@@ -148,6 +175,7 @@ public sealed class PlaybackFfmpegExternalRuntimeManifestTests
             "host.ffmpeg.8.1",
             "8.1-custom",
             licenseIdentifier,
+            PlaybackFfmpegExternalRuntimeBuildConfiguration.Required,
             CreateFiles(CreateLibraryBytes()));
 
         Assert.Equal(
@@ -166,6 +194,7 @@ public sealed class PlaybackFfmpegExternalRuntimeManifestTests
             "host.ffmpeg.8.1",
             "8.1-custom",
             PlaybackFfmpegExternalRuntimeManifest.RequiredDeclaredLicenseIdentifier,
+            PlaybackFfmpegExternalRuntimeBuildConfiguration.Required,
             files);
 
         Assert.Equal(
@@ -188,10 +217,33 @@ public sealed class PlaybackFfmpegExternalRuntimeManifestTests
             "host.ffmpeg.8.1",
             "8.1-custom",
             PlaybackFfmpegExternalRuntimeManifest.RequiredDeclaredLicenseIdentifier,
+            PlaybackFfmpegExternalRuntimeBuildConfiguration.Required,
             files);
 
         Assert.Equal(
             PlaybackFfmpegExternalRuntimeManifestResult.DuplicateRole,
+            creation.Result);
+        Assert.Null(creation.Manifest);
+    }
+
+    [Fact]
+    public void Host_manifest_rejects_undefined_role()
+    {
+        var files = CreateFiles(CreateLibraryBytes()).ToArray();
+        files[0] = files[0] with
+        {
+            Role = (PlaybackFfmpegExternalRuntimeLibraryRole)999,
+        };
+
+        var creation = PlaybackFfmpegExternalRuntimeManifest.CreateHostSupplied(
+            "host.ffmpeg.8.1",
+            "8.1-custom",
+            PlaybackFfmpegExternalRuntimeManifest.RequiredDeclaredLicenseIdentifier,
+            PlaybackFfmpegExternalRuntimeBuildConfiguration.Required,
+            files);
+
+        Assert.Equal(
+            PlaybackFfmpegExternalRuntimeManifestResult.UndefinedRole,
             creation.Result);
         Assert.Null(creation.Manifest);
     }
@@ -209,6 +261,7 @@ public sealed class PlaybackFfmpegExternalRuntimeManifestTests
             "host.ffmpeg.8.1",
             "8.1-custom",
             PlaybackFfmpegExternalRuntimeManifest.RequiredDeclaredLicenseIdentifier,
+            PlaybackFfmpegExternalRuntimeBuildConfiguration.Required,
             files);
 
         Assert.Equal(
@@ -226,6 +279,7 @@ public sealed class PlaybackFfmpegExternalRuntimeManifestTests
             "host.ffmpeg.8.1",
             "8.1-custom",
             PlaybackFfmpegExternalRuntimeManifest.RequiredDeclaredLicenseIdentifier,
+            PlaybackFfmpegExternalRuntimeBuildConfiguration.Required,
             files);
 
         Assert.Equal(
@@ -245,6 +299,7 @@ public sealed class PlaybackFfmpegExternalRuntimeManifestTests
             "host.ffmpeg.8.1",
             "8.1-custom",
             PlaybackFfmpegExternalRuntimeManifest.RequiredDeclaredLicenseIdentifier,
+            PlaybackFfmpegExternalRuntimeBuildConfiguration.Required,
             files);
 
         Assert.Equal(
@@ -264,6 +319,7 @@ public sealed class PlaybackFfmpegExternalRuntimeManifestTests
             "host.ffmpeg.8.1",
             "8.1-custom",
             PlaybackFfmpegExternalRuntimeManifest.RequiredDeclaredLicenseIdentifier,
+            PlaybackFfmpegExternalRuntimeBuildConfiguration.Required,
             files);
 
         Assert.Equal(
@@ -281,6 +337,7 @@ public sealed class PlaybackFfmpegExternalRuntimeManifestTests
             buildId,
             "8.1-custom",
             PlaybackFfmpegExternalRuntimeManifest.RequiredDeclaredLicenseIdentifier,
+            PlaybackFfmpegExternalRuntimeBuildConfiguration.Required,
             CreateFiles(CreateLibraryBytes()));
 
         Assert.Equal(
@@ -336,6 +393,7 @@ public sealed class PlaybackFfmpegExternalRuntimeManifestTests
             "host.ffmpeg.8.1.modified",
             "8.1-custom+local1",
             PlaybackFfmpegExternalRuntimeManifest.RequiredDeclaredLicenseIdentifier,
+            PlaybackFfmpegExternalRuntimeBuildConfiguration.Required,
             CreateFiles(bytes));
 
     private static IEnumerable<PlaybackFfmpegExternalRuntimeFile> CreateFiles(

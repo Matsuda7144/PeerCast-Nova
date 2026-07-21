@@ -39,6 +39,7 @@ public enum PlaybackFfmpegExternalRuntimeManifestResult
     InvalidBuildId,
     InvalidVersion,
     LicenseRejected,
+    ConfigurationRejected,
     InvalidFileCount,
     UndefinedRole,
     DuplicateRole,
@@ -48,6 +49,20 @@ public enum PlaybackFfmpegExternalRuntimeManifestResult
     FileLengthRejected,
     DigestRejected,
     InvalidInventory,
+}
+
+public readonly record struct PlaybackFfmpegExternalRuntimeBuildConfiguration(
+    bool GplEnabled,
+    bool NonfreeEnabled,
+    bool SharedEnabled,
+    bool StaticEnabled)
+{
+    public static PlaybackFfmpegExternalRuntimeBuildConfiguration Required { get; } =
+        new(
+            GplEnabled: false,
+            NonfreeEnabled: false,
+            SharedEnabled: true,
+            StaticEnabled: false);
 }
 
 public readonly record struct PlaybackFfmpegExternalRuntimeFile(
@@ -88,6 +103,7 @@ public sealed class PlaybackFfmpegExternalRuntimeManifest
         PlaybackFfmpegExternalRuntimeManifestOrigin origin,
         string buildId,
         string version,
+        PlaybackFfmpegExternalRuntimeBuildConfiguration buildConfiguration,
         PlaybackFfmpegExternalRuntimeFile[] files,
         PlaybackDecoderBackendRuntimeInventory runtimeInventory)
     {
@@ -95,6 +111,7 @@ public sealed class PlaybackFfmpegExternalRuntimeManifest
         BuildId = buildId;
         Version = version;
         LicenseIdentifier = RequiredDeclaredLicenseIdentifier;
+        BuildConfiguration = buildConfiguration;
         _files = files;
         Files = Array.AsReadOnly(_files);
         RuntimeInventory = runtimeInventory;
@@ -138,6 +155,8 @@ public sealed class PlaybackFfmpegExternalRuntimeManifest
 
     public string LicenseIdentifier { get; }
 
+    public PlaybackFfmpegExternalRuntimeBuildConfiguration BuildConfiguration { get; }
+
     public bool IsHostSupplied => Origin == PlaybackFfmpegExternalRuntimeManifestOrigin.HostSupplied;
 
     public IReadOnlyList<PlaybackFfmpegExternalRuntimeFile> Files { get; }
@@ -150,20 +169,25 @@ public sealed class PlaybackFfmpegExternalRuntimeManifest
         string buildId,
         string version,
         string licenseIdentifier,
+        PlaybackFfmpegExternalRuntimeBuildConfiguration buildConfiguration,
         IEnumerable<PlaybackFfmpegExternalRuntimeFile> files) =>
         Create(
             PlaybackFfmpegExternalRuntimeManifestOrigin.HostSupplied,
             buildId,
             version,
             licenseIdentifier,
-            files);
+            buildConfiguration,
+            files,
+            runtimeInventory: null);
 
     private static PlaybackFfmpegExternalRuntimeManifestCreation Create(
         PlaybackFfmpegExternalRuntimeManifestOrigin origin,
         string buildId,
         string version,
         string licenseIdentifier,
-        IEnumerable<PlaybackFfmpegExternalRuntimeFile> files)
+        PlaybackFfmpegExternalRuntimeBuildConfiguration buildConfiguration,
+        IEnumerable<PlaybackFfmpegExternalRuntimeFile> files,
+        PlaybackDecoderBackendRuntimeInventory? runtimeInventory)
     {
         if (!IsBoundedIdentity(buildId))
         {
@@ -181,6 +205,11 @@ public sealed class PlaybackFfmpegExternalRuntimeManifest
                 StringComparison.Ordinal))
         {
             return Rejected(PlaybackFfmpegExternalRuntimeManifestResult.LicenseRejected);
+        }
+
+        if (buildConfiguration != PlaybackFfmpegExternalRuntimeBuildConfiguration.Required)
+        {
+            return Rejected(PlaybackFfmpegExternalRuntimeManifestResult.ConfigurationRejected);
         }
 
         if (files is null)
@@ -253,17 +282,33 @@ public sealed class PlaybackFfmpegExternalRuntimeManifest
 
         try
         {
-            var inventory = new PlaybackDecoderBackendRuntimeInventory(materialized.Select(
+            var requiredInventory = new PlaybackDecoderBackendRuntimeInventory(materialized.Select(
                 static file => new PlaybackDecoderBackendRuntimeFile(
                     file.FileName,
                     file.Length,
                     file.Sha256)));
+            var inventory = runtimeInventory ?? requiredInventory;
+            var inventoryByName = inventory.Files.ToDictionary(
+                static file => file.Name,
+                StringComparer.OrdinalIgnoreCase);
+            if (requiredInventory.Files.Any(required =>
+                    !inventoryByName.TryGetValue(required.Name, out var actual) ||
+                    actual.Length != required.Length ||
+                    !string.Equals(
+                        actual.Sha256,
+                        required.Sha256,
+                        StringComparison.OrdinalIgnoreCase)))
+            {
+                return Rejected(PlaybackFfmpegExternalRuntimeManifestResult.InvalidInventory);
+            }
+
             return new(
                 PlaybackFfmpegExternalRuntimeManifestResult.Accepted,
                 new PlaybackFfmpegExternalRuntimeManifest(
                     origin,
                     buildId,
                     version,
+                    buildConfiguration,
                     materialized,
                     inventory));
         }
@@ -281,6 +326,7 @@ public sealed class PlaybackFfmpegExternalRuntimeManifest
             PlaybackFfmpegBackendCandidate.BuildId,
             PlaybackFfmpegBackendCandidate.FfmpegVersion,
             RequiredDeclaredLicenseIdentifier,
+            PlaybackFfmpegExternalRuntimeBuildConfiguration.Required,
             RequiredRoles.Select(role =>
             {
                 var expected = Expected(role);
@@ -294,7 +340,8 @@ public sealed class PlaybackFfmpegExternalRuntimeManifest
                     expected.AbiMajor,
                     file.Length,
                     file.Sha256);
-            }));
+            }),
+            inventory);
         return creation.Manifest ??
             throw new InvalidOperationException("The built-in FFmpeg runtime manifest is invalid.");
     }

@@ -206,7 +206,7 @@ internal readonly record struct VerifiedPlaybackDecoderRuntimeFile(
 /// </summary>
 public static class PlaybackDecoderBackendInstalledRuntimeLocator
 {
-    internal const int MaximumFiles = 5;
+    internal const int MaximumFiles = 10;
     private const uint OpenExisting = 3;
     private const uint FileFlagBackupSemantics = 0x02000000;
     private const uint FileFlagOpenReparsePoint = 0x00200000;

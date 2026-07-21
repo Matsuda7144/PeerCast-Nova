@@ -7,17 +7,21 @@ PeerCast Nova can use FFmpeg libraries as an optional external runtime. FFmpeg i
 The only runtime identity reviewed by the PeerCast Nova project is:
 
 - Build project: BtbN/FFmpeg-Builds
-- Release tag: `autobuild-2026-07-15-14-01`
-- BtbN commit: `1f74efed63f467dbf0d1e5dd8548bf2188f4ad21`
-- FFmpeg commit: `94138f6973dd1ac6208ace92148ac0d172455d65`
-- Build ID: `btbn.ffmpeg.20260715.win64.lgpl-shared`
-- FFmpeg version: `n8.1.2-22-g94138f6973-20260715`
-- Candidate archive: `ffmpeg-n8.1-latest-win64-lgpl-shared-8.1.zip`
-- Archive SHA-256: `F711E0478C03FD48624C59A0487E0C5D904779A3C67280A0A7B49B0002F12B43`
+- Release tag: `autobuild-2026-07-21-13-38`
+- Release time: `2026-07-21T13:38:40Z`
+- BtbN commit: `8c736b2d6fe5da2a10a8896d01e53bfb0ca4f665`
+- FFmpeg commit: `703dcc25b91eacd2ab8b8b2fe888dc8d7ab4ad6d`
+- Build ID: `btbn.ffmpeg.20260721.win64.lgpl-shared`
+- FFmpeg version: `n8.1.2-29-g703dcc25b9-20260721`
+- Candidate archive: `ffmpeg-n8.1.2-29-g703dcc25b9-win64-lgpl-shared-8.1.zip`
+- Archive size: `70,510,808` bytes
+- Archive SHA-256: `50764B52D38CB0BAF8AF938C0E4CA886D2C6753B520B2C319B532ED5C17E7CBF`
 - Declared license class: `LGPL-3.0-or-later`
 - Linkage: external shared libraries
 
 The archive name and checksum are provenance evidence only. PeerCast Nova does not provide that archive or promise that a third-party daily-build asset remains available.
+
+The 2026-07-15 identity remains documented in `PROVENANCE.md` as superseded and is not accepted by the active manifest.
 
 ## Host-supplied runtimes
 

@@ -30,6 +30,19 @@ public sealed class PlaybackDecoderBackendInstalledRuntimeLocatorTests
     }
 
     [WindowsFact]
+    public async Task Locate_TenFileReviewedBinInventoryRemainsHeldUntilLeaseDisposal()
+    {
+        using var directory = new TemporaryDirectory();
+        var files = await WriteRuntimeAsync(directory.Path, 10);
+        var result = await LocateAsync(directory.Path, files);
+
+        Assert.Equal(PlaybackDecoderBackendInstalledRuntimeLocation.Verified, result.Location);
+        var lease = Assert.IsType<VerifiedPlaybackDecoderRuntimeLease>(result.Lease);
+        Assert.Equal(10, lease.FileCount);
+        await lease.DisposeAsync();
+    }
+
+    [WindowsFact]
     public async Task Locate_CaseVariantUsesWindowsNameComparison()
     {
         using var directory = new TemporaryDirectory();

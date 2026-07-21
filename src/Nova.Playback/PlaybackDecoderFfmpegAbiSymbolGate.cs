@@ -69,14 +69,23 @@ public sealed class PlaybackDecoderFfmpegAbiSymbolGate
         .Select(static requirement => requirement.FileName)
         .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
+    private static readonly HashSet<string> AllowedVerifiedInventoryNames = new(
+        [
+            .. VerifiedRuntimeNames,
+            "avdevice-62.dll", "avfilter-11.dll",
+            "ffmpeg.exe", "ffplay.exe", "ffprobe.exe",
+        ],
+        StringComparer.OrdinalIgnoreCase);
+
     private static readonly HashSet<string> AllowedSystemDependencies = new(
         [
             "advapi32.dll", "bcrypt.dll", "cfgmgr32.dll", "combase.dll",
-            "crypt32.dll", "dwmapi.dll", "gdi32.dll", "imm32.dll", "kernel32.dll",
+            "crypt32.dll", "d2d1.dll", "dwrite.dll", "dwmapi.dll", "gdi32.dll",
+            "imm32.dll", "iphlpapi.dll", "kernel32.dll",
             "mf.dll", "mfplat.dll", "mfuuid.dll", "ncrypt.dll", "ntdll.dll",
             "ole32.dll", "oleaut32.dll", "powrprof.dll", "propsys.dll",
             "rpcrt4.dll", "secur32.dll", "setupapi.dll", "shell32.dll",
-            "shlwapi.dll", "user32.dll", "userenv.dll", "ucrtbase.dll",
+            "shlwapi.dll", "user32.dll", "userenv.dll", "ucrtbase.dll", "usp10.dll",
             "version.dll", "winmm.dll", "ws2_32.dll",
         ],
         StringComparer.OrdinalIgnoreCase);
@@ -142,7 +151,8 @@ public sealed class PlaybackDecoderFfmpegAbiSymbolGate
         VerifiedPlaybackDecoderRuntimeLease owner,
         IReadOnlyDictionary<string, VerifiedPlaybackDecoderRuntimeFile> runtime)
     {
-        if (runtime.Count != Requirements.Length ||
+        if (runtime.Count < Requirements.Length ||
+            runtime.Keys.Any(static name => !AllowedVerifiedInventoryNames.Contains(name)) ||
             Requirements.Any(requirement => !runtime.ContainsKey(requirement.FileName)))
         {
             return new(PlaybackDecoderFfmpegAbiSymbolGateResult.RuntimeMismatch);

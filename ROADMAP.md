@@ -80,19 +80,21 @@
 
 ## 0.0.10 Controlled Native Activation and Output Evidence — In Progress
 
-### Next: 0.0.10a Controlled Real External-Runtime Decode Activation Review
+### 0.0.10a Approved FFmpeg Candidate Manifest Refresh — Implemented
 
-Define the evidence and ownership gate for the first controlled activation of the exact built-in approved external runtime:
+The reviewed BtbN 2026-07-21 win64 LGPL shared candidate is now the exact built-in manifest identity:
 
-- identify one retained media fixture with committed provenance and checksum;
-- identify one exact external runtime directory matching the approved manifest;
-- keep runtime binaries outside repository, release, CI artifact, installer, and cache publication;
-- select an explicit Windows runner and application-owned dispatcher／window environment;
-- define expected runtime verification, ABI, symbol, context-open, packet, frame, and cleanup evidence;
-- define how native frame bytes and metadata are inspected without claiming physical output;
-- define cancellation, failure, retained ownership, and terminal cleanup evidence;
-- prohibit runtime search, download, extraction, fallback, rehosting, or silent candidate replacement;
-- keep physical D3D11／WASAPI rendering and audible／visible playback in later milestones.
+- active build ID `btbn.ffmpeg.20260721.win64.lgpl-shared` with fixed release, archive, BtbN, and FFmpeg identity;
+- exact five load-role hashes plus complete ten-file reviewed `bin` inventory;
+- complete 223-file expanded inventory and verbatim build configuration／license evidence;
+- GPL／nonfree disabled and shared／static policy enforced by the manifest;
+- 2026-07-15 identity and hashes retained as superseded rejection history;
+- four additional Windows system dependencies classified and allow-listed without bundling;
+- no native load, decode, D3D11／WASAPI activation, or FFmpeg binary distribution.
+
+### Next: 0.0.10b Controlled Real External-Runtime Native Decode Validation
+
+Use the exact approved external runtime and controlled FLV fixture on one explicit Windows runner to record finite H.264／AAC context, packet, frame, metadata, bounds, failure, and cleanup evidence. Keep D3D11／WASAPI rendering and audible／visible playback in later milestones.
 
 ### Later sequence
 

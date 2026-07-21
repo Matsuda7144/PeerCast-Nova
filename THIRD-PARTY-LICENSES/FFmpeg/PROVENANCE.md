@@ -1,70 +1,68 @@
 # Reviewed FFmpeg Candidate Provenance
 
-This record identifies the exact third-party build reviewed for PeerCast Nova's built-in external-runtime manifest. It is an engineering record, not legal advice.
+This record identifies the exact third-party build approved for PeerCast Nova's built-in external-runtime manifest. It is an engineering record, not legal advice.
 
-## Immutable identity
+## Active immutable identity
 
 | Field | Value |
 | --- | --- |
 | Build repository | `BtbN/FFmpeg-Builds` |
+| Release tag | `autobuild-2026-07-21-13-38` |
+| Release time | `2026-07-21T13:38:40Z` |
+| Fixed asset | `ffmpeg-n8.1.2-29-g703dcc25b9-win64-lgpl-shared-8.1.zip` |
+| Fixed asset URL | `https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-07-21-13-38/ffmpeg-n8.1.2-29-g703dcc25b9-win64-lgpl-shared-8.1.zip` |
+| Archive size | `70,510,808` bytes |
+| Archive SHA-256 | `50764B52D38CB0BAF8AF938C0E4CA886D2C6753B520B2C319B532ED5C17E7CBF` |
+| BtbN commit | `8c736b2d6fe5da2a10a8896d01e53bfb0ca4f665` |
+| FFmpeg commit | `703dcc25b91eacd2ab8b8b2fe888dc8d7ab4ad6d` |
+| FFmpeg version | `n8.1.2-29-g703dcc25b9-20260721` |
+| Nova build ID | `btbn.ffmpeg.20260721.win64.lgpl-shared` |
+| Build class | `win64 LGPL shared` |
+| Expanded inventory | `223` files |
+
+The fixed release tag, asset URL, archive size and digest, both commits, and build ID form one inseparable identity. A floating `latest` URL is not provenance.
+
+## Retained binary evidence
+
+The complete 223-file expanded inventory is retained in `CANDIDATE-20260721-INVENTORY.txt`. The manifest verifies the complete ten-file `bin` directory while only these five roles are eligible for loading:
+
+| File | Size (bytes) | SHA-256 |
+| --- | ---: | --- |
+| `avcodec-62.dll` | 70,875,136 | `4936D6DD5C1615AC4166017A9843F4D8DC415EF6D3156A4138B84C2A4419818C` |
+| `avformat-62.dll` | 22,070,784 | `198B582EE199BA16C973A438FA125A2448772755BC2E95CC01B28AB434270290` |
+| `avutil-60.dll` | 2,937,856 | `419513335F9209499243C3C7F2EA46C0B3F477281D80DE90E696E2E1062D7452` |
+| `swresample-6.dll` | 723,968 | `344CA8558DCED8431D54E692A171F5167510E940E860292F33CD77460DB0E83B` |
+| `swscale-9.dll` | 12,570,624 | `7EBE9B9B4B8B23DA6E86631573E85AE484392CB7B3D0ECF506F621BDC1222229` |
+
+The remaining reviewed `bin` companions are `avdevice-62.dll`, `avfilter-11.dll`, `ffmpeg.exe`, `ffplay.exe`, and `ffprobe.exe`. They are integrity inventory entries, not Nova load roles. No file was removed, relocated, or copied to manufacture an exact inventory.
+
+The verbatim command evidence is retained as:
+
+- `ffmpeg-candidate-buildconf.txt` — complete `ffmpeg.exe -buildconf` output;
+- `ffmpeg-candidate-license.txt` — complete `ffmpeg.exe -L` output.
+
+The build configuration contains `--enable-shared` and `--disable-static`; it contains neither `--enable-gpl` nor `--enable-nonfree`. Required exports and ABI majors 62／62／60／6／9 were present.
+
+## PE dependency classification
+
+The reviewed five DLLs may import other verified load-role DLLs and allow-listed Windows system libraries. `d2d1.dll`, `dwrite.dll`, `iphlpapi.dll`, and `usp10.dll` are Windows system dependencies. They are not FFmpeg runtime inventory entries and must not be bundled by Nova or added beside the runtime. `avdevice-62.dll` and `avfilter-11.dll` remain reviewed top-level companion files but are not dependency allow-list entries for the five load roles. Unknown non-system dependencies fail closed.
+
+## Superseded candidate history
+
+The former candidate is retained for rejection and audit history only:
+
+| Field | Superseded value |
+| --- | --- |
+| Build ID | `btbn.ffmpeg.20260715.win64.lgpl-shared` |
 | Release tag | `autobuild-2026-07-15-14-01` |
-| Release time | 2026-07-15 14:02 UTC |
+| Asset | `ffmpeg-n8.1-latest-win64-lgpl-shared-8.1.zip` |
 | BtbN commit | `1f74efed63f467dbf0d1e5dd8548bf2188f4ad21` |
 | FFmpeg commit | `94138f6973dd1ac6208ace92148ac0d172455d65` |
-| FFmpeg version label | `n8.1.2-22-g94138f6973-20260715` |
-| Asset | `ffmpeg-n8.1-latest-win64-lgpl-shared-8.1.zip` |
+| FFmpeg version | `n8.1.2-22-g94138f6973-20260715` |
 | Archive SHA-256 | `F711E0478C03FD48624C59A0487E0C5D904779A3C67280A0A7B49B0002F12B43` |
-| Nova build ID | `btbn.ffmpeg.20260715.win64.lgpl-shared` |
 
-The release tag, both complete commits, asset name, and archive checksum are one inseparable identity. A floating `latest` URL is not evidence of the reviewed bytes.
+This identity is `Superseded`, not approved for native activation, and its five DLL digests do not satisfy the active manifest.
 
-## Exact upstream build-definition evidence
+## Approval scope
 
-At BtbN commit `1f74efed63f467dbf0d1e5dd8548bf2188f4ad21`:
-
-- `variants/win64-lgpl-shared.sh` selects `windows-install-shared.sh` and `defaults-lgpl-shared.sh`;
-- `variants/defaults-lgpl-shared.sh` selects `defaults-lgpl.sh`, then adds `--enable-shared --disable-static`;
-- `variants/defaults-lgpl.sh` sets `--enable-version3 --disable-debug`, selects FFmpeg `master`, and packages `COPYING.LGPLv3`;
-- the LGPL variant excludes the GPL-only dependency set used by the GPL variant;
-- the nonfree variant is a separate build class and is not accepted by Nova.
-
-These source definitions establish the selected build class. They do not replace inspection of the produced archive.
-
-## Binary review evidence and limitation
-
-The candidate archive checksum and five extracted DLL checksums are fixed by the runtime manifest and tests. The original 0.0.9w review did not retain verbatim transcripts of:
-
-```text
-ffmpeg.exe -buildconf
-ffmpeg.exe -L
-```
-
-This correction records that omission explicitly rather than reconstructing or inventing command output. The fixed candidate remains the only Nova-reviewed identity for the external-only, no-bundling route, but a future candidate update must not be approved until the exact archive has been independently acquired, checksum-matched, and the complete command transcripts are committed with the review.
-
-For every future candidate review, retain:
-
-1. archive checksum comparison against the upstream release checksum;
-2. complete `ffmpeg.exe -buildconf` output;
-3. complete `ffmpeg.exe -L` output;
-4. complete extracted top-level file inventory and SHA-256 values;
-5. PE dependency inventory for each accepted DLL;
-6. dependency-to-license inventory;
-7. confirmation that `--enable-gpl` and `--enable-nonfree` are absent;
-8. confirmation that shared libraries are enabled and static FFmpeg libraries are disabled;
-9. exact upstream source and build-repository commits;
-10. reviewer, date, and review result.
-
-If any evidence is missing or inconsistent, the candidate remains `Pending` and must not be changed to `Approved`.
-
-## Scope of approval
-
-Approval applies only to the exact built-in identity and only to Nova's external, explicitly located, dynamically loaded, non-bundled route. It does not approve:
-
-- a host-supplied manifest;
-- a modified or rebuilt runtime;
-- another daily build with the same filename;
-- a GPL or nonfree build;
-- redistribution or rehosting by Nova;
-- a third-party combined installer or runtime pack.
-
-A host-supplied manifest records `HostDeclared`, `HostAttested`, and `Unreviewed`; the host bears responsibility for the exact build it authorizes.
+`ApprovedForManifestImplementation` applies only to the exact active identity and Nova's explicit-directory, external, dynamically loaded, non-bundled route. It does not approve a modified build, a host-supplied manifest, another daily build, redistribution, native activation, decode, D3D11／WASAPI activation, or audible／visible playback. A host-supplied manifest remains `HostDeclared`, `HostAttested`, and `Unreviewed`.

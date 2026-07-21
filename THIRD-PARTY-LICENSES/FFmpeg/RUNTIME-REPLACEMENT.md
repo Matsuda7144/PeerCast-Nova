@@ -28,7 +28,7 @@ A replacement runtime must provide exactly these recognizable shared-library nam
 | Audio resampling | `swresample-6.dll` | 6 |
 | Video scaling | `swscale-9.dll` | 9 |
 
-Although the current production decoder uses H.264, AAC, and utility symbols, the complete verified five-DLL dependency set must be present. Missing files, additional top-level files, renamed DLLs, path-bearing names, wrong ABI majors, missing required symbols, unexpected PE dependencies, size mismatches, or digest mismatches fail closed.
+Although the current production decoder uses H.264, AAC, and utility symbols, a host-supplied replacement contains exactly this five-DLL set. The built-in candidate separately verifies its complete ten-file reviewed `bin` inventory, including companion DLLs and tools that Nova never loads. Missing files, additional top-level files, renamed DLLs, path-bearing names, wrong ABI majors, missing required symbols, unexpected PE dependencies, size mismatches, or digest mismatches fail closed.
 
 ## Required host declaration
 
@@ -50,6 +50,8 @@ var creation = PlaybackFfmpegExternalRuntimeManifest.CreateHostSupplied(
     version: "8.1-custom+local1",
     licenseIdentifier:
         PlaybackFfmpegExternalRuntimeManifest.RequiredDeclaredLicenseIdentifier,
+    buildConfiguration:
+        PlaybackFfmpegExternalRuntimeBuildConfiguration.Required,
     files:
     [
         new(PlaybackFfmpegExternalRuntimeLibraryRole.AvCodec,
@@ -72,6 +74,10 @@ if (creation.Result != PlaybackFfmpegExternalRuntimeManifestResult.Accepted ||
 ```
 
 The manifest contains no directory, URL, downloader, command, script, or installer. It is only an immutable host attestation for exact local files.
+
+`Required` means GPL disabled, nonfree disabled, shared enabled, and static disabled. A conflicting declaration fails before runtime access.
+
+`d2d1.dll`, `dwrite.dll`, `iphlpapi.dll`, and `usp10.dll` are allow-listed Windows system dependencies. They must not be copied into the runtime directory or bundled with Nova. Unknown non-system imports remain rejected.
 
 ## Activate through the application composition root
 

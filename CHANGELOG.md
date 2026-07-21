@@ -5,6 +5,19 @@
 Detailed history through 0.0.8g remains preserved in Git history at commit
 `f078dab5372a45a8c577c1c802a697ab72b45c02` and in milestone ADR/PCN records.
 
+### 0.0.10a - Approved FFmpeg Candidate Manifest Refresh
+
+- Replaced the active built-in identity with `btbn.ffmpeg.20260721.win64.lgpl-shared`, fixed to the 70,510,808-byte archive and SHA-256 `50764B52D38CB0BAF8AF938C0E4CA886D2C6753B520B2C319B532ED5C17E7CBF`.
+- Retained the 2026-07-15 candidate identity and five DLL digests as superseded audit and rejection history.
+- Fixed exact lengths and SHA-256 values for the five load-role DLLs and the complete ten-file reviewed `bin` inventory.
+- Required GPL disabled, nonfree disabled, shared enabled, and static disabled for accepted manifests.
+- Added `d2d1.dll`, `dwrite.dll`, `iphlpapi.dll`, and `usp10.dll` as Windows system dependency allow-list entries; none is bundled by Nova or the FFmpeg runtime.
+- Retained complete `-buildconf`, `-L`, and 223-file expanded inventory evidence as text only.
+- Added integrity, configuration, ABI／symbol, dependency, superseded-history, and binary-exclusion tests plus ADR-0137 and PCN-0145.
+- Kept all FFmpeg archives, executables, and DLLs outside Git and build／publish artifacts.
+- Performed no native DLL load, runtime ABI／symbol execution, decoder-context creation, packet submission, native decode, D3D11／WASAPI activation, or audible／visible output.
+- Selected 0.0.10b Controlled Real External-Runtime Native Decode Validation.
+
 ### 0.0.9z - Controlled Retained-Fixture Production Activation Validation
 
 - Added a controlled cross-platform integration harness around the real finite application lifecycle and real production PCP／FLV composition.

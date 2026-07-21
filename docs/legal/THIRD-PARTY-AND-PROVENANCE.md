@@ -71,14 +71,17 @@ The permanent default distribution decision is:
 
 ### Built-in candidate
 
-The exact built-in identity is:
+The active exact built-in identity is:
 
-- BtbN release tag `autobuild-2026-07-15-14-01`;
-- BtbN commit `1f74efed63f467dbf0d1e5dd8548bf2188f4ad21`;
-- FFmpeg commit `94138f6973dd1ac6208ace92148ac0d172455d65`;
-- archive SHA-256 `F711E0478C03FD48624C59A0487E0C5D904779A3C67280A0A7B49B0002F12B43`.
+- BtbN release tag `autobuild-2026-07-21-13-38`, released `2026-07-21T13:38:40Z`;
+- BtbN commit `8c736b2d6fe5da2a10a8896d01e53bfb0ca4f665`;
+- FFmpeg commit `703dcc25b91eacd2ab8b8b2fe888dc8d7ab4ad6d`;
+- archive size `70,510,808` bytes;
+- archive SHA-256 `50764B52D38CB0BAF8AF938C0E4CA886D2C6753B520B2C319B532ED5C17E7CBF`.
 
 Only this identity is `ProjectReviewed`, `BuiltInApproved`, and `Approved` for the external-only route.
+
+The 2026-07-15 identity and its hashes remain present as `Superseded` history. They cannot satisfy the active manifest.
 
 ### Host-supplied manifest
 
@@ -90,9 +93,9 @@ The generic backend policy still rejects pending provenance. The host-specific r
 
 ## Evidence correction
 
-`THIRD-PARTY-LICENSES/FFmpeg/PROVENANCE.md` records exact release and commit identity plus the upstream variant definitions. It also records that the original 0.0.9w review did not retain verbatim `ffmpeg.exe -buildconf` and `ffmpeg.exe -L` transcripts. Those transcripts must not be reconstructed or invented.
+`THIRD-PARTY-LICENSES/FFmpeg/PROVENANCE.md` records exact release, asset, commit, archive, complete inventory, build configuration, dependency, and superseded-candidate evidence. The verbatim `ffmpeg.exe -buildconf` and `ffmpeg.exe -L` outputs for the active candidate are committed as text evidence.
 
-Every future built-in candidate remains `Pending` until complete command transcripts, archive checksum comparison, extracted inventory, PE dependencies, and dependency-license inventory are committed.
+The active evidence confirms GPL and nonfree disabled, shared enabled, static disabled, and classifies `d2d1.dll`, `dwrite.dll`, `iphlpapi.dll`, and `usp10.dll` as Windows system dependencies that Nova and the FFmpeg runtime do not bundle. Every future built-in candidate remains `Pending` until equivalent evidence is committed.
 
 ## Legal material and release guard
 
@@ -107,4 +110,4 @@ Activated CLI build and publish output includes:
 
 Nova release, installer, EULA, and translated terms must not prohibit reverse engineering performed to debug modifications to LGPL libraries. FFmpeg trademark attribution is retained, and Nova must not imply affiliation or endorsement.
 
-See `FFMPEG-EXTERNAL-RUNTIME-COMPLIANCE.md`, ADR-0132, amended ADR-0133, PCN-0140, and amended PCN-0141.
+See `FFMPEG-EXTERNAL-RUNTIME-COMPLIANCE.md`, ADR-0132, amended ADR-0133, ADR-0137, PCN-0140, amended PCN-0141, and PCN-0145.

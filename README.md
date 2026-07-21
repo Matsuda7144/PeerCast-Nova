@@ -9,25 +9,20 @@ License: **Apache License 2.0**
 
 ## 現在地
 
-**Milestone 0.0.9z — Controlled Retained-Fixture Production Activation Validation**
+**Milestone 0.0.10a — Approved FFmpeg Candidate Manifest Refresh**
 
-0.0.9fのcontrolled FLV fixtureを0.0.9y finite application lifecycleへ接続し、real bounded parser、real production composition、source-bound decode、decoded-completion transfer、retained scheduler ownership、generation-matched output admissionを一つのcross-platform integration harnessで検証しました。
+`ApprovedForManifestImplementation`となったBtbN 2026-07-21 win64 LGPL shared候補へbuilt-in manifestを更新し、旧2026-07-15候補をsuperseded履歴として保持しました。archive、complete inventory、5 load-role DLL、build configuration、PE dependency、ABI／symbol条件をtext evidenceとtestsで固定しています。
 
-- controlled real FLV bootstrapからexact parser source sessionとdecoder generation 0を作成
-- production snapshotから320×240 videoと48 kHz stereo audio構成を導出
-- lifecycle outputをactive decoder generation 0へ構成して`Ready`へ移行
-- interleaved video／audio packetでaudio submit `EAGAIN`を保持
-- one receive → one managed audio frame → one scheduler transfer → one retained retry
-- second encoded／decoded queue、hidden loop、automatic retryなし
-- first deliveryの`RetainedWouldBlock`でscheduler ownershipを維持
-- caller-driven second deliveryで`AudioDelivered`をcommit
-- discontinuity bootstrapでgeneration 0 stop完了後にgeneration 1を作成
-- output-ready generationを0から1へreconfigureして再び`Ready`
-- normal stopはproduction-firstで、borrowed dispatcherとwindow tokenを維持
-- physical Windows activation、real FFmpeg loading、real native decodeは別gateとして未検証
-- routine CircleCIでrestore、Release build with analyzers、full tests、format verification成功
+- active build ID `btbn.ffmpeg.20260721.win64.lgpl-shared`
+- fixed archive size／SHA-256とcomplete 223-file expanded inventory
+- exact ten-file `bin` integrity inventory、load対象は5 DLLのみ
+- GPL／nonfree disabled、shared enabled、static disabledをmanifest条件化
+- `d2d1.dll`、`dwrite.dll`、`iphlpapi.dll`、`usp10.dll`をWindows system dependencyとして分類
+- verbatim `-buildconf`／`-L` text evidenceを保持
+- FFmpeg archive／EXE／DLLはGit、build、publish、release artifactへ含めない
+- native load、ABI／symbol runtime execution、decoder context、packet、decodeは未実施
 
-このmilestoneはcomplete managed production seamのcontrolled validationです。physical COM／D3D11／WASAPI、実FFmpeg runtime、application window／message loop、audible／visible playbackはまだ検証していません。
+このmilestoneはapproved manifest implementationです。physical COM／D3D11／WASAPI、実FFmpeg runtime activation、native decode、application window／message loop、audible／visible playbackはまだ検証していません。
 
 ## 実装済みの主な領域
 
@@ -83,6 +78,8 @@ License: **Apache License 2.0**
 - generation-matched initial／replacement output configuration
 - explicit retained resize and terminal device-loss teardown
 - controlled retained-fixture production lifecycle integration validation
+- approved 2026-07-21 FFmpeg candidate manifest and superseded-candidate history
+- complete candidate inventory／buildconf／license text evidence
 
 詳細:
 
@@ -98,7 +95,6 @@ License: **Apache License 2.0**
 
 PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信アプリではありません。
 
-- controlled real external-runtime decode activation review
 - controlled real FFmpeg native decode validation
 - controlled Windows video／audio output validation
 - Windows application window／message-loop implementation
@@ -115,9 +111,9 @@ FFmpeg binary bundling／redistributionは既定方針として禁止です。�
 
 ## 次のマイルストーン
 
-**0.0.10a — Controlled Real External-Runtime Decode Activation Review**
+**0.0.10b — Controlled Real External-Runtime Native Decode Validation**
 
-exact approved built-in runtimeをcontrolled Windows環境で実際にactivateする前に、fixture provenance、runtime-directory custody、Windows runner、native decode evidence、cleanup、artifact非配布、failure evidenceをレビューします。physical video rendering／audio outputは後続gateとして分離します。
+0.0.10aで固定したexact approved built-in runtimeとcontrolled FLV fixtureを明示Windows環境でのみ使用し、runtime verificationからH.264／AAC context、finite packet／frame、cleanupまでを証跡化します。D3D11／WASAPIとphysical audio／video outputは後続gateとして分離します。
 
 ## 必要環境
 

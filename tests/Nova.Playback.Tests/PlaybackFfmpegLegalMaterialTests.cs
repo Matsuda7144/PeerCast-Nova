@@ -83,28 +83,62 @@ public sealed class PlaybackFfmpegLegalMaterialTests
     }
 
     [Fact]
-    public async Task Provenance_records_exact_release_and_missing_transcript_gate()
+    public async Task Provenance_records_active_and_superseded_exact_identities()
     {
         var provenance = await File.ReadAllTextAsync(
             Path.Combine(GetLegalDirectory(), "PROVENANCE.md"));
 
+        Assert.Contains("autobuild-2026-07-21-13-38", provenance, StringComparison.Ordinal);
+        Assert.Contains(
+            "8c736b2d6fe5da2a10a8896d01e53bfb0ca4f665",
+            provenance,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "703dcc25b91eacd2ab8b8b2fe888dc8d7ab4ad6d",
+            provenance,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "50764B52D38CB0BAF8AF938C0E4CA886D2C6753B520B2C319B532ED5C17E7CBF",
+            provenance,
+            StringComparison.Ordinal);
+        Assert.Contains("70,510,808", provenance, StringComparison.Ordinal);
+        Assert.Contains("223", provenance, StringComparison.Ordinal);
         Assert.Contains("autobuild-2026-07-15-14-01", provenance, StringComparison.Ordinal);
-        Assert.Contains(
-            "1f74efed63f467dbf0d1e5dd8548bf2188f4ad21",
-            provenance,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "94138f6973dd1ac6208ace92148ac0d172455d65",
-            provenance,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "F711E0478C03FD48624C59A0487E0C5D904779A3C67280A0A7B49B0002F12B43",
-            provenance,
-            StringComparison.Ordinal);
-        Assert.Contains("ffmpeg.exe -buildconf", provenance, StringComparison.Ordinal);
-        Assert.Contains("ffmpeg.exe -L", provenance, StringComparison.Ordinal);
-        Assert.Contains("did not retain verbatim transcripts", provenance, StringComparison.Ordinal);
-        Assert.Contains("remains `Pending`", provenance, StringComparison.Ordinal);
+        Assert.Contains("Superseded", provenance, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Candidate_transcripts_prove_required_lgpl_shared_configuration()
+    {
+        var legalDirectory = GetLegalDirectory();
+        var buildconf = await File.ReadAllTextAsync(
+            Path.Combine(legalDirectory, "ffmpeg-candidate-buildconf.txt"));
+        var license = await File.ReadAllTextAsync(
+            Path.Combine(legalDirectory, "ffmpeg-candidate-license.txt"));
+
+        Assert.Contains("n8.1.2-29-g703dcc25b9-20260721", buildconf, StringComparison.Ordinal);
+        Assert.Contains("--enable-shared", buildconf, StringComparison.Ordinal);
+        Assert.Contains("--disable-static", buildconf, StringComparison.Ordinal);
+        Assert.DoesNotContain("--enable-gpl", buildconf, StringComparison.Ordinal);
+        Assert.DoesNotContain("--enable-nonfree", buildconf, StringComparison.Ordinal);
+        Assert.Contains("GNU Lesser General Public License", license, StringComparison.Ordinal);
+        Assert.DoesNotContain("--enable-gpl", license, StringComparison.Ordinal);
+        Assert.DoesNotContain("--enable-nonfree", license, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Repository_legal_evidence_contains_no_ffmpeg_binary_or_archive()
+    {
+        var legalDirectory = GetLegalDirectory();
+        var forbiddenExtensions = new HashSet<string>(
+            [".dll", ".exe", ".zip", ".7z", ".tar", ".xz"],
+            StringComparer.OrdinalIgnoreCase);
+
+        var forbidden = Directory.EnumerateFiles(legalDirectory, "*", SearchOption.AllDirectories)
+            .Where(path => forbiddenExtensions.Contains(Path.GetExtension(path)))
+            .ToArray();
+
+        Assert.Empty(forbidden);
     }
 
     [Fact]

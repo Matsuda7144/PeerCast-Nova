@@ -18,6 +18,16 @@ public sealed class PlaybackDecoderFfmpegAbiSymbolGateTests
         "avformat-62.dll",
     ];
 
+    private static readonly string[] CompleteReviewedBinInventory =
+    [
+        .. RuntimeFiles,
+        "avdevice-62.dll",
+        "avfilter-11.dll",
+        "ffmpeg.exe",
+        "ffplay.exe",
+        "ffprobe.exe",
+    ];
+
     [Fact]
     public void Verify_FiveDllsVersionsAndSymbolsPassWithFixedSearchScope()
     {
@@ -33,6 +43,50 @@ public sealed class PlaybackDecoderFfmpegAbiSymbolGateTests
             PlaybackDecoderNativeSearchScope.VerifiedDirectoryAndSystem32,
             scope));
         Assert.Equal(loader.LoadedModules.AsEnumerable().Reverse(), loader.FreedModules);
+    }
+
+    [Fact]
+    public void Verify_CompleteReviewedInventoryLoadsOnlyRequiredFiveRoles()
+    {
+        using var runtime = new FakeRuntime(CompleteReviewedBinInventory);
+        var loader = new FakeLoader();
+
+        var result = CreateGate(loader).Verify(runtime.Lease);
+
+        Assert.Equal(PlaybackDecoderFfmpegAbiSymbolGateResult.Verified, result);
+        Assert.Equal(RuntimeFiles, loader.LoadedNames);
+        Assert.DoesNotContain("avdevice-62.dll", loader.LoadedNames);
+        Assert.DoesNotContain("avfilter-11.dll", loader.LoadedNames);
+        Assert.DoesNotContain(loader.LoadedNames, static name => name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Verify_UnexpectedVerifiedRuntimeEntryFailsBeforeInspectionOrLoad()
+    {
+        using var runtime = new FakeRuntime([.. RuntimeFiles, "unexpected.dll"]);
+        var loader = new FakeLoader();
+        var inspector = new FakeInspector();
+
+        var result = CreateGate(loader, inspector).Verify(runtime.Lease);
+
+        Assert.Equal(PlaybackDecoderFfmpegAbiSymbolGateResult.RuntimeMismatch, result);
+        Assert.Equal(0, inspector.CallCount);
+        Assert.Empty(loader.LoadedModules);
+    }
+
+    [Theory]
+    [InlineData("d2d1.dll")]
+    [InlineData("dwrite.dll")]
+    [InlineData("iphlpapi.dll")]
+    [InlineData("usp10.dll")]
+    public void Verify_NewWindowsSystemDependenciesAreAllowed(string dependency)
+    {
+        using var runtime = new FakeRuntime();
+        var inspector = new FakeInspector { Dependencies = ["kernel32.dll", dependency] };
+
+        var result = CreateGate(new FakeLoader(), inspector).Verify(runtime.Lease);
+
+        Assert.Equal(PlaybackDecoderFfmpegAbiSymbolGateResult.Verified, result);
     }
 
     [Fact]
