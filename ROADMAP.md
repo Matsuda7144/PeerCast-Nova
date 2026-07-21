@@ -70,7 +70,7 @@
 
 0.0.9u implements the dedicated production owner from awaited PCP／FLV input through source-bound decode, scheduler transfer, caller-driven delivery, explicit reset, stop, and discontinuity replacement.
 
-0.0.9w implements the external LGPL compliance gate. It adds immutable built-in and host manifests, exact runtime verification, legal material, user replacement, and an approved application-root FFmpeg production entry without bundling or discovery.
+0.0.9w implements the corrected external LGPL compliance gate. It approves only the exact built-in candidate, records host replacements as `HostDeclared`／`HostAttested`／`Unreviewed`, requires `AllowHostAttestedRuntime`, preserves exact runtime verification, includes readable legal／provenance／release-guard material, and adds no bundling or discovery.
 
 0.0.9x reviews the missing application lifecycle above that production entry and the existing Windows output stack. It selects one application-provided owner-thread dispatcher, keeps window／message-loop ownership outside playback, retains the 0.0.9q generation-matched scheduler as the sole production delivery authority, uses the active decoder generation for output configuration, makes resize explicit, and makes device loss terminal for the first implementation.
 
@@ -78,7 +78,7 @@
 
 Implement one finite lifecycle owner that:
 
-- accepts an approved built-in or host FFmpeg manifest and one explicit runtime directory;
+- accepts the exact approved built-in manifest or an explicitly allowed host-attested unreviewed manifest and one explicit runtime directory;
 - accepts an application-owned output dispatcher and positive window token without owning either;
 - validates backend policy and pure configuration before OS work;
 - runs the resource-free Windows adapter probe;
@@ -86,7 +86,7 @@ Implement one finite lifecycle owner that:
 - constructs binding, stream-initialization, and buffer-processing boundaries around the singular activation owner;
 - adds a minimal dispatcher-backed process／reset output port for asynchronous production delivery;
 - generalizes the generation delivery seam only enough to consume that port without adding another scheduler path;
-- creates the approved external runtime production composition borrowing the output port;
+- creates the external runtime production composition borrowing the output port;
 - accepts input before stream configuration but blocks delivery until an exact parser stream description exists;
 - binds and initializes output with the exact active decoder generation;
 - resets and reconfigures output state before delivering a discontinuity replacement generation;
@@ -129,6 +129,7 @@ Routine Linux CI uses CircleCI while GitHub Actions usage is exhausted. Final br
 - keep FFmpeg host-installed and dynamically loaded
 - do not bundle, mirror, rehost, download, or install FFmpeg in the default distribution
 - preserve explicit-directory and checksum／ABI verification for user replacements
+- do not convert host attestation into Nova review approval
 - keep application window and output dispatcher externally owned
 - keep Windows native output resources under one owner thread
 - record provenance and redistribution permission for third-party assets
@@ -136,7 +137,7 @@ Routine Linux CI uses CircleCI while GitHub Actions usage is exhausted. Final br
 ## 0.1.0 Genesis gate
 
 - bounded demux and production composition
-- approved external runtime compliance and replacement boundary
+- exact built-in approval and explicit host-attested replacement boundary
 - finite application-owned Windows lifecycle composition
 - finite decoded buffering and output lifecycle
 - controlled audible／visible verification

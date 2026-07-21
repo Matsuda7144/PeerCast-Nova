@@ -11,7 +11,7 @@ License: **Apache License 2.0**
 
 **Milestone 0.0.9x — Approved External Runtime and Windows Lifecycle Activation Review**
 
-0.0.9wで承認したexternal LGPL FFmpeg runtimeと、0.0.6t〜0.0.6yで分離したWindows 11 D3D11／WASAPI output境界を、application lifecycleへ接続する正確なownershipと順序をレビューしました。
+0.0.9wで承認したexact built-in external LGPL FFmpeg runtimeと、明示的にhostがattestするunreviewed replacement route、0.0.6t〜0.0.6yで分離したWindows 11 D3D11／WASAPI output境界を、application lifecycleへ接続する正確なownershipと順序をレビューしました。
 
 - applicationがwindow、message loop、output dispatcher／owner threadを所有
 - playback lifecycleはadapter probe、COM／D3D11／WASAPI activation、binding、stream、buffer、production compositionを所有
@@ -74,10 +74,10 @@ License: **Apache License 2.0**
 - finite production generation ingress／replacement composition boundary
 - FFmpeg candidate license／registration／distribution review
 - external-only LGPL runtime compliance policy
-- built-in／host-supplied FFmpeg runtime manifest
+- project-reviewed built-in／host-declared host-attested unreviewed FFmpeg runtime manifest
 - checksum-preserving LGPL user replacement boundary
-- approved external FFmpeg application-composition-root entry
-- GPLv3／LGPLv3 notice and license packaging
+- built-in-approved／explicit-host-attested application-composition-root entry
+- readable GPLv3／LGPLv3 notice, provenance, replacement, and release-terms guard packaging
 - approved runtime／Windows lifecycle activation architecture review
 
 詳細:
@@ -113,7 +113,7 @@ FFmpeg binary bundling／redistributionは既定方針として禁止です。�
 
 **0.0.9y — Finite Approved External Runtime and Windows Lifecycle Activation Boundary**
 
-application-owned dispatcherとwindow tokenを借用し、probe、activation、binding、stream、buffer、approved external runtime production compositionを一つの有限ownerとして実装します。exact stream description後のinitial output configuration、discontinuity generation reconfiguration、retained resize／backpressure、terminal device loss、production-first stopとowner-thread teardownをcross-platform injected testsで固定します。
+application-owned dispatcherとwindow tokenを借用し、probe、activation、binding、stream、buffer、approved built-in external runtimeまたはexplicit host-attested runtimeのproduction compositionを一つの有限ownerとして実装します。exact stream description後のinitial output configuration、discontinuity generation reconfiguration、retained resize／backpressure、terminal device loss、production-first stopとowner-thread teardownをcross-platform injected testsで固定します。
 
 ## 必要環境
 
@@ -143,8 +143,9 @@ dotnet format PeerCast-Nova.sln --verify-no-changes --no-restore
 - 実装していない機能を完了扱いしない
 - 第三者assetはprovenanceとredistribution permissionを記録する
 - LGPL replacement freedomとruntime integrityを明示manifestで両立する
+- exact built-in candidateだけをNova review approvalとし、host attestationをapprovalへ読み替えない
 - Windows native resourceはowner threadで所有しproduction decode pathはdispatcher-backed portだけを借用する
 
 ## ライセンス
 
-PeerCast Novaは[Apache License 2.0](LICENSE)で公開されています。FFmpegはNovaのApache License 2.0には含まれず、外部runtimeとして別のlicense termsに従います。
+PeerCast Novaは[Apache License 2.0](LICENSE)で公開されています。FFmpegはNovaのApache License 2.0には含まれず、外部runtimeとして別のlicense termsに従います。built-in candidateのNova reviewはexact identityだけに限定され、host-supplied runtimeはhost declaration／attestationでありNova approvalではありません。

@@ -2,6 +2,20 @@
 
 PeerCast Nova uses FFmpeg only from one explicit local directory supplied by the application host. It does not search `PATH`, the Windows registry, system directories, or conventional installation locations, and it does not download or install a runtime.
 
+## Authorization model
+
+`PlaybackFfmpegExternalRuntimeManifest.BuiltInCandidate` is the one identity reviewed by the PeerCast Nova project.
+
+`PlaybackFfmpegExternalRuntimeManifest.CreateHostSupplied` creates a different authorization class:
+
+- the license string is declared by the host;
+- the exact files are attested by the host;
+- the manifest remains `Unreviewed` by PeerCast Nova;
+- Nova does not represent it as `LicenseReview.Approved`;
+- activation requires the separate `AllowHostAttestedRuntime = true` policy switch.
+
+The application host is responsible for confirming the actual FFmpeg configuration, all dependency licenses, and the legal and technical suitability of the exact build it authorizes.
+
 ## Required compatible library set
 
 A replacement runtime must provide exactly these recognizable shared-library names and ABI majors:
@@ -16,7 +30,7 @@ A replacement runtime must provide exactly these recognizable shared-library nam
 
 Although the current production decoder uses H.264, AAC, and utility symbols, the complete verified five-DLL dependency set must be present. Missing files, additional top-level files, renamed DLLs, path-bearing names, wrong ABI majors, missing required symbols, unexpected PE dependencies, size mismatches, or digest mismatches fail closed.
 
-## License requirement
+## Required host declaration
 
 The host manifest must declare exactly:
 
@@ -24,23 +38,18 @@ The host manifest must declare exactly:
 LGPL-3.0-or-later
 ```
 
-GPL, nonfree, unknown, undefined, or differently declared license classes are rejected by the approved production route. The application host is responsible for confirming the actual configuration and dependency licenses of the build it authorizes.
+This field records a host declaration. It is not proof of the binary's configuration and is not a Nova legal review. GPL, nonfree, unknown, undefined, or differently declared license classes are rejected by this route.
 
 ## Create a host manifest
 
-For each of the five DLLs, calculate:
-
-1. the exact file length in bytes;
-2. the SHA-256 digest as 64 hexadecimal characters;
-3. the role, exact file name, and required ABI major from the table above.
-
-Create the manifest through `PlaybackFfmpegExternalRuntimeManifest.CreateHostSupplied`:
+For each DLL, calculate its exact byte length and SHA-256 digest, then create the manifest:
 
 ```csharp
 var creation = PlaybackFfmpegExternalRuntimeManifest.CreateHostSupplied(
     buildId: "my.ffmpeg.8.1.modified",
     version: "8.1-custom+local1",
-    licenseIdentifier: PlaybackFfmpegExternalRuntimeManifest.ApprovedLicenseIdentifier,
+    licenseIdentifier:
+        PlaybackFfmpegExternalRuntimeManifest.RequiredDeclaredLicenseIdentifier,
     files:
     [
         new(PlaybackFfmpegExternalRuntimeLibraryRole.AvCodec,
@@ -62,11 +71,9 @@ if (creation.Result != PlaybackFfmpegExternalRuntimeManifestResult.Accepted ||
 }
 ```
 
-The manifest contains no directory, URL, downloader, command, script, or installer. It is only an immutable authorization record for exact local files.
+The manifest contains no directory, URL, downloader, command, script, or installer. It is only an immutable host attestation for exact local files.
 
 ## Activate through the application composition root
-
-The application supplies the accepted manifest and explicit directory to the approved composition-root entry:
 
 ```csharp
 var composition = PlaybackFfmpegExternalRuntimeComposition.Create(
@@ -79,20 +86,23 @@ var composition = PlaybackFfmpegExternalRuntimeComposition.Create(
         AllowThirdParty = true,
         AllowNativeCode = true,
         AllowBundled = false,
+        AllowHostAttestedRuntime = true,
     },
     creation.Manifest);
 ```
 
-The runtime then passes through the existing fixed-drive and reparse-point checks, directory and file guard handles, exact inventory verification, PE dependency inspection, DLL loading restrictions, ABI-major checks, and required-symbol checks. A host manifest does not disable or bypass any of those gates.
+Without `AllowHostAttestedRuntime = true`, a host manifest returns `PolicyRejected` before Nova inspects the runtime directory or enters native loading. The built-in reviewed manifest does not require this host-attestation switch.
+
+Every activated runtime still passes the fixed-drive and reparse-point checks, retained directory and file handles, exact inventory verification, PE dependency inspection, DLL loading restrictions, ABI-major checks, and required-symbol checks. Host attestation does not disable or bypass a runtime gate.
 
 ## Modifying or rebuilding FFmpeg
 
 An interface-compatible modified LGPL shared build may be used by generating a new host manifest for the resulting DLLs. Do not reuse the built-in hashes after modifying or rebuilding a library.
 
-PeerCast Nova does not impose a restriction on reverse engineering performed to debug modifications to the LGPL libraries. The user remains free to replace the external libraries with another compatible build that passes the explicit manifest and runtime verification contract.
+PeerCast Nova does not impose a restriction on reverse engineering performed to debug modifications to the LGPL libraries. Nova release, installer, EULA, and translated terms must preserve that freedom.
 
-## Redistribution boundary
+## Legal obligations and Nova policy
 
-This procedure is for a user- or host-installed runtime. It does not authorize bundling FFmpeg with PeerCast Nova.
+PeerCast Nova's no-bundling rule is a project distribution policy. It does not replace the LGPL and is not a complete compliance guide. Anyone redistributing FFmpeg binaries must evaluate and satisfy the obligations applicable to that distribution, including corresponding source, build scripts and configuration, modifications, notices, relinking or replacement ability, dependency licenses, installation information where applicable, and source availability.
 
-A party that redistributes FFmpeg binaries together with Nova is the binary distributor for that package and must independently satisfy the applicable corresponding-source, build-script, patch, copyright, notice, license, installation-information, dependency, and source-availability obligations. PeerCast Nova's default release process does not perform that redistribution.
+This host-installed procedure does not authorize bundling FFmpeg with PeerCast Nova. A third-party combined package is outside Nova's default release boundary and requires its own documented compliance review.

@@ -7,7 +7,7 @@ Detailed history through 0.0.8g remains preserved in Git history at commit
 
 ### 0.0.9x - Approved External Runtime and Windows Lifecycle Activation Review
 
-- Reviewed the exact connection from the approved external FFmpeg production route to the existing Windows 11 D3D11／WASAPI output boundaries.
+- Reviewed the exact connection from the approved built-in FFmpeg production route and explicit host-attested unreviewed replacement route to the existing Windows 11 D3D11／WASAPI output boundaries.
 - Confirmed that the application owns the window, message loop, and output dispatcher／owner thread.
 - Kept MTA COM, D3D11 device/context, default WASAPI endpoint/client, event handle, binding, stream, and buffer ownership under one playback lifecycle owner.
 - Identified that activation borrows are owner-thread-affine while production delivery resumes asynchronously, so direct concrete output calls do not prove production thread affinity.
@@ -29,24 +29,29 @@ Detailed history through 0.0.8g remains preserved in Git history at commit
 
 ### 0.0.9w - External LGPL Runtime Compliance and User Replacement Boundary
 
-- Added `PlaybackFfmpegExternalRuntimeManifest` with immutable built-in and host-supplied origins.
-- Accepted only `LGPL-3.0-or-later` and exactly five reviewed FFmpeg shared-library roles.
+- Added `PlaybackFfmpegExternalRuntimeManifest` with immutable built-in and host-supplied origins and separate declaration, authorization, and review states.
+- Kept only the exact built-in identity `ProjectReviewed`, `BuiltInApproved`, and `LicenseReview.Approved`; host manifests are `HostDeclared`, `HostAttested`, `Unreviewed`, and `LicenseReview.Pending`.
+- Renamed the required license declaration constant to `RequiredDeclaredLicenseIdentifier` so a host declaration is not represented as Nova approval.
+- Accepted only the declared string `LGPL-3.0-or-later` and exactly five reviewed FFmpeg shared-library roles.
 - Required recognizable filenames, reviewed ABI majors, positive lengths, and SHA-256 digests for `avcodec`, `avformat`, `avutil`, `swresample`, and `swscale`.
 - Rejected GPL, nonfree, LGPL-2.1, unknown, duplicate, missing, renamed, case-variant, path-bearing, wrong-ABI, invalid-length, and invalid-digest manifests.
 - Kept runtime paths, URLs, commands, scripts, archives, download instructions, installation instructions, and fallback locations outside the manifest contract.
-- Added `CreateHostSupplied` so a user or application host can authorize an interface-compatible modified LGPL build.
-- Preserved exact checksum verification for host replacements and proved later byte changes produce a digest mismatch.
+- Added `CreateHostSupplied` so a user or application host can attest one interface-compatible modified LGPL build without claiming Nova review.
+- Added the dedicated `AllowHostAttestedRuntime` policy switch and rejected a host runtime before path observation or native work when it is absent.
+- Preserved generic policy rejection of pending provenance and exact checksum verification for host replacements; later byte changes still produce a digest mismatch.
 - Added `PlaybackFfmpegExternalRuntimeGenerationFactory` as a manifest-specific adapter over the existing production generation factory.
-- Added `PlaybackFfmpegExternalRuntimeComposition` as the application-composition-root entry for the approved route.
+- Added `PlaybackFfmpegExternalRuntimeComposition` as the application-composition-root entry for the approved built-in or explicitly host-attested route.
 - Reused the existing explicit-directory locator, retained directory and DLL handles, exact inventory verifier, PE dependency gate, ABI-major gate, and required-symbol gate.
 - Kept generic backend registration, implicit discovery, network access, download, extraction, installation, update, fallback, resident pumping, second queues, and Windows resource ownership absent.
-- Changed the exact reviewed BtbN candidate from `LicenseReview.Pending` to `LicenseReview.Approved`.
-- Kept production policy explicit: third-party and native code must be allowed while bundled code remains disabled.
-- Added `THIRD-PARTY-LICENSES/FFmpeg` with a prominent notice, runtime replacement instructions, verbatim LGPLv3 text, deterministic GPLv3 text archive, extraction instructions, and fixed text hashes.
+- Recorded exact BtbN release tag and commit, exact FFmpeg commit, candidate archive, and archive SHA-256 in `PROVENANCE.md`.
+- Recorded that the original review did not retain verbatim `ffmpeg.exe -buildconf` and `ffmpeg.exe -L` transcripts and made those transcripts a hard gate for every future built-in approval.
+- Added `THIRD-PARTY-LICENSES/FFmpeg` with prominent notice, runtime replacement instructions, readable GPLv3／LGPLv3 texts, deterministic GPLv3 gzip duplicate, fixed text hashes, provenance, and a distribution-terms guard.
+- Required Nova-controlled EULA, installer, release, About, and translated terms to preserve reverse engineering for debugging LGPL-library modifications.
+- Added FFmpeg trademark attribution and separated applicable license obligations from Nova's stricter no-bundling policy.
 - Copied the complete FFmpeg legal directory into `Nova.Cli` build and publish output.
-- Added focused manifest, replacement-integrity, policy, legal-text, notice, packaging, candidate-transition, and integration-probe tests.
-- Updated obsolete pending-review probe expectations so approved candidates reach the explicit runtime gate.
-- Added ADR-0133 and PCN-0141 and advanced the project ledgers.
+- Added focused manifest, host-attestation policy, replacement-integrity, legal-text, notice, provenance, release-guard, packaging, candidate-transition, and integration-probe tests.
+- Updated obsolete pending-review probe expectations so the exact approved built-in candidate reaches the explicit runtime gate.
+- Amended ADR-0133 and PCN-0141 and reconciled README, ROADMAP, NAVIGATION, legal policy, and provenance ledgers.
 - Selected 0.0.9x Approved External Runtime and Windows Lifecycle Activation Review.
 - Kept FFmpeg binary bundling／redistribution, Windows application lifecycle activation, controlled real-media decode／output validation, and audible／visible playback unavailable.
 
@@ -90,7 +95,7 @@ Detailed history through 0.0.8g remains preserved in Git history at commit
 - Added ten focused cross-platform tests plus ADR-0131 and PCN-0139.
 - Isolated intentional CA1068, CA1822, and CA2250 contracts through SARIF status probes, added narrow file-scoped rationale, and restored routine CircleCI byte-for-byte.
 - Selected 0.0.9v FFmpeg Candidate License, Backend Registration, and Distribution Review.
-- Kept the pinned candidate `LicenseReview.Pending`, normal backend registration, FFmpeg distribution, Windows device activation, resident pumping, and audible／visible playback unavailable.
+- Kept the pinned FFmpeg candidate `LicenseReview.Pending`, normal backend registration, FFmpeg distribution, Windows device activation, resident pumping, and audible／visible playback unavailable.
 
 ### 0.0.9t - Production Generation Ingress and Replacement Composition Review
 

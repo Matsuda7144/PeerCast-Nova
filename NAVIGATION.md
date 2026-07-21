@@ -4,7 +4,7 @@
 
 **0.0.9x — Approved External Runtime and Windows Lifecycle Activation Review — Completed**
 
-承認済みexternal FFmpeg production routeと既存Windows output境界を、application-owned lifecycleへ接続するownershipと順序を確定しました。
+exact built-in approved external FFmpeg production routeと、explicit host-attested unreviewed replacement route、既存Windows output境界をapplication-owned lifecycleへ接続するownershipと順序を確定しました。
 
 - applicationがwindow、message loop、dispatcher／output owner threadを所有
 - playback lifecycleがprobe、COM／D3D11／WASAPI activation、binding、stream、buffer、production compositionを所有
@@ -19,16 +19,22 @@
 - device lossは初回lifecycle implementationではterminal
 - stopはproduction composition後にbuffer → stream → binding → activation
 - FFmpeg external-only／explicit-directory／verified／unbundled policyを維持
-- runtime source／tests変更なし
+- host manifestは`HostDeclared`／`HostAttested`／`Unreviewed`でありNova approvalではない
+- 0.0.9x自体のruntime source／tests変更なし
 
 ## CI
 
-GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして使用します。最終documentation headでrestore、Release build with analyzers、full solution tests、format verificationを通してからmergeします。
+GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして使用します。最終headでrestore、Release build with analyzers、full solution tests、format verificationを通してからmergeします。
 
 ## 最新の入口
 
 - `docs/adr/ADR-0134-approved-external-runtime-windows-lifecycle-activation-review.md`
 - `docs/reviews/PCN-0142-APPROVED-EXTERNAL-RUNTIME-WINDOWS-LIFECYCLE-ACTIVATION-REVIEW.md`
+- `docs/adr/ADR-0133-external-lgpl-runtime-compliance-user-replacement-boundary.md`
+- `docs/reviews/PCN-0141-EXTERNAL-LGPL-RUNTIME-COMPLIANCE-USER-REPLACEMENT-BOUNDARY.md`
+- `docs/legal/FFMPEG-EXTERNAL-RUNTIME-COMPLIANCE.md`
+- `THIRD-PARTY-LICENSES/FFmpeg/PROVENANCE.md`
+- `THIRD-PARTY-LICENSES/FFmpeg/NOVA-DISTRIBUTION-GUARD.md`
 - `src/Nova.Playback/PlaybackFfmpegExternalRuntimeProductionComposition.cs`
 - `src/Nova.Playback/PlaybackGenerationMatchedSchedulerDeliveryBoundary.cs`
 - `src/Nova.Playback/PlaybackWindowsOutputAdapterSelection.cs`
@@ -53,11 +59,11 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 **0.0.9y — Finite Approved External Runtime and Windows Lifecycle Activation Boundary**
 
-application-owned dispatcherとwindow tokenを借用する一つの有限lifecycle ownerを実装します。initial stream configuration、discontinuity output generation reconfiguration、retained resize／backpressure、terminal device loss、production-first stop、owner-thread teardownをcross-platform injected testsで固定します。
+application-owned dispatcherとwindow tokenを借用する一つの有限lifecycle ownerを実装します。exact built-in approvedまたはexplicit host-attested runtimeを対象に、initial stream configuration、discontinuity output generation reconfiguration、retained resize／backpressure、terminal device loss、production-first stop、owner-thread teardownをcross-platform injected testsで固定します。
 
 ## 未完了
 
-- approved runtime／Windows lifecycle implementation
+- approved／host-attested runtime Windows lifecycle implementation
 - output owner-thread dispatcher adapter
 - controlled production retained-fixture validation
 - controlled real-media decode／output validation

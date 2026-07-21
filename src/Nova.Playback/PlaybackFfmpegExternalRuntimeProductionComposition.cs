@@ -12,6 +12,7 @@ public sealed class PlaybackFfmpegExternalRuntimeGenerationFactory :
     IAsyncDisposable
 {
     private readonly PlaybackProductionDecoderGenerationFactory _factory;
+    private readonly bool _policyRejected;
 
     public PlaybackFfmpegExternalRuntimeGenerationFactory(
         PlaybackDecoderBackendPolicy policy,
@@ -23,6 +24,8 @@ public sealed class PlaybackFfmpegExternalRuntimeGenerationFactory :
         ArgumentNullException.ThrowIfNull(runtimeManifest);
 
         RuntimeManifest = runtimeManifest;
+        _policyRejected = EvaluateManifestPolicy(policy, runtimeManifest) !=
+            PlaybackDecoderBackendPolicyRejection.None;
         var standardOperations = new PlaybackProductionDecoderGenerationFactoryOperations(
             clock ?? new StopwatchPlaybackMonotonicClock());
         _factory = new PlaybackProductionDecoderGenerationFactory(
@@ -44,6 +47,8 @@ public sealed class PlaybackFfmpegExternalRuntimeGenerationFactory :
         ArgumentNullException.ThrowIfNull(standardOperations);
 
         RuntimeManifest = runtimeManifest;
+        _policyRejected = EvaluateManifestPolicy(policy, runtimeManifest) !=
+            PlaybackDecoderBackendPolicyRejection.None;
         _factory = new PlaybackProductionDecoderGenerationFactory(
             policy,
             options,
@@ -54,7 +59,13 @@ public sealed class PlaybackFfmpegExternalRuntimeGenerationFactory :
 
     public PlaybackFfmpegExternalRuntimeManifest RuntimeManifest { get; }
 
-    public PlaybackProductionDecoderGenerationFactorySnapshot Snapshot => _factory.Snapshot;
+    public PlaybackProductionDecoderGenerationFactorySnapshot Snapshot => _policyRejected
+        ? new(
+            PlaybackProductionDecoderGenerationFactoryState.Idle,
+            PlaybackProductionDecoderGenerationFactoryResult.PolicyRejected,
+            0,
+            HasActiveCreation: false)
+        : _factory.Snapshot;
 
     public ValueTask<PlaybackProductionDecoderGenerationCreation> CreateAsync(
         string runtimeDirectory,
@@ -62,14 +73,23 @@ public sealed class PlaybackFfmpegExternalRuntimeGenerationFactory :
         PlaybackWindowsOutputBufferProcessingBoundary? output,
         int decoderGeneration,
         int discontinuityGeneration,
-        CancellationToken cancellationToken = default) =>
-        _factory.CreateAsync(
+        CancellationToken cancellationToken = default)
+    {
+        if (_policyRejected)
+        {
+            return ValueTask.FromResult(new PlaybackProductionDecoderGenerationCreation(
+                PlaybackProductionDecoderGenerationFactoryResult.PolicyRejected,
+                null));
+        }
+
+        return _factory.CreateAsync(
             runtimeDirectory,
             sourceSession,
             output,
             decoderGeneration,
             discontinuityGeneration,
             cancellationToken);
+    }
 
     public void Dispose()
     {
@@ -82,12 +102,20 @@ public sealed class PlaybackFfmpegExternalRuntimeGenerationFactory :
         await _factory.DisposeAsync().ConfigureAwait(false);
         GC.SuppressFinalize(this);
     }
+
+    private static PlaybackDecoderBackendPolicyRejection EvaluateManifestPolicy(
+        PlaybackDecoderBackendPolicy policy,
+        PlaybackFfmpegExternalRuntimeManifest runtimeManifest) =>
+        runtimeManifest.IsHostSupplied
+            ? policy.EvaluateHostAttestedRuntime(runtimeManifest.Provenance)
+            : policy.Evaluate(runtimeManifest.Provenance);
 }
 
 /// <summary>
-/// Application-composition-root entry for the approved external FFmpeg runtime route.
-/// It adds no runtime discovery, download, extraction, installation, fallback, queue,
-/// resident loop, or Windows resource ownership.
+/// Application-composition-root entry for the reviewed built-in or explicitly
+/// host-attested external FFmpeg runtime route. It adds no runtime discovery,
+/// download, extraction, installation, fallback, queue, resident loop, or
+/// Windows resource ownership.
 /// </summary>
 public static class PlaybackFfmpegExternalRuntimeComposition
 {
@@ -151,7 +179,15 @@ internal sealed class PlaybackFfmpegExternalRuntimeGenerationFactoryOperations(
     IPlaybackProductionDecoderGenerationFactoryOperations standardOperations) :
     IPlaybackProductionDecoderGenerationFactoryOperations
 {
-    public PlaybackDecoderBackendProvenance Provenance => runtimeManifest.Provenance;
+    /// <summary>
+    /// The generic production factory validates the reviewed FFmpeg ABI/backend class.
+    /// A host runtime's separate unreviewed declaration and explicit attestation are
+    /// evaluated by PlaybackFfmpegExternalRuntimeGenerationFactory before this adapter
+    /// can be reached; they are never reported as a Nova review approval.
+    /// </summary>
+    public PlaybackDecoderBackendProvenance Provenance => runtimeManifest.IsHostSupplied
+        ? PlaybackFfmpegBackendCandidate.Provenance
+        : runtimeManifest.Provenance;
 
     public PlaybackProductionDecoderGenerationOwnedCreation PrepareBinding(
         PlaybackBoundedDemuxSession sourceSession) =>

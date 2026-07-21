@@ -6,6 +6,24 @@ public enum PlaybackFfmpegExternalRuntimeManifestOrigin
     HostSupplied,
 }
 
+public enum PlaybackFfmpegExternalRuntimeLicenseDeclarationAuthority
+{
+    ProjectReviewed,
+    HostDeclared,
+}
+
+public enum PlaybackFfmpegExternalRuntimeAuthorization
+{
+    BuiltInApproved,
+    HostAttested,
+}
+
+public enum PlaybackFfmpegExternalRuntimeReview
+{
+    Approved,
+    Unreviewed,
+}
+
 public enum PlaybackFfmpegExternalRuntimeLibraryRole
 {
     AvCodec,
@@ -44,12 +62,14 @@ public sealed record PlaybackFfmpegExternalRuntimeManifestCreation(
     PlaybackFfmpegExternalRuntimeManifest? Manifest);
 
 /// <summary>
-/// Immutable host authorization for one external LGPL FFmpeg shared runtime.
-/// It carries no directory, URL, command, archive, download, or installation data.
+/// Immutable authorization record for one external LGPL FFmpeg shared runtime.
+/// A built-in manifest records a Nova review; a host manifest records only the
+/// host's declaration and attestation. It carries no directory, URL, command,
+/// archive, download, or installation data.
 /// </summary>
 public sealed class PlaybackFfmpegExternalRuntimeManifest
 {
-    public const string ApprovedLicenseIdentifier = "LGPL-3.0-or-later";
+    public const string RequiredDeclaredLicenseIdentifier = "LGPL-3.0-or-later";
     public const int MaximumIdentityLength = 128;
     public const int RequiredFileCount = 5;
 
@@ -74,14 +94,27 @@ public sealed class PlaybackFfmpegExternalRuntimeManifest
         Origin = origin;
         BuildId = buildId;
         Version = version;
-        LicenseIdentifier = ApprovedLicenseIdentifier;
+        LicenseIdentifier = RequiredDeclaredLicenseIdentifier;
         _files = files;
         Files = Array.AsReadOnly(_files);
         RuntimeInventory = runtimeInventory;
+
+        var isBuiltIn = origin == PlaybackFfmpegExternalRuntimeManifestOrigin.BuiltInCandidate;
+        LicenseDeclarationAuthority = isBuiltIn
+            ? PlaybackFfmpegExternalRuntimeLicenseDeclarationAuthority.ProjectReviewed
+            : PlaybackFfmpegExternalRuntimeLicenseDeclarationAuthority.HostDeclared;
+        Authorization = isBuiltIn
+            ? PlaybackFfmpegExternalRuntimeAuthorization.BuiltInApproved
+            : PlaybackFfmpegExternalRuntimeAuthorization.HostAttested;
+        Review = isBuiltIn
+            ? PlaybackFfmpegExternalRuntimeReview.Approved
+            : PlaybackFfmpegExternalRuntimeReview.Unreviewed;
         Provenance = new(
             PlaybackDecoderBackendOrigin.ThirdParty,
             PlaybackDecoderBackendDistribution.OptionalExternal,
-            PlaybackDecoderBackendLicenseReview.Approved,
+            isBuiltIn
+                ? PlaybackDecoderBackendLicenseReview.Approved
+                : PlaybackDecoderBackendLicenseReview.Pending,
             ContainsNativeCode: true);
     }
 
@@ -89,6 +122,15 @@ public sealed class PlaybackFfmpegExternalRuntimeManifest
         CreateBuiltInCandidate();
 
     public PlaybackFfmpegExternalRuntimeManifestOrigin Origin { get; }
+
+    public PlaybackFfmpegExternalRuntimeLicenseDeclarationAuthority LicenseDeclarationAuthority
+    {
+        get;
+    }
+
+    public PlaybackFfmpegExternalRuntimeAuthorization Authorization { get; }
+
+    public PlaybackFfmpegExternalRuntimeReview Review { get; }
 
     public string BuildId { get; }
 
@@ -135,7 +177,7 @@ public sealed class PlaybackFfmpegExternalRuntimeManifest
 
         if (!string.Equals(
                 licenseIdentifier,
-                ApprovedLicenseIdentifier,
+                RequiredDeclaredLicenseIdentifier,
                 StringComparison.Ordinal))
         {
             return Rejected(PlaybackFfmpegExternalRuntimeManifestResult.LicenseRejected);
@@ -238,7 +280,7 @@ public sealed class PlaybackFfmpegExternalRuntimeManifest
             PlaybackFfmpegExternalRuntimeManifestOrigin.BuiltInCandidate,
             PlaybackFfmpegBackendCandidate.BuildId,
             PlaybackFfmpegBackendCandidate.FfmpegVersion,
-            ApprovedLicenseIdentifier,
+            RequiredDeclaredLicenseIdentifier,
             RequiredRoles.Select(role =>
             {
                 var expected = Expected(role);

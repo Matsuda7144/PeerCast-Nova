@@ -13,10 +13,17 @@ public sealed class PlaybackFfmpegExternalRuntimeManifestTests
             PlaybackFfmpegExternalRuntimeManifestOrigin.BuiltInCandidate,
             manifest.Origin);
         Assert.False(manifest.IsHostSupplied);
+        Assert.Equal(
+            PlaybackFfmpegExternalRuntimeLicenseDeclarationAuthority.ProjectReviewed,
+            manifest.LicenseDeclarationAuthority);
+        Assert.Equal(
+            PlaybackFfmpegExternalRuntimeAuthorization.BuiltInApproved,
+            manifest.Authorization);
+        Assert.Equal(PlaybackFfmpegExternalRuntimeReview.Approved, manifest.Review);
         Assert.Equal(PlaybackFfmpegBackendCandidate.BuildId, manifest.BuildId);
         Assert.Equal(PlaybackFfmpegBackendCandidate.FfmpegVersion, manifest.Version);
         Assert.Equal(
-            PlaybackFfmpegExternalRuntimeManifest.ApprovedLicenseIdentifier,
+            PlaybackFfmpegExternalRuntimeManifest.RequiredDeclaredLicenseIdentifier,
             manifest.LicenseIdentifier);
         Assert.Equal(PlaybackDecoderBackendOrigin.ThirdParty, manifest.Provenance.Origin);
         Assert.Equal(
@@ -35,7 +42,7 @@ public sealed class PlaybackFfmpegExternalRuntimeManifestTests
     }
 
     [Fact]
-    public async Task Host_manifest_accepts_modified_library_hashes_without_disabling_verification()
+    public async Task Host_manifest_is_host_declared_attested_and_unreviewed()
     {
         var bytes = CreateLibraryBytes();
         var creation = CreateHostManifest(bytes);
@@ -43,6 +50,16 @@ public sealed class PlaybackFfmpegExternalRuntimeManifestTests
 
         Assert.Equal(PlaybackFfmpegExternalRuntimeManifestResult.Accepted, creation.Result);
         Assert.True(manifest.IsHostSupplied);
+        Assert.Equal(
+            PlaybackFfmpegExternalRuntimeLicenseDeclarationAuthority.HostDeclared,
+            manifest.LicenseDeclarationAuthority);
+        Assert.Equal(
+            PlaybackFfmpegExternalRuntimeAuthorization.HostAttested,
+            manifest.Authorization);
+        Assert.Equal(PlaybackFfmpegExternalRuntimeReview.Unreviewed, manifest.Review);
+        Assert.Equal(
+            PlaybackDecoderBackendLicenseReview.Pending,
+            manifest.Provenance.LicenseReview);
         Assert.Equal("host.ffmpeg.8.1.modified", manifest.BuildId);
         Assert.All(manifest.Files, static file => Assert.Equal(64, file.Sha256.Length));
 
@@ -77,12 +94,55 @@ public sealed class PlaybackFfmpegExternalRuntimeManifestTests
         }
     }
 
+    [Fact]
+    public async Task Host_attested_runtime_requires_explicit_policy_before_runtime_access()
+    {
+        var manifest = Assert.IsType<PlaybackFfmpegExternalRuntimeManifest>(
+            CreateHostManifest(CreateLibraryBytes()).Manifest);
+        var deniedPolicy = new PlaybackDecoderBackendPolicy
+        {
+            AllowThirdParty = true,
+            AllowNativeCode = true,
+            AllowBundled = false,
+            AllowHostAttestedRuntime = false,
+        };
+        var allowedPolicy = deniedPolicy with { AllowHostAttestedRuntime = true };
+
+        Assert.Equal(
+            PlaybackDecoderBackendPolicyRejection.HostAttestedRuntimeNotAllowed,
+            deniedPolicy.EvaluateHostAttestedRuntime(manifest.Provenance));
+        Assert.Equal(
+            PlaybackDecoderBackendPolicyRejection.None,
+            allowedPolicy.EvaluateHostAttestedRuntime(manifest.Provenance));
+        Assert.Equal(
+            PlaybackDecoderBackendPolicyRejection.LicenseNotApproved,
+            allowedPolicy.Evaluate(manifest.Provenance));
+
+        await using var factory = new PlaybackFfmpegExternalRuntimeGenerationFactory(
+            deniedPolicy,
+            manifest);
+        var result = await factory.CreateAsync(
+            "this-path-must-not-be-inspected",
+            sourceSession: null,
+            output: null,
+            decoderGeneration: 0,
+            discontinuityGeneration: 0);
+
+        Assert.Equal(
+            PlaybackProductionDecoderGenerationFactoryResult.PolicyRejected,
+            result.Result);
+        Assert.Null(result.Generation);
+        Assert.Equal(
+            PlaybackProductionDecoderGenerationFactoryResult.PolicyRejected,
+            factory.Snapshot.Result);
+    }
+
     [Theory]
     [InlineData("GPL-3.0-or-later")]
     [InlineData("LicenseRef-NonFree")]
     [InlineData("LGPL-2.1-or-later")]
     [InlineData("")]
-    public void Host_manifest_rejects_nonapproved_license_classes(string licenseIdentifier)
+    public void Host_manifest_rejects_nonrequired_declared_license_classes(string licenseIdentifier)
     {
         var creation = PlaybackFfmpegExternalRuntimeManifest.CreateHostSupplied(
             "host.ffmpeg.8.1",
@@ -105,7 +165,7 @@ public sealed class PlaybackFfmpegExternalRuntimeManifestTests
         var creation = PlaybackFfmpegExternalRuntimeManifest.CreateHostSupplied(
             "host.ffmpeg.8.1",
             "8.1-custom",
-            PlaybackFfmpegExternalRuntimeManifest.ApprovedLicenseIdentifier,
+            PlaybackFfmpegExternalRuntimeManifest.RequiredDeclaredLicenseIdentifier,
             files);
 
         Assert.Equal(
@@ -127,7 +187,7 @@ public sealed class PlaybackFfmpegExternalRuntimeManifestTests
         var creation = PlaybackFfmpegExternalRuntimeManifest.CreateHostSupplied(
             "host.ffmpeg.8.1",
             "8.1-custom",
-            PlaybackFfmpegExternalRuntimeManifest.ApprovedLicenseIdentifier,
+            PlaybackFfmpegExternalRuntimeManifest.RequiredDeclaredLicenseIdentifier,
             files);
 
         Assert.Equal(
@@ -148,7 +208,7 @@ public sealed class PlaybackFfmpegExternalRuntimeManifestTests
         var creation = PlaybackFfmpegExternalRuntimeManifest.CreateHostSupplied(
             "host.ffmpeg.8.1",
             "8.1-custom",
-            PlaybackFfmpegExternalRuntimeManifest.ApprovedLicenseIdentifier,
+            PlaybackFfmpegExternalRuntimeManifest.RequiredDeclaredLicenseIdentifier,
             files);
 
         Assert.Equal(
@@ -165,7 +225,7 @@ public sealed class PlaybackFfmpegExternalRuntimeManifestTests
         var creation = PlaybackFfmpegExternalRuntimeManifest.CreateHostSupplied(
             "host.ffmpeg.8.1",
             "8.1-custom",
-            PlaybackFfmpegExternalRuntimeManifest.ApprovedLicenseIdentifier,
+            PlaybackFfmpegExternalRuntimeManifest.RequiredDeclaredLicenseIdentifier,
             files);
 
         Assert.Equal(
@@ -184,7 +244,7 @@ public sealed class PlaybackFfmpegExternalRuntimeManifestTests
         var creation = PlaybackFfmpegExternalRuntimeManifest.CreateHostSupplied(
             "host.ffmpeg.8.1",
             "8.1-custom",
-            PlaybackFfmpegExternalRuntimeManifest.ApprovedLicenseIdentifier,
+            PlaybackFfmpegExternalRuntimeManifest.RequiredDeclaredLicenseIdentifier,
             files);
 
         Assert.Equal(
@@ -203,7 +263,7 @@ public sealed class PlaybackFfmpegExternalRuntimeManifestTests
         var creation = PlaybackFfmpegExternalRuntimeManifest.CreateHostSupplied(
             "host.ffmpeg.8.1",
             "8.1-custom",
-            PlaybackFfmpegExternalRuntimeManifest.ApprovedLicenseIdentifier,
+            PlaybackFfmpegExternalRuntimeManifest.RequiredDeclaredLicenseIdentifier,
             files);
 
         Assert.Equal(
@@ -220,7 +280,7 @@ public sealed class PlaybackFfmpegExternalRuntimeManifestTests
         var creation = PlaybackFfmpegExternalRuntimeManifest.CreateHostSupplied(
             buildId,
             "8.1-custom",
-            PlaybackFfmpegExternalRuntimeManifest.ApprovedLicenseIdentifier,
+            PlaybackFfmpegExternalRuntimeManifest.RequiredDeclaredLicenseIdentifier,
             CreateFiles(CreateLibraryBytes()));
 
         Assert.Equal(
@@ -229,7 +289,7 @@ public sealed class PlaybackFfmpegExternalRuntimeManifestTests
     }
 
     [Fact]
-    public void Approved_external_manifest_requires_explicit_third_party_and_native_policy()
+    public void Reviewed_external_manifest_requires_explicit_third_party_and_native_policy()
     {
         var manifest = PlaybackFfmpegExternalRuntimeManifest.BuiltInCandidate;
         var approvedPolicy = new PlaybackDecoderBackendPolicy
@@ -275,7 +335,7 @@ public sealed class PlaybackFfmpegExternalRuntimeManifestTests
         PlaybackFfmpegExternalRuntimeManifest.CreateHostSupplied(
             "host.ffmpeg.8.1.modified",
             "8.1-custom+local1",
-            PlaybackFfmpegExternalRuntimeManifest.ApprovedLicenseIdentifier,
+            PlaybackFfmpegExternalRuntimeManifest.RequiredDeclaredLicenseIdentifier,
             CreateFiles(bytes));
 
     private static IEnumerable<PlaybackFfmpegExternalRuntimeFile> CreateFiles(
