@@ -5,6 +5,22 @@
 Detailed history through 0.0.8g remains preserved in Git history at commit
 `f078dab5372a45a8c577c1c802a697ab72b45c02` and in milestone ADR/PCN records.
 
+### 0.0.9p - Generation-matched Scheduler Delivery and Output Lifecycle Review
+
+- Reviewed the ownership connection from the 0.0.9o scheduler ingress through reservation, exact FFmpeg context selection, managed conversion, timing, and output lifecycle.
+- Rejected production use of destructive `BoundedPlaybackScheduler.RunOneAsync` because it cannot retain a frame through output backpressure and accepts an unbound caller context.
+- Selected scheduler reservation as the sole production delivery foundation and kept each operation finite and caller-driven.
+- Required one generation owner with singular source-bound native-session ownership rather than a second decoder-context lifetime owner.
+- Required video frames to use only their generation's video context and audio frames to use only the matching audio context.
+- Selected an injected result-aware canonical output seam so `WouldBlock`, initialization／binding／resize, device loss, cancellation, and recovery can retain ownership.
+- Required explicit delivered／dropped／retained reservation completion so deliberate video drop is not counted as delivery.
+- Defined one-shot acknowledgement of the first replacement-generation `DecoderReset` after successful reset admission, avoiding an immutable-reservation reset loop.
+- Required asynchronous shutdown: close admission, cancel and await active delivery, release active completion and scheduler ownership, then dispose native contexts.
+- Kept Windows activation／binding／stream initialization and device-wide COM／OS resources externally owned.
+- Selected 0.0.9q Finite Generation-matched Scheduler Delivery and Output Lifecycle Boundary.
+- Added ADR-0126 and PCN-0134 without changing runtime source or tests.
+- Kept production generation factory, backend activation, FFmpeg distribution, continuous pumping, and audible／visible playback unchanged.
+
 ### 0.0.9o - One-shot Decoded Completion Transfer and Scheduler Ingress Boundary
 
 - Added explicit attached／detached／disposed ownership states to `PlaybackSourceBoundDecodedFrameCompletion`.

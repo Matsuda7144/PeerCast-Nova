@@ -2,21 +2,19 @@
 
 ## 現在地
 
-**0.0.9o — One-shot Decoded Completion Transfer and Scheduler Ingress Boundary — Implemented**
+**0.0.9p — Generation-matched Scheduler Delivery and Output Lifecycle Review — Completed**
 
-0.0.9nで確定したownership契約をruntimeへ落とし、exact active decoded completionから既存`BoundedPlaybackScheduler`へmanaged frameを1回だけ移譲する境界を追加しました。
+0.0.9oのscheduler-owned frameを、同じsource-bound decoder generationのcontextとoutput lifecycleへ接続するownership契約を確定しました。runtime実装は0.0.9qへ分離しています。
 
-- completion ownershipをattached／detached／disposedの3状態で管理
-- exact active decode boundaryがsource、decoder／discontinuity generation、media、stream、stream-local sequence、managed bytes、frame roleを再検証してdetachを承認
-- detach後のcompletion disposalはdecode backpressureだけを解放し、scheduler-owned frameを破棄しない
-- scheduler ingressはvalidate→detach→enqueueを1回だけ実行し、rollback／reconstruction／retryなし
-- video／audio別stream-local sequenceはidentityとして保持
-- scheduler用generation-wide sequenceはaccepted enqueue後だけcommit
-- replacement generationの最初のaccepted frameだけ`DecoderReset`
-- cancellation before detachはcompletion ownershipとreset markerを維持
-- rejected／undefined／invalid／exhausted／exception pathはgeneration terminal
-- terminal／discontinuity cleanupはscheduler ownership→matching decoder context lifetimeの順
-- second decoded queue、resident loop、production delivery／output activationは追加しない
+- production deliveryはscheduler reservation経路へ一本化し、destructiveな`RunOneAsync`は診断用途に維持
+- 一回の有限operationでreserve→generation検証→matching context選択→timing／reset admission→conversion→output→completion
+- native video／audio contextはsource-bound native sessionだけが所有し、二重ownershipを禁止
+- result-aware canonical output seamでretryable Windows output状態を保持
+- reservation completionを`Delivered / Dropped / Retained`へ分離
+- first-frame `DecoderReset`は成功したreset admission後に一度だけacknowledge
+- active delivery／reservationをcancel／awaitしてからscheduler frameとnative contextをcleanup
+- device-wide Windows activation／binding／initialization ownershipは外側に維持
+- second queue、resident loop、hidden retry、同一frameへの二重output pathなし
 
 ## CI
 
@@ -24,12 +22,14 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 ## 最新の入口
 
-- `docs/adr/ADR-0125-one-shot-decoded-completion-scheduler-ingress-boundary.md`
-- `docs/reviews/PCN-0133-ONE-SHOT-DECODED-COMPLETION-SCHEDULER-INGRESS-BOUNDARY.md`
+- `docs/adr/ADR-0126-generation-matched-scheduler-delivery-output-lifecycle.md`
+- `docs/reviews/PCN-0134-GENERATION-MATCHED-SCHEDULER-DELIVERY-OUTPUT-LIFECYCLE-REVIEW.md`
 - `src/Nova.Playback/PlaybackDecodedCompletionSchedulerIngressBoundary.cs`
 - `src/Nova.Playback/PlaybackSourceBoundOneFrameDecodeBoundary.cs`
+- `src/Nova.Playback/PlaybackBoundedFlvNativeDecoderSession.cs`
 - `src/Nova.Playback/BoundedPlaybackScheduler.cs`
-- `tests/Nova.Playback.Tests/PlaybackDecodedCompletionSchedulerIngressBoundaryTests.cs`
+- `src/Nova.Playback/PlaybackLateAwareTimedDispatchBoundary.cs`
+- `src/Nova.Playback/PlaybackWindowsOutputBufferProcessingBoundary.cs`
 
 ## ADR／PCN索引の永久欠番
 
@@ -39,13 +39,13 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 ## 次の作業
 
-**0.0.9p — Generation-matched Scheduler Delivery and Output Lifecycle Review**
+**0.0.9q — Finite Generation-matched Scheduler Delivery and Output Lifecycle Boundary**
 
-scheduler-owned frame、generation-matched decoder context lifetime、reservation、late-aware dispatch、awaited sink／Windows output lifecycleをどのgeneration ownerで接続するかをレビューします。delivery完了、drop、stop、discontinuity、output failureのownershipとcleanup順を確定し、runtime compositionは次の実装マイルストーンへ分離します。
+exact source-bound decode generation、0.0.9o scheduler ingress、one-item reservation、matching context conversion、result-aware canonical output、one-shot reset admission、typed reservation completion、async replacement cleanupを一つの有限generation boundaryへ実装します。
 
 ## 未完了
 
-- generation-matched scheduler delivery and output lifecycle
+- finite generation-matched scheduler delivery and output lifecycle implementation
 - production generation factory and backend activation
 - MP4／fragmented MP4 parser
 - discontinuity-time `avcodec_flush_buffers` semantics

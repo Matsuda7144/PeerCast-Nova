@@ -58,26 +58,30 @@
 - 0.0.9m Finite Awaited Decoded Completion Composition Boundary
 - 0.0.9n Decoded Completion Transfer and Scheduler Ingress Review
 - 0.0.9o One-shot Decoded Completion Transfer and Scheduler Ingress Boundary
+- 0.0.9p Generation-matched Scheduler Delivery and Output Lifecycle Review
 
-0.0.9o adds explicit attached／detached／disposed ownership to the source-bound decoded completion and requires the exact active decode boundary to authorize one-shot detach. Completion disposal after detach releases decode backpressure without disposing the transferred frame.
+0.0.9o adds explicit attached／detached／disposed ownership to the source-bound decoded completion and requires the exact active decode boundary to authorize one-shot detach. One generation-scoped ingress validates stream-local video／audio identity, assigns a separate monotonic cross-media scheduler sequence, and commits the first accepted `DecoderReset` only after scheduler ownership.
 
-One generation-scoped ingress validates stream-local video／audio identity, assigns a separate monotonic cross-media scheduler sequence, applies `DecoderReset` only to the first accepted replacement-generation frame, and commits counters only after accepted scheduler ownership. Cancellation before detach changes no ownership or sequence state. Rejection and contradiction are terminal, with scheduler frames disposed before matching decoder-context lifetime.
+0.0.9p selects reservation-based delivery as the production scheduler exit. It requires exact media-context selection from the same source-bound native session, a result-aware canonical output seam, typed delivered／dropped／retained reservation completion, one-shot reset admission, and asynchronous cancellation／reservation cleanup before native-context disposal. Device-wide Windows activation and stream ownership remain external.
 
-### Next: 0.0.9p Generation-matched Scheduler Delivery and Output Lifecycle Review
+### Next: 0.0.9q Finite Generation-matched Scheduler Delivery and Output Lifecycle Boundary
 
-Review the ownership connection from the 0.0.9o scheduler ingress through the existing reservation, late-aware dispatch, conversion, awaited sink, and Windows output boundaries:
+Implement one finite generation owner that composes the source-bound decode generation and 0.0.9o scheduler ingress with one-item scheduler delivery:
 
-- select one generation owner for scheduler, matching decoder-context lifetime, reservations, and output work;
-- define delivery／drop／late／stop／discontinuity／output-failure completion semantics;
-- preserve one finite caller-driven dispatch operation rather than a resident output loop;
-- dispose active decoded completion before scheduler ownership, then scheduler reservations／frames before decode／native ownership;
-- prevent old-generation frames from using replacement-generation decoder contexts or output reservations;
-- keep backend activation, runtime distribution, and audible／visible playback outside review scope.
+- keep native video／audio context ownership singular inside the source-bound session;
+- reserve at most one scheduler item per caller operation;
+- validate exact source, decoder／discontinuity generation, scheduler sequence, media role, and context liveness;
+- use only the matching video or audio FFmpeg context for callback-scoped adaptation／conversion;
+- call one injected result-aware canonical output operation;
+- explicitly complete the reservation as delivered, dropped, or retained;
+- acknowledge the first replacement-generation `DecoderReset` only after successful reset admission;
+- cancel and await active delivery before scheduler and decode／native cleanup;
+- add no resident output loop, hidden retry, or second decoded queue.
 
 ### Later sequence
 
-1. implement the reviewed generation-matched scheduler delivery and output lifecycle composition;
-2. add a production generation factory and review ABI-gate acquisition／backend activation／Windows lifecycle;
+1. add a production generation factory and review ABI-gate acquisition／backend activation／Windows device lifecycle;
+2. connect bounded decode ingress and finite delivery through controlled production composition;
 3. perform controlled real-media validation.
 
 ### Deferred
@@ -87,6 +91,7 @@ Review the ownership connection from the 0.0.9o scheduler ingress through the ex
 - production generation factory and backend activation
 - discontinuity reset and `avcodec_flush_buffers`
 - duration cutoff
+- independent audio recovery generation changes
 - complete synchronization
 - controlled audible／visible playback
 

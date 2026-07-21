@@ -9,26 +9,23 @@ License: **Apache License 2.0**
 
 ## 現在地
 
-**Milestone 0.0.9o — One-shot Decoded Completion Transfer and Scheduler Ingress Boundary**
+**Milestone 0.0.9p — Generation-matched Scheduler Delivery and Output Lifecycle Review**
 
-0.0.9nで確定したownership契約をruntimeへ実装し、source-bound decoded completionから既存`BoundedPlaybackScheduler`へmanaged frameを1回だけ移譲する境界を追加しました。
+0.0.9oでschedulerへ移譲したreal decoded frameを、同じdecoder generationのcontextとoutput lifecycleへ安全に接続するownership契約を確定しました。runtime実装は0.0.9qへ分離しています。
 
-- completion ownershipをattached／detached／disposedで明示
-- exact active decode boundaryだけがone-shot detachを承認
-- detach前にsource、decoder／discontinuity generation、media、stream、stream-local sequence、managed bytes、frame livenessを再検証
-- detach後のcompletion disposalはdecode backpressureだけを解放し、scheduler-owned frameを破棄しない
-- scheduler ingressはvalidate→detach→enqueueを1回だけ実行
-- enqueue後のrollback、frame再構築、retryを禁止
-- accepted transferは`Enqueued`／`EnqueuedAfterDroppingOldest`のみ
-- video／audio別stream-local sequenceはidentityとして維持
-- scheduler用generation-wide cross-media sequenceはaccepted enqueue後だけcommit
-- replacement generationの最初のaccepted frameだけ`DecoderReset`
-- cancellation before detachはownership、sequence、reset markerを変更しない
-- rejected／undefined／invalid／exhausted／exception pathはgeneration terminal
-- scheduler ownershipをmatching decoder context lifetimeより先にcleanup
-- second decoded queue、resident pump、production output activationは追加しない
+- production deliveryはdestructiveな`RunOneAsync`ではなくscheduler reservation経路へ一本化
+- 一回のcaller-driven delivery operationでreserve→generation検証→context選択→timing／reset admission→conversion→output→reservation completion
+- video frameは同じnative sessionのvideo context、audio frameは同じsessionのaudio contextだけを使用
+- source-bound native sessionを唯一のcontext ownerとし、二重のcontext lifetime ownershipを禁止
+- result-aware canonical output seamで`WouldBlock`、initialization／binding／resize、device loss、recoveryを表現
+- reservation completionを`Delivered / Dropped / Retained`へ分離し、明示dropをdeliveryとして数えない
+- replacement generationの最初の`DecoderReset`を成功したreset admission後に一度だけacknowledge
+- cancellationやretryable outputではreservationとreset markerを維持
+- active deliveryをcancel／awaitしてからscheduler frame、decode boundary、native contextをcleanup
+- Windows activation、binding、stream initialization、COM／OS handle ownershipはapplication owner側に維持
+- second decoded queue、resident pump、hidden retry、二重output pathは追加しない
 
-診断専用のmanaged conversion、bounded scheduler、awaited sink delivery、late-aware dispatch、Windows output境界は実装済みです。0.0.9oでreal decoded frameのone-shot scheduler ingress境界まで到達しましたが、generation-matched scheduler delivery、production decoder factory、FFmpeg backend activation、runtime配布、audible／visible playbackにはまだ接続していません。
+診断専用のawaited sink delivery、managed conversion、late-aware dispatch、Windows output境界は既に存在します。0.0.9pではそれらをそのまま混在させず、generation-matchedなreservation deliveryへ統合する契約を選択しました。production generation composite、backend activation、runtime配布、audible／visible playbackはまだ未実装です。
 
 ## 実装済みの主な領域
 
@@ -67,9 +64,9 @@ License: **Apache License 2.0**
 - finite awaited PCP-to-FLV composition boundary
 - source-bound one-frame managed receive and independent EOS drain
 - finite awaited PCP／FLV／decode composition boundary
-- decoded completion transfer／scheduler ingress architecture review
 - exact-active one-shot decoded completion detach
 - generation-wide scheduler ingress ownership boundary
+- generation-matched scheduler delivery／output lifecycle architecture review
 
 詳細:
 
@@ -83,7 +80,7 @@ License: **Apache License 2.0**
 
 PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信アプリではありません。
 
-- generation-matched scheduler delivery and output lifecycle
+- finite generation-matched scheduler delivery and output lifecycle implementation
 - production generation factory and decoder ingress activation
 - MP4／fragmented MP4 parser
 - decoded-buffer duration cutoff
@@ -98,9 +95,9 @@ FFmpeg backend activation、runtime bundling／distribution、license approval�
 
 ## 次のマイルストーン
 
-**0.0.9p — Generation-matched Scheduler Delivery and Output Lifecycle Review**
+**0.0.9q — Finite Generation-matched Scheduler Delivery and Output Lifecycle Boundary**
 
-0.0.9oのscheduler-owned frameとmatching decoder context lifetimeを、既存のreservation、late-aware dispatch、managed conversion、awaited sink、Windows output境界へどう接続するかをレビューします。delivery、drop、stop、discontinuity、output failureのownershipとcleanup順を確定し、runtime compositionは次の実装マイルストーンへ分離します。
+exact source-bound decode generation、0.0.9o scheduler ingress、one-item reservation、matching FFmpeg context conversion、result-aware canonical output、one-shot `DecoderReset` admission、`Delivered / Dropped / Retained` completion、async cleanupを一つの有限generation boundaryへ実装します。Windows device activationとproduction factoryは後続へ残します。
 
 ## 必要環境
 
