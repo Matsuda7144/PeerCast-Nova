@@ -75,12 +75,24 @@ internal sealed class SystemPlaybackControlledWindowsPhysicalRunOperations :
             },
             _runner,
             runner.WindowToken,
-            new PlaybackApprovedExternalRuntimeWindowsLifecycleOptions
-            {
-                AudioBufferDuration = _options.AudioBufferDuration,
-            });
+            CreateLifecycleOptions(_options.AudioBufferDuration));
         return await _lifecycle.InitializeAsync(token).ConfigureAwait(false);
     }
+
+    internal static PlaybackApprovedExternalRuntimeWindowsLifecycleOptions CreateLifecycleOptions(
+        TimeSpan audioBufferDuration) => new()
+        {
+            AudioBufferDuration = audioBufferDuration,
+            Generation = new()
+            {
+                Scheduler = new()
+                {
+                    Capacity = PlaybackSchedulerOptions.DefaultCapacity,
+                    MaximumOwnedBytes = PlaybackSchedulerOptions.DefaultMaximumOwnedBytes,
+                    FullPolicy = PlaybackSchedulerFullPolicy.DropOldest,
+                },
+            },
+        };
 
     public ValueTask<PcpControlledFlvFixtureReplayReport> ReplayFixtureAsync(
         CancellationToken token)

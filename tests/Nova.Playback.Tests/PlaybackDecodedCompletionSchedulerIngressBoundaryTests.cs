@@ -288,11 +288,61 @@ public sealed class PlaybackDecodedCompletionSchedulerIngressBoundaryTests
         Assert.Equal(PlaybackDecodedCompletionSchedulerIngressState.Disposed, ingress.Snapshot.State);
     }
 
+    [Fact]
+    public void Transfer_DropOldestKeepsBoundedCapacityAndOwnershipAcrossSeventeenFrames()
+    {
+        using var harness = new Harness(discontinuityGeneration: 0);
+        var frames = new List<PlaybackDecoderFfmpegManagedFrame>();
+        var context = new FakeContextLifetime(() => frames.All(frame => frame.IsDisposed));
+        var operations = new FakeIngressOperations();
+        var ingress = CreateIngress(
+            harness,
+            context,
+            capacity: PlaybackSchedulerOptions.DefaultCapacity,
+            fullPolicy: PlaybackSchedulerFullPolicy.DropOldest,
+            maximumOwnedBytes: PlaybackSchedulerOptions.DefaultMaximumOwnedBytes,
+            operations: operations);
+
+        for (var index = 0; index <= PlaybackSchedulerOptions.DefaultCapacity; index++)
+        {
+            var frame = CreateFrame(PlaybackBoundedDemuxMediaKind.Video);
+            frames.Add(frame);
+
+            Assert.Equal(
+                PlaybackDecodedCompletionSchedulerIngressResult.Transferred,
+                ingress.Transfer(ReceiveFrame(
+                    harness,
+                    PlaybackBoundedDemuxMediaKind.Video,
+                    frame)));
+        }
+
+        Assert.All(
+            operations.Results.Take(PlaybackSchedulerOptions.DefaultCapacity),
+            result => Assert.Equal(PlaybackSchedulerEnqueueResult.Enqueued, result));
+        Assert.Equal(
+            PlaybackSchedulerEnqueueResult.EnqueuedAfterDroppingOldest,
+            operations.Results[PlaybackSchedulerOptions.DefaultCapacity]);
+        Assert.Equal(PlaybackSchedulerOptions.DefaultCapacity, ingress.Snapshot.Scheduler.QueueLength);
+        Assert.Equal(1, ingress.Snapshot.Scheduler.DropCount);
+        Assert.Equal(PlaybackDecodedCompletionSchedulerIngressState.Accepting, ingress.Snapshot.State);
+        Assert.Equal(PlaybackDecodedCompletionSchedulerIngressResult.Transferred, ingress.Snapshot.Result);
+        Assert.Equal(17, ingress.Snapshot.AcceptedTransferCount);
+        Assert.True(frames[0].IsDisposed);
+        Assert.All(frames.Skip(1), frame => Assert.False(frame.IsDisposed));
+
+        ingress.Dispose();
+
+        Assert.All(frames, frame => Assert.True(frame.IsDisposed));
+        Assert.True(context.IsDisposed);
+        Assert.True(context.OwnedFrameDisposedAtDispose);
+    }
+
     private static PlaybackDecodedCompletionSchedulerIngressBoundary CreateIngress(
         Harness harness,
         FakeContextLifetime context,
         int capacity = 4,
         PlaybackSchedulerFullPolicy fullPolicy = PlaybackSchedulerFullPolicy.Reject,
+        long maximumOwnedBytes = 1024,
         long initialSchedulerSequence = 0,
         FakeIngressOperations? operations = null)
     {
@@ -300,7 +350,7 @@ public sealed class PlaybackDecodedCompletionSchedulerIngressBoundaryTests
             new PlaybackSchedulerOptions
             {
                 Capacity = capacity,
-                MaximumOwnedBytes = 1024,
+                MaximumOwnedBytes = maximumOwnedBytes,
                 FullPolicy = fullPolicy,
             },
             new PlaybackPolicyClockBoundary(
@@ -360,6 +410,8 @@ public sealed class PlaybackDecodedCompletionSchedulerIngressBoundaryTests
 
         public List<PlaybackDecodedFrameDiscontinuityKind> Discontinuities { get; } = [];
 
+        public List<PlaybackSchedulerEnqueueResult> Results { get; } = [];
+
         public PlaybackSchedulerEnqueueResult? ForcedResult { get; init; }
 
         public bool ThrowBeforeConsume { get; init; }
@@ -384,7 +436,9 @@ public sealed class PlaybackDecodedCompletionSchedulerIngressBoundaryTests
                 return forced;
             }
 
-            return scheduler.Enqueue(frame, sequence, discontinuity);
+            var result = scheduler.Enqueue(frame, sequence, discontinuity);
+            Results.Add(result);
+            return result;
         }
     }
 
