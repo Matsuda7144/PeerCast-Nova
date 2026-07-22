@@ -508,6 +508,7 @@ internal sealed class SystemPlaybackWindowsOutputTextureCopyProbeCalls :
         void DrawIndexedInstancedIndirect(); void DrawInstancedIndirect(); void Dispatch();
         void DispatchIndirect(); void RSSetState(); void RSSetViewports(); void RSSetScissorRects();
         void CopySubresourceRegion();
+        [PreserveSig]
         void CopyResource(nint destination, nint source);
     }
 }

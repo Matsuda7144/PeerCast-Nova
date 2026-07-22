@@ -14,6 +14,12 @@ Validate a diagnostic comparison path for the 0.0.10d Phase 5 black-output bound
 - Keep the result visible for one bounded observation interval without another native output operation.
 - Dispose the diagnostic boundary, stream, binding, and activation before stopping the borrowed runner.
 
+## COM ABI requirement
+
+`ID3D11DeviceContext.CopyResource` must retain the exact native `void` return contract with `PreserveSig` and two pointer-sized resource arguments. The first physical run demonstrated that an implicitly HRESULT-translated declaration is not an acceptable diagnostic boundary: it terminated with access violation before a canonical record could be emitted.
+
+Reflection coverage must fail if the return type, `PreserveSig` attribute, or parameter types change.
+
 ## Rejection requirements
 
 Reject before native access for invalid format, dimensions, stride, byte count, generation, initialization, binding, platform, or cancellation. Map occlusion, resize, device loss, unsupported format, and unknown HRESULTs to fixed results.

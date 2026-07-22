@@ -23,6 +23,12 @@ Add one diagnostic-only comparison path:
 
 The comparison path is not registered as the production buffer processor and does not mutate the existing `UpdateSubresource` path.
 
+## Physical-run correction
+
+The first physical comparison run terminated before record creation with access violation `0xC0000005` at `ID3D11DeviceContext.CopyResource`. The COM import declared the native `void CopyResource(ID3D11Resource*, ID3D11Resource*)` method without `PreserveSig`, allowing .NET's default HRESULT signature translation to replace the native return contract.
+
+The correction preserves the exact native `void` signature and adds reflection coverage for the return type, attribute, and two pointer parameters. The production upload path remains unchanged until one corrected comparison run completes and the operator records visibility.
+
 ## Interpretation
 
 - visible quadrants: swap-chain and Win32 presentation can display the pixels; the direct `UpdateSubresource` upload is the remaining failing boundary;
