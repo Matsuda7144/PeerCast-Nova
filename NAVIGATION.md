@@ -2,18 +2,20 @@
 
 ## 現在地
 
-**0.0.10a — Approved FFmpeg Candidate Manifest Refresh — Implemented**
+**0.0.10c — Controlled Windows Video／Audio Output Validation Review — Completed**
 
-approved BtbN 2026-07-21 win64 LGPL shared候補をbuilt-in manifestへ実装し、complete inventory、5 load-role digest、build configuration、Windows dependency、superseded candidate履歴をfail-closed testsで固定しました。native activationは行っていません。
+0.0.10bのcontrolled native H.264／AAC decodeを前提に、real D3D11／DXGI video presentationとreal WASAPI audio outputを有限検証するためのownership、証跡、失敗条件、artifact非保持ルールを確定しました。0.0.10c自体はreview-onlyでありphysical outputはまだ実行していません。
 
-- active build IDとfixed release／archive／commit identity
-- exact ten-file `bin` inventoryと5 load-role ABI／symbol条件
-- GPL／nonfree disabled、shared enabled、static disabled
-- four Windows system dependenciesとunknown dependency fail-close
-- complete transcripts／inventory text evidence
-- superseded 2026-07-15 rejection history
-- FFmpeg binary非配布とnative activation未実施
-- 0.0.10b補足: `PlaybackDecoderFfmpegFrameDataBoundary`でpadded planar／packed audio line sizeを受理し、logical sample bytesのみmanaged copyするcontrolled native decodeを完了
+- applicationがreal window／message loop／owner-thread dispatcherを所有
+- playback lifecycleがprobe、COM／D3D11／DXGI／WASAPI、binding、stream、buffer、productionを所有
+- exact approved external FFmpeg runtimeとcontrolled fixtureのみ使用
+- videoはgeneration-matched deliveryとphysical present acknowledgementを必須化
+- audioはgeneration-matched deliveryとdeterministic WASAPI buffer progressを必須化
+- `WouldBlock`、resize、resetはcaller-visibleでhidden retryなし
+- device lossはterminalでadapter／endpoint fallbackやin-place recreateなし
+- video／audioは独立runを許可し、両方通過後にcombined runへ進む
+- production-first、owner-thread output teardown、borrowed window／dispatcher維持
+- runtime binary、fixture、decoded bytes、native pointer、device identifierを記録しない
 
 ## CI
 
@@ -21,24 +23,21 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 ## 最新の入口
 
-- `docs/adr/ADR-0137-approved-ffmpeg-candidate-manifest-refresh.md`
-- `docs/reviews/PCN-0145-APPROVED-FFMPEG-CANDIDATE-MANIFEST-REFRESH.md`
-- `src/Nova.Playback/PlaybackFfmpegBackendCandidate.cs`
-- `src/Nova.Playback/PlaybackFfmpegExternalRuntimeManifest.cs`
-- `src/Nova.Playback/PlaybackDecoderBackendRuntimeInventory.cs`
-- `THIRD-PARTY-LICENSES/FFmpeg/PROVENANCE.md`
-- `tests/Nova.Playback.Tests/PlaybackControlledRetainedFixtureProductionActivationValidationTests.cs`
-- `docs/adr/ADR-0136-controlled-retained-fixture-production-activation-validation.md`
-- `docs/reviews/PCN-0144-CONTROLLED-RETAINED-FIXTURE-PRODUCTION-ACTIVATION-VALIDATION.md`
-- `docs/adr/ADR-0135-finite-approved-external-runtime-windows-lifecycle-activation-boundary.md`
-- `docs/reviews/PCN-0143-FINITE-APPROVED-EXTERNAL-RUNTIME-WINDOWS-LIFECYCLE-ACTIVATION-BOUNDARY.md`
+- `docs/adr/ADR-0138-controlled-windows-video-audio-output-validation-review.md`
+- `docs/reviews/PCN-0146-CONTROLLED-WINDOWS-VIDEO-AUDIO-OUTPUT-VALIDATION-REVIEW.md`
 - `src/Nova.Playback/PlaybackApprovedExternalRuntimeWindowsLifecycleBoundary.cs`
 - `src/Nova.Playback/PlaybackApprovedExternalRuntimeWindowsLifecycleOperations.cs`
-- `src/Nova.Playback/PlaybackDispatcherBackedProductionGeneration.cs`
-- `src/Nova.Playback/PlaybackWindowsOutputDispatcher.cs`
-- `src/Nova.Playback/PlaybackProductionPcpFlvCompositionBoundary.cs`
+- `src/Nova.Playback/PlaybackWindowsOutputActivationBoundary.cs`
+- `src/Nova.Playback/PlaybackWindowsOutputResourceBindingBoundary.cs`
+- `src/Nova.Playback/PlaybackWindowsOutputStreamInitializationBoundary.cs`
+- `src/Nova.Playback/PlaybackWindowsOutputBufferProcessingBoundary.cs`
 - `src/Nova.Playback/PlaybackGenerationMatchedSchedulerDeliveryBoundary.cs`
-- `tests/Nova.Playback.Tests/PlaybackControlledRetainedFlvFixtureValidationTests.cs`
+- `src/Nova.Playback/PlaybackWindowsOutputDispatcher.cs`
+- `src/Nova.Playback/PlaybackDecoderFfmpegFrameDataBoundary.cs`
+- `src/Nova.Playback/PlaybackDecoderFfmpegManagedFrameCopy.cs`
+- `docs/adr/ADR-0137-approved-ffmpeg-candidate-manifest-refresh.md`
+- `docs/reviews/PCN-0145-APPROVED-FFMPEG-CANDIDATE-MANIFEST-REFRESH.md`
+- `THIRD-PARTY-LICENSES/FFmpeg/PROVENANCE.md`
 
 ## 進捗記録の規律
 
@@ -52,20 +51,20 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 ## 次の作業
 
-**0.0.10b — Controlled Real External-Runtime Native Decode Validation**
+**0.0.10d — Controlled Physical Windows Video／Audio Output Validation**
 
-exact approved built-in runtimeを実際に配置したcontrolled Windows環境で、H.264／AAC native context、packet／frame、metadata、bounds、cleanupを有限検証します。physical rendering／audio outputは後続gateとして分離します。
+ADR-0138／PCN-0146の条件に従い、明示Windows 11 physical runner、real application-owned window／dispatcher、exact approved external runtime、controlled fixtureを使ってvideoとaudioのphysical outputを独立した有限runで検証します。production ownership、generation matching、caller-driven backpressure、terminal device loss、artifact非保持を変更しません。
 
 ## 未完了
 
-- controlled real FFmpeg native decode validation
-- controlled Windows video／audio output validation
-- Windows application window／message loop
+- controlled physical Windows video output validation
+- controlled physical Windows audio output validation
+- combined controlled audible／visible playback validation
+- Windows application window／message loop implementation
 - application dispatcher implementation
 - GUI legal／about surface
 - MP4／fragmented MP4 parser
 - discontinuity-time `avcodec_flush_buffers` semantics
 - duration cutoff
 - complete A/V synchronization
-- controlled audible／visible playback
 - GUI、installer、recorder
