@@ -9,11 +9,27 @@ ConsoleCancelEventHandler cancelHandler = (_, eventArgs) =>
 Console.CancelKeyPress += cancelHandler;
 try
 {
-    var result = await PlaybackControlledWindowsPhysicalRunCommand.RunAsync(
-        args,
-        Console.Out,
-        cancellationSource.Token);
-    Environment.ExitCode = result.ExitCode;
+    if (Array.Exists(
+            args,
+            argument => string.Equals(
+                argument,
+                PlaybackControlledWindowsIndependentRunSetCommand.Argument,
+                StringComparison.OrdinalIgnoreCase)))
+    {
+        var verification = await PlaybackControlledWindowsIndependentRunSetCommand.RunAsync(
+            args,
+            Console.Out,
+            cancellationSource.Token);
+        Environment.ExitCode = verification.ExitCode;
+    }
+    else
+    {
+        var run = await PlaybackControlledWindowsPhysicalRunCommand.RunAsync(
+            args,
+            Console.Out,
+            cancellationSource.Token);
+        Environment.ExitCode = run.ExitCode;
+    }
 }
 finally
 {

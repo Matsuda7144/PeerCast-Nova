@@ -30,42 +30,13 @@ public static class PlaybackControlledWindowsPhysicalRunCommand
 
         await using var composition = new PlaybackControlledWindowsPhysicalRunComposition(options);
         var result = await composition.RunAsync(cancellationToken).ConfigureAwait(false);
-        var snapshot = composition.Snapshot;
-        await output.WriteLineAsync("Milestone: 0.0.10d Phase 4").ConfigureAwait(false);
-        await output.WriteLineAsync($"Result: {result}").ConfigureAwait(false);
-        await output.WriteLineAsync($"Kind: {snapshot.Kind}").ConfigureAwait(false);
-        await output.WriteLineAsync(
-            $"Runtime Build: {PlaybackFfmpegBackendCandidate.BuildId}").ConfigureAwait(false);
-        await output.WriteLineAsync($"Fixture SHA-256: {snapshot.FixtureSha256}")
-            .ConfigureAwait(false);
-        await output.WriteLineAsync(
-            $"Fixture Bytes: {snapshot.FixtureByteCount.ToString(CultureInfo.InvariantCulture)}")
-            .ConfigureAwait(false);
-        await output.WriteLineAsync(
-            $"Fixture Packets: {snapshot.FixturePacketCount.ToString(CultureInfo.InvariantCulture)}")
-            .ConfigureAwait(false);
-        await output.WriteLineAsync(
-            $"Decode Operations: {snapshot.DecodeOperationCount.ToString(CultureInfo.InvariantCulture)}")
-            .ConfigureAwait(false);
-        await output.WriteLineAsync(
-            $"Delivery Attempts: {snapshot.DeliveryAttemptCount.ToString(CultureInfo.InvariantCulture)}")
-            .ConfigureAwait(false);
-        await output.WriteLineAsync(
-            $"Delivered: {snapshot.DeliveredCount.ToString(CultureInfo.InvariantCulture)}")
-            .ConfigureAwait(false);
-        await output.WriteLineAsync(
-            $"Retained WouldBlock: {snapshot.RetainedWouldBlockCount.ToString(CultureInfo.InvariantCulture)}")
-            .ConfigureAwait(false);
-        await output.WriteLineAsync($"Evidence: {snapshot.EvidenceResult}")
-            .ConfigureAwait(false);
-        await output.WriteLineAsync(
-            $"Borrowed Window Preserved: {snapshot.BorrowedWindowPreserved}")
-            .ConfigureAwait(false);
-        await output.WriteLineAsync(
-            $"Borrowed Dispatcher Preserved: {snapshot.BorrowedDispatcherPreserved}")
-            .ConfigureAwait(false);
-        await output.WriteLineAsync("External Binary Or Payload Published: False")
-            .ConfigureAwait(false);
+        var record = PlaybackControlledWindowsPhysicalRunRecordCodec.Create(
+            composition.Snapshot,
+            options.FixtureSha256);
+        await PlaybackControlledWindowsPhysicalRunRecordCodec.WriteAsync(
+            output,
+            record,
+            cancellationToken).ConfigureAwait(false);
         return new(result == PlaybackControlledWindowsPhysicalRunResult.Completed ? 0 : 1, result);
     }
 

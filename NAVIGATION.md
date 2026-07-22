@@ -2,24 +2,24 @@
 
 ## 現在地
 
-**0.0.10d — Controlled Physical Windows Video／Audio Output Validation — Phase 4 Composition In Progress**
+**0.0.10d — Controlled Physical Windows Video／Audio Output Validation — Phase 5 Independent Run Record Admission In Progress**
 
-application-owned runner、approved external-runtime lifecycle、digest-first controlled FLV fixture replay、finite decode／delivery、pre-cleanup native evidence、production-first cleanup、borrowed owner verification、Phase 1 evidence gateを一つの明示compositionへ接続しました。通常CLIから隔離した専用`Nova.ControlledWindowsRunner` entrypointを追加しています。実機D3D11／WASAPI runはまだ実行していません。
+Phase 4の明示physical-run compositionに続き、videoとaudioを独立実行した結果を固定schemaのsanitized recordとして出力し、2記録をfail-closedで受理する境界を追加しました。この環境では実機D3D11／WASAPI runを実行していないため、0.0.10dのphysical validation完了はまだ記録していません。
 
-- runtime directory、fixture path、SHA-256、video／audio kind、operation上限をrunner起動前にfail-closed検証
-- fixture全体を上限内で読み、完全なSHA-256一致後にだけPCP packet viewを公開
-- digest mismatchではpacket consumerを一度も呼ばない
-- callback-scoped payloadは有限chunkへ分割し、replay終了後にtemporary bufferを消去
-- runner → lifecycle → fixture → input completion → decode／drain → deliveryの順序を固定
-- decode／delivery回数はimmutable上限内、sleep／timer／polling／hidden retryなし
-- caller-visible `RetainedWouldBlock`は1回記録してrunを終了し、再試行しない
-- native output snapshotはlifecycle cleanup前に取得
-- cleanup完了後に元のwindow token、message loop、dispatcher owner-thread accessを再検証
-- exact runtime build ID、fixture digest、generation、delivery counter、cleanup contractをPhase 1 gateへ提出
-- evidence admissionまたは失敗後にapplication runnerを停止
-- command出力はsanitized counter／resultのみでlocal path、device ID、pointer、handle、media bytesを出力しない
-- dedicated entrypointのみがcommandを呼び、通常`Nova.Cli` startupは変更しない
-- Linux CIはfake operationsとtemporary fixtureだけを使い、physical outputを主張しない
+- 各physical runはschema version 1のcanonical bounded text recordをstdoutへ出力
+- recordはmilestone、kind、runtime build ID、fixture SHA-256、固定result、有限counter、terminal state、borrowed-owner preservationだけを保持
+- runtime path、fixture path、device／endpoint identity、HWND、thread ID、pointer、handle、packet／decoded bytesを保持しない
+- parserは固定header／footer／field順序を要求し、missing／extra／reordered／trailing／oversized contentを拒否
+- video recordとaudio recordは別々に1件だけ受理
+- 両recordは同一approved runtime buildと同一controlled fixture digestを必須化
+- `Completed`＋`Accepted` evidence、positive progress、exactly one delivery、zero retained `WouldBlock`を必須化
+- runner=`Stopped`、lifecycle=`Disposed`、borrowed window／dispatcher preserved、external publication=falseを必須化
+- duplicate kind、identity mismatch、evidence contradiction、cleanup contradictionはterminal reject
+- 片方だけのrecordではsetを完了せず、他方を待つ
+- 専用verify modeはbounded external record filesだけを読み、runner／runtime／fixture／physical outputを開始しない
+- verify reportはrecord pathを表示せず、`Physical-Runs-Executed-By-This-Command: False`を明示
+- operatorによるvisible／audible observationはdeterministic admissionとは別のsupporting noteとして扱う
+- Linux CIはsynthetic sanitized recordsだけを使い、physical outputを主張しない
 
 ## CI
 
@@ -27,17 +27,20 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 ## 最新の入口
 
+- `docs/adr/ADR-0143-independent-physical-run-record-admission.md`
+- `docs/reviews/PCN-0151-INDEPENDENT-PHYSICAL-RUN-RECORD-ADMISSION.md`
+- `src/Nova.Cli/PlaybackControlledWindowsPhysicalRunRecord.cs`
+- `src/Nova.Cli/PlaybackControlledWindowsIndependentRunSetBoundary.cs`
+- `src/Nova.Cli/PlaybackControlledWindowsIndependentRunSetCommand.cs`
+- `src/Nova.Cli/PlaybackControlledWindowsPhysicalRunCommand.cs`
+- `src/Nova.ControlledWindowsRunner/Program.cs`
+- `tests/Nova.Cli.Tests/PlaybackControlledWindowsPhysicalRunRecordTests.cs`
+- `tests/Nova.Cli.Tests/PlaybackControlledWindowsIndependentRunSetCommandTests.cs`
 - `docs/adr/ADR-0142-explicit-controlled-windows-physical-run-composition.md`
 - `docs/reviews/PCN-0150-EXPLICIT-CONTROLLED-WINDOWS-PHYSICAL-RUN-COMPOSITION.md`
-- `src/Nova.ControlledWindowsRunner/Program.cs`
-- `src/Nova.ControlledWindowsRunner/Nova.ControlledWindowsRunner.csproj`
 - `src/Nova.Cli/PlaybackControlledWindowsPhysicalRunComposition.cs`
 - `src/Nova.Cli/SystemPlaybackControlledWindowsPhysicalRunOperations.cs`
-- `src/Nova.Cli/PlaybackControlledWindowsPhysicalRunCommand.cs`
 - `src/Nova.Network/Pcp/PcpControlledFlvFixtureReplayBoundary.cs`
-- `tests/Nova.Cli.Tests/PlaybackControlledWindowsPhysicalRunCompositionTests.cs`
-- `tests/Nova.Cli.Tests/PlaybackControlledWindowsPhysicalRunCommandTests.cs`
-- `tests/Nova.Network.Tests/PcpControlledFlvFixtureReplayBoundaryTests.cs`
 - `docs/adr/ADR-0141-application-owned-windows-physical-runner-harness.md`
 - `docs/reviews/PCN-0149-APPLICATION-OWNED-WINDOWS-PHYSICAL-RUNNER-HARNESS.md`
 - `src/Nova.Cli/PlaybackWindowsPhysicalRunnerHost.cs`
@@ -64,9 +67,9 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 ## 次の作業
 
-**0.0.10d Phase 5 — Independent Physical Video and Audio Runs**
+**0.0.10d Phase 5 — Execute Independent Physical Video and Audio Runs**
 
-明示Windows 11 physical runnerでexact approved runtimeとretained controlled fixtureを使用し、videoとaudioを独立実行します。accepted `SystemWindows` evidence、sanitized command output、operator observationを記録し、両runが通るまで0.0.10d完了を主張しません。
+明示Windows 11 runnerでexact approved runtimeとretained controlled fixtureを使用し、videoとaudioを独立実行して別々のcanonical recordへ保存します。両recordをverify modeへ通し、accepted `SystemWindows` evidenceとoperatorのvisible／audible observationを記録します。実記録が揃うまで0.0.10d完了を主張しません。
 
 ## 未完了
 
