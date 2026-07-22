@@ -350,42 +350,55 @@ internal sealed class WindowsFfmpeg81FrameDataNativeApi :
             PlaybackDecoderFfmpegFrameFormat.AudioFloat32Planar => (4, true),
             _ => (0, false),
         };
-        if (bytesPerSample == 0)
+        if (bytesPerSample == 0 || metadata.SampleCount <= 0 || metadata.ChannelCount <= 0)
         {
             return null;
         }
 
-        var planeCount = planar ? metadata.ChannelCount : 1;
-        var samplesPerPlane = planar
-            ? metadata.SampleCount
-            : checked(metadata.SampleCount * metadata.ChannelCount);
-        var logicalLength = checked(samplesPerPlane * bytesPerSample);
-        var lineSize = _memory.ReadLineSize(frame, 0);
-        if (lineSize < logicalLength || lineSize > MaximumReferencedBytes)
+        try
         {
-            return null;
-        }
-
-        var descriptors = new Descriptor[planeCount];
-        long total = 0;
-        for (var index = 0; index < planeCount; index++)
-        {
-            var pointer = _memory.ReadAudioDataPointer(frame, index);
-            if (pointer == 0 || !TryLength(logicalLength, 1, ref total, out var length))
+            var planeCount = planar ? metadata.ChannelCount : 1;
+            var samplesPerPlane = planar
+                ? metadata.SampleCount
+                : checked(metadata.SampleCount * metadata.ChannelCount);
+            var logicalLength = checked(samplesPerPlane * bytesPerSample);
+            var lineSize = _memory.ReadLineSize(frame, 0);
+            if (lineSize <= 0 || lineSize < logicalLength ||
+                lineSize > MaximumReferencedBytes)
             {
                 return null;
             }
 
-            descriptors[index] = new(
-                pointer,
-                PlaybackDecoderFfmpegFrameDataKind.AudioSamples,
-                index,
-                length,
-                lineSize,
-                1);
-        }
+            var descriptors = new Descriptor[planeCount];
+            long totalLogicalLength = 0;
+            for (var index = 0; index < planeCount; index++)
+            {
+                var pointer = _memory.ReadAudioDataPointer(frame, index);
+                if (pointer == 0 ||
+                    !TryLength(
+                        logicalLength,
+                        1,
+                        ref totalLogicalLength,
+                        out var length))
+                {
+                    return null;
+                }
 
-        return descriptors;
+                descriptors[index] = new(
+                    pointer,
+                    PlaybackDecoderFfmpegFrameDataKind.AudioSamples,
+                    index,
+                    length,
+                    lineSize,
+                    1);
+            }
+
+            return descriptors;
+        }
+        catch (OverflowException)
+        {
+            return null;
+        }
     }
 
     private static bool TryLength(

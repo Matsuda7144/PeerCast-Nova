@@ -215,7 +215,7 @@ public sealed class PlaybackDecoderFfmpegManagedFrameCopyBoundary
                 data.Kind != layouts[_nextPlane].Kind ||
                 data.Rows != layouts[_nextPlane].Rows ||
                 data.Stride < layouts[_nextPlane].LogicalRowBytes ||
-                !HasRequiredBytes(data))
+                !HasRequiredBytes(data, layouts[_nextPlane]))
             {
                 Failure = CopyFailure.InsufficientData;
                 Clear(buffers);
@@ -351,10 +351,18 @@ public sealed class PlaybackDecoderFfmpegManagedFrameCopyBoundary
             }
         }
 
-        private static bool HasRequiredBytes(PlaybackDecoderFfmpegFrameDataView data)
+        private static bool HasRequiredBytes(
+            PlaybackDecoderFfmpegFrameDataView data,
+            PlaneLayout layout)
         {
             try
             {
+                if (data.Kind == PlaybackDecoderFfmpegFrameDataKind.AudioSamples &&
+                    data.Rows == 1)
+                {
+                    return data.Length >= layout.LogicalRowBytes;
+                }
+
                 return data.Length >= checked(data.Stride * data.Rows);
             }
             catch (OverflowException)

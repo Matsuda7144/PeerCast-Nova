@@ -74,6 +74,149 @@ public sealed class PlaybackDecoderFfmpegFrameDataBoundaryTests
     }
 
     [Theory]
+    [InlineData(4_096)]
+    [InlineData(8_192)]
+    public void ValidateAndConsume_ObservedPlanarFloatAudioAcceptsExactOrPaddedLineSize(
+        int lineSize)
+    {
+        using var memory = new FakeMemoryReader([lineSize], 2);
+        var metadata = Audio(
+            PlaybackDecoderFfmpegFrameFormat.AudioFloat32Planar,
+            sampleCount: 1_024,
+            channelCount: 2);
+        var consumer = new RecordingConsumer();
+
+        var result = CreateNative(memory).ValidateAndConsume((nint)400, metadata, consumer);
+
+        Assert.Equal(PlaybackDecoderFfmpegFrameDataVisitResult.Consumed, result);
+        Assert.Equal(
+            [
+                (PlaybackDecoderFfmpegFrameDataKind.AudioSamples, 0, 4_096, lineSize, 1),
+                (PlaybackDecoderFfmpegFrameDataKind.AudioSamples, 1, 4_096, lineSize, 1),
+            ],
+            consumer.Items);
+    }
+
+    [Theory]
+    [InlineData(4_095)]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void ValidateAndConsume_PlanarFloatAudioRejectsShortOrNonPositiveLineSize(
+        int lineSize)
+    {
+        using var memory = new FakeMemoryReader([lineSize], 2);
+
+        Assert.Equal(
+            PlaybackDecoderFfmpegFrameDataVisitResult.InvalidData,
+            CreateNative(memory).ValidateAndConsume(
+                (nint)400,
+                Audio(
+                    PlaybackDecoderFfmpegFrameFormat.AudioFloat32Planar,
+                    sampleCount: 1_024,
+                    channelCount: 2),
+                new RecordingConsumer()));
+    }
+
+    [Fact]
+    public void ValidateAndConsume_PlanarAudioMissingSecondPlaneFailsClosed()
+    {
+        using var memory = new FakeMemoryReader([8_192], 2);
+        memory.SetNull(1);
+
+        Assert.Equal(
+            PlaybackDecoderFfmpegFrameDataVisitResult.InvalidData,
+            CreateNative(memory).ValidateAndConsume(
+                (nint)400,
+                Audio(
+                    PlaybackDecoderFfmpegFrameFormat.AudioFloat32Planar,
+                    sampleCount: 1_024,
+                    channelCount: 2),
+                new RecordingConsumer()));
+    }
+
+    [Fact]
+    public void ValidateAndConsume_PackedAudioAcceptsPaddingAndRejectsShortLineSize()
+    {
+        var metadata = Audio(
+            PlaybackDecoderFfmpegFrameFormat.AudioFloat32,
+            sampleCount: 1_024,
+            channelCount: 2);
+        using var padded = new FakeMemoryReader([16_384], 1);
+        using var shortLine = new FakeMemoryReader([8_191], 1);
+        var consumer = new RecordingConsumer();
+
+        Assert.Equal(
+            PlaybackDecoderFfmpegFrameDataVisitResult.Consumed,
+            CreateNative(padded).ValidateAndConsume((nint)400, metadata, consumer));
+        Assert.Single(consumer.Items);
+        Assert.Equal(
+            (PlaybackDecoderFfmpegFrameDataKind.AudioSamples, 0, 8_192, 16_384, 1),
+            consumer.Items[0]);
+        Assert.Equal(
+            PlaybackDecoderFfmpegFrameDataVisitResult.InvalidData,
+            CreateNative(shortLine).ValidateAndConsume(
+                (nint)400,
+                metadata,
+                new RecordingConsumer()));
+    }
+
+    [Theory]
+    [InlineData(0, 2)]
+    [InlineData(-1, 2)]
+    [InlineData(1_024, 0)]
+    [InlineData(1_024, -1)]
+    public void ValidateAndConsume_AudioRejectsNonPositiveSamplesOrChannels(
+        int sampleCount,
+        int channelCount)
+    {
+        using var memory = new FakeMemoryReader([8_192], 2);
+
+        Assert.Equal(
+            PlaybackDecoderFfmpegFrameDataVisitResult.InvalidData,
+            CreateNative(memory).ValidateAndConsume(
+                (nint)400,
+                Audio(
+                    PlaybackDecoderFfmpegFrameFormat.AudioFloat32Planar,
+                    sampleCount,
+                    channelCount),
+                new RecordingConsumer()));
+    }
+
+    [Fact]
+    public void ValidateAndConsume_AudioMultiplicationOverflowFailsClosed()
+    {
+        using var memory = new FakeMemoryReader([int.MaxValue], 1);
+
+        Assert.Equal(
+            PlaybackDecoderFfmpegFrameDataVisitResult.InvalidData,
+            CreateNative(memory).ValidateAndConsume(
+                (nint)400,
+                Audio(
+                    PlaybackDecoderFfmpegFrameFormat.AudioFloat32,
+                    int.MaxValue,
+                    2),
+                new RecordingConsumer()));
+    }
+
+    [Fact]
+    public void ValidateAndConsume_PlanarAudioCumulativeLogicalBytesAboveLimitFailsClosed()
+    {
+        const int samplesPerPlane = 33_554_433;
+        const int logicalBytesPerPlane = samplesPerPlane * 4;
+        using var memory = new FakeMemoryReader([logicalBytesPerPlane], 2);
+
+        Assert.Equal(
+            PlaybackDecoderFfmpegFrameDataVisitResult.InvalidData,
+            CreateNative(memory).ValidateAndConsume(
+                (nint)400,
+                Audio(
+                    PlaybackDecoderFfmpegFrameFormat.AudioFloat32Planar,
+                    samplesPerPlane,
+                    2),
+                new RecordingConsumer()));
+    }
+
+    [Theory]
     [InlineData(5, (int)PlaybackDecoderFfmpegFrameDataVisitResult.InvalidData)]
     [InlineData(6, (int)PlaybackDecoderFfmpegFrameDataVisitResult.Consumed)]
     public void ValidateAndConsume_OddWidthNv12RequiresRoundedChromaStride(
@@ -249,6 +392,21 @@ public sealed class PlaybackDecoderFfmpegFrameDataBoundaryTests
 
     private static WindowsFfmpeg81FrameDataNativeApi CreateNative(
         IPlaybackDecoderFfmpegFrameMemoryReader memory) => new(memory, true);
+
+    private static PlaybackDecoderFfmpegFrameMetadata Audio(
+        PlaybackDecoderFfmpegFrameFormat format,
+        int sampleCount,
+        int channelCount) => new(
+            PlaybackDecoderFfmpegFrameMediaKind.Audio,
+            format,
+            0,
+            0,
+            48_000,
+            channelCount,
+            sampleCount,
+            default,
+            default,
+            default);
 
     private static PlaybackDecoderFfmpegFrameDataBoundary CreateBoundary(
         IPlaybackDecoderFfmpegFrameMetadataNativeApi metadataApi,

@@ -68,7 +68,8 @@ public sealed class PlaybackDecoderFfmpegManagedFrameCopyTests
                 PlaybackDecoderFfmpegFrameDataKind.AudioSamples,
                 logicalBytes + 4,
                 1,
-                logicalBytes))
+                logicalBytes,
+                ReportedLength: logicalBytes))
             .ToArray();
         var source = new FakeSource(Audio(format), specs);
         var consumer = new RecordingConsumer();
@@ -78,6 +79,57 @@ public sealed class PlaybackDecoderFfmpegManagedFrameCopyTests
             Create(source).ReceiveAndCopy(owners.Context, consumer));
         Assert.Equal(planeCount, consumer.Frame!.Planes.Count);
         Assert.All(consumer.Frame.Planes, plane => Assert.Equal(logicalBytes, plane.Buffer.Length));
+    }
+
+    [Fact]
+    public void ReceiveAndCopy_ObservedPaddedPlanarFloatFrameCopiesOrderedLogicalPlanesOnly()
+    {
+        using var owners = new TestOwners();
+        var source = new FakeSource(
+            new PlaybackDecoderFfmpegFrameMetadata(
+                PlaybackDecoderFfmpegFrameMediaKind.Audio,
+                PlaybackDecoderFfmpegFrameFormat.AudioFloat32Planar,
+                0,
+                0,
+                48_000,
+                2,
+                1_024,
+                default,
+                default,
+                default),
+            [
+                new(
+                    0,
+                    PlaybackDecoderFfmpegFrameDataKind.AudioSamples,
+                    8_192,
+                    1,
+                    4_096,
+                    ReportedLength: 4_096,
+                    LogicalFillByte: 0x11,
+                    PaddingByte: 0xEE),
+                new(
+                    1,
+                    PlaybackDecoderFfmpegFrameDataKind.AudioSamples,
+                    8_192,
+                    1,
+                    4_096,
+                    ReportedLength: 4_096,
+                    LogicalFillByte: 0x22,
+                    PaddingByte: 0xEE),
+            ]);
+        var consumer = new RecordingConsumer();
+
+        var result = Create(source).ReceiveAndCopy(owners.Context, consumer);
+
+        Assert.Equal(PlaybackDecoderFfmpegManagedFrameCopyResult.Copied, result);
+        var frame = Assert.IsType<PlaybackDecoderFfmpegManagedFrame>(consumer.Frame);
+        Assert.Equal(2, frame.Planes.Count);
+        Assert.Equal(4_096, frame.Planes[0].Buffer.Length);
+        Assert.Equal(4_096, frame.Planes[1].Buffer.Length);
+        Assert.All(frame.Planes[0].Buffer.ToArray(), value => Assert.Equal(0x11, value));
+        Assert.All(frame.Planes[1].Buffer.ToArray(), value => Assert.Equal(0x22, value));
+        Assert.DoesNotContain((byte)0xEE, frame.Planes[0].Buffer.ToArray());
+        Assert.DoesNotContain((byte)0xEE, frame.Planes[1].Buffer.ToArray());
     }
 
     [Fact]
@@ -91,6 +143,33 @@ public sealed class PlaybackDecoderFfmpegManagedFrameCopyTests
         Assert.Equal(
             PlaybackDecoderFfmpegManagedFrameCopyResult.InsufficientData,
             Create(source).ReceiveAndCopy(owners.Context, new RecordingConsumer()));
+    }
+
+    [Fact]
+    public void ReceiveAndCopy_PaddedAudioFailureAllowsCompleteContextAndRuntimeCleanup()
+    {
+        var owners = new TestOwners();
+        var source = new FakeSource(
+            Audio(PlaybackDecoderFfmpegFrameFormat.AudioFloat32Planar),
+            [
+                new(
+                    0,
+                    PlaybackDecoderFfmpegFrameDataKind.AudioSamples,
+                    16,
+                    1,
+                    16,
+                    ReportedLength: 15),
+            ]);
+
+        Assert.Equal(
+            PlaybackDecoderFfmpegManagedFrameCopyResult.InsufficientData,
+            Create(source).ReceiveAndCopy(owners.Context, new RecordingConsumer()));
+        Assert.False(owners.Context.IsDisposed);
+
+        owners.Dispose();
+
+        Assert.True(owners.Context.IsDisposed);
+        Assert.True(owners.RuntimeIsDisposed);
     }
 
     [Fact]
@@ -280,7 +359,9 @@ public sealed class PlaybackDecoderFfmpegManagedFrameCopyTests
         int Stride,
         int Rows,
         int LogicalBytes,
-        int? ReportedLength = null);
+        int? ReportedLength = null,
+        byte? LogicalFillByte = null,
+        byte? PaddingByte = null);
 
     private sealed class FakeSource(
         PlaybackDecoderFfmpegFrameMetadata metadata,
@@ -315,7 +396,21 @@ public sealed class PlaybackDecoderFfmpegManagedFrameCopyTests
                 {
                     for (var index = 0; index < length; index++)
                     {
-                        Marshal.WriteByte(pointer, index, (byte)(index + 1));
+                        Marshal.WriteByte(
+                            pointer,
+                            index,
+                            plane.LogicalFillByte ?? (byte)(index + 1));
+                    }
+
+                    if (plane.PaddingByte is { } padding)
+                    {
+                        for (var row = 0; row < plane.Rows; row++)
+                        {
+                            for (var index = plane.LogicalBytes; index < plane.Stride; index++)
+                            {
+                                Marshal.WriteByte(pointer, checked(row * plane.Stride + index), padding);
+                            }
+                        }
                     }
 
                     NativeViewCount++;
@@ -398,6 +493,8 @@ public sealed class PlaybackDecoderFfmpegManagedFrameCopyTests
         }
 
         public PlaybackDecoderFfmpegContextLease Context { get; }
+
+        public bool RuntimeIsDisposed => _runtime.IsDisposed;
 
         public void Dispose()
         {
