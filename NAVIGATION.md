@@ -1,8 +1,21 @@
 # PeerCast Nova Navigation
 
+## Phase 5 controlled D3D11 texture-copy output probe
+
+The decoded physical video run and the generated opaque non-black BGRA quadrant probe both completed with accepted Present accounting, but the operator observed only a black window. A diagnostic-only comparison now creates one exact BGRA texture from the same quadrant bytes, copies it to swap-chain back buffer 0 with `CopyResource`, and presents once. It bypasses the production direct `UpdateSubresource` upload without changing production behavior.
+
+- `docs/adr/ADR-0151-controlled-d3d11-texture-copy-output-probe.md`
+- `docs/reviews/PCN-0159-CONTROLLED-D3D11-TEXTURE-COPY-OUTPUT-PROBE.md`
+- `docs/runbooks/0.0.10d-controlled-windows-texture-copy-probe.md`
+- `src/Nova.Playback/PlaybackWindowsOutputTextureCopyProbeBoundary.cs`
+- `src/Nova.Cli/PlaybackControlledWindowsTextureCopyProbeCommand.cs`
+- `tests/Nova.Playback.Tests/PlaybackWindowsOutputTextureCopyProbeBoundaryTests.cs`
+- `tests/Nova.Cli.Tests/PlaybackControlledWindowsTextureCopyProbeCommandTests.cs`
+- `tools/Run-ControlledWindowsTextureCopyProbe.ps1`
+
 ## Phase 5 controlled known-pattern Windows output probe
 
-The physical video run completed with accepted deterministic evidence and `VideoAccepted` canonical preflight, but the three-second operator observation showed only a black window, so `Video visible: No` is recorded. A diagnostic-only probe now generates one known opaque non-black 320×240 BGRA four-quadrant frame and sends it exactly once through the same controlled Windows activation, binding, stream, buffer, D3D11 Present, window, dispatcher, and cleanup path without FFmpeg, media, decode, conversion, scheduler, timing, or audio output.
+The physical video run completed with accepted deterministic evidence and `VideoAccepted` canonical preflight, but the three-second operator observation showed only a black window, so `Video visible: No` is recorded. A diagnostic-only probe generated one known opaque non-black 320×240 BGRA four-quadrant frame and sent it exactly once through the same controlled Windows activation, binding, stream, buffer, D3D11 Present, window, dispatcher, and cleanup path without FFmpeg, media, decode, conversion, scheduler, timing, or audio output. Its deterministic result completed, but the operator recorded `Known pattern visible: No`.
 
 - `docs/adr/ADR-0150-controlled-known-pattern-windows-output-probe.md`
 - `docs/reviews/PCN-0158-CONTROLLED-KNOWN-PATTERN-WINDOWS-OUTPUT-PROBE.md`
@@ -65,18 +78,18 @@ The bounded FLV native decoder session configures the exact parser-provided stre
 
 ## 現在地
 
-**0.0.10d — Controlled Physical Windows Video／Audio Output Validation — Phase 5 Black-output Diagnosis In Progress**
+**0.0.10d — Controlled Physical Windows Video／Audio Output Validation — Phase 5 Black-output Upload Comparison In Progress**
 
-Windows 11でcontrolled physical video runを2回実行し、最新runはmain `8c87337bfd6996fa5c018eda512ec143c83be6e4`、helper exit 0、`Completed`、`Accepted`、`VideoAccepted`、exactly one delivery、zero retained `WouldBlock`、runner stopped、lifecycle disposed、borrowed owners preserved、external publication falseを記録しました。一方、operator observationは認識可能なtest patternではなく黒画面だけだったため、`Video visible: No`です。
+Windows 11のdecoded physical video runとgenerated known-pattern runはいずれもdeterministic Present accountingに成功しましたが、operator observationは黒画面でした。最新known-pattern runはmain `0c38faf7bebf4cf8f5dcb114993ac22d5db64a41`、helper exit 0、`Completed`、1 Present attempt／acknowledgement、76,800 non-black pixels、307,200 accepted bytes、zero WouldBlock／resize／device loss、runner stopped、cleanup completed、borrowed owners preservedを記録し、`Known pattern visible: No`です。
 
-- deterministic D3D11 call accountingとcanonical video admissionは成功
-- recognizable visible videoは失敗
-- deterministic evidenceとoperator observationは独立して保持
-- known non-black BGRA probeでdecode／conversion側とWindows output側を分離
-- probeはFFmpeg、fixture、parser、decoder、scheduler、timing、audio writeを使用しない
+- FFmpeg、fixture、decode、managed conversionは黒画面再現に不要
+- production uploadはswap-chain back bufferへ直接`UpdateSubresource`を呼ぶ
+- `UpdateSubresource`はHRESULTを返さないため、後続Present成功だけではpixel uploadを証明しない
+- comparison probeは同じbytesからtextureを作成し、`CopyResource`でback bufferへ転送する
+- comparison probeはproduction uploadを変更せず、1 texture creation／1 copy／1 Presentに限定
 - audio runとpaired verificationは黒画面境界が解決するまで開始しない
 - runtime path、fixture path、record path、device／endpoint identity、HWND、thread ID、pointer、handle、pixel payloadをrepositoryへ保持しない
-- Linux CIはsynthetic／injected validationだけを使い、physical visibilityを主張しない
+- Linux CIはinjected validationだけを使い、physical visibilityを主張しない
 
 ## CI
 
@@ -84,6 +97,14 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 ## 最新の入口
 
+- `docs/adr/ADR-0151-controlled-d3d11-texture-copy-output-probe.md`
+- `docs/reviews/PCN-0159-CONTROLLED-D3D11-TEXTURE-COPY-OUTPUT-PROBE.md`
+- `docs/runbooks/0.0.10d-controlled-windows-texture-copy-probe.md`
+- `src/Nova.Playback/PlaybackWindowsOutputTextureCopyProbeBoundary.cs`
+- `src/Nova.Cli/PlaybackControlledWindowsTextureCopyProbeCommand.cs`
+- `tests/Nova.Playback.Tests/PlaybackWindowsOutputTextureCopyProbeBoundaryTests.cs`
+- `tests/Nova.Cli.Tests/PlaybackControlledWindowsTextureCopyProbeCommandTests.cs`
+- `tools/Run-ControlledWindowsTextureCopyProbe.ps1`
 - `docs/adr/ADR-0150-controlled-known-pattern-windows-output-probe.md`
 - `docs/reviews/PCN-0158-CONTROLLED-KNOWN-PATTERN-WINDOWS-OUTPUT-PROBE.md`
 - `docs/runbooks/0.0.10d-controlled-windows-known-pattern-probe.md`
@@ -148,13 +169,14 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 ## 次の作業
 
-**0.0.10d Phase 5 — Execute Controlled Known-pattern Windows Output Probe**
+**0.0.10d Phase 5 — Execute Controlled D3D11 Texture-copy Output Probe**
 
-修正後mainからknown-pattern helperを1回だけ実行し、canonical probe recordをrepository外へ保存します。operatorは赤／緑／青／白の4分割が認識できたかを`Known pattern visible: Yes／No`で記録します。結果が確定するまでaudio runとpaired-record verifyを開始しません。
+修正後mainからtexture-copy helperを1回だけ実行し、canonical comparison recordをrepository外へ保存します。operatorは赤／緑／青／白の4分割が認識できたかを`Texture-copy pattern visible: Yes／No`で記録します。結果が確定するまでproduction uploadを変更せず、audio runとpaired-record verifyを開始しません。
 
 ## 未完了
 
-- controlled known-pattern Windows output diagnosis
+- controlled D3D11 texture-copy output diagnosis
+- production direct upload correction if isolated
 - recognizable controlled physical Windows video output validation
 - controlled physical Windows audio output validation
 - combined controlled audible／visible playback validation

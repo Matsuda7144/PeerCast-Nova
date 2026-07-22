@@ -13,6 +13,19 @@ try
             args,
             argument => string.Equals(
                 argument,
+                PlaybackControlledWindowsTextureCopyProbeCommand.Argument,
+                StringComparison.OrdinalIgnoreCase)))
+    {
+        var probe = await PlaybackControlledWindowsTextureCopyProbeCommand.RunAsync(
+            args,
+            Console.Out,
+            cancellationSource.Token);
+        Environment.ExitCode = probe.ExitCode;
+    }
+    else if (Array.Exists(
+            args,
+            argument => string.Equals(
+                argument,
                 PlaybackControlledWindowsKnownPatternProbeCommand.Argument,
                 StringComparison.OrdinalIgnoreCase)))
     {
