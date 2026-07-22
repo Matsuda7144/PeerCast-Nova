@@ -2,21 +2,21 @@
 
 ## 現在地
 
-**0.0.10d — Controlled Physical Windows Video／Audio Output Validation — Phase 1 In Progress**
+**0.0.10d — Controlled Physical Windows Video／Audio Output Validation — Phase 2 Counter Plumbing In Progress**
 
-ADR-0138／PCN-0146で定義したphysical output gateの最初の実装として、sanitized deterministic evidenceをone-shotで受理するfail-closed boundaryを追加しました。`SystemWindows`以外の証跡はphysical outputとして受理せず、実機runはまだ実行していません。
+Phase 1のone-shot admission gateへ、既存のsystem Windows output processorからsanitized deterministic counterを渡す経路を追加しました。production buffer snapshotにnative evidenceを載せ、同じPhase 1 gateへ変換するadapterを実装しています。実機runはまだ実行していません。
 
-- exact active runtime build IDとcontrolled fixture SHA-256を必須化
-- decoder generationとoutput generationの完全一致を必須化
-- videoはBGRA32、exact stride、present acknowledgement、accepted bytesを検証
-- audioはinterleaved PCM、buffer duration、WASAPI write、accepted frames／bytes、first startを検証
-- delivered／retained `WouldBlock`をfinite attempt count内で検証
-- hidden retry、device fallback、device recreationをゼロに固定
-- production stop → buffer → stream → binding → activationのcleanup順序を必須化
-- owner-thread teardownとborrowed window／dispatcher維持を必須化
-- one-shot accepted／rejected settlement、rollback／in-place correctionなし
-- runtime path、device identifier、native pointer、handle、packet／decoded bytesを証跡型へ含めない
-- Phase 1はevidence contractのみでphysical D3D11／WASAPI実行を主張しない
+- supported Windowsのproduction processorだけを`SystemWindows` provenanceで包む
+- injected processorを自動的にsystem provenanceへ昇格させない
+- videoはattempt、present acknowledgement、accepted bytes、`WouldBlock`、resize、device lossを記録
+- audioはattempt、write acknowledgement、accepted frames／bytes、`WouldBlock`、first start、device lossを記録
+- first successful configurationとgenerationを固定し、後続矛盾をlatch
+- counter overflowをlatchし、native result自体は変更しない
+- additiveな`PlaybackWindowsOutputBufferSnapshot.NativeEvidence`で既存lifecycleへ接続
+- native generation／buffer generation／retained `WouldBlock`の矛盾をcapture adapterで拒否
+- adapterは必ずPhase 1 `PlaybackControlledWindowsOutputEvidenceBoundary`を通す
+- native ownership、scheduler ownership、reset、resize、device-loss、cleanup順序は変更しない
+- Phase 2はcounter plumbingのみでphysical D3D11／WASAPI実行を主張しない
 
 ## CI
 
@@ -24,6 +24,10 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 ## 最新の入口
 
+- `docs/adr/ADR-0140-system-native-windows-output-evidence-capture.md`
+- `docs/reviews/PCN-0148-SYSTEM-NATIVE-WINDOWS-OUTPUT-EVIDENCE-CAPTURE.md`
+- `src/Nova.Playback/PlaybackWindowsOutputNativeEvidenceCapture.cs`
+- `tests/Nova.Playback.Tests/PlaybackWindowsOutputNativeEvidenceCaptureTests.cs`
 - `docs/adr/ADR-0139-controlled-physical-windows-output-evidence-admission-boundary.md`
 - `docs/reviews/PCN-0147-CONTROLLED-PHYSICAL-WINDOWS-OUTPUT-EVIDENCE-ADMISSION.md`
 - `src/Nova.Playback/PlaybackControlledWindowsOutputEvidenceBoundary.cs`
@@ -56,13 +60,13 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 ## 次の作業
 
-**0.0.10d Phase 2 — System Native Evidence Capture and Physical Runs**
+**0.0.10d Phase 3 — Explicit Windows Physical Runner Harness**
 
-既存の`IDXGISwapChain.Present`とWASAPI `ReleaseBuffer／Start`経路からsanitized counterを直接取得し、application-owned real window／dispatcherとexact approved runtime／fixtureを使用する独立video／audio runを明示Windows 11 physical runnerで実行します。Phase 1 evidence gateを迂回する別経路は追加しません。
+application-owned real window／message loop／owner-thread dispatcherを持つ有限runnerを明示Windows 11環境向けに用意し、exact approved runtimeとcontrolled fixtureを使う独立video／audio runを実行します。pre-cleanup native evidence snapshot、caller-visible delivery counters、production-first cleanup証跡をPhase 1 gateへ提出し、accepted recordが得られた場合だけphysical validation完了を記録します。
 
 ## 未完了
 
-- system-native present／WASAPI evidence counter connection
+- explicit Windows physical runner harness
 - controlled physical Windows video output validation
 - controlled physical Windows audio output validation
 - combined controlled audible／visible playback validation

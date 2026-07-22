@@ -56,7 +56,10 @@ public readonly record struct PlaybackWindowsOutputBufferSnapshot(
     PlaybackWindowsOutputBufferState AudioState,
     long VideoGeneration,
     long AudioGeneration,
-    bool AudioStarted);
+    bool AudioStarted)
+{
+    public PlaybackWindowsOutputNativeEvidenceSnapshot NativeEvidence { get; init; }
+}
 
 public sealed class PlaybackWindowsOutputBufferProcessingBoundary : IDisposable
 {
@@ -107,7 +110,10 @@ public sealed class PlaybackWindowsOutputBufferProcessingBoundary : IDisposable
     }
 
     public PlaybackWindowsOutputBufferSnapshot Snapshot => new(
-        _videoState, _audioState, _videoGeneration, _audioGeneration, _audioStarted);
+        _videoState, _audioState, _videoGeneration, _audioGeneration, _audioStarted)
+    {
+        NativeEvidence = (_native as IPlaybackWindowsOutputNativeEvidenceSource)?.Snapshot ?? default,
+    };
 
     public async ValueTask<PlaybackWindowsOutputBufferProcessingResult> ProcessVideoAsync(
         PlaybackWindowsVideoFrameBuffer frame, CancellationToken cancellationToken)
@@ -318,8 +324,11 @@ public sealed class PlaybackWindowsOutputBufferProcessingBoundary : IDisposable
     }
 
     private static IPlaybackWindowsOutputNativeBufferProcessor CreateSystemProcessor() =>
-        OperatingSystem.IsWindows() ? new SystemPlaybackWindowsOutputNativeBufferProcessor() :
-            new UnsupportedPlaybackWindowsOutputNativeBufferProcessor();
+        OperatingSystem.IsWindows()
+            ? new PlaybackWindowsOutputNativeEvidenceProcessor(
+                new SystemPlaybackWindowsOutputNativeBufferProcessor(),
+                PlaybackControlledWindowsOutputEvidenceSource.SystemWindows)
+            : new UnsupportedPlaybackWindowsOutputNativeBufferProcessor();
 }
 
 internal enum PlaybackWindowsOutputNativeBufferResult
