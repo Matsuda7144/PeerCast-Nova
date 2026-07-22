@@ -17,6 +17,7 @@ Detailed history through 0.0.8g remains preserved in Git history at commit
 - Kept all FFmpeg archives, executables, and DLLs outside Git and build／publish artifacts.
 - Performed no native DLL load, runtime ABI／symbol execution, decoder-context creation, packet submission, native decode, D3D11／WASAPI activation, or audible／visible output.
 - Selected 0.0.10b Controlled Real External-Runtime Native Decode Validation.
+- Completed 0.0.10b controlled native decode by accepting padded planar／packed audio line sizes in `PlaybackDecoderFfmpegFrameDataBoundary` while copying only logical sample bytes and preserving fail-closed bounds and complete cleanup.
 
 ### 0.0.9z - Controlled Retained-Fixture Production Activation Validation
 

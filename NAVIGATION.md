@@ -13,6 +13,7 @@ approved BtbN 2026-07-21 win64 LGPL shared候補をbuilt-in manifestへ実装し
 - complete transcripts／inventory text evidence
 - superseded 2026-07-15 rejection history
 - FFmpeg binary非配布とnative activation未実施
+- 0.0.10b補足: `PlaybackDecoderFfmpegFrameDataBoundary`でpadded planar／packed audio line sizeを受理し、logical sample bytesのみmanaged copyするcontrolled native decodeを完了
 
 ## CI
 
@@ -38,6 +39,10 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 - `src/Nova.Playback/PlaybackProductionPcpFlvCompositionBoundary.cs`
 - `src/Nova.Playback/PlaybackGenerationMatchedSchedulerDeliveryBoundary.cs`
 - `tests/Nova.Playback.Tests/PlaybackControlledRetainedFlvFixtureValidationTests.cs`
+
+## 進捗記録の規律
+
+実装・設計変更だけでなく、バグ修正にも同じ進捗記録の規律を適用します。
 
 ## ADR／PCN索引の永久欠番
 
