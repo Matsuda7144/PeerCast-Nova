@@ -4,6 +4,10 @@
 
 Validate a diagnostic comparison path for the 0.0.10d Phase 5 black-output boundary and correct the shared D3D11 device-context COM ABI mapping proven defective by the physical probe.
 
+## Review result
+
+`CompletedTextureCopyVisibleAndProductionPatternVisible`
+
 ## Required behavior
 
 - Use the existing application-owned Windows runner, owner dispatcher, activated D3D11 device, swap chain, and cleanup order.
@@ -35,9 +39,39 @@ Both private `ID3D11DeviceContext` declarations must preserve the official metho
 15. `CopyResource`;
 16. production only: `UpdateSubresource`.
 
-The two physical texture-copy attempts demonstrated that `PreserveSig` alone cannot repair a shifted vtable. The missing `OMSetBlendState` and `OMSetDepthStencilState` slots caused the managed `CopyResource` declaration to invoke `RSSetScissorRects` and caused the production `UpdateSubresource` declaration to invoke `CopySubresourceRegion`.
+The two failed physical texture-copy attempts demonstrated that `PreserveSig` alone cannot repair a shifted vtable. The missing `OMSetBlendState` and `OMSetDepthStencilState` slots caused the managed `CopyResource` declaration to invoke `RSSetScissorRects` and caused the production `UpdateSubresource` declaration to invoke `CopySubresourceRegion`.
 
 Reflection coverage must fail if either declaration loses the critical sequence, if probe `CopyResource` loses its native `void`／two-pointer contract, or if production `UpdateSubresource` and `OMSetRenderTargets` lose their preserved native signatures.
+
+## Physical validation
+
+Both corrected probes were executed once from clean main `5386637fdca7cab8dfd451491f99422930a67bfb`.
+
+### Texture-copy comparison
+
+- helper exit: `0`;
+- `Result: Completed`;
+- upload path: `CreateTexture2D+CopyResource`;
+- Present attempts／acknowledgements: `1／1`;
+- accepted bytes: `307200`;
+- WouldBlock／resize／device loss: `0／0／0`;
+- runner stopped, output cleanup completed, borrowed owners preserved;
+- operator observation: `Texture-copy pattern visible: Yes`.
+
+### Production upload
+
+- helper exit: `0`;
+- `Result: Completed`;
+- upload path: production direct `UpdateSubresource`;
+- Present attempts／acknowledgements: `1／1`;
+- accepted bytes: `307200`;
+- WouldBlock／resize／device loss: `0／0／0`;
+- runner stopped, output cleanup completed, borrowed owners preserved;
+- operator observation: `Known pattern visible: Yes`.
+
+Neither run used FFmpeg, the media fixture, audio, paired verification, retry, an additional Present, fallback, or instrumentation.
+
+These results physically validate the corrected texture-copy path, the corrected production upload path, and the shared D3D11／DXGI／Win32 presentation boundary for the exact generated pixels.
 
 ## Rejection requirements
 
@@ -45,7 +79,7 @@ Reject before native access for invalid format, dimensions, stride, byte count, 
 
 ## Evidence
 
-The sanitized external record must contain only the fixed milestone, result, pattern identity, upload-path identity, dimensions, finite counters, terminal runner state, cleanup／borrowed-owner preservation, and false runtime／publication statements.
+The sanitized external record contains only the fixed milestone, result, pattern identity, upload-path identity where applicable, dimensions, finite counters, terminal runner state, cleanup／borrowed-owner preservation, and false runtime／publication statements.
 
 It must not contain a repository path, runtime path, media path, record path, device identity, window handle, thread identity, COM pointer, native handle, or pixel payload.
 
@@ -58,4 +92,6 @@ CircleCI final head must pass:
 - full solution tests;
 - format verification.
 
-Physical visibility remains a post-merge Windows observation and is not claimed by CI.
+## Next gate
+
+Execute one controlled physical video run using the approved external runtime, retained fixture, corrected clean main, and a new external canonical record. Audio and paired verification remain blocked until that video record is independently accepted and the operator records `Video visible: Yes`.
