@@ -1,5 +1,13 @@
 # PeerCast Nova Navigation
 
+## Phase 5 production timing presentation origin
+
+The production monotonic timing path now anchors the first valid decoded presentation timestamp to the first playback-position read. Subsequent video and audio decisions preserve the original shared source timeline as relative offsets from that anchor. The 250 ms maximum wait and all early and late tolerances remain unchanged; raw timestamps are not rewritten, zero is not synthesized, and no sleep, retry, queue, or fixture change is added. Transactional timing reset clears both the monotonic position origin and the presentation anchor.
+
+- `docs/adr/ADR-0145-production-timing-presentation-origin.md`
+- `docs/reviews/PCN-0153-PRODUCTION-TIMING-PRESENTATION-ORIGIN.md`
+- `src/Nova.Playback/PlaybackAvTimingDecisionBoundary.cs`
+
 ## Phase 5 decoded timestamp propagation
 
 The bounded FLV native decoder session now configures the exact parser-provided stream time base through the public FFmpeg `av_opt_set_q` API and the `pkt_timebase` option. Configuration occurs after parameter transfer and before codec open for video and audio independently. When a decoded frame reports an exactly unset `0/positive` raw time base, metadata conversion uses the context lease's retained configured value; a valid raw frame time base remains authoritative and malformed raw values remain fail-closed. No timestamp is synthesized, no retry or fallback path is added, and physical video/audio success remains unclaimed.
@@ -35,6 +43,10 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 ## 最新の入口
 
+- `docs/adr/ADR-0145-production-timing-presentation-origin.md`
+- `docs/reviews/PCN-0153-PRODUCTION-TIMING-PRESENTATION-ORIGIN.md`
+- `src/Nova.Playback/PlaybackAvTimingDecisionBoundary.cs`
+- `tests/Nova.Playback.Tests/PlaybackAvTimingPresentationOriginTests.cs`
 - `docs/adr/ADR-0143-independent-physical-run-record-admission.md`
 - `docs/reviews/PCN-0151-INDEPENDENT-PHYSICAL-RUN-RECORD-ADMISSION.md`
 - `src/Nova.Cli/PlaybackControlledWindowsPhysicalRunRecord.cs`

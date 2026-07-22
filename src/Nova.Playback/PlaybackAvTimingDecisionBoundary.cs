@@ -69,10 +69,14 @@ public sealed class PlaybackAvTimingDecisionBoundary : IDisposable
     private readonly IPlaybackAvTimingPositionSource _positionSource;
     private readonly IPlaybackAvTimingGenerationResetter _resetter;
     private readonly PlaybackAvTimingTolerances _tolerances;
+    private readonly bool _anchorFirstPresentationTimestamp;
     private long _videoGeneration;
     private long _audioGeneration;
     private bool _hasPosition;
     private TimeSpan _lastPosition;
+    private bool _hasPresentationAnchor;
+    private TimeSpan _presentationAnchorTimestamp;
+    private TimeSpan _presentationAnchorPosition;
     private PlaybackAvTimingDecisionState _state;
     private volatile bool _isDisposed;
 
@@ -83,7 +87,7 @@ public sealed class PlaybackAvTimingDecisionBoundary : IDisposable
         long audioGeneration)
         : this(new MonotonicPlaybackAvTimingPositionSource(clock),
             new InMemoryPlaybackAvTimingGenerationResetter(), tolerances,
-            videoGeneration, audioGeneration)
+            videoGeneration, audioGeneration, anchorFirstPresentationTimestamp: true)
     {
     }
 
@@ -93,6 +97,18 @@ public sealed class PlaybackAvTimingDecisionBoundary : IDisposable
         PlaybackAvTimingTolerances tolerances,
         long videoGeneration,
         long audioGeneration)
+        : this(positionSource, resetter, tolerances, videoGeneration, audioGeneration,
+            anchorFirstPresentationTimestamp: false)
+    {
+    }
+
+    internal PlaybackAvTimingDecisionBoundary(
+        IPlaybackAvTimingPositionSource positionSource,
+        IPlaybackAvTimingGenerationResetter resetter,
+        PlaybackAvTimingTolerances tolerances,
+        long videoGeneration,
+        long audioGeneration,
+        bool anchorFirstPresentationTimestamp)
     {
         ArgumentNullException.ThrowIfNull(positionSource);
         ArgumentNullException.ThrowIfNull(resetter);
@@ -105,6 +121,7 @@ public sealed class PlaybackAvTimingDecisionBoundary : IDisposable
         _tolerances = tolerances;
         _videoGeneration = videoGeneration;
         _audioGeneration = audioGeneration;
+        _anchorFirstPresentationTimestamp = anchorFirstPresentationTimestamp;
     }
 
     public PlaybackAvTimingDecisionSnapshot Snapshot =>
@@ -149,13 +166,20 @@ public sealed class PlaybackAvTimingDecisionBoundary : IDisposable
                 return Decision(PlaybackAvTimingDecisionResult.Cancelled);
             if (read.Result != PlaybackAvTimingPositionResult.Started)
                 return Fault();
-            long deltaTicks;
-            try { deltaTicks = checked(item.PresentationTimestamp.Value.Ticks - read.Position.Ticks); }
-            catch (OverflowException) { return Fault(); }
             if (read.Position < TimeSpan.Zero)
                 return Fault();
             if (_hasPosition && read.Position < _lastPosition)
                 return Fault();
+
+            long deltaTicks;
+            try
+            {
+                deltaTicks = CalculateDeltaTicks(item.PresentationTimestamp.Value, read.Position);
+            }
+            catch (OverflowException)
+            {
+                return Fault();
+            }
             _hasPosition = true;
             _lastPosition = read.Position;
 
@@ -221,6 +245,8 @@ public sealed class PlaybackAvTimingDecisionBoundary : IDisposable
             _videoGeneration = videoGeneration;
             _audioGeneration = audioGeneration;
             _hasPosition = false;
+            _lastPosition = default;
+            ClearPresentationAnchor();
             _state = PlaybackAvTimingDecisionState.Ready;
             return PlaybackAvTimingResetResult.Reset;
         }
@@ -234,6 +260,35 @@ public sealed class PlaybackAvTimingDecisionBoundary : IDisposable
         _gate.Wait();
         try { _state = PlaybackAvTimingDecisionState.Disposed; }
         finally { _gate.Release(); }
+    }
+
+    private long CalculateDeltaTicks(TimeSpan presentationTimestamp, TimeSpan position)
+    {
+        if (!_anchorFirstPresentationTimestamp)
+        {
+            return checked(presentationTimestamp.Ticks - position.Ticks);
+        }
+
+        if (!_hasPresentationAnchor)
+        {
+            _hasPresentationAnchor = true;
+            _presentationAnchorTimestamp = presentationTimestamp;
+            _presentationAnchorPosition = position;
+            return 0;
+        }
+
+        var timestampOffsetTicks = checked(
+            presentationTimestamp.Ticks - _presentationAnchorTimestamp.Ticks);
+        var targetPositionTicks = checked(
+            _presentationAnchorPosition.Ticks + timestampOffsetTicks);
+        return checked(targetPositionTicks - position.Ticks);
+    }
+
+    private void ClearPresentationAnchor()
+    {
+        _hasPresentationAnchor = false;
+        _presentationAnchorTimestamp = default;
+        _presentationAnchorPosition = default;
     }
 
     private static bool IsValid(PlaybackAvTimingItem item) =>
