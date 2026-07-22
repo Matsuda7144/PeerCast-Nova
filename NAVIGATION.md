@@ -1,5 +1,14 @@
 # PeerCast Nova Navigation
 
+## Phase 5 video-gated controlled audio run
+
+A dedicated Windows audio helper now requires an independently `VideoAccepted` external record before native audio activation. It then executes exactly one physical `audio` run, keeps the accepted WASAPI buffer alive for a bounded one-second observation interval, writes one external canonical audio record, and requires `AudioAccepted` single-record preflight. It does not perform paired verification and keeps audible observation separate.
+
+- `docs/adr/ADR-0148-video-gated-controlled-audio-run.md`
+- `docs/reviews/PCN-0156-VIDEO-GATED-CONTROLLED-AUDIO-RUN.md`
+- `tools/Run-ControlledWindowsPhysicalAudio.ps1`
+- `docs/runbooks/0.0.10d-controlled-windows-audio-validation.md`
+
 ## Phase 5 single physical run record preflight
 
 A new verify-only command reads one repository-external canonical physical record through the same bounded UTF-8 reader and submits it to the same independent run-set admission boundary used by paired verification. The dedicated video helper invokes this preflight after a successful physical exit and refuses to continue unless the record is independently `VideoAccepted`. The preflight starts no runner, runtime, fixture, decode, or physical output and never prints the record path.
@@ -59,6 +68,7 @@ Phase 4の明示physical-run compositionに続き、videoとaudioを独立実行
 - duplicate kind、identity mismatch、evidence contradiction、cleanup contradictionはterminal reject
 - 片方だけのrecordではsetを完了せず、他方を待つ
 - single-record preflightは成功recordを同じadmission boundaryで独立受理
+- audio helperは`VideoAccepted`をnative activation前に必須化し、成功audio recordへ`AudioAccepted`を必須化
 - 専用verify modeはbounded external record filesだけを読み、runner／runtime／fixture／physical outputを開始しない
 - verify reportはrecord pathを表示せず、`Physical-Runs-Executed-By-This-Command: False`を明示
 - operatorによるvisible／audible observationはdeterministic admissionとは別のsupporting noteとして扱う
@@ -70,6 +80,10 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 ## 最新の入口
 
+- `docs/adr/ADR-0148-video-gated-controlled-audio-run.md`
+- `docs/reviews/PCN-0156-VIDEO-GATED-CONTROLLED-AUDIO-RUN.md`
+- `tools/Run-ControlledWindowsPhysicalAudio.ps1`
+- `docs/runbooks/0.0.10d-controlled-windows-audio-validation.md`
 - `docs/adr/ADR-0147-single-physical-run-record-preflight.md`
 - `docs/reviews/PCN-0155-SINGLE-PHYSICAL-RUN-RECORD-PREFLIGHT.md`
 - `src/Nova.Cli/PlaybackControlledWindowsPhysicalRunRecordPreflightCommand.cs`
@@ -124,9 +138,9 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 ## 次の作業
 
-**0.0.10d Phase 5 — Execute Controlled Physical Video Revalidation**
+**0.0.10d Phase 5 — Execute Controlled Physical Video, Then Gated Audio**
 
-明示Windows 11 runnerでexact approved runtimeとretained controlled fixtureを使用し、修正後mainからvideo runだけを実行してcanonical recordをrepository外へ保存します。delivery後の有限観察保持中にoperatorがwindowを確認し、physical command成功後のsingle-record preflightが`VideoAccepted`となり、`Video visible: Yes／No`が記録されるまで、audio runとpaired-record verifyを開始しません。
+明示Windows 11 runnerでexact approved runtimeとretained controlled fixtureを使用し、修正後mainからvideo runだけを先に実行します。single-record preflightが`VideoAccepted`となり、`Video visible: Yes／No`が記録された後に限り、gated audio helperでaudio runを1回実行します。audio recordが`AudioAccepted`となり、`Audio audible: Yes／No`が記録されるまでpaired-record verifyを開始しません。
 
 ## 未完了
 
