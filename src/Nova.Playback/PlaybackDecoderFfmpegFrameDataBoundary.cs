@@ -147,6 +147,7 @@ public sealed class PlaybackDecoderFfmpegFrameDataBoundary :
             _metadataBoundary,
             _nativeApi,
             contextLease.CodecId,
+            contextLease.ConfiguredPacketTimeBase,
             consumer);
         var frameResult = _frameBoundary.ReceiveAndProcess(contextLease, adapter);
         if (adapter.Result == PlaybackDecoderFfmpegFrameDataVisitResult.InvalidData)
@@ -183,17 +184,20 @@ public sealed class PlaybackDecoderFfmpegFrameDataBoundary :
         private readonly PlaybackDecoderFfmpegFrameMetadataBoundary _metadataBoundary;
         private readonly IPlaybackDecoderFfmpegFrameDataNativeApi _nativeApi;
         private readonly PlaybackDecoderFfmpegCodecId _codecId;
+        private readonly PlaybackBoundedDemuxTimeBase? _configuredPacketTimeBase;
         private readonly IPlaybackDecoderFfmpegFrameDataConsumer _consumer;
 
         public FrameConsumerAdapter(
             PlaybackDecoderFfmpegFrameMetadataBoundary metadataBoundary,
             IPlaybackDecoderFfmpegFrameDataNativeApi nativeApi,
             PlaybackDecoderFfmpegCodecId codecId,
+            PlaybackBoundedDemuxTimeBase? configuredPacketTimeBase,
             IPlaybackDecoderFfmpegFrameDataConsumer consumer)
         {
             _metadataBoundary = metadataBoundary;
             _nativeApi = nativeApi;
             _codecId = codecId;
+            _configuredPacketTimeBase = configuredPacketTimeBase;
             _consumer = consumer;
         }
 
@@ -203,7 +207,11 @@ public sealed class PlaybackDecoderFfmpegFrameDataBoundary :
 
         public bool Consume(nint frame)
         {
-            if (!_metadataBoundary.TryReadCallbackMetadata(frame, _codecId, out var metadata))
+            if (!_metadataBoundary.TryReadCallbackMetadata(
+                    frame,
+                    _codecId,
+                    _configuredPacketTimeBase,
+                    out var metadata))
             {
                 MetadataInvalid = true;
                 Result = PlaybackDecoderFfmpegFrameDataVisitResult.InvalidData;

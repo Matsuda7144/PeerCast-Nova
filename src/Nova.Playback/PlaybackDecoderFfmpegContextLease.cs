@@ -213,6 +213,7 @@ public sealed class PlaybackDecoderFfmpegContextLease : IDisposable, IAsyncDispo
     private readonly nint _freeContext;
     private nint _context;
     private bool _parametersTransferred;
+    private PlaybackBoundedDemuxTimeBase? _configuredPacketTimeBase;
     private bool _isOpened;
 
     internal PlaybackDecoderFfmpegContextLease(
@@ -262,6 +263,17 @@ public sealed class PlaybackDecoderFfmpegContextLease : IDisposable, IAsyncDispo
             lock (_sync)
             {
                 return _context != 0 && _isOpened;
+            }
+        }
+    }
+
+    internal PlaybackBoundedDemuxTimeBase? ConfiguredPacketTimeBase
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _context != 0 ? _configuredPacketTimeBase : null;
             }
         }
     }
@@ -317,6 +329,23 @@ public sealed class PlaybackDecoderFfmpegContextLease : IDisposable, IAsyncDispo
         }
     }
 
+    internal void MarkPacketTimeBaseConfigured(PlaybackBoundedDemuxTimeBase timeBase)
+    {
+        lock (_sync)
+        {
+            EnsureAvailable();
+            if (!PlaybackBoundedDemuxSession.IsValidTimeBase(timeBase) ||
+                !_parametersTransferred ||
+                _configuredPacketTimeBase is not null ||
+                _isOpened)
+            {
+                throw new InvalidOperationException(
+                    "The packet time base cannot be configured in the current context state.");
+            }
+
+            _configuredPacketTimeBase = timeBase;
+        }
+    }
 
     public void Dispose()
     {
@@ -326,6 +355,7 @@ public sealed class PlaybackDecoderFfmpegContextLease : IDisposable, IAsyncDispo
             context = _context;
             _context = 0;
             _parametersTransferred = false;
+            _configuredPacketTimeBase = null;
             _isOpened = false;
         }
 

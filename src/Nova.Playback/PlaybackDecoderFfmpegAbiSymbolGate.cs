@@ -44,7 +44,7 @@ public sealed class PlaybackDecoderFfmpegAbiSymbolGate
             [
                 "avutil_version", "av_version_info", "av_malloc", "av_mallocz",
                 "av_free", "av_frame_alloc", "av_frame_free",
-                "av_channel_layout_default",
+                "av_channel_layout_default", "av_opt_set_q",
             ]),
         new("swresample-6.dll", "swresample_version", 6,
             ["swresample_version", "swr_alloc", "swr_init", "swr_free"]),

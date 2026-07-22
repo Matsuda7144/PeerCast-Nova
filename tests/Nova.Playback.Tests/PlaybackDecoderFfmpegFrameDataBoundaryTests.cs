@@ -390,6 +390,23 @@ public sealed class PlaybackDecoderFfmpegFrameDataBoundaryTests
         Assert.Equal(0, data.CallCount);
     }
 
+    [Fact]
+    public void ReceiveAndConsume_ConfiguredPacketTimeBaseSurvivesManagedCopyBoundary()
+    {
+        using var owners = new TestOwners(configurePacketTimeBase: true);
+        var consumer = new RecordingConsumer();
+        var metadata = new ConfiguredTimeBaseMetadataNativeApi();
+        var boundary = CreateBoundary(metadata, new ForwardingDataNativeApi(), true);
+
+        var result = boundary.ReceiveAndConsume(owners.Context, consumer);
+
+        Assert.Equal(PlaybackDecoderFfmpegFrameDataResult.Processed, result);
+        var item = Assert.Single(consumer.Metadata);
+        Assert.Equal(TimeSpan.FromMilliseconds(621), item.PresentationTimestamp.Value);
+        Assert.Equal(TimeSpan.FromMilliseconds(621), item.BestEffortTimestamp.Value);
+        Assert.False(item.Duration.IsKnown);
+    }
+
     private static WindowsFfmpeg81FrameDataNativeApi CreateNative(
         IPlaybackDecoderFfmpegFrameMemoryReader memory) => new(memory, true);
 
@@ -503,6 +520,24 @@ public sealed class PlaybackDecoderFfmpegFrameDataBoundaryTests
         }
     }
 
+    private sealed class ForwardingDataNativeApi : IPlaybackDecoderFfmpegFrameDataNativeApi
+    {
+        public PlaybackDecoderFfmpegFrameDataVisitResult ValidateAndConsume(
+            nint frame,
+            PlaybackDecoderFfmpegFrameMetadata metadata,
+            IPlaybackDecoderFfmpegFrameDataConsumer consumer) =>
+            consumer.Consume(metadata, default)
+                ? PlaybackDecoderFfmpegFrameDataVisitResult.Consumed
+                : PlaybackDecoderFfmpegFrameDataVisitResult.ConsumerRejected;
+    }
+
+    private sealed class ConfiguredTimeBaseMetadataNativeApi :
+        IPlaybackDecoderFfmpegFrameMetadataNativeApi
+    {
+        public PlaybackDecoderFfmpegRawFrameMetadata Read(nint frame) =>
+            new(0, 4, 2, 0, 0, 0, 621, 621, 0, 0, 1);
+    }
+
     private sealed class ThrowingDataNativeApi : IPlaybackDecoderFfmpegFrameDataNativeApi
     {
         public PlaybackDecoderFfmpegFrameDataVisitResult ValidateAndConsume(
@@ -535,7 +570,7 @@ public sealed class PlaybackDecoderFfmpegFrameDataBoundaryTests
         private readonly string _directory;
         private readonly VerifiedPlaybackDecoderRuntimeLease _runtime;
 
-        public TestOwners()
+        public TestOwners(bool configurePacketTimeBase = false)
         {
             _directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_directory);
@@ -567,6 +602,11 @@ public sealed class PlaybackDecoderFfmpegFrameDataBoundaryTests
                 (nint)200,
                 (nint)300);
             Context.MarkParametersTransferred();
+            if (configurePacketTimeBase)
+            {
+                Context.MarkPacketTimeBaseConfigured(new(1, 1_000));
+            }
+
             Context.MarkOpened();
         }
 

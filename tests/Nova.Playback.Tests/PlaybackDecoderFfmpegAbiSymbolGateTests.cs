@@ -133,6 +133,19 @@ public sealed class PlaybackDecoderFfmpegAbiSymbolGateTests
     }
 
     [Fact]
+    public void Verify_PacketTimeBasePublicOptionSymbolIsRequiredExactly()
+    {
+        using var runtime = new FakeRuntime();
+        var loader = new FakeLoader { MissingSymbol = "av_opt_set_q" };
+
+        var result = CreateGate(loader).Verify(runtime.Lease);
+
+        Assert.Equal(PlaybackDecoderFfmpegAbiSymbolGateResult.SymbolMissing, result);
+        Assert.Contains("av_opt_set_q", loader.RequestedSymbols);
+        Assert.DoesNotContain("av_opt_set", loader.RequestedSymbols);
+    }
+
+    [Fact]
     public void Verify_VersionMismatchReleasesCurrentAndPriorModulesInReverseOrder()
     {
         using var runtime = new FakeRuntime();
@@ -296,6 +309,8 @@ public sealed class PlaybackDecoderFfmpegAbiSymbolGateTests
 
         public List<nint> FreedModules { get; } = [];
 
+        public List<string> RequestedSymbols { get; } = [];
+
         public nint Load(string verifiedPath, PlaybackDecoderNativeSearchScope searchScope)
         {
             _loadCount++;
@@ -316,6 +331,7 @@ public sealed class PlaybackDecoderFfmpegAbiSymbolGateTests
 
         public nint GetSymbol(nint module, string symbol)
         {
+            RequestedSymbols.Add(symbol);
             if (string.Equals(symbol, MissingSymbol, StringComparison.Ordinal))
             {
                 return 0;

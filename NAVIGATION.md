@@ -1,5 +1,13 @@
 # PeerCast Nova Navigation
 
+## Phase 5 decoded timestamp propagation
+
+The bounded FLV native decoder session now configures the exact parser-provided stream time base through the public FFmpeg `av_opt_set_q` API and the `pkt_timebase` option. Configuration occurs after parameter transfer and before codec open for video and audio independently. When a decoded frame reports an exactly unset `0/positive` raw time base, metadata conversion uses the context lease's retained configured value; a valid raw frame time base remains authoritative and malformed raw values remain fail-closed. No timestamp is synthesized, no retry or fallback path is added, and physical video/audio success remains unclaimed.
+
+- `docs/adr/ADR-0144-explicit-decoder-packet-time-base-propagation.md`
+- `docs/reviews/PCN-0152-DECODED-TIMESTAMP-PROPAGATION.md`
+- `src/Nova.Playback/PlaybackDecoderFfmpegPacketTimeBaseConfiguration.cs`
+
 ## 現在地
 
 **0.0.10d — Controlled Physical Windows Video／Audio Output Validation — Phase 5 Independent Run Record Admission In Progress**

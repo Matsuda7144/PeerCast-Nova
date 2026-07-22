@@ -24,7 +24,10 @@ public sealed class PlaybackBoundedFlvNativeDecoderSessionTests
         Assert.Equal(new PlaybackBoundedDemuxTimeBase(1, 1_000), session.AudioTimeBase);
         Assert.True(binding.IsDisposed);
         Assert.Equal(
-            ["create:H264", "transfer:H264", "open:H264", "create:Aac", "transfer:Aac", "open:Aac"],
+            [
+                "create:H264", "transfer:H264", "time-base:H264:1/1000", "open:H264",
+                "create:Aac", "transfer:Aac", "time-base:Aac:1/1000", "open:Aac",
+            ],
             operations.Calls);
         Assert.False(videoGate.IsDisposed);
         Assert.False(audioGate.IsDisposed);
@@ -34,6 +37,34 @@ public sealed class PlaybackBoundedFlvNativeDecoderSessionTests
         Assert.True(audioGate.IsDisposed);
         Assert.Equal(["audio", "video"], operations.Disposals);
         Assert.False(source.IsDisposed);
+    }
+
+    [Fact]
+    public void Open_VideoTimeBaseFailureConsumesEverythingAndStopsBeforeOpen()
+    {
+        using var source = CreateSession();
+        var binding = CreateBinding(source);
+        var videoGate = new FakeGate("video-gate");
+        var audioGate = new FakeGate("audio-gate");
+        var operations = new FakeOperations
+        {
+            VideoTimeBaseResult =
+                PlaybackDecoderFfmpegPacketTimeBaseConfigurationResult.NativeRejected,
+        };
+
+        var opening = new PlaybackBoundedFlvNativeDecoderSessionFactory(operations)
+            .OpenCore(binding, videoGate, audioGate);
+
+        Assert.Equal(
+            PlaybackBoundedFlvNativeDecoderSessionResult.VideoTimeBaseRejected,
+            opening.Result);
+        Assert.Null(opening.Session);
+        Assert.True(binding.IsDisposed);
+        Assert.True(videoGate.IsDisposed);
+        Assert.True(audioGate.IsDisposed);
+        Assert.Equal(
+            ["create:H264", "transfer:H264", "time-base:H264:1/1000"],
+            operations.Calls);
     }
 
     [Fact]
@@ -85,6 +116,28 @@ public sealed class PlaybackBoundedFlvNativeDecoderSessionTests
     }
 
     [Fact]
+    public void Open_AudioTimeBaseFailureDisposesAudioBeforeVideoAndStopsBeforeOpen()
+    {
+        using var source = CreateSession();
+        var binding = CreateBinding(source);
+        var operations = new FakeOperations
+        {
+            AudioTimeBaseResult =
+                PlaybackDecoderFfmpegPacketTimeBaseConfigurationResult.NativeRejected,
+        };
+
+        var opening = new PlaybackBoundedFlvNativeDecoderSessionFactory(operations)
+            .OpenCore(binding, new FakeGate("video-gate"), new FakeGate("audio-gate"));
+
+        Assert.Equal(
+            PlaybackBoundedFlvNativeDecoderSessionResult.AudioTimeBaseRejected,
+            opening.Result);
+        Assert.Null(opening.Session);
+        Assert.Equal(["audio", "video"], operations.Disposals);
+        Assert.Equal("time-base:Aac:1/1000", operations.Calls[^1]);
+    }
+
+    [Fact]
     public void Open_SourceDisposedBetweenStreamsStopsBeforeAudioCreation()
     {
         var source = CreateSession();
@@ -104,7 +157,9 @@ public sealed class PlaybackBoundedFlvNativeDecoderSessionTests
         Assert.True(binding.IsDisposed);
         Assert.True(videoGate.IsDisposed);
         Assert.True(audioGate.IsDisposed);
-        Assert.Equal(["create:H264", "transfer:H264", "open:H264"], operations.Calls);
+        Assert.Equal(
+            ["create:H264", "transfer:H264", "time-base:H264:1/1000", "open:H264"],
+            operations.Calls);
     }
 
     [Fact]
@@ -235,6 +290,14 @@ public sealed class PlaybackBoundedFlvNativeDecoderSessionTests
         public PlaybackDecoderFfmpegCodecOpenResult AudioOpenResult { get; init; } =
             PlaybackDecoderFfmpegCodecOpenResult.Opened;
 
+        public PlaybackDecoderFfmpegPacketTimeBaseConfigurationResult VideoTimeBaseResult
+        { get; init; } =
+            PlaybackDecoderFfmpegPacketTimeBaseConfigurationResult.Configured;
+
+        public PlaybackDecoderFfmpegPacketTimeBaseConfigurationResult AudioTimeBaseResult
+        { get; init; } =
+            PlaybackDecoderFfmpegPacketTimeBaseConfigurationResult.Configured;
+
         public Action? AfterVideoOpen { get; init; }
 
         public PlaybackBoundedFlvNativeContextCreation CreateContext(
@@ -274,6 +337,17 @@ public sealed class PlaybackBoundedFlvNativeDecoderSessionTests
             }
 
             return AudioOpenResult;
+        }
+
+        public PlaybackDecoderFfmpegPacketTimeBaseConfigurationResult ConfigurePacketTimeBase(
+            IPlaybackBoundedFlvNativeContextOwner context,
+            PlaybackBoundedDemuxTimeBase timeBase)
+        {
+            Calls.Add(
+                $"time-base:{context.CodecId}:{timeBase.Numerator}/{timeBase.Denominator}");
+            return context.CodecId == PlaybackDecoderFfmpegCodecId.H264
+                ? VideoTimeBaseResult
+                : AudioTimeBaseResult;
         }
 
         public void DisposeUnusedGate(object gate)

@@ -5,6 +5,16 @@
 Detailed history through 0.0.8g remains preserved in Git history at commit
 `f078dab5372a45a8c577c1c802a697ab72b45c02` and in milestone ADR/PCN records.
 
+### 0.0.10d Phase 5 - Explicit decoder packet time-base propagation
+
+- Added a fail-closed `av_opt_set_q` boundary that applies the exact bounded FLV stream time base to `AVCodecContext` option `pkt_timebase` after parameter transfer and before codec open.
+- Added `av_opt_set_q` to the reviewed `avutil-60` ABI symbol gate without using private structure offsets.
+- Retained the successfully configured packet time base in the decoder context lease and cleared it during normal or failure cleanup.
+- Used the retained time base only when `AVFrame.time_base` is exactly unset (`0/positive`); a valid raw frame time base remains authoritative and malformed raw values remain rejected.
+- Preserved raw PTS, best-effort timestamp, duration, generation, sequence, discontinuity, frame ownership, and existing scheduler admission semantics without timestamp synthesis or retry.
+- Added focused cross-platform tests for the public option call, state and cleanup rules, strict per-stream open order, raw/effective metadata conversion, managed-copy propagation, and ABI symbol admission.
+- Recorded the boundary in ADR-0144 and PCN-0152. This change does not claim a successful physical video or audio run, operator-visible video, operator-audible audio, or completion of 0.0.10d.
+
 ### 0.0.10a - Approved FFmpeg Candidate Manifest Refresh
 
 - Replaced the active built-in identity with `btbn.ffmpeg.20260721.win64.lgpl-shared`, fixed to the 70,510,808-byte archive and SHA-256 `50764B52D38CB0BAF8AF938C0E4CA886D2C6753B520B2C319B532ED5C17E7CBF`.

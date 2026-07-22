@@ -110,6 +110,88 @@ public sealed class PlaybackDecoderFfmpegFrameMetadataTests
         Assert.Equal(PlaybackDecoderFfmpegFrameTime.Unknown, metadata.Duration);
     }
 
+    [Theory]
+    [InlineData(PlaybackDecoderFfmpegCodecId.H264)]
+    [InlineData(PlaybackDecoderFfmpegCodecId.Aac)]
+    public void ReceiveAndExtract_UnsetRawTimeBaseUsesConfiguredPacketTimeBase(
+        PlaybackDecoderFfmpegCodecId codecId)
+    {
+        using var owners = new TestOwners(
+            codecId,
+            opened: true,
+            configuredPacketTimeBase: new(1, 1_000));
+        var consumer = new RecordingConsumer();
+        var source = codecId == PlaybackDecoderFfmpegCodecId.H264 ? ValidVideo : ValidAudio;
+        var raw = source with
+        {
+            PresentationTimestamp = 621,
+            BestEffortTimestamp = 621,
+            Duration = 0,
+            TimeBaseNumerator = 0,
+            TimeBaseDenominator = 1,
+        };
+
+        Assert.Equal(
+            PlaybackDecoderFfmpegFrameMetadataResult.Extracted,
+            CreateBoundary(new FakeMetadataNativeApi(raw))
+                .ReceiveAndExtract(owners.Context, consumer));
+        var metadata = Assert.Single(consumer.Items);
+        Assert.Equal(TimeSpan.FromMilliseconds(621), metadata.PresentationTimestamp.Value);
+        Assert.Equal(TimeSpan.FromMilliseconds(621), metadata.BestEffortTimestamp.Value);
+        Assert.False(metadata.Duration.IsKnown);
+    }
+
+    [Fact]
+    public void ReceiveAndExtract_ValidRawTimeBaseRemainsAuthoritative()
+    {
+        using var owners = new TestOwners(
+            PlaybackDecoderFfmpegCodecId.H264,
+            opened: true,
+            configuredPacketTimeBase: new(1, 1_000));
+        var consumer = new RecordingConsumer();
+        var raw = ValidVideo with
+        {
+            PresentationTimestamp = 621,
+            BestEffortTimestamp = 621,
+            Duration = 1,
+            TimeBaseNumerator = 1,
+            TimeBaseDenominator = 100,
+        };
+
+        Assert.Equal(
+            PlaybackDecoderFfmpegFrameMetadataResult.Extracted,
+            CreateBoundary(new FakeMetadataNativeApi(raw))
+                .ReceiveAndExtract(owners.Context, consumer));
+        var metadata = Assert.Single(consumer.Items);
+        Assert.Equal(TimeSpan.FromMilliseconds(6_210), metadata.PresentationTimestamp.Value);
+        Assert.Equal(TimeSpan.FromMilliseconds(10), metadata.Duration.Value);
+    }
+
+    [Theory]
+    [InlineData(-1, 1)]
+    [InlineData(0, 0)]
+    [InlineData(0, -1)]
+    public void ReceiveAndExtract_InvalidRawTimeBaseNeverFallsBack(
+        int numerator,
+        int denominator)
+    {
+        using var owners = new TestOwners(
+            PlaybackDecoderFfmpegCodecId.H264,
+            opened: true,
+            configuredPacketTimeBase: new(1, 1_000));
+        var raw = ValidVideo with
+        {
+            TimeBaseNumerator = numerator,
+            TimeBaseDenominator = denominator,
+        };
+
+        var result = CreateBoundary(new FakeMetadataNativeApi(raw)).ReceiveAndExtract(
+            owners.Context,
+            new RecordingConsumer());
+
+        Assert.Equal(PlaybackDecoderFfmpegFrameMetadataResult.InvalidMetadata, result);
+    }
+
     [Fact]
     public void ReceiveAndExtract_FfmpegUnknownTimestampsAndZeroDurationAreAllowed()
     {
@@ -335,7 +417,8 @@ public sealed class PlaybackDecoderFfmpegFrameMetadataTests
         public TestOwners(
             PlaybackDecoderFfmpegCodecId codecId,
             bool opened,
-            string? omitSymbol = null)
+            string? omitSymbol = null,
+            PlaybackBoundedDemuxTimeBase? configuredPacketTimeBase = null)
         {
             _directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_directory);
@@ -372,6 +455,11 @@ public sealed class PlaybackDecoderFfmpegFrameMetadataTests
             if (opened)
             {
                 Context.MarkParametersTransferred();
+                if (configuredPacketTimeBase is { } timeBase)
+                {
+                    Context.MarkPacketTimeBaseConfigured(timeBase);
+                }
+
                 Context.MarkOpened();
             }
         }

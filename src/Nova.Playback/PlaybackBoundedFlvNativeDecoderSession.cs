@@ -7,9 +7,11 @@ public enum PlaybackBoundedFlvNativeDecoderSessionResult
     SourceDisposed,
     VideoContextRejected,
     VideoTransferRejected,
+    VideoTimeBaseRejected,
     VideoOpenRejected,
     AudioContextRejected,
     AudioTransferRejected,
+    AudioTimeBaseRejected,
     AudioOpenRejected,
     Faulted,
 }
@@ -45,6 +47,10 @@ internal interface IPlaybackBoundedFlvNativeDecoderSessionOperations
         IPlaybackBoundedFlvNativeContextOwner context,
         PlaybackDecoderFfmpegCodecParametersLease parameters);
 
+    PlaybackDecoderFfmpegPacketTimeBaseConfigurationResult ConfigurePacketTimeBase(
+        IPlaybackBoundedFlvNativeContextOwner context,
+        PlaybackBoundedDemuxTimeBase timeBase);
+
     PlaybackDecoderFfmpegCodecOpenResult Open(
         IPlaybackBoundedFlvNativeContextOwner context);
 
@@ -56,6 +62,8 @@ internal sealed class PlaybackBoundedFlvNativeDecoderSessionOperations :
 {
     private readonly PlaybackDecoderFfmpegContextLeaseFactory _contextFactory = new();
     private readonly PlaybackDecoderFfmpegParameterTransfer _parameterTransfer = new();
+    private readonly PlaybackDecoderFfmpegPacketTimeBaseConfigurationBoundary
+        _packetTimeBaseConfiguration = new();
     private readonly PlaybackDecoderFfmpegCodecOpen _codecOpen = new();
 
     public PlaybackBoundedFlvNativeContextCreation CreateContext(
@@ -87,6 +95,13 @@ internal sealed class PlaybackBoundedFlvNativeDecoderSessionOperations :
         context.Context is { } lease
             ? _codecOpen.Open(lease)
             : PlaybackDecoderFfmpegCodecOpenResult.ContextUnavailable;
+
+    public PlaybackDecoderFfmpegPacketTimeBaseConfigurationResult ConfigurePacketTimeBase(
+        IPlaybackBoundedFlvNativeContextOwner context,
+        PlaybackBoundedDemuxTimeBase timeBase) =>
+        context.Context is { } lease
+            ? _packetTimeBaseConfiguration.Configure(lease, timeBase)
+            : PlaybackDecoderFfmpegPacketTimeBaseConfigurationResult.ContextUnavailable;
 
     public void DisposeUnusedGate(object gate)
     {
@@ -252,6 +267,12 @@ public sealed class PlaybackBoundedFlvNativeDecoderSessionFactory
                 return Fail(PlaybackBoundedFlvNativeDecoderSessionResult.VideoTransferRejected);
             }
 
+            if (_operations.ConfigurePacketTimeBase(video!, videoTimeBase) !=
+                PlaybackDecoderFfmpegPacketTimeBaseConfigurationResult.Configured)
+            {
+                return Fail(PlaybackBoundedFlvNativeDecoderSessionResult.VideoTimeBaseRejected);
+            }
+
             if (_operations.Open(video!) != PlaybackDecoderFfmpegCodecOpenResult.Opened)
             {
                 return Fail(PlaybackBoundedFlvNativeDecoderSessionResult.VideoOpenRejected);
@@ -275,6 +296,12 @@ public sealed class PlaybackBoundedFlvNativeDecoderSessionFactory
                 PlaybackDecoderFfmpegParameterTransferResult.Applied)
             {
                 return Fail(PlaybackBoundedFlvNativeDecoderSessionResult.AudioTransferRejected);
+            }
+
+            if (_operations.ConfigurePacketTimeBase(audio!, audioTimeBase) !=
+                PlaybackDecoderFfmpegPacketTimeBaseConfigurationResult.Configured)
+            {
+                return Fail(PlaybackBoundedFlvNativeDecoderSessionResult.AudioTimeBaseRejected);
             }
 
             if (_operations.Open(audio!) != PlaybackDecoderFfmpegCodecOpenResult.Opened)

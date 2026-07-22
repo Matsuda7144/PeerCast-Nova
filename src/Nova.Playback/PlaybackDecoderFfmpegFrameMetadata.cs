@@ -149,7 +149,11 @@ public sealed class PlaybackDecoderFfmpegFrameMetadataBoundary
             return PlaybackDecoderFfmpegFrameMetadataResult.Unsupported;
         }
 
-        var adapter = new MetadataConsumerAdapter(_nativeApi, contextLease.CodecId, consumer);
+        var adapter = new MetadataConsumerAdapter(
+            _nativeApi,
+            contextLease.CodecId,
+            contextLease.ConfiguredPacketTimeBase,
+            consumer);
         var frameResult = _frameBoundary.ReceiveAndProcess(contextLease, adapter);
         if (adapter.ValidationFailed)
         {
@@ -181,25 +185,29 @@ public sealed class PlaybackDecoderFfmpegFrameMetadataBoundary
     internal bool TryReadCallbackMetadata(
         nint frame,
         PlaybackDecoderFfmpegCodecId codecId,
+        PlaybackBoundedDemuxTimeBase? configuredPacketTimeBase,
         out PlaybackDecoderFfmpegFrameMetadata metadata)
     {
         var raw = _nativeApi.Read(frame);
-        return TryCreate(codecId, raw, out metadata);
+        return TryCreate(codecId, raw, configuredPacketTimeBase, out metadata);
     }
 
     private sealed class MetadataConsumerAdapter : IPlaybackDecoderFfmpegNativeFrameConsumer
     {
         private readonly IPlaybackDecoderFfmpegFrameMetadataNativeApi _nativeApi;
         private readonly PlaybackDecoderFfmpegCodecId _codecId;
+        private readonly PlaybackBoundedDemuxTimeBase? _configuredPacketTimeBase;
         private readonly IPlaybackDecoderFfmpegFrameMetadataConsumer _consumer;
 
         public MetadataConsumerAdapter(
             IPlaybackDecoderFfmpegFrameMetadataNativeApi nativeApi,
             PlaybackDecoderFfmpegCodecId codecId,
+            PlaybackBoundedDemuxTimeBase? configuredPacketTimeBase,
             IPlaybackDecoderFfmpegFrameMetadataConsumer consumer)
         {
             _nativeApi = nativeApi;
             _codecId = codecId;
+            _configuredPacketTimeBase = configuredPacketTimeBase;
             _consumer = consumer;
         }
 
@@ -208,7 +216,7 @@ public sealed class PlaybackDecoderFfmpegFrameMetadataBoundary
         public bool Consume(nint frame)
         {
             var raw = _nativeApi.Read(frame);
-            if (!TryCreate(_codecId, raw, out var metadata))
+            if (!TryCreate(_codecId, raw, _configuredPacketTimeBase, out var metadata))
             {
                 ValidationFailed = true;
                 return false;
@@ -221,15 +229,39 @@ public sealed class PlaybackDecoderFfmpegFrameMetadataBoundary
     private static bool TryCreate(
         PlaybackDecoderFfmpegCodecId codecId,
         PlaybackDecoderFfmpegRawFrameMetadata raw,
+        PlaybackBoundedDemuxTimeBase? configuredPacketTimeBase,
         out PlaybackDecoderFfmpegFrameMetadata metadata)
     {
         metadata = default;
         if (raw.Duration < 0 ||
             raw.TimeBaseNumerator < 0 ||
-            raw.TimeBaseDenominator <= 0 ||
-            !TryConvertTime(raw.PresentationTimestamp, raw, false, out var timestamp) ||
-            !TryConvertTime(raw.BestEffortTimestamp, raw, false, out var bestEffortTimestamp) ||
-            !TryConvertTime(raw.Duration, raw, true, out var duration))
+            raw.TimeBaseDenominator <= 0)
+        {
+            return false;
+        }
+
+        var effective = raw;
+        if (raw.TimeBaseNumerator == 0 && configuredPacketTimeBase is { } configured)
+        {
+            if (!PlaybackBoundedDemuxSession.IsValidTimeBase(configured))
+            {
+                return false;
+            }
+
+            effective = raw with
+            {
+                TimeBaseNumerator = configured.Numerator,
+                TimeBaseDenominator = configured.Denominator,
+            };
+        }
+
+        if (!TryConvertTime(raw.PresentationTimestamp, effective, false, out var timestamp) ||
+            !TryConvertTime(
+                raw.BestEffortTimestamp,
+                effective,
+                false,
+                out var bestEffortTimestamp) ||
+            !TryConvertTime(raw.Duration, effective, true, out var duration))
         {
             return false;
         }
