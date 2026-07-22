@@ -13,6 +13,19 @@ try
             args,
             argument => string.Equals(
                 argument,
+                PlaybackControlledWindowsKnownPatternProbeCommand.Argument,
+                StringComparison.OrdinalIgnoreCase)))
+    {
+        var probe = await PlaybackControlledWindowsKnownPatternProbeCommand.RunAsync(
+            args,
+            Console.Out,
+            cancellationSource.Token);
+        Environment.ExitCode = probe.ExitCode;
+    }
+    else if (Array.Exists(
+            args,
+            argument => string.Equals(
+                argument,
                 PlaybackControlledWindowsPhysicalRunRecordPreflightCommand.Argument,
                 StringComparison.OrdinalIgnoreCase)))
     {
