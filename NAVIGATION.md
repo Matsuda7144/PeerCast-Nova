@@ -2,21 +2,23 @@
 
 ## 現在地
 
-**0.0.10d — Controlled Physical Windows Video／Audio Output Validation — Phase 2 Counter Plumbing In Progress**
+**0.0.10d — Controlled Physical Windows Video／Audio Output Validation — Phase 3 Runner Harness In Progress**
 
-Phase 1のone-shot admission gateへ、既存のsystem Windows output processorからsanitized deterministic counterを渡す経路を追加しました。production buffer snapshotにnative evidenceを載せ、同じPhase 1 gateへ変換するadapterを実装しています。実機runはまだ実行していません。
+application-owned real window／message loop／owner-thread dispatcherを有限に提供するWindows 11 runner harnessを`Nova.Cli`へ追加しました。`Nova.Playback`はdispatcherとwindow tokenを借用するだけで、threadやwindowを所有しません。実機D3D11／WASAPI runはまだ実行していません。
 
-- supported Windowsのproduction processorだけを`SystemWindows` provenanceで包む
-- injected processorを自動的にsystem provenanceへ昇格させない
-- videoはattempt、present acknowledgement、accepted bytes、`WouldBlock`、resize、device lossを記録
-- audioはattempt、write acknowledgement、accepted frames／bytes、`WouldBlock`、first start、device lossを記録
-- first successful configurationとgenerationを固定し、後続矛盾をlatch
-- counter overflowをlatchし、native result自体は変更しない
-- additiveな`PlaybackWindowsOutputBufferSnapshot.NativeEvidence`で既存lifecycleへ接続
-- native generation／buffer generation／retained `WouldBlock`の矛盾をcapture adapterで拒否
-- adapterは必ずPhase 1 `PlaybackControlledWindowsOutputEvidenceBoundary`を通す
-- native ownership、scheduler ownership、reset、resize、device-loss、cleanup順序は変更しない
-- Phase 2はcounter plumbingのみでphysical D3D11／WASAPI実行を主張しない
+- `Nova.Cli`が専用controlled-run thread、visible Win32 window、message loopを所有
+- supported production pathはWindows 11以降だけを受理
+- client size、title、pending上限をthread作成前にfail-closed検証
+- application dispatcherはpending operation数を1〜64の固定上限で管理
+- 上限超過は即時`Faulted`、hidden retry／delay／resubmitなし
+- pre-cancelled operationは保持・実行せず`Cancelled`
+- accepted operationはowner threadで直列実行
+- owner-thread nested invocationはself-deadlock回避のためinline実行
+- stop開始時にqueued operationを`Shutdown`でsettleし、新規受付を閉じる
+- native window closeでもmessage loopを終了し、後続受付を閉じる
+- snapshotはwindow token、owner managed thread ID、pending数、sanitized counterだけを保持
+- runtime path、device identifier、media bytes、native output resourceをrunner snapshotへ含めない
+- Linux CIはfake native pumpだけを使い、User32／D3D11／WASAPI実行を主張しない
 
 ## CI
 
@@ -24,6 +26,11 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 ## 最新の入口
 
+- `docs/adr/ADR-0141-application-owned-windows-physical-runner-harness.md`
+- `docs/reviews/PCN-0149-APPLICATION-OWNED-WINDOWS-PHYSICAL-RUNNER-HARNESS.md`
+- `src/Nova.Cli/PlaybackWindowsPhysicalRunnerHost.cs`
+- `src/Nova.Cli/SystemPlaybackWindowsPhysicalRunnerNative.cs`
+- `tests/Nova.Cli.Tests/PlaybackWindowsPhysicalRunnerHostTests.cs`
 - `docs/adr/ADR-0140-system-native-windows-output-evidence-capture.md`
 - `docs/reviews/PCN-0148-SYSTEM-NATIVE-WINDOWS-OUTPUT-EVIDENCE-CAPTURE.md`
 - `src/Nova.Playback/PlaybackWindowsOutputNativeEvidenceCapture.cs`
@@ -42,11 +49,6 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 - `src/Nova.Playback/PlaybackWindowsOutputBufferProcessingBoundary.cs`
 - `src/Nova.Playback/PlaybackGenerationMatchedSchedulerDeliveryBoundary.cs`
 - `src/Nova.Playback/PlaybackWindowsOutputDispatcher.cs`
-- `src/Nova.Playback/PlaybackDecoderFfmpegFrameDataBoundary.cs`
-- `src/Nova.Playback/PlaybackDecoderFfmpegManagedFrameCopy.cs`
-- `docs/adr/ADR-0137-approved-ffmpeg-candidate-manifest-refresh.md`
-- `docs/reviews/PCN-0145-APPROVED-FFMPEG-CANDIDATE-MANIFEST-REFRESH.md`
-- `THIRD-PARTY-LICENSES/FFmpeg/PROVENANCE.md`
 
 ## 進捗記録の規律
 
@@ -60,18 +62,16 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 ## 次の作業
 
-**0.0.10d Phase 3 — Explicit Windows Physical Runner Harness**
+**0.0.10d Phase 4 — Explicit Physical Run Composition**
 
-application-owned real window／message loop／owner-thread dispatcherを持つ有限runnerを明示Windows 11環境向けに用意し、exact approved runtimeとcontrolled fixtureを使う独立video／audio runを実行します。pre-cleanup native evidence snapshot、caller-visible delivery counters、production-first cleanup証跡をPhase 1 gateへ提出し、accepted recordが得られた場合だけphysical validation完了を記録します。
+runner harness、approved external-runtime lifecycle、exact runtime manifest、controlled fixture、Phase 2 native counter、Phase 1 evidence gateを一つの明示command／entrypointへ有限compositionします。videoとaudioは独立runとし、evidence captureはoutput cleanup前、cleanupはproduction-firstで行います。accepted `SystemWindows` recordが得られるまでphysical validation完了を記録しません。
 
 ## 未完了
 
-- explicit Windows physical runner harness
+- explicit Windows physical run command／entrypoint
 - controlled physical Windows video output validation
 - controlled physical Windows audio output validation
 - combined controlled audible／visible playback validation
-- Windows application window／message loop implementation
-- application dispatcher implementation
 - GUI legal／about surface
 - MP4／fragmented MP4 parser
 - discontinuity-time `avcodec_flush_buffers` semantics
