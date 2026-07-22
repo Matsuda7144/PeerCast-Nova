@@ -504,7 +504,8 @@ internal sealed class SystemPlaybackWindowsOutputTextureCopyProbeCalls :
         void GSSetShader(); void IASetPrimitiveTopology(); void VSSetShaderResources();
         void VSSetSamplers(); void Begin(); void End(); void GetData(); void SetPredication();
         void GSSetShaderResources(); void GSSetSamplers(); void OMSetRenderTargets();
-        void OMSetRenderTargetsAndUnorderedAccessViews(); void SOSetTargets(); void DrawAuto();
+        void OMSetRenderTargetsAndUnorderedAccessViews(); void OMSetBlendState();
+        void OMSetDepthStencilState(); void SOSetTargets(); void DrawAuto();
         void DrawIndexedInstancedIndirect(); void DrawInstancedIndirect(); void Dispatch();
         void DispatchIndirect(); void RSSetState(); void RSSetViewports(); void RSSetScissorRects();
         void CopySubresourceRegion();

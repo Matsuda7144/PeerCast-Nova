@@ -354,8 +354,12 @@ internal interface IPlaybackWindowsOutputNativeBufferProcessor
 internal sealed class UnsupportedPlaybackWindowsOutputNativeBufferProcessor :
     IPlaybackWindowsOutputNativeBufferProcessor
 {
-    public PlaybackWindowsOutputNativeBufferResult ProcessVideo(IDisposable borrowedResource, PlaybackWindowsVideoFrameBuffer frame) => PlaybackWindowsOutputNativeBufferResult.Failure;
-    public PlaybackWindowsOutputNativeBufferResult ProcessAudio(IDisposable borrowedResource, PlaybackWindowsAudioSampleBuffer samples, bool startStream) => PlaybackWindowsOutputNativeBufferResult.Failure;
+    public PlaybackWindowsOutputNativeBufferResult ProcessVideo(
+        IDisposable borrowedResource, PlaybackWindowsVideoFrameBuffer frame) =>
+        PlaybackWindowsOutputNativeBufferResult.Failure;
+    public PlaybackWindowsOutputNativeBufferResult ProcessAudio(
+        IDisposable borrowedResource, PlaybackWindowsAudioSampleBuffer samples, bool startStream) =>
+        PlaybackWindowsOutputNativeBufferResult.Failure;
     public void ResetVideo(IDisposable borrowedResource) { }
     public void ResetAudio(IDisposable borrowedResource) { }
 }
@@ -529,17 +533,23 @@ internal sealed class SystemPlaybackWindowsOutputNativeBufferCalls :
      InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     private interface ID3D11DeviceContext
     {
-        void GetDevice(out nint device); void GetPrivateData(); void SetPrivateData(); void SetPrivateDataInterface();
-        void VSSetConstantBuffers(); void PSSetShaderResources(); void PSSetShader(); void PSSetSamplers(); void VSSetShader();
-        void DrawIndexed(); void Draw(); void Map(); void Unmap(); void PSSetConstantBuffers(); void IASetInputLayout();
-        void IASetVertexBuffers(); void IASetIndexBuffer(); void DrawIndexedInstanced(); void DrawInstanced();
-        void GSSetConstantBuffers(); void GSSetShader(); void IASetPrimitiveTopology(); void VSSetShaderResources();
-        void VSSetSamplers(); void Begin(); void End(); void GetData(); void SetPredication(); void GSSetShaderResources();
-        void GSSetSamplers();
+        void GetDevice(out nint device); void GetPrivateData(); void SetPrivateData();
+        void SetPrivateDataInterface(); void VSSetConstantBuffers(); void PSSetShaderResources();
+        void PSSetShader(); void PSSetSamplers(); void VSSetShader(); void DrawIndexed();
+        void Draw(); void Map(); void Unmap(); void PSSetConstantBuffers();
+        void IASetInputLayout(); void IASetVertexBuffers(); void IASetIndexBuffer();
+        void DrawIndexedInstanced(); void DrawInstanced(); void GSSetConstantBuffers();
+        void GSSetShader(); void IASetPrimitiveTopology(); void VSSetShaderResources();
+        void VSSetSamplers(); void Begin(); void End(); void GetData(); void SetPredication();
+        void GSSetShaderResources(); void GSSetSamplers();
+        [PreserveSig]
         void OMSetRenderTargets(uint count, ref nint renderTargetViews, nint depthStencilView);
-        void OMSetRenderTargetsAndUnorderedAccessViews(); void SOSetTargets(); void DrawAuto();
-        void DrawIndexedInstancedIndirect(); void DrawInstancedIndirect(); void Dispatch(); void DispatchIndirect();
-        void RSSetState(); void RSSetViewports(); void RSSetScissorRects(); void CopySubresourceRegion(); void CopyResource();
+        void OMSetRenderTargetsAndUnorderedAccessViews(); void OMSetBlendState();
+        void OMSetDepthStencilState(); void SOSetTargets(); void DrawAuto();
+        void DrawIndexedInstancedIndirect(); void DrawInstancedIndirect(); void Dispatch();
+        void DispatchIndirect(); void RSSetState(); void RSSetViewports(); void RSSetScissorRects();
+        void CopySubresourceRegion(); void CopyResource();
+        [PreserveSig]
         void UpdateSubresource(nint destination, uint subresource, nint box,
             nint source, uint rowPitch, uint depthPitch);
     }

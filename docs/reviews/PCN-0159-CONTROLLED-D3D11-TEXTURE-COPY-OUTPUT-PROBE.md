@@ -2,7 +2,7 @@
 
 ## Scope
 
-Validate a diagnostic comparison path for the 0.0.10d Phase 5 black-output boundary without changing production playback.
+Validate a diagnostic comparison path for the 0.0.10d Phase 5 black-output boundary and correct the shared D3D11 device-context COM ABI mapping proven defective by the physical probe.
 
 ## Required behavior
 
@@ -16,9 +16,28 @@ Validate a diagnostic comparison path for the 0.0.10d Phase 5 black-output bound
 
 ## COM ABI requirement
 
-`ID3D11DeviceContext.CopyResource` must retain the exact native `void` return contract with `PreserveSig` and two pointer-sized resource arguments. The first physical run demonstrated that an implicitly HRESULT-translated declaration is not an acceptable diagnostic boundary: it terminated with access violation before a canonical record could be emitted.
+Both private `ID3D11DeviceContext` declarations must preserve the official method order through the invoked upload methods. The required critical sequence is:
 
-Reflection coverage must fail if the return type, `PreserveSig` attribute, or parameter types change.
+1. `OMSetRenderTargets`;
+2. `OMSetRenderTargetsAndUnorderedAccessViews`;
+3. `OMSetBlendState`;
+4. `OMSetDepthStencilState`;
+5. `SOSetTargets`;
+6. `DrawAuto`;
+7. `DrawIndexedInstancedIndirect`;
+8. `DrawInstancedIndirect`;
+9. `Dispatch`;
+10. `DispatchIndirect`;
+11. `RSSetState`;
+12. `RSSetViewports`;
+13. `RSSetScissorRects`;
+14. `CopySubresourceRegion`;
+15. `CopyResource`;
+16. production only: `UpdateSubresource`.
+
+The two physical texture-copy attempts demonstrated that `PreserveSig` alone cannot repair a shifted vtable. The missing `OMSetBlendState` and `OMSetDepthStencilState` slots caused the managed `CopyResource` declaration to invoke `RSSetScissorRects` and caused the production `UpdateSubresource` declaration to invoke `CopySubresourceRegion`.
+
+Reflection coverage must fail if either declaration loses the critical sequence, if probe `CopyResource` loses its native `void`／two-pointer contract, or if production `UpdateSubresource` and `OMSetRenderTargets` lose their preserved native signatures.
 
 ## Rejection requirements
 
