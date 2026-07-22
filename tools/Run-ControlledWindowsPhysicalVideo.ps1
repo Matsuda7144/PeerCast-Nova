@@ -23,7 +23,10 @@ param(
     [int]$MaximumDeliveryOperations = 128,
 
     [ValidateRange(1, 1048576)]
-    [int]$FixturePacketBytes = 65536
+    [int]$FixturePacketBytes = 65536,
+
+    [ValidateRange(0, 30000)]
+    [int]$ObservationHoldMilliseconds = 3000
 )
 
 Set-StrictMode -Version Latest
@@ -153,7 +156,8 @@ try {
             --output-kind video `
             --max-decode-operations $MaximumDecodeOperations `
             --max-delivery-operations $MaximumDeliveryOperations `
-            --fixture-packet-bytes $FixturePacketBytes > $temporaryRecord
+            --fixture-packet-bytes $FixturePacketBytes `
+            --observation-hold-ms $ObservationHoldMilliseconds > $temporaryRecord
         $runExitCode = $LASTEXITCODE
 
         $recordLines = @(Get-Content -LiteralPath $temporaryRecord)
@@ -184,6 +188,7 @@ try {
 
     $recordLines | ForEach-Object { Write-Output $_ }
     Write-Host "Validated commit: $head"
+    Write-Host "Observation hold: $ObservationHoldMilliseconds ms"
     Write-Host 'Operator observation required: Video visible: Yes / No'
     $finalExitCode = $runExitCode
 }

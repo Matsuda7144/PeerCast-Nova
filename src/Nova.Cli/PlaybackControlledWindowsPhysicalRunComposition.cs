@@ -10,6 +10,7 @@ public enum PlaybackControlledWindowsPhysicalRunState
     InitializingLifecycle,
     ReplayingFixture,
     Decoding,
+    HoldingObservation,
     CapturingEvidence,
     CleaningUp,
     Completed,
@@ -36,6 +37,8 @@ public enum PlaybackControlledWindowsPhysicalRunResult
 
 public sealed record PlaybackControlledWindowsPhysicalRunOptions
 {
+    public static readonly TimeSpan MaximumObservationHoldDuration = TimeSpan.FromSeconds(30);
+
     public PlaybackControlledWindowsOutputValidationKind Kind { get; init; }
     public string RuntimeDirectory { get; init; } = string.Empty;
     public string FixturePath { get; init; } = string.Empty;
@@ -44,6 +47,7 @@ public sealed record PlaybackControlledWindowsPhysicalRunOptions
     public int PacketPayloadBytes { get; init; } = 64 * 1024;
     public int MaximumDecodeOperations { get; init; } = 128;
     public int MaximumDeliveryOperations { get; init; } = 128;
+    public TimeSpan ObservationHoldDuration { get; init; }
     public TimeSpan AudioBufferDuration { get; init; } = TimeSpan.FromMilliseconds(100);
     public PlaybackWindowsPhysicalRunnerOptions Runner { get; init; } = new();
 }
@@ -187,6 +191,13 @@ public sealed class PlaybackControlledWindowsPhysicalRunComposition : IAsyncDisp
             var delivery = await RunFiniteDecodeAsync(cancellationToken).ConfigureAwait(false);
             if (delivery != PlaybackControlledWindowsPhysicalRunResult.Completed)
                 return Terminal(delivery);
+
+            if (_options.ObservationHoldDuration > TimeSpan.Zero)
+            {
+                SetState(PlaybackControlledWindowsPhysicalRunState.HoldingObservation);
+                await Task.Delay(_options.ObservationHoldDuration, cancellationToken)
+                    .ConfigureAwait(false);
+            }
 
             SetState(PlaybackControlledWindowsPhysicalRunState.CapturingEvidence);
             var preCleanup = _operations.Snapshot;
@@ -388,6 +399,9 @@ public sealed class PlaybackControlledWindowsPhysicalRunComposition : IAsyncDisp
         options.PacketPayloadBytes <= options.MaximumFixtureBytes &&
         options.MaximumDecodeOperations is >= 1 and <= 4096 &&
         options.MaximumDeliveryOperations is >= 1 and <= 4096 &&
+        options.ObservationHoldDuration >= TimeSpan.Zero &&
+        options.ObservationHoldDuration <=
+            PlaybackControlledWindowsPhysicalRunOptions.MaximumObservationHoldDuration &&
         options.AudioBufferDuration >= TimeSpan.FromMilliseconds(1) &&
         options.AudioBufferDuration <=
             PlaybackWindowsOutputStreamInitializationBoundary.MaximumAudioBufferDuration &&

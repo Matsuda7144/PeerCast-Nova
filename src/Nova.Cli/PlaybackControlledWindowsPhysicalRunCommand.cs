@@ -14,6 +14,7 @@ public readonly record struct PlaybackControlledWindowsPhysicalRunCommandResult(
 public static class PlaybackControlledWindowsPhysicalRunCommand
 {
     public const string Argument = "--controlled-windows-physical-run";
+    private const int MaximumObservationHoldMilliseconds = 30_000;
 
     public static async ValueTask<PlaybackControlledWindowsPhysicalRunCommandResult> RunAsync(
         string[] arguments,
@@ -56,7 +57,9 @@ public static class PlaybackControlledWindowsPhysicalRunCommand
             !TryParseBounded(arguments, "--max-delivery-operations", 128, 1, 4096,
                 out var maximumDelivery) ||
             !TryParseBounded(arguments, "--fixture-packet-bytes", 64 * 1024, 1,
-                1024 * 1024, out var packetBytes))
+                1024 * 1024, out var packetBytes) ||
+            !TryParseBounded(arguments, "--observation-hold-ms", 0, 0,
+                MaximumObservationHoldMilliseconds, out var observationHoldMilliseconds))
         {
             return false;
         }
@@ -70,6 +73,7 @@ public static class PlaybackControlledWindowsPhysicalRunCommand
             MaximumDecodeOperations = maximumDecode,
             MaximumDeliveryOperations = maximumDelivery,
             PacketPayloadBytes = packetBytes,
+            ObservationHoldDuration = TimeSpan.FromMilliseconds(observationHoldMilliseconds),
         };
         return true;
     }

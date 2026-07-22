@@ -46,4 +46,31 @@ public sealed class PlaybackControlledWindowsPhysicalRunCommandTests
             PlaybackControlledWindowsPhysicalRunResult.InvalidConfiguration,
             result.Result);
     }
+
+    [Theory]
+    [InlineData("-1")]
+    [InlineData("30001")]
+    [InlineData("not-a-number")]
+    public async Task Invalid_observation_hold_fails_before_composition_start(string hold)
+    {
+        using var output = new StringWriter();
+        string[] arguments =
+        [
+            PlaybackControlledWindowsPhysicalRunCommand.Argument,
+            "--runtime-directory", "C:\\controlled-runtime",
+            "--controlled-fixture", "C:\\controlled.flv",
+            "--fixture-sha256", new string('A', 64),
+            "--output-kind", "video",
+            "--observation-hold-ms", hold,
+        ];
+
+        var result = await PlaybackControlledWindowsPhysicalRunCommand.RunAsync(
+            arguments,
+            output);
+
+        Assert.Equal(2, result.ExitCode);
+        Assert.Equal(
+            PlaybackControlledWindowsPhysicalRunResult.InvalidConfiguration,
+            result.Result);
+    }
 }

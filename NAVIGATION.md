@@ -1,8 +1,17 @@
 # PeerCast Nova Navigation
 
+## Phase 5 bounded physical output observation hold
+
+The controlled physical-run composition now keeps an already delivered frame and its existing output lifecycle alive for one explicit bounded operator-observation interval before evidence capture and cleanup. The default remains zero; `--observation-hold-ms` accepts 0 through 30,000 ms, and the dedicated video helper requests three seconds. No decode, scheduler delivery, retry, resubmission, native output operation, timestamp change, or evidence mutation occurs during the hold.
+
+- `docs/adr/ADR-0146-bounded-physical-output-observation-hold.md`
+- `docs/reviews/PCN-0154-BOUNDED-PHYSICAL-OUTPUT-OBSERVATION-HOLD.md`
+- `src/Nova.Cli/PlaybackControlledWindowsPhysicalRunComposition.cs`
+- `tests/Nova.Cli.Tests/PlaybackControlledWindowsPhysicalObservationHoldTests.cs`
+
 ## Phase 5 controlled Windows video revalidation runbook
 
-A dedicated Windows PowerShell helper now fixes the retained fixture identity, requires an exact clean `main` commit, keeps the approved FFmpeg runtime, fixture, and canonical record outside the repository, builds the dedicated runner, and executes exactly one physical `video` run. It does not start audio or paired-record verification. The operator still records `Video visible: Yes／No` separately from deterministic evidence.
+A dedicated Windows PowerShell helper now fixes the retained fixture identity, requires an exact clean `main` commit, keeps the approved FFmpeg runtime, fixture, and canonical record outside the repository, builds the dedicated runner, and executes exactly one physical `video` run. It requests a finite three-second observation hold, does not start audio or paired-record verification, and keeps `Video visible: Yes／No` separate from deterministic evidence.
 
 - `tools/Run-ControlledWindowsPhysicalVideo.ps1`
 - `docs/runbooks/0.0.10d-controlled-windows-video-revalidation.md`
@@ -50,6 +59,9 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 ## 最新の入口
 
+- `docs/adr/ADR-0146-bounded-physical-output-observation-hold.md`
+- `docs/reviews/PCN-0154-BOUNDED-PHYSICAL-OUTPUT-OBSERVATION-HOLD.md`
+- `tests/Nova.Cli.Tests/PlaybackControlledWindowsPhysicalObservationHoldTests.cs`
 - `tools/Run-ControlledWindowsPhysicalVideo.ps1`
 - `docs/runbooks/0.0.10d-controlled-windows-video-revalidation.md`
 - `docs/adr/ADR-0145-production-timing-presentation-origin.md`
@@ -98,7 +110,7 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 **0.0.10d Phase 5 — Execute Controlled Physical Video Revalidation**
 
-明示Windows 11 runnerでexact approved runtimeとretained controlled fixtureを使用し、修正後mainからvideo runだけを実行してcanonical recordをrepository外へ保存します。deterministic evidenceが`Completed`／`Accepted`となり、operatorの`Video visible: Yes／No`が記録されるまで、audio runとpaired-record verifyを開始しません。
+明示Windows 11 runnerでexact approved runtimeとretained controlled fixtureを使用し、修正後mainからvideo runだけを実行してcanonical recordをrepository外へ保存します。delivery後の有限観察保持中にoperatorがwindowを確認し、deterministic evidenceが`Completed`／`Accepted`となり、`Video visible: Yes／No`が記録されるまで、audio runとpaired-record verifyを開始しません。
 
 ## 未完了
 
