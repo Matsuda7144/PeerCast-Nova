@@ -146,7 +146,8 @@ try {
         Stop-Validation 'the controlled Windows runner assembly is unavailable.'
     }
 
-    $temporaryRecord = $recordFull + '.tmp'
+    $temporaryRecord = Join-Path $recordDirectory (
+        '.pcn-video-record-' + [System.Guid]::NewGuid().ToString('N') + '.tmp')
     try {
         & dotnet $runnerAssembly `
             --controlled-windows-physical-run `
@@ -181,6 +182,33 @@ try {
         Stop-Validation 'the command did not produce one canonical sanitized video record.'
     }
 
+    $preflightAccepted = $false
+    if ($runExitCode -eq 0) {
+        $temporaryPreflight = Join-Path $recordDirectory (
+            '.pcn-video-preflight-' + [System.Guid]::NewGuid().ToString('N') + '.tmp')
+        try {
+            & dotnet $runnerAssembly `
+                --verify-controlled-windows-run-record `
+                --record $recordFull `
+                --expected-kind video `
+                --fixture-sha256 $expectedFixtureSha256 > $temporaryPreflight
+            $preflightExitCode = $LASTEXITCODE
+            $preflightLines = @(Get-Content -LiteralPath $temporaryPreflight)
+        }
+        finally {
+            Remove-Item -LiteralPath $temporaryPreflight -Force -ErrorAction SilentlyContinue
+        }
+
+        if ($preflightExitCode -ne 0 -or
+            $preflightLines -cnotcontains 'Result: VideoAccepted' -or
+            $preflightLines -cnotcontains 'Expected-Kind: Video' -or
+            $preflightLines -cnotcontains 'Record-Accepted: True' -or
+            $preflightLines -cnotcontains 'Physical-Runs-Executed-By-This-Command: False') {
+            Stop-Validation 'the canonical video record preflight was not accepted.'
+        }
+        $preflightAccepted = $true
+    }
+
     $postStatus = @(& git status --porcelain --untracked-files=all)
     if ($LASTEXITCODE -ne 0 -or $postStatus.Count -ne 0) {
         Stop-Validation 'the repository changed during physical validation.'
@@ -189,6 +217,9 @@ try {
     $recordLines | ForEach-Object { Write-Output $_ }
     Write-Host "Validated commit: $head"
     Write-Host "Observation hold: $ObservationHoldMilliseconds ms"
+    if ($preflightAccepted) {
+        Write-Host 'Canonical video preflight: Accepted'
+    }
     Write-Host 'Operator observation required: Video visible: Yes / No'
     $finalExitCode = $runExitCode
 }

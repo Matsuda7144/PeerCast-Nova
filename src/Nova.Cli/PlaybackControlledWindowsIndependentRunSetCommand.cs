@@ -1,4 +1,3 @@
-using System.Text;
 using PeerCast.Nova.Playback;
 
 namespace PeerCast.Nova.Cli;
@@ -15,8 +14,6 @@ public readonly record struct PlaybackControlledWindowsIndependentRunSetCommandR
 public static class PlaybackControlledWindowsIndependentRunSetCommand
 {
     public const string Argument = "--verify-controlled-windows-run-records";
-    private const int MaximumRecordByteCount =
-        PlaybackControlledWindowsPhysicalRunRecordCodec.MaximumRecordCharacterCount * 4;
 
     public static async ValueTask<PlaybackControlledWindowsIndependentRunSetCommandResult>
         RunAsync(
@@ -40,9 +37,13 @@ public static class PlaybackControlledWindowsIndependentRunSetCommand
             return new(2, PlaybackControlledWindowsIndependentRunSetResult.InvalidRecord);
         }
 
-        var videoText = await ReadBoundedAsync(videoPath!, cancellationToken)
+        var videoText = await PlaybackControlledWindowsPhysicalRunRecordFile.ReadBoundedAsync(
+                videoPath!,
+                cancellationToken)
             .ConfigureAwait(false);
-        var audioText = await ReadBoundedAsync(audioPath!, cancellationToken)
+        var audioText = await PlaybackControlledWindowsPhysicalRunRecordFile.ReadBoundedAsync(
+                audioPath!,
+                cancellationToken)
             .ConfigureAwait(false);
         if (!PlaybackControlledWindowsPhysicalRunRecordCodec.TryParse(
                 videoText,
@@ -85,44 +86,6 @@ public static class PlaybackControlledWindowsIndependentRunSetCommand
             videoAccepted: true,
             audioAccepted: completed).ConfigureAwait(false);
         return new(completed ? 0 : 1, audio);
-    }
-
-    private static async ValueTask<string?> ReadBoundedAsync(
-        string path,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            await using var stream = new FileStream(
-                path,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.Read,
-                bufferSize: 4096,
-                FileOptions.Asynchronous | FileOptions.SequentialScan);
-            if (stream.Length <= 0 || stream.Length > MaximumRecordByteCount)
-            {
-                return null;
-            }
-
-            var bytes = new byte[checked((int)stream.Length)];
-            await stream.ReadExactlyAsync(bytes, cancellationToken).ConfigureAwait(false);
-            var text = new UTF8Encoding(
-                encoderShouldEmitUTF8Identifier: false,
-                throwOnInvalidBytes: true).GetString(bytes);
-            return text.Length <=
-                PlaybackControlledWindowsPhysicalRunRecordCodec.MaximumRecordCharacterCount
-                ? text
-                : null;
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch
-        {
-            return null;
-        }
     }
 
     private static async ValueTask WriteReportAsync(
