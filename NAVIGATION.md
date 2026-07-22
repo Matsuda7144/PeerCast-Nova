@@ -1,5 +1,12 @@
 # PeerCast Nova Navigation
 
+## Phase 5 controlled Windows video revalidation runbook
+
+A dedicated Windows PowerShell helper now fixes the retained fixture identity, requires an exact clean `main` commit, keeps the approved FFmpeg runtime, fixture, and canonical record outside the repository, builds the dedicated runner, and executes exactly one physical `video` run. It does not start audio or paired-record verification. The operator still records `Video visible: Yes／No` separately from deterministic evidence.
+
+- `tools/Run-ControlledWindowsPhysicalVideo.ps1`
+- `docs/runbooks/0.0.10d-controlled-windows-video-revalidation.md`
+
 ## Phase 5 production timing presentation origin
 
 The production monotonic timing path now anchors the first valid decoded presentation timestamp to the first playback-position read. Subsequent video and audio decisions preserve the original shared source timeline as relative offsets from that anchor. The 250 ms maximum wait and all early and late tolerances remain unchanged; raw timestamps are not rewritten, zero is not synthesized, and no sleep, retry, queue, or fixture change is added. Transactional timing reset clears both the monotonic position origin and the presentation anchor.
@@ -43,6 +50,8 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 ## 最新の入口
 
+- `tools/Run-ControlledWindowsPhysicalVideo.ps1`
+- `docs/runbooks/0.0.10d-controlled-windows-video-revalidation.md`
 - `docs/adr/ADR-0145-production-timing-presentation-origin.md`
 - `docs/reviews/PCN-0153-PRODUCTION-TIMING-PRESENTATION-ORIGIN.md`
 - `src/Nova.Playback/PlaybackAvTimingDecisionBoundary.cs`
@@ -87,9 +96,9 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 ## 次の作業
 
-**0.0.10d Phase 5 — Execute Independent Physical Video and Audio Runs**
+**0.0.10d Phase 5 — Execute Controlled Physical Video Revalidation**
 
-明示Windows 11 runnerでexact approved runtimeとretained controlled fixtureを使用し、videoとaudioを独立実行して別々のcanonical recordへ保存します。両recordをverify modeへ通し、accepted `SystemWindows` evidenceとoperatorのvisible／audible observationを記録します。実記録が揃うまで0.0.10d完了を主張しません。
+明示Windows 11 runnerでexact approved runtimeとretained controlled fixtureを使用し、修正後mainからvideo runだけを実行してcanonical recordをrepository外へ保存します。deterministic evidenceが`Completed`／`Accepted`となり、operatorの`Video visible: Yes／No`が記録されるまで、audio runとpaired-record verifyを開始しません。
 
 ## 未完了
 
