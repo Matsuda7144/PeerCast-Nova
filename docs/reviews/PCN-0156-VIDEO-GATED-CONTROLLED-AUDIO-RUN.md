@@ -61,3 +61,27 @@ This accepted external video record is now the exact prerequisite input to the a
 2. retain an `AudioAccepted` record and record `Audio audible: Yes／No` separately;
 3. recreate the paired verification helper from current main and submit the two accepted external records;
 4. review deterministic and operator evidence separately before declaring 0.0.10d complete.
+
+## First audio attempt review
+
+Clean main `36ff2d616965975f9d42879cfbf4e23ded99ace1` passed the retained video
+record gate as `VideoAccepted`. The controlled audio command performed two decode
+operations and transferred an audio frame. Its one delivery attempt returned
+`DeliveryRejected`, with delivered count `0`, retained WouldBlock count `0`, and
+no native audio evidence. The command did not run audio preflight or request an
+operator audible observation. Paired verification was not started.
+
+The first generation reservation retained the scheduler's video-first default
+while fixture replay had queued both media kinds. It therefore selected video for
+an audio-only run, whose outer composition rejected the non-`AudioDelivered`
+result. WASAPI reachability remains unproven. Borrowed-owner `False` fields in the
+early terminal record mean unassessed, not contradictory ownership.
+
+The reviewed correction adds a bounded initial-output preference to the existing
+scheduler. It applies only to the first successful reservation, is not consumed by
+empty or cancelled attempts, and then yields to the existing caller preference and
+alternation. Controlled video maps to video and controlled audio maps to audio.
+Capacity `16`, maximum owned bytes `64 MiB`, and `DropOldest` remain unchanged;
+normal scheduler defaults remain video and `DropIncoming`. A corrected physical
+audio run is still required before audio preflight, operator observation, or
+paired verification.

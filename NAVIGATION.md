@@ -11,6 +11,18 @@ The corrected physical video run completed once from clean main `cd7442e18d18acf
 
 The accepted visible video record now opens the separately gated audio run. The dedicated Windows helper first requires that exact external record to pass `VideoAccepted`, then executes one physical `audio` run, keeps the accepted WASAPI buffer alive for the default one-second observation interval, retains one external canonical audio record, and requires `AudioAccepted`. It performs no paired verification.
 
+The first audio attempt on clean main
+`36ff2d616965975f9d42879cfbf4e23ded99ace1` passed `VideoAccepted` but its
+single delivery attempt ended `DeliveryRejected` with zero delivered, zero
+retained WouldBlock, and no native audio evidence. Audio preflight and operator
+observation were not run; WASAPI reachability remains unproven. The cause was the
+generation scheduler's video-first initial reservation conflicting with the
+audio-only controlled run while both media kinds were queued. The corrected
+controlled lifecycle maps its requested media kind to the existing bounded
+scheduler's first successful reservation. Normal production remains video-first
+and `DropIncoming`; controlled capacity `16`, `64 MiB`, and `DropOldest` are
+unchanged. Corrected physical audio and paired verification remain pending.
+
 - `docs/adr/ADR-0148-video-gated-controlled-audio-run.md`
 - `docs/reviews/PCN-0156-VIDEO-GATED-CONTROLLED-AUDIO-RUN.md`
 - `tools/Run-ControlledWindowsPhysicalAudio.ps1`

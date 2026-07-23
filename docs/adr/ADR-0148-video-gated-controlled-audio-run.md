@@ -39,3 +39,26 @@ The accepted visible video record opens the audio execution gate. A successful a
 The selected decoded audio item may be brief. `Audio audible: Yes／No` is supporting evidence only and cannot make a rejected deterministic record acceptable or make an accepted record invalid by itself.
 
 Paired verification remains blocked until the independent audio run is complete, its record passes `AudioAccepted`, and deterministic and audible observations have been reviewed separately.
+
+## First controlled audio execution result
+
+The first video-gated audio command ran from clean main
+`36ff2d616965975f9d42879cfbf4e23ded99ace1`. The external video record gate
+returned `VideoAccepted`. Fixture replay then completed two decode operations and
+transferred an audio frame, but the single delivery attempt terminated as
+`DeliveryRejected`: delivered count `0`, retained WouldBlock count `0`, and no
+native audio evidence. Audio preflight and operator observation were not run.
+
+The terminal record's borrowed-owner `False` values describe owners that were not
+evaluated after the early terminal result; they are not evidence of an ownership
+contradiction. The run did not prove that WASAPI was reached.
+
+The diagnosed cause is a mismatch between the controlled audio-only request and
+the generation scheduler's unconditional initial video preference. Because both
+video and audio were queued, the first reservation could select video even after
+the audio frame transfer. The outer audio-only composition correctly rejected the
+inner `VideoDelivered` result. The bounded scheduler now accepts an explicit
+initial output kind. Controlled video selects video and controlled audio selects
+audio; normal production continues to default to video. This changes no retry,
+queue, timing, output, or ownership contract. Audio execution and paired
+verification remain pending until the corrected physical audio run is reviewed.

@@ -75,12 +75,13 @@ internal sealed class SystemPlaybackControlledWindowsPhysicalRunOperations :
             },
             _runner,
             runner.WindowToken,
-            CreateLifecycleOptions(_options.AudioBufferDuration));
+            CreateLifecycleOptions(_options.AudioBufferDuration, _options.Kind));
         return await _lifecycle.InitializeAsync(token).ConfigureAwait(false);
     }
 
     internal static PlaybackApprovedExternalRuntimeWindowsLifecycleOptions CreateLifecycleOptions(
-        TimeSpan audioBufferDuration) => new()
+        TimeSpan audioBufferDuration,
+        PlaybackControlledWindowsOutputValidationKind kind) => new()
         {
             AudioBufferDuration = audioBufferDuration,
             Generation = new()
@@ -90,6 +91,14 @@ internal sealed class SystemPlaybackControlledWindowsPhysicalRunOperations :
                     Capacity = PlaybackSchedulerOptions.DefaultCapacity,
                     MaximumOwnedBytes = PlaybackSchedulerOptions.DefaultMaximumOwnedBytes,
                     FullPolicy = PlaybackSchedulerFullPolicy.DropOldest,
+                    InitialOutputKind = kind switch
+                    {
+                        PlaybackControlledWindowsOutputValidationKind.Video =>
+                            PlaybackSchedulerInitialOutputKind.Video,
+                        PlaybackControlledWindowsOutputValidationKind.Audio =>
+                            PlaybackSchedulerInitialOutputKind.Audio,
+                        _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+                    },
                 },
             },
         };

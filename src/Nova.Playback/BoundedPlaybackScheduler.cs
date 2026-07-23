@@ -7,6 +7,12 @@ public enum PlaybackSchedulerFullPolicy
     Reject,
 }
 
+public enum PlaybackSchedulerInitialOutputKind
+{
+    Video,
+    Audio,
+}
+
 public enum PlaybackSchedulerEnqueueResult
 {
     Enqueued,
@@ -52,6 +58,9 @@ public sealed record PlaybackSchedulerOptions
 
     public PlaybackSchedulerFullPolicy FullPolicy { get; init; } =
         PlaybackSchedulerFullPolicy.DropIncoming;
+
+    public PlaybackSchedulerInitialOutputKind InitialOutputKind { get; init; } =
+        PlaybackSchedulerInitialOutputKind.Video;
 }
 
 internal interface IPlaybackSchedulerDelay
@@ -77,6 +86,7 @@ public sealed class BoundedPlaybackScheduler : IDisposable
     private readonly CancellationTokenSource _disposeCancellation = new();
     private readonly ScheduledFrame?[] _queue;
     private readonly PlaybackSchedulerFullPolicy _fullPolicy;
+    private readonly PlaybackSchedulerOutputKind _initialOutputKind;
     private readonly long _maximumOwnedBytes;
     private readonly PlaybackPolicyClockBoundary _policy;
     private readonly PlaybackDecoderFfmpegAwaitedSinkDeliveryBoundary _delivery;
@@ -90,6 +100,7 @@ public sealed class BoundedPlaybackScheduler : IDisposable
     private long _deliveryCount;
     private int _isDisposed;
     private ScheduledFrame? _outputReservation;
+    private bool _hasReservedOutput;
 
     public BoundedPlaybackScheduler(
         PlaybackSchedulerOptions options,
@@ -127,8 +138,16 @@ public sealed class BoundedPlaybackScheduler : IDisposable
             throw new ArgumentOutOfRangeException(nameof(options));
         }
 
+        if (!Enum.IsDefined(options.InitialOutputKind))
+        {
+            throw new ArgumentOutOfRangeException(nameof(options));
+        }
+
         _queue = new ScheduledFrame?[options.Capacity];
         _fullPolicy = options.FullPolicy;
+        _initialOutputKind = options.InitialOutputKind == PlaybackSchedulerInitialOutputKind.Video
+            ? PlaybackSchedulerOutputKind.Video
+            : PlaybackSchedulerOutputKind.Audio;
         _maximumOwnedBytes = options.MaximumOwnedBytes;
         _policy = policy;
         _delivery = delivery;
@@ -359,8 +378,9 @@ public sealed class BoundedPlaybackScheduler : IDisposable
                 return null;
             }
 
-            var scheduled = FindOutput(preferredKind) ?? FindOutput(
-                preferredKind == PlaybackSchedulerOutputKind.Video
+            var effectivePreferredKind = _hasReservedOutput ? preferredKind : _initialOutputKind;
+            var scheduled = FindOutput(effectivePreferredKind) ?? FindOutput(
+                effectivePreferredKind == PlaybackSchedulerOutputKind.Video
                     ? PlaybackSchedulerOutputKind.Audio
                     : PlaybackSchedulerOutputKind.Video);
             if (scheduled is null)
@@ -370,6 +390,7 @@ public sealed class BoundedPlaybackScheduler : IDisposable
             }
 
             _outputReservation = scheduled;
+            _hasReservedOutput = true;
             return new PlaybackSchedulerOutputReservation(this, scheduled, scheduled.Frame,
                 scheduled.Sequence, scheduled.Discontinuity);
         }

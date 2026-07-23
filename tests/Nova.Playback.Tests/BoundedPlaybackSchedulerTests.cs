@@ -199,6 +199,98 @@ public sealed class BoundedPlaybackSchedulerTests
     }
 
     [Fact]
+    public async Task ReserveOutputAsync_UsesConfiguredAudioForFirstSuccessfulReservation()
+    {
+        using var scheduler = Scheduler(
+            [TimeSpan.Zero],
+            initialOutputKind: PlaybackSchedulerInitialOutputKind.Audio);
+        var video = VideoFrame(0);
+        var audio = AudioFrame(0);
+        scheduler.Enqueue(video, 1, None);
+        scheduler.Enqueue(audio, 2, None);
+
+        using var reservation = await scheduler.ReserveOutputAsync(
+            PlaybackSchedulerOutputKind.Video,
+            CancellationToken.None);
+
+        Assert.NotNull(reservation);
+        Assert.Equal(PlaybackDecoderFfmpegFrameMediaKind.Audio, reservation.Frame.Metadata.MediaKind);
+        Assert.Equal(2, reservation.Sequence);
+        reservation.Complete(PlaybackSchedulerOutputCompletion.Delivered);
+        Assert.True(audio.IsDisposed);
+        Assert.False(video.IsDisposed);
+    }
+
+    [Fact]
+    public async Task ReserveOutputAsync_DefaultsFirstSuccessfulReservationToVideo()
+    {
+        using var scheduler = Scheduler([TimeSpan.Zero]);
+        scheduler.Enqueue(AudioFrame(0), 1, None);
+        scheduler.Enqueue(VideoFrame(0), 2, None);
+
+        using var reservation = await scheduler.ReserveOutputAsync(
+            PlaybackSchedulerOutputKind.Audio,
+            CancellationToken.None);
+
+        Assert.NotNull(reservation);
+        Assert.Equal(PlaybackDecoderFfmpegFrameMediaKind.Video, reservation.Frame.Metadata.MediaKind);
+        Assert.Equal(2, reservation.Sequence);
+    }
+
+    [Fact]
+    public async Task ReserveOutputAsync_ReturnsToCallerPreferenceAfterFirstReservation()
+    {
+        using var scheduler = Scheduler(
+            [TimeSpan.Zero],
+            initialOutputKind: PlaybackSchedulerInitialOutputKind.Audio);
+        scheduler.Enqueue(AudioFrame(0), 1, None);
+        scheduler.Enqueue(VideoFrame(0), 2, None);
+        scheduler.Enqueue(AudioFrame(0), 3, None);
+
+        using (var first = await scheduler.ReserveOutputAsync(
+                   PlaybackSchedulerOutputKind.Video,
+                   CancellationToken.None))
+        {
+            Assert.NotNull(first);
+            Assert.Equal(1, first.Sequence);
+            first.Complete(PlaybackSchedulerOutputCompletion.Delivered);
+        }
+
+        using var second = await scheduler.ReserveOutputAsync(
+            PlaybackSchedulerOutputKind.Video,
+            CancellationToken.None);
+        Assert.NotNull(second);
+        Assert.Equal(PlaybackDecoderFfmpegFrameMediaKind.Video, second.Frame.Metadata.MediaKind);
+        Assert.Equal(2, second.Sequence);
+    }
+
+    [Fact]
+    public async Task ReserveOutputAsync_EmptyAndCancelledAttemptsDoNotConsumeInitialPreference()
+    {
+        using var scheduler = Scheduler(
+            [TimeSpan.Zero],
+            initialOutputKind: PlaybackSchedulerInitialOutputKind.Audio);
+        Assert.Null(await scheduler.ReserveOutputAsync(
+            PlaybackSchedulerOutputKind.Video,
+            CancellationToken.None));
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        Assert.Null(await scheduler.ReserveOutputAsync(
+            PlaybackSchedulerOutputKind.Video,
+            cancellation.Token));
+        scheduler.Enqueue(VideoFrame(0), 1, None);
+        scheduler.Enqueue(AudioFrame(0), 2, None);
+
+        using var reservation = await scheduler.ReserveOutputAsync(
+            PlaybackSchedulerOutputKind.Video,
+            CancellationToken.None);
+
+        Assert.NotNull(reservation);
+        Assert.Equal(PlaybackDecoderFfmpegFrameMediaKind.Audio, reservation.Frame.Metadata.MediaKind);
+        Assert.Equal(2, reservation.Sequence);
+    }
+
+    [Fact]
     public async Task RunOneAsync_KeepsInFlightBytesAccountedUntilSinkCompletes()
     {
         using var owners = new TestOwners();
@@ -415,6 +507,12 @@ public sealed class BoundedPlaybackSchedulerTests
                 MaximumOwnedBytes = PlaybackSchedulerOptions.MaximumOwnedBytesHardLimit + 1,
             },
             policy));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new BoundedPlaybackScheduler(
+            new PlaybackSchedulerOptions
+            {
+                InitialOutputKind = (PlaybackSchedulerInitialOutputKind)int.MaxValue,
+            },
+            policy));
     }
 
     private static readonly PlaybackDecodedFrameDiscontinuityKind None =
@@ -427,12 +525,15 @@ public sealed class BoundedPlaybackSchedulerTests
         int capacity = PlaybackSchedulerOptions.DefaultCapacity,
         PlaybackSchedulerFullPolicy fullPolicy = PlaybackSchedulerFullPolicy.DropIncoming,
         IPlaybackSchedulerDelay? delay = null,
-        long maximumOwnedBytes = PlaybackSchedulerOptions.DefaultMaximumOwnedBytes) => new(
+        long maximumOwnedBytes = PlaybackSchedulerOptions.DefaultMaximumOwnedBytes,
+        PlaybackSchedulerInitialOutputKind initialOutputKind =
+            PlaybackSchedulerInitialOutputKind.Video) => new(
             new PlaybackSchedulerOptions
             {
                 Capacity = capacity,
                 FullPolicy = fullPolicy,
                 MaximumOwnedBytes = maximumOwnedBytes,
+                InitialOutputKind = initialOutputKind,
             },
             new PlaybackPolicyClockBoundary(
                 new FakeClock(arrivals),

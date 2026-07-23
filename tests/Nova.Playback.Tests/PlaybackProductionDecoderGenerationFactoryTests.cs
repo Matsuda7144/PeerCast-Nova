@@ -286,6 +286,30 @@ public sealed class PlaybackProductionDecoderGenerationFactoryTests
         Assert.Empty(operations.Calls);
     }
 
+    [Fact]
+    public void Invalid_scheduler_initial_output_kind_is_rejected_during_construction()
+    {
+        var operations = new FakeOperations();
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new PlaybackProductionDecoderGenerationFactory(
+                new PlaybackDecoderBackendPolicy
+                {
+                    AllowThirdParty = true,
+                    AllowNativeCode = true,
+                },
+                new PlaybackProductionDecoderGenerationFactoryOptions
+                {
+                    Scheduler = new PlaybackSchedulerOptions
+                    {
+                        InitialOutputKind = (PlaybackSchedulerInitialOutputKind)int.MaxValue,
+                    },
+                },
+                operations));
+
+        Assert.Empty(operations.Calls);
+    }
+
     private static PlaybackProductionDecoderGenerationFactory CreateFactory(
         FakeOperations operations) =>
         new(

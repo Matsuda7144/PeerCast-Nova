@@ -821,6 +821,7 @@ public sealed class PlaybackProductionDecoderGenerationFactory : IDisposable, IA
             options.Scheduler.MaximumOwnedBytes is < 1 or
                 > PlaybackSchedulerOptions.MaximumOwnedBytesHardLimit ||
             !Enum.IsDefined(options.Scheduler.FullPolicy) ||
+            !Enum.IsDefined(options.Scheduler.InitialOutputKind) ||
             !Enum.IsDefined(options.SchedulerPolicy.ClockMaster) ||
             !IsPositiveBounded(options.SchedulerPolicy.MaximumWait,
                 PlaybackPolicyOptions.MaximumWaitLimit) ||
