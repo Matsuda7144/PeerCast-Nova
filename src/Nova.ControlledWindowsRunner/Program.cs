@@ -13,6 +13,36 @@ try
             args,
             argument => string.Equals(
                 argument,
+                PlaybackControlledWindowsDeliveryDiagnosticChildCaptureCommand.Argument,
+                StringComparison.OrdinalIgnoreCase)))
+    {
+        Environment.ExitCode =
+            await PlaybackControlledWindowsDeliveryDiagnosticChildCaptureCommand.RunAsync(
+                args,
+                System.Reflection.Assembly.GetEntryAssembly()?.Location ??
+                    throw new InvalidOperationException(
+                        "The controlled runner assembly path is unavailable."),
+                Console.Out,
+                cancellationSource.Token);
+    }
+    else if (Array.Exists(
+            args,
+            argument => string.Equals(
+                argument,
+                PlaybackControlledWindowsDeliveryDiagnosticCommand.Argument,
+                StringComparison.OrdinalIgnoreCase)))
+    {
+        var diagnostic =
+            await PlaybackControlledWindowsDeliveryDiagnosticCommand.RunAsync(
+                args,
+                Console.Out,
+                cancellationSource.Token);
+        Environment.ExitCode = diagnostic.ExitCode;
+    }
+    else if (Array.Exists(
+            args,
+            argument => string.Equals(
+                argument,
                 PlaybackControlledWindowsAudioChildCaptureCommand.Argument,
                 StringComparison.OrdinalIgnoreCase)))
     {

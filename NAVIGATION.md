@@ -71,9 +71,16 @@ must not be repeated. It passed the video gate but stopped with
 `DeliveryRejected / None`, decode operations `3`, outer delivery attempts `2`,
 delivered `1`, and retained WouldBlock `0`. The runner stopped and lifecycle
 disposed. The operator recorded `Audio audible: No` after hearing only a
-noise-like transient. The second outer delivery reached normal production
-`RetainedWait` before a native write and the finite controlled harness treated
-that retained timing result as terminal. Paired verification remains blocked.
+noise-like transient.
+
+The later run on clean main `955ffcdad693391eed1535987c96589eb479741e`
+was also executed exactly once and must not be repeated. It reproduced the same
+`DeliveryRejected / None`, `3 / 2 / 1 / 0` decode, attempt, delivered, and
+retained-WouldBlock counters, with `Audio audible: No`. Because PR #120 had
+already added bounded handling for `RetainedWait`, the earlier claim that the
+second outer result was necessarily `RetainedWait` is disproven. The exact fixed
+lifecycle result is currently hidden by the generic `DeliveryRejected` mapping.
+Paired verification remains blocked.
 
 ## Phase 5 controlled known-audio tone probe
 
@@ -117,20 +124,43 @@ scheduler and normal one-frame composition are bypassed but unchanged.
 
 ## Phase 5 controlled audio retained timing resume
 
-The controlled four-frame harness now distinguishes normal early-presentation
-retention from an output rejection. Controlled audio alone resumes
-`RetainedWait` after one upward-rounded `1024 / 48000` AAC-frame cadence, with
-at most two resumes for one outer delivery. The same scheduler item remains
-retained; no decode, transfer, enqueue, replacement reservation, conversion, or
-native write occurs while timing is early. `RetainedWouldBlock` and every other
-non-delivery result remain terminal. Video and normal production timing are
-unchanged. This code review performs no physical output.
+Controlled audio alone resumes `RetainedWait` after one upward-rounded
+`1024 / 48000` AAC-frame cadence, with at most two resumes for one outer
+delivery. The same scheduler item remains retained; no decode, transfer,
+enqueue, replacement reservation, conversion, or native write occurs while
+timing is early. `RetainedWouldBlock` and every other non-delivery result remain
+terminal. Video and normal production timing are unchanged.
+
+The post-merge physical reproduction at `955ffcdad693391eed1535987c96589eb479741e`
+did not change the outer failure boundary. Therefore the timing-resume code
+remains bounded and reviewed, but `RetainedWait` is not established as the
+actual second outer terminal result.
 
 - `docs/adr/ADR-0155-controlled-audio-retained-timing-resume.md`
 - `docs/reviews/PCN-0163-CONTROLLED-AUDIO-RETAINED-TIMING-RESUME.md`
 - `docs/runbooks/0.0.10d-controlled-audio-retained-timing-resume.md`
 - `src/Nova.Cli/SystemPlaybackControlledWindowsPhysicalRunOperations.cs`
 - `tests/Nova.Cli.Tests/SystemPlaybackControlledWindowsPhysicalRunOperationsTests.cs`
+
+## Phase 5 controlled audio delivery-result diagnostic
+
+The dedicated diagnostic reuses the unchanged physical-run composition through
+an operations decorator. It records the exact fixed result returned by each
+outer delivery call, in order, while delegating all work unchanged. The separate
+record is bounded to the four-delivery audio target and explicitly states that it
+is not an audio-acceptance record.
+
+The existing canonical physical-run schema, accepted visible video record,
+single-record preflight, and paired verification remain unchanged. The
+implementation review performs no physical output. A later diagnostic execution
+requires a separately approved exact merged main commit and remains exactly once.
+
+- `docs/adr/ADR-0156-controlled-audio-delivery-result-diagnostic.md`
+- `docs/reviews/PCN-0164-CONTROLLED-AUDIO-DELIVERY-RESULT-DIAGNOSTIC.md`
+- `docs/runbooks/0.0.10d-controlled-audio-delivery-result-diagnostic.md`
+- `src/Nova.Cli/PlaybackControlledWindowsDeliveryDiagnosticCommand.cs`
+- `tests/Nova.Cli.Tests/PlaybackControlledWindowsDeliveryDiagnosticCommandTests.cs`
+- `tools/Run-ControlledWindowsPhysicalAudioDeliveryDiagnostic.ps1`
 
 ## Phase 5 corrected Windows output probes
 
@@ -181,19 +211,20 @@ The bounded FLV decoder configures the exact parser stream time base through pub
 
 ## 現在地
 
-**0.0.10d — Controlled Physical Windows Video／Audio Output Validation — Phase 5 Retained Timing Resume Review**
+**0.0.10d — Controlled Physical Windows Video／Audio Output Validation — Phase 5 Delivery-Result Diagnostic Review**
 
 - corrected D3D11 texture-copy pattern: deterministic success, visible `Yes`;
 - corrected production `UpdateSubresource` pattern: deterministic success, visible `Yes`;
 - corrected decoded physical video: `Completed／Accepted`, `VideoAccepted`, visible `Yes`;
 - known 80 ms tone and decoded fixture slice: accepted and recognizable;
-- four-frame physical audio at `63f8be0c`: stopped at the second outer delivery with `RetainedWait` translated to `DeliveryRejected`; audible `No`;
-- current gate: final-head review and CI for controlled-audio-only bounded timing resume;
-- no further physical audio run is authorized before the correction is merged and its exact main commit is separately approved;
-- paired verification remains blocked until a later audio record is `AudioAccepted` and audible observation is recorded separately;
+- four-frame physical audio at `63f8be0c` and retained-timing run at `955ffcda`: both stopped at the second outer delivery with `3 / 2 / 1 / 0` counters and audible `No`;
+- the prior `RetainedWait` terminal-result claim is disproven; the exact fixed second result is unknown;
+- current gate: final-head review and CI for the separate exact delivery-result diagnostic;
+- no further physical audio run is authorized before the diagnostic is merged and its exact main commit is separately approved;
+- paired verification remains blocked until a later canonical audio record is `AudioAccepted` and audible observation is recorded separately;
 - approved runtime: `btbn.ffmpeg.20260721.win64.lgpl-shared`;
 - fixture: `66,939` bytes, SHA-256 `32872B300286525F4EF97FEE3533E25419AC8E48BFD4BC2C4FD9545F071B1E15`;
-- no runtime path, fixture path, record path, device／endpoint identity, HWND, thread ID, pointer, handle, or payload is retained in the repository.
+- no runtime path, fixture path, record path, device／endpoint identity, HWND, thread ID, pointer, handle, HRESULT, raw process output, or payload is retained in the repository.
 
 ## CI
 
@@ -201,12 +232,11 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 ## 最新の入口
 
-- `docs/adr/ADR-0155-controlled-audio-retained-timing-resume.md`
-- `docs/reviews/PCN-0163-CONTROLLED-AUDIO-RETAINED-TIMING-RESUME.md`
-- `docs/runbooks/0.0.10d-controlled-audio-retained-timing-resume.md`
-- `src/Nova.Cli/SystemPlaybackControlledWindowsPhysicalRunOperations.cs`
-- `tests/Nova.Cli.Tests/SystemPlaybackControlledWindowsPhysicalRunOperationsTests.cs`
-- `docs/runbooks/0.0.10d-controlled-windows-audio-validation.md`
-- `tools/Run-ControlledWindowsPhysicalAudio.ps1`
+- `docs/adr/ADR-0156-controlled-audio-delivery-result-diagnostic.md`
+- `docs/reviews/PCN-0164-CONTROLLED-AUDIO-DELIVERY-RESULT-DIAGNOSTIC.md`
+- `docs/runbooks/0.0.10d-controlled-audio-delivery-result-diagnostic.md`
+- `src/Nova.Cli/PlaybackControlledWindowsDeliveryDiagnosticCommand.cs`
+- `tests/Nova.Cli.Tests/PlaybackControlledWindowsDeliveryDiagnosticCommandTests.cs`
+- `tools/Run-ControlledWindowsPhysicalAudioDeliveryDiagnostic.ps1`
 - `docs/runbooks/0.0.10d-controlled-windows-video-revalidation.md`
 - `tools/Run-ControlledWindowsPhysicalVideo.ps1`
