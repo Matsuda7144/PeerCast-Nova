@@ -64,3 +64,48 @@ The existing controlled-audio `RetainedWait` resume remains unchanged. The diagn
 This implementation PR executes no physical output.
 
 After merge and routine main CI success, one new diagnostic execution may be separately approved from the exact merged main commit. It must use the retained approved runtime and fixture, the accepted visible video record, new external diagnostic and failure paths, and no retry or paired verification.
+
+## Retained diagnostic outcome
+
+The diagnostic was executed exactly once from clean main
+`fcab3837722efb716decbc175e1dee678c939d9b`, after the failed
+post-EOS result had been retained by PR #128 and both final-head and post-merge
+CircleCI succeeded.
+
+The retained diagnostic record reported:
+
+- `Run-Result: Completed`;
+- `Evidence: Accepted`;
+- fixture bytes / packets: `66,939 / 2`;
+- decode operations: `4`;
+- delivery attempts / delivered: `4 / 4`;
+- retained WouldBlock: `0`;
+- ordered results: four consecutive `AudioDelivered` values;
+- runner / lifecycle: `Stopped / Disposed`;
+- borrowed window / dispatcher preserved: `True / True`;
+- external binary or payload published: `False`;
+- physical runs executed by the command: `True`;
+- audio acceptance claimed: `False`.
+
+The operator heard no sound and recorded `Audio audible: No`. No retry, alternate
+endpoint, timing change, buffer change, fixture change, ordinary audio helper,
+additional probe, or paired verification was performed.
+
+## Interpretation
+
+The diagnostic did not reproduce the earlier third-attempt failure from clean main
+`d3cf3a32c66bb5a8dc322e6b1e524bd807c518b4`, which had reported three attempts,
+two deliveries, and a noise-like audible transient. Because the diagnostic's third
+result was `AudioDelivered`, the exact historical third result is not recoverable
+from retained evidence.
+
+The documentation-only change between `d3cf3a32...` and `fcab383...` did not alter
+production audio behavior. The two retained physical outcomes therefore establish a
+non-deterministic or timing-sensitive controlled physical boundary. They also show
+that four caller-visible `AudioDelivered` results and accepted counters do not by
+themselves establish audible fixture output.
+
+Issue #127 is closed as not planned because its requested historical result did not
+reproduce. Investigation continues in Issue #129. No further physical execution is
+authorized until a new bounded, payload-free evidence boundary is implemented,
+merged, and reviewed.
