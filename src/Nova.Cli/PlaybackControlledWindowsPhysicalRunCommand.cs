@@ -14,6 +14,8 @@ public readonly record struct PlaybackControlledWindowsPhysicalRunCommandResult(
 public static class PlaybackControlledWindowsPhysicalRunCommand
 {
     public const string Argument = "--controlled-windows-physical-run";
+    public const string DiagnoseAudioNativeStagesArgument =
+        "--diagnose-audio-native-stages";
     private const int MaximumObservationHoldMilliseconds = 30_000;
 
     public static async ValueTask<PlaybackControlledWindowsPhysicalRunCommandResult> RunAsync(
@@ -41,7 +43,7 @@ public static class PlaybackControlledWindowsPhysicalRunCommand
         return new(result == PlaybackControlledWindowsPhysicalRunResult.Completed ? 0 : 1, result);
     }
 
-    private static bool TryParse(
+    internal static bool TryParse(
         string[] arguments,
         out PlaybackControlledWindowsPhysicalRunOptions options)
     {
@@ -50,8 +52,16 @@ public static class PlaybackControlledWindowsPhysicalRunCommand
         var fixture = GetOption(arguments, "--controlled-fixture");
         var digest = GetOption(arguments, "--fixture-sha256");
         var kindText = GetOption(arguments, "--output-kind");
+        var diagnosticFlagCount = arguments.Count(
+            argument => string.Equals(
+                argument,
+                DiagnoseAudioNativeStagesArgument,
+                StringComparison.OrdinalIgnoreCase));
         if (runtime is null || fixture is null || digest is null ||
             !TryParseKind(kindText, out var kind) ||
+            diagnosticFlagCount > 1 ||
+            (diagnosticFlagCount == 1 &&
+                kind != PlaybackControlledWindowsOutputValidationKind.Audio) ||
             !TryParseBounded(arguments, "--max-decode-operations", 128, 1, 4096,
                 out var maximumDecode) ||
             !TryParseBounded(arguments, "--max-delivery-operations", 128, 1, 4096,
@@ -74,6 +84,7 @@ public static class PlaybackControlledWindowsPhysicalRunCommand
             MaximumDeliveryOperations = maximumDelivery,
             PacketPayloadBytes = packetBytes,
             ObservationHoldDuration = TimeSpan.FromMilliseconds(observationHoldMilliseconds),
+            DiagnoseAudioNativeStages = diagnosticFlagCount == 1,
         };
         return true;
     }

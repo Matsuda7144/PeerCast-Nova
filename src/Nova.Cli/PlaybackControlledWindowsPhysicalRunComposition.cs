@@ -49,6 +49,7 @@ public sealed record PlaybackControlledWindowsPhysicalRunOptions
     public int MaximumDeliveryOperations { get; init; } = 128;
     public TimeSpan ObservationHoldDuration { get; init; }
     public TimeSpan AudioBufferDuration { get; init; } = TimeSpan.FromMilliseconds(100);
+    public bool DiagnoseAudioNativeStages { get; init; }
     public PlaybackWindowsPhysicalRunnerOptions Runner { get; init; } = new();
 }
 

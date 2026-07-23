@@ -73,4 +73,48 @@ public sealed class PlaybackControlledWindowsPhysicalRunCommandTests
             PlaybackControlledWindowsPhysicalRunResult.InvalidConfiguration,
             result.Result);
     }
+
+    [Fact]
+    public void AudioNativeStageDiagnosticsRequiresOneExplicitAudioFlag()
+    {
+        var arguments = ValidArguments("audio");
+
+        Assert.True(
+            PlaybackControlledWindowsPhysicalRunCommand.TryParse(
+                arguments,
+                out var normalOptions));
+        Assert.False(normalOptions.DiagnoseAudioNativeStages);
+
+        Assert.True(
+            PlaybackControlledWindowsPhysicalRunCommand.TryParse(
+                [.. arguments,
+                    PlaybackControlledWindowsPhysicalRunCommand
+                        .DiagnoseAudioNativeStagesArgument],
+                out var diagnosticOptions));
+        Assert.True(diagnosticOptions.DiagnoseAudioNativeStages);
+
+        Assert.False(
+            PlaybackControlledWindowsPhysicalRunCommand.TryParse(
+                [.. ValidArguments("video"),
+                    PlaybackControlledWindowsPhysicalRunCommand
+                        .DiagnoseAudioNativeStagesArgument],
+                out _));
+        Assert.False(
+            PlaybackControlledWindowsPhysicalRunCommand.TryParse(
+                [.. arguments,
+                    PlaybackControlledWindowsPhysicalRunCommand
+                        .DiagnoseAudioNativeStagesArgument,
+                    PlaybackControlledWindowsPhysicalRunCommand
+                        .DiagnoseAudioNativeStagesArgument],
+                out _));
+    }
+
+    private static string[] ValidArguments(string kind) =>
+    [
+        PlaybackControlledWindowsPhysicalRunCommand.Argument,
+        "--runtime-directory", "C:\\controlled-runtime",
+        "--controlled-fixture", "C:\\controlled.flv",
+        "--fixture-sha256", new string('A', 64),
+        "--output-kind", kind,
+    ];
 }

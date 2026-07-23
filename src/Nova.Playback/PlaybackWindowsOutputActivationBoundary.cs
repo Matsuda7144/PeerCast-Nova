@@ -33,9 +33,22 @@ public sealed class PlaybackWindowsOutputActivationBoundary : IDisposable
     {
     }
 
+    internal PlaybackWindowsOutputActivationBoundary(
+        IPlaybackWindowsAudioNativeStageReporter audioNativeStageReporter)
+        : this(
+            CreateSystemNativeActivation(audioNativeStageReporter),
+            static () => OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22_000),
+            enforceOwningThread: true)
+    {
+    }
+
     private static IPlaybackWindowsOutputNativeActivation CreateSystemNativeActivation() =>
+        CreateSystemNativeActivation(NullPlaybackWindowsAudioNativeStageReporter.Instance);
+
+    private static IPlaybackWindowsOutputNativeActivation CreateSystemNativeActivation(
+        IPlaybackWindowsAudioNativeStageReporter audioNativeStageReporter) =>
         OperatingSystem.IsWindows()
-            ? new SystemPlaybackWindowsOutputNativeActivation()
+            ? new SystemPlaybackWindowsOutputNativeActivation(audioNativeStageReporter)
             : new UnsupportedPlaybackWindowsOutputNativeActivation();
 
     internal PlaybackWindowsOutputActivationBoundary(
@@ -288,6 +301,7 @@ internal sealed class UnsupportedPlaybackWindowsOutputNativeActivation :
 internal sealed class SystemPlaybackWindowsOutputNativeActivation :
     IPlaybackWindowsOutputNativeActivation
 {
+    private readonly IPlaybackWindowsAudioNativeStageReporter _audioNativeStageReporter;
     private const uint CoinitMultithreaded = 0;
     private const uint D3DDriverTypeHardware = 1;
     private const uint D3D11SdkVersion = 7;
@@ -300,6 +314,18 @@ internal sealed class SystemPlaybackWindowsOutputNativeActivation :
         new("A95664D2-9614-4F35-A746-DE8DB63617E6");
     private static readonly Guid AudioClientInterface =
         new("1CB9AD4C-DBFA-4C32-B178-C2F568A703B2");
+
+    public SystemPlaybackWindowsOutputNativeActivation()
+        : this(NullPlaybackWindowsAudioNativeStageReporter.Instance)
+    {
+    }
+
+    internal SystemPlaybackWindowsOutputNativeActivation(
+        IPlaybackWindowsAudioNativeStageReporter audioNativeStageReporter)
+    {
+        ArgumentNullException.ThrowIfNull(audioNativeStageReporter);
+        _audioNativeStageReporter = audioNativeStageReporter;
+    }
 
     public PlaybackWindowsOutputActivationResult InitializeComApartment(
         out IDisposable? apartment)
@@ -388,7 +414,11 @@ internal sealed class SystemPlaybackWindowsOutputNativeActivation :
             var ownedClient = client;
             var ownedEventHandle = eventHandle;
             audio = new WasapiResource(
-                ownedEnumerator, ownedEndpoint, ownedClient, ownedEventHandle);
+                ownedEnumerator,
+                ownedEndpoint,
+                ownedClient,
+                ownedEventHandle,
+                _audioNativeStageReporter);
             enumerator = endpoint = client = eventHandle = 0;
             return PlaybackWindowsOutputActivationResult.Activated;
         }
@@ -505,9 +535,15 @@ internal sealed class SystemPlaybackWindowsOutputNativeActivation :
     }
 
     private sealed class WasapiResource(
-        nint enumerator, nint endpoint, nint client, nint eventHandle) :
+        nint enumerator,
+        nint endpoint,
+        nint client,
+        nint eventHandle,
+        IPlaybackWindowsAudioNativeStageReporter audioNativeStageReporter) :
         IDisposable, IPlaybackWindowsWasapiBorrowedResource
     {
+        private readonly IPlaybackWindowsAudioNativeStageReporter _audioNativeStageReporter =
+            audioNativeStageReporter;
         private nint _enumerator = enumerator;
         private nint _endpoint = endpoint;
         private nint _client = client;
@@ -547,7 +583,11 @@ internal sealed class SystemPlaybackWindowsOutputNativeActivation :
             try
             {
                 var interfaceId = AudioRenderClientInterface;
+                _audioNativeStageReporter.Report(
+                    PlaybackWindowsAudioNativeStage.EnsureRenderClientEntering);
                 var result = clientObject.GetService(ref interfaceId, out var renderClient);
+                _audioNativeStageReporter.Report(
+                    PlaybackWindowsAudioNativeStage.EnsureRenderClientCompleted);
                 if (result < 0 || renderClient == 0) return false;
                 _renderClient = renderClient;
                 return true;
@@ -564,7 +604,14 @@ internal sealed class SystemPlaybackWindowsOutputNativeActivation :
             if (renderClient != 0) Marshal.Release(renderClient);
             if (_client == 0) return;
             var clientObject = (IAudioClientReset)Marshal.GetObjectForIUnknown(_client);
-            try { clientObject.Reset(); }
+            try
+            {
+                _audioNativeStageReporter.Report(
+                    PlaybackWindowsAudioNativeStage.ResetEntering);
+                clientObject.Reset();
+                _audioNativeStageReporter.Report(
+                    PlaybackWindowsAudioNativeStage.ResetCompleted);
+            }
             finally { Marshal.FinalReleaseComObject(clientObject); }
         }
 

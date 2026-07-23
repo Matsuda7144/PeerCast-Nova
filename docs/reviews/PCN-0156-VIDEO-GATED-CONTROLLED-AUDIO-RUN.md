@@ -85,3 +85,37 @@ Capacity `16`, maximum owned bytes `64 MiB`, and `DropOldest` remain unchanged;
 normal scheduler defaults remain video and `DropIncoming`. A corrected physical
 audio run is still required before audio preflight, operator observation, or
 paired verification.
+
+## Process-failure diagnostic review
+
+The corrected-selection command was executed once from clean main
+`e8b7fcac2f679eb5023ae8ab36571b86773d3950`. Its video gate returned
+`VideoAccepted`, but the physical child emitted zero stdout bytes. The canonical
+audio envelope was therefore absent. The helper exited `2` after creating a
+zero-byte external audio-record file. Decode and delivery counters, runner and
+lifecycle states, and borrowed-owner preservation remain unknown. Audio
+preflight, audible observation, and paired verification were not run. There was
+no retry, redelivery, fallback, or added instrumentation.
+
+Because the former helper replaced the child result with a generic error and did
+not preserve its stderr boundary, neither a specific WASAPI call nor a native
+crash code is established. This result is not evidence against PR #112's
+controlled initial-media selection correction.
+
+The reviewed diagnostic boundary:
+
+- requires unused, distinct, repository-external audio and failure record paths;
+- captures one child exit code and concurrent stdout and stderr drains;
+- never writes zero-byte or incomplete stdout to the audio record path;
+- promotes only a complete canonical audio record;
+- emits a fixed sanitized process-failure record only when canonical output is
+  absent;
+- records only an allowlisted stderr class and the final exact allowlisted native
+  audio stage, never raw stderr;
+- enables stage output only through the dedicated controlled runner's explicit
+  diagnostic flag;
+- preserves production output, retry, timing, queue, ownership, and exception
+  normalization behavior.
+
+The next run is diagnostic evidence gathering only. It is not final physical
+audio acceptance, and paired verification remains blocked.

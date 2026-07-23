@@ -71,6 +71,13 @@ try
         Environment.ExitCode = run.ExitCode;
     }
 }
+catch (Exception)
+{
+    Console.Error.WriteLine(
+        "PCN-CONTROLLED-RUNNER-FAILURE: ManagedUnhandledException");
+    Console.Error.Flush();
+    Environment.ExitCode = 1;
+}
 finally
 {
     Console.CancelKeyPress -= cancelHandler;

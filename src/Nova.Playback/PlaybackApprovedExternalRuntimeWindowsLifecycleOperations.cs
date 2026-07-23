@@ -118,7 +118,8 @@ internal sealed class PlaybackApprovedExternalRuntimeWindowsLifecycleOperations 
                             PlaybackWindowsOutputActivationResult.InvalidEnvironment);
                     }
 
-                    var activation = new PlaybackWindowsOutputActivationBoundary();
+                    var activation = new PlaybackWindowsOutputActivationBoundary(
+                        _options.AudioNativeStageReporter);
                     var result = activation.Activate();
                     if (result == PlaybackWindowsOutputActivationResult.Activated)
                     {
@@ -173,7 +174,8 @@ internal sealed class PlaybackApprovedExternalRuntimeWindowsLifecycleOperations 
                 _buffers = new PlaybackWindowsOutputBufferProcessingBoundary(
                     activation,
                     _binding,
-                    _streams);
+                    _streams,
+                    _options.AudioNativeStageReporter);
             }
         }
 

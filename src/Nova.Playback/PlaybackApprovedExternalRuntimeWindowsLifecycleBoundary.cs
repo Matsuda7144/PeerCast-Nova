@@ -59,6 +59,9 @@ public enum PlaybackApprovedExternalRuntimeWindowsLifecycleResult
 
 public sealed record PlaybackApprovedExternalRuntimeWindowsLifecycleOptions
 {
+    internal IPlaybackWindowsAudioNativeStageReporter AudioNativeStageReporter { get; init; } =
+        NullPlaybackWindowsAudioNativeStageReporter.Instance;
+
     public PlaybackDecodedVideoPixelFormat VideoFormat { get; init; } =
         PlaybackDecodedVideoPixelFormat.Bgra32;
 

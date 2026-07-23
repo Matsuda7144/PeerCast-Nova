@@ -75,14 +75,23 @@ internal sealed class SystemPlaybackControlledWindowsPhysicalRunOperations :
             },
             _runner,
             runner.WindowToken,
-            CreateLifecycleOptions(_options.AudioBufferDuration, _options.Kind));
+            CreateLifecycleOptions(
+                _options.AudioBufferDuration,
+                _options.Kind,
+                _options.DiagnoseAudioNativeStages));
         return await _lifecycle.InitializeAsync(token).ConfigureAwait(false);
     }
 
     internal static PlaybackApprovedExternalRuntimeWindowsLifecycleOptions CreateLifecycleOptions(
         TimeSpan audioBufferDuration,
-        PlaybackControlledWindowsOutputValidationKind kind) => new()
+        PlaybackControlledWindowsOutputValidationKind kind,
+        bool diagnoseAudioNativeStages = false,
+        TextWriter? diagnosticOutput = null) => new()
         {
+            AudioNativeStageReporter = diagnoseAudioNativeStages
+                ? new TextWriterPlaybackWindowsAudioNativeStageReporter(
+                    diagnosticOutput ?? Console.Error)
+                : NullPlaybackWindowsAudioNativeStageReporter.Instance,
             AudioBufferDuration = audioBufferDuration,
             Generation = new()
             {

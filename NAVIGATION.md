@@ -23,6 +23,22 @@ scheduler's first successful reservation. Normal production remains video-first
 and `DropIncoming`; controlled capacity `16`, `64 MiB`, and `DropOldest` are
 unchanged. Corrected physical audio and paired verification remain pending.
 
+The first corrected-selection audio attempt on clean main
+`e8b7fcac2f679eb5023ae8ab36571b86773d3950` passed the video gate but
+produced zero child stdout bytes and no canonical audio record. The helper exited
+`2` and left a zero-byte external audio-record file. Counters, states, and owner
+preservation are unknown; audio preflight, audible observation, and paired
+verification were not executed. No retry or fallback occurred. Because the old
+helper lost the child exit code and stderr boundary, no WASAPI call or crash code
+is established, and the result does not refute PR #112.
+
+The controlled diagnostic boundary now promotes only complete canonical stdout
+and otherwise writes a separate repository-external sanitized failure record.
+The dedicated explicit flag reports only fixed native audio stage names; raw
+stderr, paths, device identities, pointers, handles, HRESULTs, and media data are
+not recorded. The next physical audio command is diagnostic only and remains
+blocked from final acceptance and paired verification.
+
 - `docs/adr/ADR-0148-video-gated-controlled-audio-run.md`
 - `docs/reviews/PCN-0156-VIDEO-GATED-CONTROLLED-AUDIO-RUN.md`
 - `tools/Run-ControlledWindowsPhysicalAudio.ps1`

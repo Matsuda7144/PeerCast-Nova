@@ -91,6 +91,20 @@ public sealed class PlaybackWindowsOutputBufferProcessingBoundary : IDisposable
         PlaybackWindowsOutputActivationBoundary activation,
         PlaybackWindowsOutputResourceBindingBoundary binding,
         PlaybackWindowsOutputStreamInitializationBoundary initialization,
+        IPlaybackWindowsAudioNativeStageReporter audioNativeStageReporter)
+        : this(
+            activation,
+            binding,
+            initialization,
+            CreateSystemProcessor(audioNativeStageReporter),
+            static () => OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22_000))
+    {
+    }
+
+    internal PlaybackWindowsOutputBufferProcessingBoundary(
+        PlaybackWindowsOutputActivationBoundary activation,
+        PlaybackWindowsOutputResourceBindingBoundary binding,
+        PlaybackWindowsOutputStreamInitializationBoundary initialization,
         IPlaybackWindowsOutputNativeBufferProcessor native,
         Func<bool> isSupportedPlatform)
     {
@@ -324,9 +338,15 @@ public sealed class PlaybackWindowsOutputBufferProcessingBoundary : IDisposable
     }
 
     private static IPlaybackWindowsOutputNativeBufferProcessor CreateSystemProcessor() =>
+        CreateSystemProcessor(NullPlaybackWindowsAudioNativeStageReporter.Instance);
+
+    private static IPlaybackWindowsOutputNativeBufferProcessor CreateSystemProcessor(
+        IPlaybackWindowsAudioNativeStageReporter audioNativeStageReporter) =>
         OperatingSystem.IsWindows()
             ? new PlaybackWindowsOutputNativeEvidenceProcessor(
-                new SystemPlaybackWindowsOutputNativeBufferProcessor(),
+                new SystemPlaybackWindowsOutputNativeBufferProcessor(
+                    new SystemPlaybackWindowsOutputNativeBufferCalls(
+                        audioNativeStageReporter)),
                 PlaybackControlledWindowsOutputEvidenceSource.SystemWindows)
             : new UnsupportedPlaybackWindowsOutputNativeBufferProcessor();
 }
@@ -435,6 +455,20 @@ internal interface IPlaybackWindowsOutputNativeBufferCalls
 internal sealed class SystemPlaybackWindowsOutputNativeBufferCalls :
     IPlaybackWindowsOutputNativeBufferCalls
 {
+    private readonly IPlaybackWindowsAudioNativeStageReporter _audioNativeStageReporter;
+
+    public SystemPlaybackWindowsOutputNativeBufferCalls()
+        : this(NullPlaybackWindowsAudioNativeStageReporter.Instance)
+    {
+    }
+
+    internal SystemPlaybackWindowsOutputNativeBufferCalls(
+        IPlaybackWindowsAudioNativeStageReporter audioNativeStageReporter)
+    {
+        ArgumentNullException.ThrowIfNull(audioNativeStageReporter);
+        _audioNativeStageReporter = audioNativeStageReporter;
+    }
+
     public int UploadAndPresent(IPlaybackWindowsDirect3D11BorrowedResource resource,
         PlaybackWindowsVideoFrameBuffer frame)
     {
@@ -476,27 +510,52 @@ internal sealed class SystemPlaybackWindowsOutputNativeBufferCalls :
         var render = (IAudioRenderClient)Marshal.GetObjectForIUnknown(resource.AudioRenderClient);
         try
         {
+            _audioNativeStageReporter.Report(
+                PlaybackWindowsAudioNativeStage.GetBufferSizeEntering);
             var result = client.GetBufferSize(out var capacity);
+            _audioNativeStageReporter.Report(
+                PlaybackWindowsAudioNativeStage.GetBufferSizeCompleted);
             if (result < 0) return result;
+            _audioNativeStageReporter.Report(
+                PlaybackWindowsAudioNativeStage.GetCurrentPaddingEntering);
             result = client.GetCurrentPadding(out var padding);
+            _audioNativeStageReporter.Report(
+                PlaybackWindowsAudioNativeStage.GetCurrentPaddingCompleted);
             if (result < 0) return result;
             if (padding > capacity || samples.FrameCount > capacity - padding)
                 return unchecked((int)0x88890006);
+            _audioNativeStageReporter.Report(
+                PlaybackWindowsAudioNativeStage.GetBufferEntering);
             result = render.GetBuffer((uint)samples.FrameCount, out var buffer);
+            _audioNativeStageReporter.Report(
+                PlaybackWindowsAudioNativeStage.GetBufferCompleted);
             if (result < 0) return result;
             var releaseFrames = 0u;
             try
             {
+                _audioNativeStageReporter.Report(
+                    PlaybackWindowsAudioNativeStage.BufferCopyEntering);
                 Marshal.Copy(samples.Buffer.ToArray(), 0, buffer, samples.Buffer.Length);
+                _audioNativeStageReporter.Report(
+                    PlaybackWindowsAudioNativeStage.BufferCopyCompleted);
                 releaseFrames = (uint)samples.FrameCount;
             }
             finally
             {
+                _audioNativeStageReporter.Report(
+                    PlaybackWindowsAudioNativeStage.ReleaseBufferEntering);
                 var release = render.ReleaseBuffer(releaseFrames, 0);
+                _audioNativeStageReporter.Report(
+                    PlaybackWindowsAudioNativeStage.ReleaseBufferCompleted);
                 if (result >= 0) result = release;
             }
             if (result < 0 || !startStream) return result;
-            return client.Start();
+            _audioNativeStageReporter.Report(
+                PlaybackWindowsAudioNativeStage.StartEntering);
+            result = client.Start();
+            _audioNativeStageReporter.Report(
+                PlaybackWindowsAudioNativeStage.StartCompleted);
+            return result;
         }
         finally
         {
@@ -509,7 +568,14 @@ internal sealed class SystemPlaybackWindowsOutputNativeBufferCalls :
     {
         if (resource.AudioClient == 0) return;
         var client = (IAudioClient)Marshal.GetObjectForIUnknown(resource.AudioClient);
-        try { client.Stop(); }
+        try
+        {
+            _audioNativeStageReporter.Report(
+                PlaybackWindowsAudioNativeStage.StopEntering);
+            client.Stop();
+            _audioNativeStageReporter.Report(
+                PlaybackWindowsAudioNativeStage.StopCompleted);
+        }
         finally { Marshal.FinalReleaseComObject(client); }
     }
 

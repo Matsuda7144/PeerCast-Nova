@@ -62,3 +62,28 @@ initial output kind. Controlled video selects video and controlled audio selects
 audio; normal production continues to default to video. This changes no retry,
 queue, timing, output, or ownership contract. Audio execution and paired
 verification remain pending until the corrected physical audio run is reviewed.
+
+## Corrected-selection run process boundary
+
+The first post-selection-correction audio attempt ran once from clean main
+`e8b7fcac2f679eb5023ae8ab36571b86773d3950`. The retained video record gate
+was accepted. The physical child produced zero stdout bytes, so no canonical
+audio record was formed. The helper subsequently exited with code `2` and left
+a zero-byte file at the requested external audio record path. Audio counters,
+runner and lifecycle states, and borrowed-owner preservation are unknown. Audio
+preflight, audible observation, and paired verification were not executed. No
+retry, redelivery, fallback, or added instrumentation was used in that run.
+
+The helper discarded the child exit code and stderr boundary when it replaced
+the missing canonical stdout with its generic exit. Therefore this evidence does
+not identify a WASAPI call or native termination code and does not refute the
+initial-selection correction from PR #112.
+
+The controlled audio helper now starts the physical child once through an
+explicit redirected process boundary. It promotes stdout only after the complete
+canonical audio envelope is accepted. Otherwise it creates no audio record and
+retains a separate repository-external sanitized process-failure record containing
+only byte counts, signed and hexadecimal child exit code, an allowlisted stderr
+classification, and the last exact allowlisted native audio stage. Raw stderr is
+never retained. The next physical execution is diagnostic only and cannot serve
+as final physical audio acceptance.
