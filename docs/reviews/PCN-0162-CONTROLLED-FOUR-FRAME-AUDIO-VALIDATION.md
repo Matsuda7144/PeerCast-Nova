@@ -73,3 +73,36 @@ This PR does not run physical output. After merge, execute the existing video-ga
 - operator observation `Audio audible: Yes` for recognizable fixture sound.
 
 Paired verification remains blocked until that result is retained.
+
+## Retained post-EOS physical result
+
+The post-EOS scheduler drain was exercised exactly once from clean main
+`d3cf3a32c66bb5a8dc322e6b1e524bd807c518b4`.
+
+The canonical record was `DeliveryRejected / None`, with fixture bytes / packets
+`66,939 / 2`, decode operations `4`, delivery attempts / delivered `3 / 2`, and
+retained WouldBlock `0`. The runner stopped, the lifecycle disposed, and no external
+binary or payload was published. Borrowed-owner verification was not reached because
+the run terminated before evidence capture.
+
+The operator heard a noise-like sound, not recognizable retained-fixture audio.
+Two successful 1,024-frame deliveries represent approximately 42.7 ms at 48 kHz,
+which remains consistent with the earlier short-duration observation, but does not
+identify the third fixed lifecycle result.
+
+The result refutes the reviewed assumption that two additional scheduler-owned audio
+frames would remain after decoder EOS. The third delivery was not `AudioDelivered`;
+`RetainedWouldBlock` is excluded. `Empty` is plausible but is not retained evidence.
+
+## Revised next gate
+
+Do not repeat the ordinary helper or any diagnostic on `d3cf3a32...`.
+
+The already implemented bounded delivery-result diagnostic must be used exactly once
+from a later merged main commit, after final-head and post-merge CircleCI success,
+with the unchanged runtime, fixture, video gate, limits, endpoint, timing, and buffer.
+It must use new repository-external diagnostic and failure paths and preserve the
+ordered sequence including the third post-EOS result.
+
+No production change, retry, recovery, endpoint fallback, additional audio probe, or
+paired verification is reviewed until that exact result is retained.

@@ -44,9 +44,46 @@ The existing controlled Windows evidence gate already accepts multiple deliverie
 
 No record schema change is required. A successful controlled audio record is expected to report four delivery attempts and four delivered items.
 
+## Physical outcome
+
+The post-EOS scheduler-drain correction was validated exactly once from clean main
+`d3cf3a32c66bb5a8dc322e6b1e524bd807c518b4`.
+
+The retained canonical record reported:
+
+- `Result: DeliveryRejected`;
+- `Evidence: None`;
+- fixture bytes / packets: `66,939 / 2`;
+- decode operations: `4`;
+- delivery attempts / delivered: `3 / 2`;
+- retained WouldBlock: `0`;
+- runner / lifecycle: `Stopped / Disposed`;
+- external binary or payload published: `False`.
+
+The managed capture retained the canonical record with child failure. The operator
+heard audio, but only as a noise-like sound rather than recognizable fixture audio.
+No retry, alternate endpoint, timing change, buffer change, second command, or
+paired verification was performed.
+
+This result disproves the assumption that decoder EOS necessarily left two
+additional audio reservations available to the controlled scheduler. Two ordinary
+audio deliveries succeeded; the third post-EOS delivery returned a fixed
+non-`AudioDelivered` result. `RetainedWouldBlock` is excluded by the record.
+`Empty` is plausible, but remains an inference because the canonical schema
+collapses the exact lifecycle result to `DeliveryRejected`.
+
+The four-frame gate is therefore not satisfied. Keep production behavior unchanged
+and preserve the existing bounds while the exact third delivery result is captured
+through the already implemented delivery-result diagnostic on a later, separately
+approved main commit.
+
 ## Consequences
 
 The next physical audio run will exercise the ordinary production one-frame path four times rather than replacing that path with a batching policy. A recognizable operator observation can therefore complete independent audio acceptance without changing normal playback latency.
+
+The attempted four-frame validation did not complete physically. No further
+ordinary audio run is authorized until the exact third delivery result has been
+retained and reviewed.
 
 ## Non-goals
 
