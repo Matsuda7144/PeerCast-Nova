@@ -26,7 +26,10 @@ public readonly record struct PlaybackWindowsOutputNativeEvidenceSnapshot(
     long AudioAcceptedByteCount,
     long AudioWouldBlockCount,
     long AudioStartAcknowledgementCount,
-    long AudioDeviceLostCount);
+    long AudioDeviceLostCount)
+{
+    public PlaybackWindowsAudioRenderTraceSnapshot AudioRenderTrace { get; init; }
+}
 
 public sealed record PlaybackControlledWindowsOutputCaptureContext(
     string RuntimeBuildId,
@@ -214,7 +217,12 @@ internal sealed class PlaybackWindowsOutputNativeEvidenceProcessor :
                     _audioAcceptedByteCount,
                     _audioWouldBlockCount,
                     _audioStartAcknowledgementCount,
-                    _audioDeviceLostCount);
+                    _audioDeviceLostCount)
+                {
+                    AudioRenderTrace =
+                        (_inner as IPlaybackWindowsAudioRenderTraceSource)?.AudioRenderTrace ??
+                        default,
+                };
             }
         }
     }

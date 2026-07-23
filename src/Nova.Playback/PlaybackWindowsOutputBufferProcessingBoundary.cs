@@ -105,6 +105,25 @@ public sealed class PlaybackWindowsOutputBufferProcessingBoundary : IDisposable
         PlaybackWindowsOutputActivationBoundary activation,
         PlaybackWindowsOutputResourceBindingBoundary binding,
         PlaybackWindowsOutputStreamInitializationBoundary initialization,
+        IPlaybackWindowsAudioNativeStageReporter audioNativeStageReporter,
+        bool captureAudioRenderTrace,
+        bool capturePreStopPadding)
+        : this(
+            activation,
+            binding,
+            initialization,
+            CreateSystemProcessor(
+                audioNativeStageReporter,
+                captureAudioRenderTrace,
+                capturePreStopPadding),
+            static () => OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22_000))
+    {
+    }
+
+    internal PlaybackWindowsOutputBufferProcessingBoundary(
+        PlaybackWindowsOutputActivationBoundary activation,
+        PlaybackWindowsOutputResourceBindingBoundary binding,
+        PlaybackWindowsOutputStreamInitializationBoundary initialization,
         IPlaybackWindowsOutputNativeBufferProcessor native,
         Func<bool> isSupportedPlatform)
     {
@@ -342,13 +361,28 @@ public sealed class PlaybackWindowsOutputBufferProcessingBoundary : IDisposable
 
     private static IPlaybackWindowsOutputNativeBufferProcessor CreateSystemProcessor(
         IPlaybackWindowsAudioNativeStageReporter audioNativeStageReporter) =>
-        OperatingSystem.IsWindows()
+        CreateSystemProcessor(
+            audioNativeStageReporter,
+            captureAudioRenderTrace: false,
+            capturePreStopPadding: false);
+
+    private static IPlaybackWindowsOutputNativeBufferProcessor CreateSystemProcessor(
+        IPlaybackWindowsAudioNativeStageReporter audioNativeStageReporter,
+        bool captureAudioRenderTrace,
+        bool capturePreStopPadding)
+    {
+        var audioRenderTrace = captureAudioRenderTrace
+            ? new PlaybackWindowsAudioRenderTrace(capturePreStopPadding)
+            : null;
+        return OperatingSystem.IsWindows()
             ? new PlaybackWindowsOutputNativeEvidenceProcessor(
                 new SystemPlaybackWindowsOutputNativeBufferProcessor(
                     new SystemPlaybackWindowsOutputNativeBufferCalls(
-                        audioNativeStageReporter)),
+                        audioNativeStageReporter,
+                        audioRenderTrace)),
                 PlaybackControlledWindowsOutputEvidenceSource.SystemWindows)
             : new UnsupportedPlaybackWindowsOutputNativeBufferProcessor();
+    }
 }
 
 internal enum PlaybackWindowsOutputNativeBufferResult
@@ -386,7 +420,8 @@ internal sealed class UnsupportedPlaybackWindowsOutputNativeBufferProcessor :
 
 [SupportedOSPlatform("windows")]
 internal sealed class SystemPlaybackWindowsOutputNativeBufferProcessor :
-    IPlaybackWindowsOutputNativeBufferProcessor
+    IPlaybackWindowsOutputNativeBufferProcessor,
+    IPlaybackWindowsAudioRenderTraceSource
 {
     private const int DxgiStatusOccluded = 0x087A0001;
     private readonly IPlaybackWindowsOutputNativeBufferCalls _calls;
@@ -396,6 +431,9 @@ internal sealed class SystemPlaybackWindowsOutputNativeBufferProcessor :
 
     internal SystemPlaybackWindowsOutputNativeBufferProcessor(
         IPlaybackWindowsOutputNativeBufferCalls calls) => _calls = calls;
+
+    public PlaybackWindowsAudioRenderTraceSnapshot AudioRenderTrace =>
+        (_calls as IPlaybackWindowsAudioRenderTraceSource)?.AudioRenderTrace ?? default;
 
     public PlaybackWindowsOutputNativeBufferResult ProcessVideo(
         IDisposable borrowedResource, PlaybackWindowsVideoFrameBuffer frame)
@@ -453,21 +491,35 @@ internal interface IPlaybackWindowsOutputNativeBufferCalls
 
 [SupportedOSPlatform("windows")]
 internal sealed class SystemPlaybackWindowsOutputNativeBufferCalls :
-    IPlaybackWindowsOutputNativeBufferCalls
+    IPlaybackWindowsOutputNativeBufferCalls,
+    IPlaybackWindowsAudioRenderTraceSource
 {
+    private const int FailureHResult = unchecked((int)0x80004005);
     private readonly IPlaybackWindowsAudioNativeStageReporter _audioNativeStageReporter;
+    private readonly PlaybackWindowsAudioRenderTrace? _audioRenderTrace;
 
     public SystemPlaybackWindowsOutputNativeBufferCalls()
-        : this(NullPlaybackWindowsAudioNativeStageReporter.Instance)
+        : this(NullPlaybackWindowsAudioNativeStageReporter.Instance, audioRenderTrace: null)
     {
     }
 
     internal SystemPlaybackWindowsOutputNativeBufferCalls(
         IPlaybackWindowsAudioNativeStageReporter audioNativeStageReporter)
+        : this(audioNativeStageReporter, audioRenderTrace: null)
+    {
+    }
+
+    internal SystemPlaybackWindowsOutputNativeBufferCalls(
+        IPlaybackWindowsAudioNativeStageReporter audioNativeStageReporter,
+        PlaybackWindowsAudioRenderTrace? audioRenderTrace)
     {
         ArgumentNullException.ThrowIfNull(audioNativeStageReporter);
         _audioNativeStageReporter = audioNativeStageReporter;
+        _audioRenderTrace = audioRenderTrace;
     }
+
+    public PlaybackWindowsAudioRenderTraceSnapshot AudioRenderTrace =>
+        _audioRenderTrace?.AudioRenderTrace ?? default;
 
     public int UploadAndPresent(IPlaybackWindowsDirect3D11BorrowedResource resource,
         PlaybackWindowsVideoFrameBuffer frame)
@@ -508,6 +560,16 @@ internal sealed class SystemPlaybackWindowsOutputNativeBufferCalls :
     {
         var client = (IAudioClient)Marshal.GetObjectForIUnknown(resource.AudioClient);
         var render = (IAudioRenderClient)Marshal.GetObjectForIUnknown(resource.AudioRenderClient);
+        var finalResult = FailureHResult;
+        var hasCapacity = false;
+        var capacityFrames = 0;
+        var hasPadding = false;
+        var paddingFrames = 0;
+        var hasAvailable = false;
+        var availableFrames = 0;
+        var getBufferAcknowledged = false;
+        var releaseBufferAcknowledged = false;
+        var startAcknowledged = false;
         try
         {
             _audioNativeStageReporter.Report(
@@ -515,21 +577,45 @@ internal sealed class SystemPlaybackWindowsOutputNativeBufferCalls :
             var result = client.GetBufferSize(out var capacity);
             _audioNativeStageReporter.Report(
                 PlaybackWindowsAudioNativeStage.GetBufferSizeCompleted);
-            if (result < 0) return result;
+            if (result < 0)
+            {
+                finalResult = result;
+                return result;
+            }
+            hasCapacity = TryConvertFrames(capacity, out capacityFrames);
+
             _audioNativeStageReporter.Report(
                 PlaybackWindowsAudioNativeStage.GetCurrentPaddingEntering);
             result = client.GetCurrentPadding(out var padding);
             _audioNativeStageReporter.Report(
                 PlaybackWindowsAudioNativeStage.GetCurrentPaddingCompleted);
-            if (result < 0) return result;
+            if (result < 0)
+            {
+                finalResult = result;
+                return result;
+            }
+            hasPadding = TryConvertFrames(padding, out paddingFrames);
+            if (padding <= capacity)
+            {
+                hasAvailable = TryConvertFrames(capacity - padding, out availableFrames);
+            }
             if (padding > capacity || samples.FrameCount > capacity - padding)
-                return unchecked((int)0x88890006);
+            {
+                finalResult = unchecked((int)0x88890006);
+                return finalResult;
+            }
+
             _audioNativeStageReporter.Report(
                 PlaybackWindowsAudioNativeStage.GetBufferEntering);
             result = render.GetBuffer((uint)samples.FrameCount, out var buffer);
             _audioNativeStageReporter.Report(
                 PlaybackWindowsAudioNativeStage.GetBufferCompleted);
-            if (result < 0) return result;
+            if (result < 0)
+            {
+                finalResult = result;
+                return result;
+            }
+            getBufferAcknowledged = true;
             var releaseFrames = 0u;
             try
             {
@@ -547,18 +633,40 @@ internal sealed class SystemPlaybackWindowsOutputNativeBufferCalls :
                 var release = render.ReleaseBuffer(releaseFrames, 0);
                 _audioNativeStageReporter.Report(
                     PlaybackWindowsAudioNativeStage.ReleaseBufferCompleted);
+                releaseBufferAcknowledged = release >= 0;
                 if (result >= 0) result = release;
             }
-            if (result < 0 || !startStream) return result;
+            if (result < 0 || !startStream)
+            {
+                finalResult = result;
+                return result;
+            }
+
             _audioNativeStageReporter.Report(
                 PlaybackWindowsAudioNativeStage.StartEntering);
             result = client.Start();
             _audioNativeStageReporter.Report(
                 PlaybackWindowsAudioNativeStage.StartCompleted);
+            startAcknowledged = result >= 0;
+            finalResult = result;
             return result;
         }
         finally
         {
+            _audioRenderTrace?.RecordWrite(new(
+                samples.FrameCount,
+                samples.Buffer.Length,
+                hasCapacity,
+                capacityFrames,
+                hasPadding,
+                paddingFrames,
+                hasAvailable,
+                availableFrames,
+                startStream,
+                getBufferAcknowledged,
+                releaseBufferAcknowledged,
+                startAcknowledged,
+                MapAudioRenderResult(finalResult)));
             Marshal.FinalReleaseComObject(render);
             Marshal.FinalReleaseComObject(client);
         }
@@ -570,6 +678,13 @@ internal sealed class SystemPlaybackWindowsOutputNativeBufferCalls :
         var client = (IAudioClient)Marshal.GetObjectForIUnknown(resource.AudioClient);
         try
         {
+            if (_audioRenderTrace?.CapturePreStopPadding == true)
+            {
+                var paddingResult = client.GetCurrentPadding(out var padding);
+                _audioRenderTrace.RecordPreStopPadding(
+                    paddingResult >= 0 && TryConvertFrames(padding, out var paddingFrames),
+                    paddingResult >= 0 && padding <= int.MaxValue ? (int)padding : 0);
+            }
             _audioNativeStageReporter.Report(
                 PlaybackWindowsAudioNativeStage.StopEntering);
             client.Stop();
@@ -578,6 +693,34 @@ internal sealed class SystemPlaybackWindowsOutputNativeBufferCalls :
         }
         finally { Marshal.FinalReleaseComObject(client); }
     }
+
+    private static bool TryConvertFrames(uint value, out int converted)
+    {
+        if (value > int.MaxValue)
+        {
+            converted = 0;
+            return false;
+        }
+
+        converted = (int)value;
+        return true;
+    }
+
+    private static PlaybackWindowsAudioRenderWriteResult MapAudioRenderResult(int hresult) =>
+        SystemPlaybackWindowsOutputNativeBufferProcessor.Normalize(hresult) switch
+        {
+            PlaybackWindowsOutputNativeBufferResult.Processed =>
+                PlaybackWindowsAudioRenderWriteResult.Processed,
+            PlaybackWindowsOutputNativeBufferResult.WouldBlock =>
+                PlaybackWindowsAudioRenderWriteResult.WouldBlock,
+            PlaybackWindowsOutputNativeBufferResult.FormatUnsupported =>
+                PlaybackWindowsAudioRenderWriteResult.FormatUnsupported,
+            PlaybackWindowsOutputNativeBufferResult.ResizeRequired =>
+                PlaybackWindowsAudioRenderWriteResult.ResizeRequired,
+            PlaybackWindowsOutputNativeBufferResult.DeviceLost =>
+                PlaybackWindowsAudioRenderWriteResult.DeviceLost,
+            _ => PlaybackWindowsAudioRenderWriteResult.Failure,
+        };
 
     private static readonly Guid D3D11Texture2DInterface =
         new("6F15AAF2-D208-4E89-9AB4-489535D34F9C");
