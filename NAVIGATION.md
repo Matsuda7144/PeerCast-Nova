@@ -56,6 +56,31 @@ and this host correction adds no WASAPI or final acceptance evidence.
 - `tools/Run-ControlledWindowsPhysicalAudio.ps1`
 - `docs/runbooks/0.0.10d-controlled-windows-audio-validation.md`
 
+The later diagnostic run on clean main
+`e7e82b01a1eb323954b8ef2375b025064a796a8d` passed the video gate and audio
+preflight and produced a `Completed` / `Accepted` record with one delivery,
+zero WouldBlock, stopped/disposed lifecycle, and preserved borrowed owners.
+The operator recorded `Audio audible: No`: only a short noise-like sound was
+heard, not recognizable fixture audio. Deterministic evidence remains valid,
+recognizable physical audio remains incomplete, and paired verification is
+blocked.
+
+## Phase 5 controlled known-audio tone probe
+
+The diagnostic-only probe generates one fixed managed 80 ms, 1,000 Hz,
+48 kHz stereo float tone, submits exactly one production audio-buffer write,
+requires one ReleaseBuffer and Start acknowledgement, holds without additional
+output, and performs production-first cleanup. It bypasses FFmpeg, fixture,
+parser, decoder, scheduler, timing, physical run records, and video Present.
+The canonical path-free record distinguishes a recognizable beep from a
+canonical PCM/WASAPI interpretation failure without claiming final physical
+audio acceptance.
+
+- `docs/adr/ADR-0149-controlled-known-audio-tone-probe.md`
+- `docs/reviews/PCN-0157-CONTROLLED-KNOWN-AUDIO-TONE-PROBE.md`
+- `src/Nova.Cli/PlaybackControlledWindowsKnownAudioToneProbe.cs`
+- `tools/Run-ControlledWindowsKnownAudioToneProbe.ps1`
+
 ## Phase 5 corrected Windows output probes
 
 The private `ID3D11DeviceContext` declarations omitted `OMSetBlendState` and `OMSetDepthStencilState`, shifting every later COM vtable call by two slots. The correction restored the official method order and native `void` signatures.

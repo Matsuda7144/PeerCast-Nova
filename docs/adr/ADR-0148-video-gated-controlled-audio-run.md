@@ -110,3 +110,27 @@ concurrent byte capture, sanitized analysis, and atomic promotion. PowerShell 7
 is not required. This correction supplies no new evidence of WASAPI reachability
 and does not alter the PR #112 initial-media selection correction. The next run
 remains diagnostic rather than final physical audio acceptance.
+
+## Accepted deterministic audio with negative operator observation
+
+The corrected diagnostic physical audio run executed once from clean main
+`e7e82b01a1eb323954b8ef2375b025064a796a8d`. The helper exited `0`; the
+retained video gate returned `VideoAccepted`; canonical audio preflight returned
+`AudioAccepted`; and the physical record reported `Completed` / `Accepted`.
+Fixture bytes and packets were `66,939` / `2`, decode operations were `2`,
+delivery attempts and delivered items were `1` / `1`, and retained WouldBlock
+was `0`. Runner and lifecycle ended `Stopped` / `Disposed`, both borrowed owners
+were preserved, and no process-failure record was created.
+
+The operator recorded `Audio audible: No`: a short noise-like sound was heard,
+but it was not recognizable as the fixture audio. No retry, redelivery,
+fallback, additional probe, or paired verification occurred. The deterministic
+audio evidence remains valid, while recognizable physical audio acceptance is
+incomplete and paired verification remains blocked.
+
+The controlled composition delivers only the first selected audio frame and
+then terminates. The retained fixture contains 48 AAC frames and 49,152 decoded
+samples, averaging 1,024 samples per frame, or approximately 21.3 ms at 48 kHz.
+The one-second observation hold emits no additional samples. That duration is a
+plausible cause of the observation, but PCM conversion and sample
+interpretation have not yet been separated from it.

@@ -29,6 +29,19 @@ try
             args,
             argument => string.Equals(
                 argument,
+                PlaybackControlledWindowsKnownAudioToneProbeCommand.Argument,
+                StringComparison.OrdinalIgnoreCase)))
+    {
+        var probe = await PlaybackControlledWindowsKnownAudioToneProbeCommand.RunAsync(
+            args,
+            Console.Out,
+            cancellationSource.Token);
+        Environment.ExitCode = probe.ExitCode;
+    }
+    else if (Array.Exists(
+            args,
+            argument => string.Equals(
+                argument,
                 PlaybackControlledWindowsTextureCopyProbeCommand.Argument,
                 StringComparison.OrdinalIgnoreCase)))
     {

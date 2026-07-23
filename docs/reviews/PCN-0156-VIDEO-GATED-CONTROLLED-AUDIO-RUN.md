@@ -154,3 +154,26 @@ The PowerShell helper continues to own all repository-external path checks and
 the video preflight before invoking the capture command. It performs audio
 preflight only for a canonical child success. PowerShell 7, retry, redelivery,
 fallback, and paired verification are not introduced.
+
+## Deterministic acceptance and audible-observation review
+
+One diagnostic run from clean main
+`e7e82b01a1eb323954b8ef2375b025064a796a8d` completed with helper exit `0`.
+The video record gate was `VideoAccepted`, canonical audio preflight was
+`AudioAccepted`, and the record was `Completed` / `Accepted`. Fixture
+bytes/packets were `66,939` / `2`; decode operations were `2`; delivery
+attempts/delivered were `1` / `1`; retained WouldBlock was `0`; runner/lifecycle
+were `Stopped` / `Disposed`; and borrowed window/dispatcher preservation was
+`True` / `True`. No failure record was produced.
+
+The independent operator result was `Audio audible: No`. A very short
+noise-like sound was heard, but it was not recognizable as fixture audio. There
+was no retry, redelivery, fallback, extra probe, or paired verification. This
+does not invalidate deterministic admission, but recognizable physical audio
+acceptance remains incomplete and paired verification stays blocked.
+
+The one-shot composition emits only one selected decoded audio frame. Across
+the retained fixture, 48 AAC frames decode to 49,152 samples, averaging 1,024
+samples (about 21.3 ms at 48 kHz) per frame. The observation hold adds no
+samples. A controlled fixed tone is required to distinguish short fixture-frame
+duration from float PCM interpretation or the native buffer path.
