@@ -7,13 +7,16 @@ public sealed class SystemPlaybackControlledWindowsPhysicalRunOperationsTests
     [Theory]
     [InlineData(
         PlaybackControlledWindowsOutputValidationKind.Video,
-        PlaybackSchedulerInitialOutputKind.Video)]
+        PlaybackSchedulerInitialOutputKind.Video,
+        PlaybackPcpFlvAwaitedDecodeMediaSelection.AudioAndVideo)]
     [InlineData(
         PlaybackControlledWindowsOutputValidationKind.Audio,
-        PlaybackSchedulerInitialOutputKind.Audio)]
+        PlaybackSchedulerInitialOutputKind.Audio,
+        PlaybackPcpFlvAwaitedDecodeMediaSelection.AudioOnly)]
     public void CreateLifecycleOptions_MapsControlledKindAndPreservesBoundedDropOldest(
         PlaybackControlledWindowsOutputValidationKind kind,
-        PlaybackSchedulerInitialOutputKind expectedInitialOutputKind)
+        PlaybackSchedulerInitialOutputKind expectedInitialOutputKind,
+        PlaybackPcpFlvAwaitedDecodeMediaSelection expectedMediaSelection)
     {
         var options = SystemPlaybackControlledWindowsPhysicalRunOperations.CreateLifecycleOptions(
             TimeSpan.FromMilliseconds(100),
@@ -29,6 +32,7 @@ public sealed class SystemPlaybackControlledWindowsPhysicalRunOperationsTests
             PlaybackSchedulerFullPolicy.DropOldest,
             options.Generation.Scheduler.FullPolicy);
         Assert.Equal(expectedInitialOutputKind, options.Generation.Scheduler.InitialOutputKind);
+        Assert.Equal(expectedMediaSelection, options.Production.MediaSelection);
     }
 
     [Fact]
@@ -39,6 +43,9 @@ public sealed class SystemPlaybackControlledWindowsPhysicalRunOperationsTests
             PlaybackSchedulerInitialOutputKind.Video,
             productionDefault.InitialOutputKind);
         Assert.Equal(PlaybackSchedulerFullPolicy.DropIncoming, productionDefault.FullPolicy);
+        Assert.Equal(
+            PlaybackPcpFlvAwaitedDecodeMediaSelection.AudioAndVideo,
+            new PlaybackPcpFlvAwaitedDecodeOptions().MediaSelection);
     }
 
     [Fact]

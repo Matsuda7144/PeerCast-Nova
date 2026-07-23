@@ -72,6 +72,9 @@ public sealed record PlaybackControlledWindowsPhysicalRunSnapshot(
 
 public sealed class PlaybackControlledWindowsPhysicalRunComposition : IAsyncDisposable
 {
+    private const int RequiredVideoDeliveryCount = 1;
+    private const int RequiredAudioDeliveryCount = 4;
+
     private readonly object _sync = new();
     private readonly PlaybackControlledWindowsPhysicalRunOptions _options;
     private readonly IPlaybackControlledWindowsPhysicalRunOperations _operations;
@@ -294,6 +297,7 @@ public sealed class PlaybackControlledWindowsPhysicalRunComposition : IAsyncDisp
         var kind = _options.Kind == PlaybackControlledWindowsOutputValidationKind.Video
             ? PlaybackBoundedDemuxMediaKind.Video
             : PlaybackBoundedDemuxMediaKind.Audio;
+        var requiredDeliveryCount = RequiredDeliveryCount(_options.Kind);
         var draining = false;
         for (var index = 0; index < _options.MaximumDecodeOperations; index++)
         {
@@ -305,7 +309,12 @@ public sealed class PlaybackControlledWindowsPhysicalRunComposition : IAsyncDisp
             switch (result)
             {
                 case PlaybackApprovedExternalRuntimeWindowsLifecycleResult.FrameTransferred:
-                    return await DeliverOneAsync(cancellationToken).ConfigureAwait(false);
+                    var delivery = await DeliverOneAsync(cancellationToken).ConfigureAwait(false);
+                    if (delivery != PlaybackControlledWindowsPhysicalRunResult.Completed)
+                        return delivery;
+                    if (DeliveredCount() >= requiredDeliveryCount)
+                        return PlaybackControlledWindowsPhysicalRunResult.Completed;
+                    break;
                 case PlaybackApprovedExternalRuntimeWindowsLifecycleResult.NeedMoreInput:
                 case PlaybackApprovedExternalRuntimeWindowsLifecycleResult.StreamRequiresDrain:
                     draining = true;
@@ -390,23 +399,40 @@ public sealed class PlaybackControlledWindowsPhysicalRunComposition : IAsyncDisp
         lock (_sync) value = checked(value + 1);
     }
 
-    private static bool ValidateOptions(PlaybackControlledWindowsPhysicalRunOptions options) =>
-        (options.Kind is PlaybackControlledWindowsOutputValidationKind.Video or
-            PlaybackControlledWindowsOutputValidationKind.Audio) &&
-        IsWindowsPath(options.RuntimeDirectory) && IsWindowsPath(options.FixturePath) &&
-        IsSha256(options.FixtureSha256) &&
-        options.MaximumFixtureBytes is >= 1 and <= 256 * 1024 * 1024 &&
-        options.PacketPayloadBytes is >= 1 and <= 1024 * 1024 &&
-        options.PacketPayloadBytes <= options.MaximumFixtureBytes &&
-        options.MaximumDecodeOperations is >= 1 and <= 4096 &&
-        options.MaximumDeliveryOperations is >= 1 and <= 4096 &&
-        options.ObservationHoldDuration >= TimeSpan.Zero &&
-        options.ObservationHoldDuration <=
-            PlaybackControlledWindowsPhysicalRunOptions.MaximumObservationHoldDuration &&
-        options.AudioBufferDuration >= TimeSpan.FromMilliseconds(1) &&
-        options.AudioBufferDuration <=
-            PlaybackWindowsOutputStreamInitializationBoundary.MaximumAudioBufferDuration &&
-        options.Runner is not null;
+    private int DeliveredCount()
+    {
+        lock (_sync) return _deliveredCount;
+    }
+
+    private static bool ValidateOptions(PlaybackControlledWindowsPhysicalRunOptions options)
+    {
+        var requiredDeliveryCount = RequiredDeliveryCount(options.Kind);
+        return requiredDeliveryCount > 0 &&
+            IsWindowsPath(options.RuntimeDirectory) && IsWindowsPath(options.FixturePath) &&
+            IsSha256(options.FixtureSha256) &&
+            options.MaximumFixtureBytes is >= 1 and <= 256 * 1024 * 1024 &&
+            options.PacketPayloadBytes is >= 1 and <= 1024 * 1024 &&
+            options.PacketPayloadBytes <= options.MaximumFixtureBytes &&
+            options.MaximumDecodeOperations is >= 1 and <= 4096 &&
+            options.MaximumDecodeOperations >= requiredDeliveryCount &&
+            options.MaximumDeliveryOperations is >= 1 and <= 4096 &&
+            options.MaximumDeliveryOperations >= requiredDeliveryCount &&
+            options.ObservationHoldDuration >= TimeSpan.Zero &&
+            options.ObservationHoldDuration <=
+                PlaybackControlledWindowsPhysicalRunOptions.MaximumObservationHoldDuration &&
+            options.AudioBufferDuration >= TimeSpan.FromMilliseconds(1) &&
+            options.AudioBufferDuration <=
+                PlaybackWindowsOutputStreamInitializationBoundary.MaximumAudioBufferDuration &&
+            options.Runner is not null;
+    }
+
+    private static int RequiredDeliveryCount(
+        PlaybackControlledWindowsOutputValidationKind kind) => kind switch
+        {
+            PlaybackControlledWindowsOutputValidationKind.Video => RequiredVideoDeliveryCount,
+            PlaybackControlledWindowsOutputValidationKind.Audio => RequiredAudioDeliveryCount,
+            _ => 0,
+        };
 
     private static bool IsWindowsPath(string? value) =>
         !string.IsNullOrWhiteSpace(value) && value.Length is >= 3 and <= 32_767 &&

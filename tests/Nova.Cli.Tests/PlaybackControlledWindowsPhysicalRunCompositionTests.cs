@@ -29,7 +29,7 @@ public sealed class PlaybackControlledWindowsPhysicalRunCompositionTests
     }
 
     [Fact]
-    public async Task Audio_run_admits_exact_write_and_first_start_evidence()
+    public async Task Audio_run_admits_four_ordinary_writes_and_one_start()
     {
         var operations = new FakeOperations(AudioLifecycle())
         {
@@ -44,8 +44,58 @@ public sealed class PlaybackControlledWindowsPhysicalRunCompositionTests
         Assert.Equal(PlaybackControlledWindowsPhysicalRunResult.Completed, result);
         Assert.Equal(PlaybackControlledWindowsOutputEvidenceResult.Accepted,
             composition.Snapshot.EvidenceResult);
+        Assert.Equal(4, composition.Snapshot.DecodeOperationCount);
+        Assert.Equal(4, composition.Snapshot.DeliveryAttemptCount);
+        Assert.Equal(4, composition.Snapshot.DeliveredCount);
+        Assert.Equal(4, operations.Log.Count(item => item == "receive:Audio"));
+        Assert.Equal(4, operations.Log.Count(item => item == "deliver"));
         Assert.True(composition.Snapshot.BorrowedWindowPreserved);
         Assert.True(composition.Snapshot.BorrowedDispatcherPreserved);
+    }
+
+    [Fact]
+    public async Task Audio_WouldBlock_after_first_write_is_terminal_without_retry()
+    {
+        var operations = new FakeOperations(AudioLifecycle());
+        operations.DeliveryResults.Enqueue(
+            PlaybackApprovedExternalRuntimeWindowsLifecycleResult.AudioDelivered);
+        operations.DeliveryResults.Enqueue(
+            PlaybackApprovedExternalRuntimeWindowsLifecycleResult.RetainedWouldBlock);
+        await using var composition = Create(
+            PlaybackControlledWindowsOutputValidationKind.Audio,
+            operations);
+
+        var result = await composition.RunAsync();
+
+        Assert.Equal(PlaybackControlledWindowsPhysicalRunResult.DeliveryRejected, result);
+        Assert.Equal(2, composition.Snapshot.DecodeOperationCount);
+        Assert.Equal(2, composition.Snapshot.DeliveryAttemptCount);
+        Assert.Equal(1, composition.Snapshot.DeliveredCount);
+        Assert.Equal(1, composition.Snapshot.RetainedWouldBlockCount);
+        Assert.Equal(2, operations.Log.Count(item => item == "deliver"));
+    }
+
+    [Theory]
+    [InlineData(3, 4)]
+    [InlineData(4, 3)]
+    public async Task Audio_run_rejects_operation_budget_below_four_before_runner(
+        int maximumDecodeOperations,
+        int maximumDeliveryOperations)
+    {
+        var operations = new FakeOperations(AudioLifecycle());
+        var options = Options(PlaybackControlledWindowsOutputValidationKind.Audio) with
+        {
+            MaximumDecodeOperations = maximumDecodeOperations,
+            MaximumDeliveryOperations = maximumDeliveryOperations,
+        };
+        await using var composition = new PlaybackControlledWindowsPhysicalRunComposition(
+            options,
+            operations);
+
+        var result = await composition.RunAsync();
+
+        Assert.Equal(PlaybackControlledWindowsPhysicalRunResult.InvalidConfiguration, result);
+        Assert.Empty(operations.Log);
     }
 
     [Fact]
@@ -212,10 +262,10 @@ public sealed class PlaybackControlledWindowsPhysicalRunCompositionTests
             AudioSampleRate: 48_000,
             AudioChannelCount: 2,
             AudioGeneration: 7,
-            AudioWriteAttemptCount: 1,
-            AudioWriteAcknowledgementCount: 1,
-            AudioAcceptedFrameCount: 1_024,
-            AudioAcceptedByteCount: 4_096,
+            AudioWriteAttemptCount: 4,
+            AudioWriteAcknowledgementCount: 4,
+            AudioAcceptedFrameCount: 4_096,
+            AudioAcceptedByteCount: 16_384,
             AudioWouldBlockCount: 0,
             AudioStartAcknowledgementCount: 1,
             AudioDeviceLostCount: 0));
@@ -251,6 +301,10 @@ public sealed class PlaybackControlledWindowsPhysicalRunCompositionTests
         IPlaybackControlledWindowsPhysicalRunOperations
     {
         public List<string> Log { get; } = [];
+        public Queue<PlaybackApprovedExternalRuntimeWindowsLifecycleResult> DeliveryResults
+        {
+            get;
+        } = new();
         public PcpControlledFlvFixtureReplayResult ReplayResult { get; init; } =
             PcpControlledFlvFixtureReplayResult.Completed;
         public PlaybackApprovedExternalRuntimeWindowsLifecycleResult ReceiveResult { get; init; } =
@@ -338,7 +392,8 @@ public sealed class PlaybackControlledWindowsPhysicalRunCompositionTests
         {
             token.ThrowIfCancellationRequested();
             Log.Add("deliver");
-            return ValueTask.FromResult(DeliveryResult);
+            return ValueTask.FromResult(
+                DeliveryResults.Count > 0 ? DeliveryResults.Dequeue() : DeliveryResult);
         }
 
         public ValueTask StopLifecycleAsync()

@@ -93,6 +93,17 @@ internal sealed class SystemPlaybackControlledWindowsPhysicalRunOperations :
                     diagnosticOutput ?? Console.Error)
                 : NullPlaybackWindowsAudioNativeStageReporter.Instance,
             AudioBufferDuration = audioBufferDuration,
+            Production = new()
+            {
+                MediaSelection = kind switch
+                {
+                    PlaybackControlledWindowsOutputValidationKind.Video =>
+                        PlaybackPcpFlvAwaitedDecodeMediaSelection.AudioAndVideo,
+                    PlaybackControlledWindowsOutputValidationKind.Audio =>
+                        PlaybackPcpFlvAwaitedDecodeMediaSelection.AudioOnly,
+                    _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+                },
+            },
             Generation = new()
             {
                 Scheduler = new()
