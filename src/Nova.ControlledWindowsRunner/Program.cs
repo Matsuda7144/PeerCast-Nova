@@ -29,6 +29,20 @@ try
             args,
             argument => string.Equals(
                 argument,
+                PlaybackControlledWindowsDecodedAudioSliceProbeCommand.Argument,
+                StringComparison.OrdinalIgnoreCase)))
+    {
+        var probe =
+            await PlaybackControlledWindowsDecodedAudioSliceProbeCommand.RunAsync(
+                args,
+                Console.Out,
+                cancellationSource.Token);
+        Environment.ExitCode = probe.ExitCode;
+    }
+    else if (Array.Exists(
+            args,
+            argument => string.Equals(
+                argument,
                 PlaybackControlledWindowsKnownAudioToneProbeCommand.Argument,
                 StringComparison.OrdinalIgnoreCase)))
     {

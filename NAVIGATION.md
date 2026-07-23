@@ -81,6 +81,30 @@ audio acceptance.
 - `src/Nova.Cli/PlaybackControlledWindowsKnownAudioToneProbe.cs`
 - `tools/Run-ControlledWindowsKnownAudioToneProbe.ps1`
 
+The separately approved physical probe on clean main
+`2ca34405b8bdd81611aa2414092c91a95a8d6d51` completed with accepted evidence,
+one acknowledged write and Start, stopped/disposed cleanup, preserved borrowed
+owners, and operator observation `Known audio tone audible: Yes`. The 80 ms
+1,000 Hz beep was recognizable. Canonical Float32 production WASAPI output is
+therefore operational; paired verification remains blocked while fixture audio
+assembly is isolated.
+
+## Phase 5 controlled decoded-audio slice probe
+
+This diagnostic reuses the approved runtime, retained fixture, existing FLV
+demux/native AAC decode, and managed conversion. It copies the chronological
+first 80 ms as three complete 1,024-sample frames plus 768 samples from the
+fourth, yielding one private 3,840-frame / 30,720-byte canonical Float32 stereo
+buffer. Only the complete aggregate reaches one production audio write. The
+scheduler and normal one-frame composition are bypassed but unchanged.
+
+- `docs/adr/ADR-0152-controlled-decoded-audio-slice-probe.md`
+- `docs/reviews/PCN-0160-CONTROLLED-DECODED-AUDIO-SLICE-PROBE.md`
+- `docs/runbooks/0.0.10d-controlled-decoded-audio-slice-probe.md`
+- `src/Nova.Playback/PlaybackDecodedAudioSliceCollector.cs`
+- `src/Nova.Cli/PlaybackControlledWindowsDecodedAudioSliceProbe.cs`
+- `tools/Run-ControlledWindowsDecodedAudioSliceProbe.ps1`
+
 ## Phase 5 corrected Windows output probes
 
 The private `ID3D11DeviceContext` declarations omitted `OMSetBlendState` and `OMSetDepthStencilState`, shifting every later COM vtable call by two slots. The correction restored the official method order and native `void` signatures.

@@ -52,3 +52,23 @@ This decision does not establish final physical audio acceptance, replace
 fixture audio, add production tone generation, start paired verification,
 synthesize audio in normal playback, change normal production behavior or
 buffer duration, or repair multi-frame delivery.
+
+## Physical result
+
+The separately approved probe ran once from clean main
+`2ca34405b8bdd81611aa2414092c91a95a8d6d51`. The helper exited `0`; the
+canonical record was `Completed` / `Accepted`; format was 48,000 Hz stereo
+`PcmFloat32Interleaved`; duration was 80 ms; and the payload was 3,840 sample
+frames / 30,720 bytes. Native write attempts/acknowledgements were `1` / `1`,
+Start was acknowledged, retained WouldBlock and video Present attempts were
+zero, the runner stopped, the output lifecycle was disposed, and both borrowed
+owners were preserved.
+
+The operator recorded `Known audio tone audible: Yes` after recognizing a clear
+electronic beep. There was one physical probe and no retry, second write,
+fixture audio/video run, additional probe, paired verification, fallback, or
+device recreation. This establishes the canonical float PCM through production
+WASAPI and the selected endpoint as capable of recognizable output. It rules
+out a general Float32/WASAPI failure as the explanation for the earlier
+noise-like fixture observation, while leaving fixture-frame duration, decoded
+content, and multi-frame assembly for the next diagnostic boundary.

@@ -6,6 +6,100 @@ namespace PeerCast.Nova.Playback.Tests;
 public sealed class PlaybackPcpFlvAwaitedDecodeCompositionBoundaryTests
 {
     [Fact]
+    public async Task Default_media_selection_submits_video_and_audio_as_before()
+    {
+        var factory = new FakeGenerationFactory();
+        await using var boundary = CreateBoundary(factory);
+
+        await boundary.ConsumeAsync(
+            CreatePacket(
+                0,
+                ConcatForTest(
+                    BuildBootstrap(),
+                    BuildVideoNaluTag(),
+                    BuildAudioRawTag())),
+            CancellationToken.None);
+
+        Assert.Equal(2, Assert.Single(factory.Generations).PacketOperations.SubmitCount);
+    }
+
+    [Fact]
+    public async Task Audio_only_media_selection_disposes_video_event_without_submission()
+    {
+        var factory = new FakeGenerationFactory();
+        await using var boundary = CreateBoundary(
+            factory,
+            options: new()
+            {
+                MediaSelection = PlaybackPcpFlvAwaitedDecodeMediaSelection.AudioOnly,
+            });
+
+        await boundary.ConsumeAsync(
+            CreatePacket(
+                0,
+                ConcatForTest(
+                    BuildBootstrap(),
+                    BuildVideoNaluTag(),
+                    BuildAudioRawTag())),
+            CancellationToken.None);
+
+        var generation = Assert.Single(factory.Generations);
+        Assert.Equal(1, generation.PacketOperations.SubmitCount);
+        Assert.False(boundary.Snapshot.HasActiveSubmission);
+        Assert.False(boundary.Snapshot.HasActiveDecodedCompletion);
+    }
+
+    [Fact]
+    public async Task Diagnostic_stop_after_settlement_releases_frame_and_pending_generation_once()
+    {
+        var factory = new FakeGenerationFactory();
+        await using var boundary = new PlaybackPcpFlvAwaitedDecodeCompositionBoundary(
+            ChannelId,
+            SessionId,
+            factory,
+            initialPacketSequence: 0,
+            new()
+            {
+                MediaSelection = PlaybackPcpFlvAwaitedDecodeMediaSelection.AudioOnly,
+            },
+            parserOptions: null,
+            stopAfterSettlement: static () => true);
+        await boundary.ConsumeAsync(
+            CreatePacket(0, BuildBootstrap()),
+            CancellationToken.None);
+        var generation = Assert.Single(factory.Generations);
+        generation.PacketOperations.SubmitResults.Enqueue(
+            PlaybackMetadataAwareNativePacketResult.NeedFrameDrain);
+        generation.ReceiveOperations.Results.Enqueue(new(
+            PlaybackDecoderFfmpegManagedFrameCopyResult.Copied,
+            CreateFrame(PlaybackBoundedDemuxMediaKind.Audio)));
+
+        await boundary.ConsumeAsync(
+            CreatePacket(1, BuildAudioRawTag()),
+            CancellationToken.None);
+
+        Assert.Equal(1, generation.Settlement.CallCount);
+        Assert.Equal(0, generation.PacketOperations.RetryCount);
+        Assert.True(generation.Generation.IsDisposed);
+        Assert.True(Assert.Single(generation.Settlement.Completions).Frame.IsDisposed);
+        Assert.False(boundary.Snapshot.HasActiveSubmission);
+        Assert.False(boundary.Snapshot.HasActiveDecodedCompletion);
+        Assert.Equal(2, boundary.Snapshot.AcceptedPacketCount);
+    }
+
+    [Fact]
+    public void Undefined_media_selection_fails_closed()
+    {
+        var factory = new FakeGenerationFactory();
+        Assert.Throws<InvalidOperationException>(() => CreateBoundary(
+            factory,
+            options: new()
+            {
+                MediaSelection = (PlaybackPcpFlvAwaitedDecodeMediaSelection)99,
+            }));
+    }
+
+    [Fact]
     public async Task Consume_bootstrap_and_interleaved_packets_use_one_decode_generation()
     {
         var factory = new FakeGenerationFactory();

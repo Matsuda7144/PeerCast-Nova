@@ -62,6 +62,13 @@ public enum PlaybackPcpFlvDecodedSettlementResult
     Faulted,
 }
 
+public enum PlaybackPcpFlvAwaitedDecodeMediaSelection
+{
+    AudioAndVideo,
+    AudioOnly,
+    VideoOnly,
+}
+
 public sealed record PlaybackPcpFlvAwaitedDecodeOptions
 {
     public const int DefaultMaximumParserOperationsPerCall = 4_096;
@@ -82,6 +89,9 @@ public sealed record PlaybackPcpFlvAwaitedDecodeOptions
 
     public long MaximumDecodedManagedBytesPerCall { get; init; } =
         DefaultMaximumDecodedManagedBytesPerCall;
+
+    public PlaybackPcpFlvAwaitedDecodeMediaSelection MediaSelection { get; init; } =
+        PlaybackPcpFlvAwaitedDecodeMediaSelection.AudioAndVideo;
 }
 
 public sealed record PlaybackPcpFlvAwaitedDecodeSnapshot(
@@ -268,6 +278,7 @@ public sealed class PlaybackPcpFlvAwaitedDecodeCompositionBoundary :
     private readonly PlaybackPcpFlvAwaitedDecodeOptions _options;
     private readonly PlaybackOneEventFinalEosFlvParser _parser;
     private readonly IPlaybackPcpFlvAwaitedDecodeGenerationFactory _generationFactory;
+    private readonly Func<bool>? _stopAfterSettlement;
 
     private PlaybackPcpFlvAwaitedDecodeGeneration? _generation;
     private PlaybackPcpFlvAwaitedDecodeState _state =
@@ -293,6 +304,25 @@ public sealed class PlaybackPcpFlvAwaitedDecodeCompositionBoundary :
         long initialPacketSequence = 0,
         PlaybackPcpFlvAwaitedDecodeOptions? options = null,
         PlaybackBoundedFlvParserOptions? parserOptions = null)
+        : this(
+            channelId,
+            channelSessionId,
+            generationFactory,
+            initialPacketSequence,
+            options,
+            parserOptions,
+            stopAfterSettlement: null)
+    {
+    }
+
+    internal PlaybackPcpFlvAwaitedDecodeCompositionBoundary(
+        ChannelId channelId,
+        ChannelSessionId channelSessionId,
+        IPlaybackPcpFlvAwaitedDecodeGenerationFactory generationFactory,
+        long initialPacketSequence,
+        PlaybackPcpFlvAwaitedDecodeOptions? options,
+        PlaybackBoundedFlvParserOptions? parserOptions,
+        Func<bool>? stopAfterSettlement)
     {
         ArgumentNullException.ThrowIfNull(channelId);
         ArgumentNullException.ThrowIfNull(channelSessionId);
@@ -314,6 +344,7 @@ public sealed class PlaybackPcpFlvAwaitedDecodeCompositionBoundary :
         _channelId = channelId;
         _channelSessionId = channelSessionId;
         _generationFactory = generationFactory;
+        _stopAfterSettlement = stopAfterSettlement;
         _nextPacketSequence = initialPacketSequence;
         _parser = new PlaybackOneEventFinalEosFlvParser(parserOptions);
     }
@@ -477,6 +508,11 @@ public sealed class PlaybackPcpFlvAwaitedDecodeCompositionBoundary :
             EnsureNoActiveDecodeWork();
             CommitPacket(packet.Payload.Length);
         }
+        catch (PlaybackPcpFlvAwaitedDecodeStopException)
+        {
+            DisposeGenerationForReplacement();
+            CommitPacket(packet.Payload.Length);
+        }
         catch (OperationCanceledException)
             when (linkedSource.IsCancellationRequested)
         {
@@ -556,6 +592,15 @@ public sealed class PlaybackPcpFlvAwaitedDecodeCompositionBoundary :
                     decodeBudget,
                     decodeOperations,
                     linkedSource.Token).ConfigureAwait(false);
+            }
+        }
+        catch (PlaybackPcpFlvAwaitedDecodeStopException)
+        {
+            DisposeGenerationForReplacement();
+            lock (_sync)
+            {
+                _state = PlaybackPcpFlvAwaitedDecodeState.EncodedInputFinalized;
+                _result = PlaybackPcpFlvAwaitedDecodeResult.DecodedFrameConsumed;
             }
         }
         catch (OperationCanceledException)
@@ -660,6 +705,12 @@ public sealed class PlaybackPcpFlvAwaitedDecodeCompositionBoundary :
                 default:
                     throw Fail(MapDecodeFailure(operation.Result));
             }
+        }
+        catch (PlaybackPcpFlvAwaitedDecodeStopException)
+        {
+            DisposeGenerationForReplacement();
+            SetResult(PlaybackPcpFlvAwaitedDecodeResult.DecodedFrameConsumed);
+            return PlaybackPcpFlvAwaitedDecodeOperationResult.FrameConsumed;
         }
         catch (OperationCanceledException)
             when (linkedSource.IsCancellationRequested)
@@ -830,6 +881,12 @@ public sealed class PlaybackPcpFlvAwaitedDecodeCompositionBoundary :
         }
 
         var sourceEvent = completion.Events[0];
+        if (!IsSelectedMedia(sourceEvent.MediaKind))
+        {
+            completion.Dispose();
+            return;
+        }
+
         var result = generation.DecodeBoundary.BeginSubmission(
             completion,
             cancellationToken);
@@ -1030,6 +1087,11 @@ public sealed class PlaybackPcpFlvAwaitedDecodeCompositionBoundary :
                     _settledFrameCount = checked(_settledFrameCount + 1);
                 }
 
+                if (_stopAfterSettlement?.Invoke() == true)
+                {
+                    throw new PlaybackPcpFlvAwaitedDecodeStopException();
+                }
+
                 return;
 
             case PlaybackPcpFlvDecodedSettlementResult.Cancelled:
@@ -1141,6 +1203,17 @@ public sealed class PlaybackPcpFlvAwaitedDecodeCompositionBoundary :
             throw Fail(PlaybackPcpFlvAwaitedDecodeResult.SequenceRejected);
         }
     }
+
+    private bool IsSelectedMedia(PlaybackBoundedDemuxMediaKind mediaKind) =>
+        _options.MediaSelection switch
+        {
+            PlaybackPcpFlvAwaitedDecodeMediaSelection.AudioAndVideo => true,
+            PlaybackPcpFlvAwaitedDecodeMediaSelection.AudioOnly =>
+                mediaKind == PlaybackBoundedDemuxMediaKind.Audio,
+            PlaybackPcpFlvAwaitedDecodeMediaSelection.VideoOnly =>
+                mediaKind == PlaybackBoundedDemuxMediaKind.Video,
+            _ => false,
+        };
 
     private void ValidateParserAccounting(
         PlaybackBoundedFlvParserOperation operation,
@@ -1426,6 +1499,8 @@ public sealed class PlaybackPcpFlvAwaitedDecodeCompositionBoundary :
         public int Count { get; set; }
     }
 
+    private sealed class PlaybackPcpFlvAwaitedDecodeStopException : Exception;
+
     private void ThrowIfDisposed()
     {
         ObjectDisposedException.ThrowIf(
@@ -1465,6 +1540,12 @@ public sealed class PlaybackPcpFlvAwaitedDecodeCompositionBoundary :
         {
             throw new InvalidOperationException(
                 $"{nameof(options.MaximumDecodedManagedBytesPerCall)} is outside the supported range.");
+        }
+
+        if (!Enum.IsDefined(options.MediaSelection))
+        {
+            throw new InvalidOperationException(
+                $"{nameof(options.MediaSelection)} is not defined.");
         }
     }
 }

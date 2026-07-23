@@ -6,7 +6,7 @@
 
 ## Review result
 
-`ImplementedAwaitingSeparatePhysicalExecution`
+`ImplementedAndPhysicallyObserved`
 
 ## Scope
 
@@ -53,3 +53,20 @@ production tone generation, paired verification, normal-playback synthesis, a
 buffer-duration change, or a multi-frame delivery correction.
 
 No physical probe is executed by this implementation review.
+
+## Separate physical observation
+
+Clean main `2ca34405b8bdd81611aa2414092c91a95a8d6d51` produced helper exit `0`
+and a `Completed` / `Accepted` canonical record: 48,000 Hz stereo
+`PcmFloat32Interleaved`, 1,000 Hz, 80 ms, 3,840 sample frames, 30,720 bytes,
+write attempts/acknowledgements `1` / `1`, Start acknowledged, zero retained
+WouldBlock, stopped runner, disposed lifecycle, and preserved borrowed window
+and dispatcher. The operator recorded `Known audio tone audible: Yes`, having
+recognized a clear beep.
+
+Exactly one physical probe ran. No retry, second write, fixture media run,
+additional probe, paired verification, fallback, or device recreation ran.
+Thus the canonical Float32-to-production-WASAPI endpoint path is operational;
+the earlier fixture result is narrowed to fixture content, single-frame
+duration, decoded conversion, or frame assembly. Paired verification remains
+blocked.
