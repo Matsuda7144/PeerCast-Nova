@@ -42,6 +42,53 @@ public enum PlaybackGenerationMatchedSchedulerResetResult
     Failure,
 }
 
+public enum PlaybackGenerationMatchedSchedulerReservationCompletion
+{
+    None,
+    Retained,
+    Delivered,
+    Dropped,
+}
+
+public readonly record struct PlaybackGenerationMatchedSchedulerDeliveryObservation(
+    long Sequence,
+    PlaybackPolicyMediaKind MediaKind,
+    bool HasPresentationTimestampOffset,
+    long PresentationTimestampOffsetTicks,
+    bool HasTimingDecision,
+    PlaybackAvTimingDecisionResult TimingResult,
+    long TimingWaitTicks,
+    PlaybackGenerationMatchedSchedulerDeliveryResult Result,
+    PlaybackGenerationMatchedSchedulerReservationCompletion Completion);
+
+public readonly record struct PlaybackGenerationMatchedSchedulerDeliveryTraceSnapshot(
+    int Count,
+    bool Overflowed,
+    PlaybackGenerationMatchedSchedulerDeliveryObservation First,
+    PlaybackGenerationMatchedSchedulerDeliveryObservation Second,
+    PlaybackGenerationMatchedSchedulerDeliveryObservation Third,
+    PlaybackGenerationMatchedSchedulerDeliveryObservation Fourth)
+{
+    public const int MaximumObservationCount = 4;
+
+    public PlaybackGenerationMatchedSchedulerDeliveryObservation GetObservation(int index)
+    {
+        if ((uint)index >= (uint)Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(index));
+        }
+
+        return index switch
+        {
+            0 => First,
+            1 => Second,
+            2 => Third,
+            3 => Fourth,
+            _ => throw new ArgumentOutOfRangeException(nameof(index)),
+        };
+    }
+}
+
 public sealed record PlaybackGenerationMatchedSchedulerDeliverySnapshot(
     PlaybackGenerationMatchedSchedulerDeliveryState State,
     PlaybackGenerationMatchedSchedulerDeliveryResult Result,
@@ -52,7 +99,10 @@ public sealed record PlaybackGenerationMatchedSchedulerDeliverySnapshot(
     bool HasCompletedSequence,
     long LastCompletedSequence,
     bool HasActiveDelivery,
-    PlaybackDecodedCompletionSchedulerIngressSnapshot Ingress);
+    PlaybackDecodedCompletionSchedulerIngressSnapshot Ingress)
+{
+    public PlaybackGenerationMatchedSchedulerDeliveryTraceSnapshot DeliveryTrace { get; init; }
+}
 
 internal enum PlaybackGenerationMatchedCanonicalDeliveryResult
 {
@@ -418,6 +468,7 @@ public sealed class PlaybackGenerationMatchedSchedulerDeliveryBoundary :
     private readonly int _decoderGeneration;
     private readonly int _discontinuityGeneration;
     private readonly long _initialSchedulerSequence;
+    private readonly PlaybackGenerationMatchedSchedulerDeliveryObservation[]? _deliveryObservations;
 
     private CancellationTokenSource? _activeCancellation;
     private PlaybackGenerationMatchedSchedulerDeliveryState _state =
@@ -429,6 +480,10 @@ public sealed class PlaybackGenerationMatchedSchedulerDeliveryBoundary :
     private bool _hasCompletedSequence;
     private long _lastCompletedSequence;
     private bool _hasActiveDelivery;
+    private int _deliveryObservationCount;
+    private bool _deliveryObservationOverflowed;
+    private bool _hasDeliveryObservationTimestampAnchor;
+    private long _deliveryObservationTimestampAnchorTicks;
     private bool _isDisposed;
 
     public PlaybackGenerationMatchedSchedulerDeliveryBoundary(
@@ -440,7 +495,8 @@ public sealed class PlaybackGenerationMatchedSchedulerDeliveryBoundary :
         BoundedPlaybackScheduler scheduler,
         PlaybackAvTimingDecisionBoundary timing,
         PlaybackWindowsOutputBufferProcessingBoundary output,
-        long initialSchedulerSequence = 0)
+        long initialSchedulerSequence = 0,
+        bool captureDeliveryObservations = false)
         : this(
             sourceSession,
             decodeBoundary,
@@ -449,7 +505,8 @@ public sealed class PlaybackGenerationMatchedSchedulerDeliveryBoundary :
             discontinuityGeneration,
             scheduler,
             initialSchedulerSequence,
-            new PlaybackGenerationMatchedSchedulerDeliveryOperations(timing, output))
+            new PlaybackGenerationMatchedSchedulerDeliveryOperations(timing, output),
+            captureDeliveryObservations)
     {
     }
 
@@ -461,7 +518,8 @@ public sealed class PlaybackGenerationMatchedSchedulerDeliveryBoundary :
         int discontinuityGeneration,
         BoundedPlaybackScheduler scheduler,
         long initialSchedulerSequence,
-        IPlaybackGenerationMatchedSchedulerDeliveryOperations operations)
+        IPlaybackGenerationMatchedSchedulerDeliveryOperations operations,
+        bool captureDeliveryObservations = false)
     {
         ArgumentNullException.ThrowIfNull(sourceSession);
         ArgumentNullException.ThrowIfNull(decodeBoundary);
@@ -504,6 +562,10 @@ public sealed class PlaybackGenerationMatchedSchedulerDeliveryBoundary :
         _initialSchedulerSequence = initialSchedulerSequence;
         _operations = operations;
         _decoderResetPending = discontinuityGeneration > 0;
+        _deliveryObservations = captureDeliveryObservations
+            ? new PlaybackGenerationMatchedSchedulerDeliveryObservation[
+                PlaybackGenerationMatchedSchedulerDeliveryTraceSnapshot.MaximumObservationCount]
+            : null;
         try
         {
             _ingress = new(
@@ -537,7 +599,10 @@ public sealed class PlaybackGenerationMatchedSchedulerDeliveryBoundary :
                     _hasCompletedSequence,
                     _lastCompletedSequence,
                     _hasActiveDelivery,
-                    _ingress.Snapshot);
+                    _ingress.Snapshot)
+                {
+                    DeliveryTrace = CreateDeliveryTraceSnapshotLocked(),
+                };
             }
         }
     }
@@ -638,6 +703,10 @@ public sealed class PlaybackGenerationMatchedSchedulerDeliveryBoundary :
         PlaybackSchedulerOutputReservation? reservation = null;
         var completion = PlaybackSchedulerOutputCompletion.Retained;
         var completed = false;
+        var hasObservationReservation = false;
+        var observationTimingItem = default(PlaybackAvTimingItem);
+        var hasObservationTimingDecision = false;
+        var observationTimingDecision = default(PlaybackAvTimingDecision);
         try
         {
             var preferred = GetPreferredKind();
@@ -653,6 +722,8 @@ public sealed class PlaybackGenerationMatchedSchedulerDeliveryBoundary :
                 return Fault(PlaybackGenerationMatchedSchedulerDeliveryResult.InvalidItem);
             }
 
+            hasObservationReservation = true;
+            observationTimingItem = timingItem;
             var effectiveDiscontinuity = reservation.Discontinuity;
             if (effectiveDiscontinuity == PlaybackDecodedFrameDiscontinuityKind.DecoderReset)
             {
@@ -665,6 +736,7 @@ public sealed class PlaybackGenerationMatchedSchedulerDeliveryBoundary :
 
                 effectiveDiscontinuity = PlaybackDecodedFrameDiscontinuityKind.None;
                 timingItem = timingItem with { Discontinuity = effectiveDiscontinuity };
+                observationTimingItem = timingItem;
             }
             else if (IsDecoderResetPending())
             {
@@ -673,6 +745,8 @@ public sealed class PlaybackGenerationMatchedSchedulerDeliveryBoundary :
 
             var decision = await _operations.DecideAsync(timingItem, operation.Token)
                 .ConfigureAwait(false);
+            hasObservationTimingDecision = true;
+            observationTimingDecision = decision;
             if (!Enum.IsDefined(decision.Result))
             {
                 return Fault(PlaybackGenerationMatchedSchedulerDeliveryResult.Faulted);
@@ -783,6 +857,13 @@ public sealed class PlaybackGenerationMatchedSchedulerDeliveryBoundary :
 
             lock (_sync)
             {
+                RecordDeliveryObservationLocked(
+                    hasObservationReservation,
+                    observationTimingItem,
+                    hasObservationTimingDecision,
+                    observationTimingDecision,
+                    _result,
+                    ToObservationCompletion(completed, completion));
                 if (ReferenceEquals(_activeCancellation, operation))
                 {
                     _activeCancellation = null;
@@ -1079,6 +1160,97 @@ public sealed class PlaybackGenerationMatchedSchedulerDeliveryBoundary :
                 PlaybackGenerationMatchedSchedulerDeliveryResult.OutputFailure,
             _ => PlaybackGenerationMatchedSchedulerDeliveryResult.Faulted,
         };
+
+    private PlaybackGenerationMatchedSchedulerDeliveryTraceSnapshot
+        CreateDeliveryTraceSnapshotLocked()
+    {
+        if (_deliveryObservations is null)
+        {
+            return default;
+        }
+
+        return new(
+            _deliveryObservationCount,
+            _deliveryObservationOverflowed,
+            _deliveryObservationCount > 0 ? _deliveryObservations[0] : default,
+            _deliveryObservationCount > 1 ? _deliveryObservations[1] : default,
+            _deliveryObservationCount > 2 ? _deliveryObservations[2] : default,
+            _deliveryObservationCount > 3 ? _deliveryObservations[3] : default);
+    }
+
+    private void RecordDeliveryObservationLocked(
+        bool hasReservation,
+        PlaybackAvTimingItem timingItem,
+        bool hasTimingDecision,
+        PlaybackAvTimingDecision timingDecision,
+        PlaybackGenerationMatchedSchedulerDeliveryResult result,
+        PlaybackGenerationMatchedSchedulerReservationCompletion completion)
+    {
+        if (_deliveryObservations is null || !hasReservation)
+        {
+            return;
+        }
+
+        if (_deliveryObservationCount >= _deliveryObservations.Length)
+        {
+            _deliveryObservationOverflowed = true;
+            return;
+        }
+
+        var hasTimestampOffset = timingItem.PresentationTimestamp.IsKnown;
+        var timestampOffsetTicks = 0L;
+        if (hasTimestampOffset)
+        {
+            var timestampTicks = timingItem.PresentationTimestamp.Value.Ticks;
+            if (!_hasDeliveryObservationTimestampAnchor)
+            {
+                _hasDeliveryObservationTimestampAnchor = true;
+                _deliveryObservationTimestampAnchorTicks = timestampTicks;
+            }
+
+            try
+            {
+                timestampOffsetTicks = checked(
+                    timestampTicks - _deliveryObservationTimestampAnchorTicks);
+            }
+            catch (OverflowException)
+            {
+                _deliveryObservationOverflowed = true;
+                return;
+            }
+        }
+
+        _deliveryObservations[_deliveryObservationCount++] = new(
+            timingItem.Sequence,
+            timingItem.MediaKind,
+            hasTimestampOffset,
+            timestampOffsetTicks,
+            hasTimingDecision,
+            hasTimingDecision ? timingDecision.Result : default,
+            hasTimingDecision ? timingDecision.WaitDuration.Ticks : 0,
+            result,
+            completion);
+    }
+
+    private static PlaybackGenerationMatchedSchedulerReservationCompletion
+        ToObservationCompletion(
+            bool completed,
+            PlaybackSchedulerOutputCompletion completion)
+    {
+        if (!completed)
+        {
+            return PlaybackGenerationMatchedSchedulerReservationCompletion.Retained;
+        }
+
+        return completion switch
+        {
+            PlaybackSchedulerOutputCompletion.Delivered =>
+                PlaybackGenerationMatchedSchedulerReservationCompletion.Delivered,
+            PlaybackSchedulerOutputCompletion.Dropped =>
+                PlaybackGenerationMatchedSchedulerReservationCompletion.Dropped,
+            _ => PlaybackGenerationMatchedSchedulerReservationCompletion.Retained,
+        };
+    }
 
     private void CommitCompletedSequence(long sequence, bool preferVideoNext)
     {
