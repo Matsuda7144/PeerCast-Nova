@@ -72,6 +72,108 @@ public sealed class SystemPlaybackControlledWindowsPhysicalRunOperationsTests
             output.ToString());
     }
 
+    [Fact]
+    public async Task ResumeControlledAudioTimingAsync_ResumesRetainedWaitToDelivery()
+    {
+        PlaybackApprovedExternalRuntimeWindowsLifecycleResult[] results =
+        [
+            PlaybackApprovedExternalRuntimeWindowsLifecycleResult.RetainedWait,
+            PlaybackApprovedExternalRuntimeWindowsLifecycleResult.AudioDelivered,
+        ];
+        var resultIndex = 0;
+        var deliveryCalls = 0;
+        var delays = new List<TimeSpan>();
+
+        var result = await SystemPlaybackControlledWindowsPhysicalRunOperations
+            .ResumeControlledAudioTimingAsync(
+                _ =>
+                {
+                    deliveryCalls++;
+                    return ValueTask.FromResult(results[resultIndex++]);
+                },
+                (delay, _) =>
+                {
+                    delays.Add(delay);
+                    return Task.CompletedTask;
+                },
+                TimeSpan.FromMilliseconds(21),
+                maximumResumeCount: 2,
+                CancellationToken.None);
+
+        Assert.Equal(
+            PlaybackApprovedExternalRuntimeWindowsLifecycleResult.AudioDelivered,
+            result);
+        Assert.Equal(2, deliveryCalls);
+        Assert.Single(delays);
+        Assert.Equal(TimeSpan.FromMilliseconds(21), delays[0]);
+    }
+
+    [Fact]
+    public async Task ResumeControlledAudioTimingAsync_DoesNotResumeWouldBlock()
+    {
+        PlaybackApprovedExternalRuntimeWindowsLifecycleResult[] results =
+        [
+            PlaybackApprovedExternalRuntimeWindowsLifecycleResult.RetainedWait,
+            PlaybackApprovedExternalRuntimeWindowsLifecycleResult.RetainedWouldBlock,
+            PlaybackApprovedExternalRuntimeWindowsLifecycleResult.AudioDelivered,
+        ];
+        var resultIndex = 0;
+        var deliveryCalls = 0;
+        var delayCalls = 0;
+
+        var result = await SystemPlaybackControlledWindowsPhysicalRunOperations
+            .ResumeControlledAudioTimingAsync(
+                _ =>
+                {
+                    deliveryCalls++;
+                    return ValueTask.FromResult(results[resultIndex++]);
+                },
+                (_, _) =>
+                {
+                    delayCalls++;
+                    return Task.CompletedTask;
+                },
+                TimeSpan.FromMilliseconds(21),
+                maximumResumeCount: 2,
+                CancellationToken.None);
+
+        Assert.Equal(
+            PlaybackApprovedExternalRuntimeWindowsLifecycleResult.RetainedWouldBlock,
+            result);
+        Assert.Equal(2, deliveryCalls);
+        Assert.Equal(1, delayCalls);
+    }
+
+    [Fact]
+    public async Task ResumeControlledAudioTimingAsync_StopsAtFixedResumeLimit()
+    {
+        var deliveryCalls = 0;
+        var delayCalls = 0;
+
+        var result = await SystemPlaybackControlledWindowsPhysicalRunOperations
+            .ResumeControlledAudioTimingAsync(
+                _ =>
+                {
+                    deliveryCalls++;
+                    return ValueTask.FromResult(
+                        PlaybackApprovedExternalRuntimeWindowsLifecycleResult.RetainedWait);
+                },
+                (_, _) =>
+                {
+                    delayCalls++;
+                    return Task.CompletedTask;
+                },
+                TimeSpan.FromMilliseconds(21),
+                maximumResumeCount: 2,
+                CancellationToken.None);
+
+        Assert.Equal(
+            PlaybackApprovedExternalRuntimeWindowsLifecycleResult.RetainedWait,
+            result);
+        Assert.Equal(3, deliveryCalls);
+        Assert.Equal(2, delayCalls);
+    }
+
     private static void ReportStageByReflection(
         PlaybackApprovedExternalRuntimeWindowsLifecycleOptions options,
         string stageName)

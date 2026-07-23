@@ -65,6 +65,16 @@ heard, not recognizable fixture audio. Deterministic evidence remains valid,
 recognizable physical audio remains incomplete, and paired verification is
 blocked.
 
+The approved four-frame run on clean main
+`63f8be0cc5663ccda0f82bd5eee1c5a3dd3201d2` was executed exactly once and
+must not be repeated. It passed the video gate but stopped with
+`DeliveryRejected / None`, decode operations `3`, outer delivery attempts `2`,
+delivered `1`, and retained WouldBlock `0`. The runner stopped and lifecycle
+disposed. The operator recorded `Audio audible: No` after hearing only a
+noise-like transient. The second outer delivery reached normal production
+`RetainedWait` before a native write and the finite controlled harness treated
+that retained timing result as terminal. Paired verification remains blocked.
+
 ## Phase 5 controlled known-audio tone probe
 
 The diagnostic-only probe generates one fixed managed 80 ms, 1,000 Hz,
@@ -104,6 +114,23 @@ scheduler and normal one-frame composition are bypassed but unchanged.
 - `src/Nova.Playback/PlaybackDecodedAudioSliceCollector.cs`
 - `src/Nova.Cli/PlaybackControlledWindowsDecodedAudioSliceProbe.cs`
 - `tools/Run-ControlledWindowsDecodedAudioSliceProbe.ps1`
+
+## Phase 5 controlled audio retained timing resume
+
+The controlled four-frame harness now distinguishes normal early-presentation
+retention from an output rejection. Controlled audio alone resumes
+`RetainedWait` after one upward-rounded `1024 / 48000` AAC-frame cadence, with
+at most two resumes for one outer delivery. The same scheduler item remains
+retained; no decode, transfer, enqueue, replacement reservation, conversion, or
+native write occurs while timing is early. `RetainedWouldBlock` and every other
+non-delivery result remain terminal. Video and normal production timing are
+unchanged. This code review performs no physical output.
+
+- `docs/adr/ADR-0155-controlled-audio-retained-timing-resume.md`
+- `docs/reviews/PCN-0163-CONTROLLED-AUDIO-RETAINED-TIMING-RESUME.md`
+- `docs/runbooks/0.0.10d-controlled-audio-retained-timing-resume.md`
+- `src/Nova.Cli/SystemPlaybackControlledWindowsPhysicalRunOperations.cs`
+- `tests/Nova.Cli.Tests/SystemPlaybackControlledWindowsPhysicalRunOperationsTests.cs`
 
 ## Phase 5 corrected Windows output probes
 
@@ -154,15 +181,18 @@ The bounded FLV decoder configures the exact parser stream time base through pub
 
 ## 現在地
 
-**0.0.10d — Controlled Physical Windows Video／Audio Output Validation — Phase 5 Physical Audio Validation Ready**
+**0.0.10d — Controlled Physical Windows Video／Audio Output Validation — Phase 5 Retained Timing Resume Review**
 
 - corrected D3D11 texture-copy pattern: deterministic success, visible `Yes`;
 - corrected production `UpdateSubresource` pattern: deterministic success, visible `Yes`;
 - corrected decoded physical video: `Completed／Accepted`, `VideoAccepted`, visible `Yes`;
+- known 80 ms tone and decoded fixture slice: accepted and recognizable;
+- four-frame physical audio at `63f8be0c`: stopped at the second outer delivery with `RetainedWait` translated to `DeliveryRejected`; audible `No`;
+- current gate: final-head review and CI for controlled-audio-only bounded timing resume;
+- no further physical audio run is authorized before the correction is merged and its exact main commit is separately approved;
+- paired verification remains blocked until a later audio record is `AudioAccepted` and audible observation is recorded separately;
 - approved runtime: `btbn.ffmpeg.20260721.win64.lgpl-shared`;
 - fixture: `66,939` bytes, SHA-256 `32872B300286525F4EF97FEE3533E25419AC8E48BFD4BC2C4FD9545F071B1E15`;
-- next gate: one video-gated controlled physical audio run with a new external audio record;
-- paired verification remains blocked until the audio record is `AudioAccepted` and audible observation is recorded separately;
 - no runtime path, fixture path, record path, device／endpoint identity, HWND, thread ID, pointer, handle, or payload is retained in the repository.
 
 ## CI
@@ -171,14 +201,12 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 ## 最新の入口
 
+- `docs/adr/ADR-0155-controlled-audio-retained-timing-resume.md`
+- `docs/reviews/PCN-0163-CONTROLLED-AUDIO-RETAINED-TIMING-RESUME.md`
+- `docs/runbooks/0.0.10d-controlled-audio-retained-timing-resume.md`
+- `src/Nova.Cli/SystemPlaybackControlledWindowsPhysicalRunOperations.cs`
+- `tests/Nova.Cli.Tests/SystemPlaybackControlledWindowsPhysicalRunOperationsTests.cs`
 - `docs/runbooks/0.0.10d-controlled-windows-audio-validation.md`
 - `tools/Run-ControlledWindowsPhysicalAudio.ps1`
-- `docs/adr/ADR-0148-video-gated-controlled-audio-run.md`
-- `docs/reviews/PCN-0156-VIDEO-GATED-CONTROLLED-AUDIO-RUN.md`
 - `docs/runbooks/0.0.10d-controlled-windows-video-revalidation.md`
 - `tools/Run-ControlledWindowsPhysicalVideo.ps1`
-- `docs/adr/ADR-0150-controlled-known-pattern-windows-output-probe.md`
-- `docs/reviews/PCN-0158-CONTROLLED-KNOWN-PATTERN-WINDOWS-OUTPUT-PROBE.md`
-- `docs/adr/ADR-0151-controlled-d3d11-texture-copy-output-probe.md`
-- `docs/reviews/PCN-0159-CONTROLLED-D3D11-TEXTURE-COPY-OUTPUT-PROBE.md`
-- `tests/Nova.Playback.Tests/PlaybackWindowsD3D11ComSignatureTests.cs`

@@ -7,6 +7,9 @@ namespace PeerCast.Nova.Cli;
 internal sealed class SystemPlaybackControlledWindowsPhysicalRunOperations :
     IPlaybackControlledWindowsPhysicalRunOperations
 {
+    private const int MaximumControlledAudioTimingResumeCount = 2;
+    private static readonly TimeSpan ControlledAudioFrameCadence =
+        TimeSpan.FromTicks(213_334);
     private static readonly ChannelId ControlledChannelId = new(
         Guid.ParseExact("71440000000000000000000000000001", "N"));
     private static readonly ChannelSessionId ControlledSessionId = new(
@@ -154,8 +157,49 @@ internal sealed class SystemPlaybackControlledWindowsPhysicalRunOperations :
         PlaybackBoundedDemuxMediaKind kind,
         CancellationToken token) => GetLifecycle().DrainDecodedAsync(kind, token);
 
-    public ValueTask<PlaybackApprovedExternalRuntimeWindowsLifecycleResult> DeliverOneAsync(
-        CancellationToken token) => GetLifecycle().DeliverOneAsync(token);
+    public async ValueTask<PlaybackApprovedExternalRuntimeWindowsLifecycleResult> DeliverOneAsync(
+        CancellationToken token)
+    {
+        var lifecycle = GetLifecycle();
+        if (_options.Kind != PlaybackControlledWindowsOutputValidationKind.Audio)
+        {
+            return await lifecycle.DeliverOneAsync(token).ConfigureAwait(false);
+        }
+
+        return await ResumeControlledAudioTimingAsync(
+            cancellationToken => lifecycle.DeliverOneAsync(cancellationToken),
+            static (delay, cancellationToken) => Task.Delay(delay, cancellationToken),
+            ControlledAudioFrameCadence,
+            MaximumControlledAudioTimingResumeCount,
+            token).ConfigureAwait(false);
+    }
+
+    internal static async ValueTask<PlaybackApprovedExternalRuntimeWindowsLifecycleResult>
+        ResumeControlledAudioTimingAsync(
+            Func<CancellationToken,
+                ValueTask<PlaybackApprovedExternalRuntimeWindowsLifecycleResult>> deliverAsync,
+            Func<TimeSpan, CancellationToken, Task> delayAsync,
+            TimeSpan frameCadence,
+            int maximumResumeCount,
+            CancellationToken token)
+    {
+        ArgumentNullException.ThrowIfNull(deliverAsync);
+        ArgumentNullException.ThrowIfNull(delayAsync);
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(frameCadence, TimeSpan.Zero);
+        ArgumentOutOfRangeException.ThrowIfLessThan(maximumResumeCount, 1);
+
+        var result = await deliverAsync(token).ConfigureAwait(false);
+        for (var resumeCount = 0;
+            result == PlaybackApprovedExternalRuntimeWindowsLifecycleResult.RetainedWait &&
+            resumeCount < maximumResumeCount;
+            resumeCount++)
+        {
+            await delayAsync(frameCadence, token).ConfigureAwait(false);
+            result = await deliverAsync(token).ConfigureAwait(false);
+        }
+
+        return result;
+    }
 
     public async ValueTask StopLifecycleAsync()
     {
