@@ -8,15 +8,18 @@ public sealed class SystemPlaybackControlledWindowsPhysicalRunOperationsTests
     [InlineData(
         PlaybackControlledWindowsOutputValidationKind.Video,
         PlaybackSchedulerInitialOutputKind.Video,
-        PlaybackPcpFlvAwaitedDecodeMediaSelection.AudioAndVideo)]
+        PlaybackPcpFlvAwaitedDecodeMediaSelection.AudioAndVideo,
+        false)]
     [InlineData(
         PlaybackControlledWindowsOutputValidationKind.Audio,
         PlaybackSchedulerInitialOutputKind.Audio,
-        PlaybackPcpFlvAwaitedDecodeMediaSelection.AudioOnly)]
+        PlaybackPcpFlvAwaitedDecodeMediaSelection.AudioOnly,
+        true)]
     public void CreateLifecycleOptions_MapsControlledKindAndPreservesBoundedDropOldest(
         PlaybackControlledWindowsOutputValidationKind kind,
         PlaybackSchedulerInitialOutputKind expectedInitialOutputKind,
-        PlaybackPcpFlvAwaitedDecodeMediaSelection expectedMediaSelection)
+        PlaybackPcpFlvAwaitedDecodeMediaSelection expectedMediaSelection,
+        bool expectedOutputRestriction)
     {
         var options = SystemPlaybackControlledWindowsPhysicalRunOperations.CreateLifecycleOptions(
             TimeSpan.FromMilliseconds(100),
@@ -32,6 +35,9 @@ public sealed class SystemPlaybackControlledWindowsPhysicalRunOperationsTests
             PlaybackSchedulerFullPolicy.DropOldest,
             options.Generation.Scheduler.FullPolicy);
         Assert.Equal(expectedInitialOutputKind, options.Generation.Scheduler.InitialOutputKind);
+        Assert.Equal(
+            expectedOutputRestriction,
+            options.Generation.Scheduler.RestrictOutputToInitialKind);
         Assert.Equal(expectedMediaSelection, options.Production.MediaSelection);
     }
 
@@ -42,6 +48,7 @@ public sealed class SystemPlaybackControlledWindowsPhysicalRunOperationsTests
         Assert.Equal(
             PlaybackSchedulerInitialOutputKind.Video,
             productionDefault.InitialOutputKind);
+        Assert.False(productionDefault.RestrictOutputToInitialKind);
         Assert.Equal(PlaybackSchedulerFullPolicy.DropIncoming, productionDefault.FullPolicy);
         Assert.Equal(
             PlaybackPcpFlvAwaitedDecodeMediaSelection.AudioAndVideo,

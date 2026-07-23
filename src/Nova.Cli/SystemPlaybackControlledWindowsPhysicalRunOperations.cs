@@ -122,6 +122,8 @@ internal sealed class SystemPlaybackControlledWindowsPhysicalRunOperations :
                             PlaybackSchedulerInitialOutputKind.Audio,
                         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
                     },
+                    RestrictOutputToInitialKind =
+                        kind == PlaybackControlledWindowsOutputValidationKind.Audio,
                 },
             },
         };

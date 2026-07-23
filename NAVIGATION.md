@@ -79,7 +79,7 @@ was also executed exactly once and must not be repeated. It reproduced the same
 retained-WouldBlock counters, with `Audio audible: No`. Because PR #120 had
 already added bounded handling for `RetainedWait`, the earlier claim that the
 second outer result was necessarily `RetainedWait` is disproven. The exact fixed
-lifecycle result is currently hidden by the generic `DeliveryRejected` mapping.
+lifecycle result was then isolated by the delivery-result diagnostic.
 Paired verification remains blocked.
 
 ## Phase 5 controlled known-audio tone probe
@@ -133,8 +133,8 @@ terminal. Video and normal production timing are unchanged.
 
 The post-merge physical reproduction at `955ffcdad693391eed1535987c96589eb479741e`
 did not change the outer failure boundary. Therefore the timing-resume code
-remains bounded and reviewed, but `RetainedWait` is not established as the
-actual second outer terminal result.
+remains bounded and reviewed, but `RetainedWait` was not the actual second outer
+terminal result.
 
 - `docs/adr/ADR-0155-controlled-audio-retained-timing-resume.md`
 - `docs/reviews/PCN-0163-CONTROLLED-AUDIO-RETAINED-TIMING-RESUME.md`
@@ -150,10 +150,12 @@ outer delivery call, in order, while delegating all work unchanged. The separate
 record is bounded to the four-delivery audio target and explicitly states that it
 is not an audio-acceptance record.
 
-The existing canonical physical-run schema, accepted visible video record,
-single-record preflight, and paired verification remain unchanged. The
-implementation review performs no physical output. A later diagnostic execution
-requires a separately approved exact merged main commit and remains exactly once.
+The approved diagnostic on clean main
+`fe427fdc6094f55ea1a1f321217eff635febf898` executed exactly once. It recorded
+`AudioDelivered` followed by `VideoDropped`, with decode operations `3`, outer
+delivery attempts `2`, delivered `1`, retained WouldBlock `0`, and operator
+observation `Audio audible: No`. No failure record was produced, and the command
+must not be repeated.
 
 - `docs/adr/ADR-0156-controlled-audio-delivery-result-diagnostic.md`
 - `docs/reviews/PCN-0164-CONTROLLED-AUDIO-DELIVERY-RESULT-DIAGNOSTIC.md`
@@ -161,6 +163,26 @@ requires a separately approved exact merged main commit and remains exactly once
 - `src/Nova.Cli/PlaybackControlledWindowsDeliveryDiagnosticCommand.cs`
 - `tests/Nova.Cli.Tests/PlaybackControlledWindowsDeliveryDiagnosticCommandTests.cs`
 - `tools/Run-ControlledWindowsPhysicalAudioDeliveryDiagnostic.ps1`
+
+## Phase 5 controlled audio fixed-kind scheduler reservation
+
+The exact `AudioDelivered` then `VideoDropped` sequence proves that the normal
+A/V scheduler preference changed to video after the first audio delivery. The
+controlled audio generation now opts into fixed-kind reservation: every
+scheduler reservation searches audio only and never falls back to video.
+Unmatched video remains scheduler-owned until ordinary bounded overflow, reset,
+or generation cleanup.
+
+The new scheduler option defaults to disabled. Controlled video and normal
+production preserve initial preference, caller-driven A/V alternation, and
+opposite-kind fallback. The implementation review performs no physical output.
+
+- `docs/adr/ADR-0157-controlled-audio-fixed-kind-scheduler-reservation.md`
+- `docs/reviews/PCN-0165-CONTROLLED-AUDIO-FIXED-KIND-SCHEDULER-RESERVATION.md`
+- `docs/runbooks/0.0.10d-controlled-audio-fixed-kind-scheduler-reservation.md`
+- `src/Nova.Playback/BoundedPlaybackScheduler.cs`
+- `src/Nova.Cli/SystemPlaybackControlledWindowsPhysicalRunOperations.cs`
+- `tests/Nova.Playback.Tests/BoundedPlaybackSchedulerRestrictedOutputTests.cs`
 
 ## Phase 5 corrected Windows output probes
 
@@ -211,16 +233,17 @@ The bounded FLV decoder configures the exact parser stream time base through pub
 
 ## 現在地
 
-**0.0.10d — Controlled Physical Windows Video／Audio Output Validation — Phase 5 Delivery-Result Diagnostic Review**
+**0.0.10d — Controlled Physical Windows Video／Audio Output Validation — Phase 5 Fixed-Kind Scheduler Reservation Review**
 
 - corrected D3D11 texture-copy pattern: deterministic success, visible `Yes`;
 - corrected production `UpdateSubresource` pattern: deterministic success, visible `Yes`;
 - corrected decoded physical video: `Completed／Accepted`, `VideoAccepted`, visible `Yes`;
 - known 80 ms tone and decoded fixture slice: accepted and recognizable;
 - four-frame physical audio at `63f8be0c` and retained-timing run at `955ffcda`: both stopped at the second outer delivery with `3 / 2 / 1 / 0` counters and audible `No`;
-- the prior `RetainedWait` terminal-result claim is disproven; the exact fixed second result is unknown;
-- current gate: final-head review and CI for the separate exact delivery-result diagnostic;
-- no further physical audio run is authorized before the diagnostic is merged and its exact main commit is separately approved;
+- delivery diagnostic at `fe427fdc`: exact outer results `AudioDelivered` then `VideoDropped`, audible `No`;
+- root cause: normal A/V post-audio video preference leaked into the audio-only validation generation;
+- current gate: final-head review and CI for controlled-audio-only fixed-kind scheduler reservation;
+- no further physical audio run is authorized before the correction is merged and its exact main commit is separately approved;
 - paired verification remains blocked until a later canonical audio record is `AudioAccepted` and audible observation is recorded separately;
 - approved runtime: `btbn.ffmpeg.20260721.win64.lgpl-shared`;
 - fixture: `66,939` bytes, SHA-256 `32872B300286525F4EF97FEE3533E25419AC8E48BFD4BC2C4FD9545F071B1E15`;
@@ -232,11 +255,12 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 
 ## 最新の入口
 
-- `docs/adr/ADR-0156-controlled-audio-delivery-result-diagnostic.md`
-- `docs/reviews/PCN-0164-CONTROLLED-AUDIO-DELIVERY-RESULT-DIAGNOSTIC.md`
-- `docs/runbooks/0.0.10d-controlled-audio-delivery-result-diagnostic.md`
-- `src/Nova.Cli/PlaybackControlledWindowsDeliveryDiagnosticCommand.cs`
-- `tests/Nova.Cli.Tests/PlaybackControlledWindowsDeliveryDiagnosticCommandTests.cs`
-- `tools/Run-ControlledWindowsPhysicalAudioDeliveryDiagnostic.ps1`
-- `docs/runbooks/0.0.10d-controlled-windows-video-revalidation.md`
-- `tools/Run-ControlledWindowsPhysicalVideo.ps1`
+- `docs/adr/ADR-0157-controlled-audio-fixed-kind-scheduler-reservation.md`
+- `docs/reviews/PCN-0165-CONTROLLED-AUDIO-FIXED-KIND-SCHEDULER-RESERVATION.md`
+- `docs/runbooks/0.0.10d-controlled-audio-fixed-kind-scheduler-reservation.md`
+- `src/Nova.Playback/BoundedPlaybackScheduler.cs`
+- `src/Nova.Cli/SystemPlaybackControlledWindowsPhysicalRunOperations.cs`
+- `tests/Nova.Playback.Tests/BoundedPlaybackSchedulerRestrictedOutputTests.cs`
+- `tests/Nova.Cli.Tests/SystemPlaybackControlledWindowsPhysicalRunOperationsTests.cs`
+- `docs/runbooks/0.0.10d-controlled-windows-audio-validation.md`
+- `tools/Run-ControlledWindowsPhysicalAudio.ps1`

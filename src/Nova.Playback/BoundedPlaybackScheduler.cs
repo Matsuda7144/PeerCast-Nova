@@ -61,6 +61,8 @@ public sealed record PlaybackSchedulerOptions
 
     public PlaybackSchedulerInitialOutputKind InitialOutputKind { get; init; } =
         PlaybackSchedulerInitialOutputKind.Video;
+
+    public bool RestrictOutputToInitialKind { get; init; }
 }
 
 internal interface IPlaybackSchedulerDelay
@@ -87,6 +89,7 @@ public sealed class BoundedPlaybackScheduler : IDisposable
     private readonly ScheduledFrame?[] _queue;
     private readonly PlaybackSchedulerFullPolicy _fullPolicy;
     private readonly PlaybackSchedulerOutputKind _initialOutputKind;
+    private readonly bool _restrictOutputToInitialKind;
     private readonly long _maximumOwnedBytes;
     private readonly PlaybackPolicyClockBoundary _policy;
     private readonly PlaybackDecoderFfmpegAwaitedSinkDeliveryBoundary _delivery;
@@ -148,6 +151,7 @@ public sealed class BoundedPlaybackScheduler : IDisposable
         _initialOutputKind = options.InitialOutputKind == PlaybackSchedulerInitialOutputKind.Video
             ? PlaybackSchedulerOutputKind.Video
             : PlaybackSchedulerOutputKind.Audio;
+        _restrictOutputToInitialKind = options.RestrictOutputToInitialKind;
         _maximumOwnedBytes = options.MaximumOwnedBytes;
         _policy = policy;
         _delivery = delivery;
@@ -378,11 +382,20 @@ public sealed class BoundedPlaybackScheduler : IDisposable
                 return null;
             }
 
-            var effectivePreferredKind = _hasReservedOutput ? preferredKind : _initialOutputKind;
-            var scheduled = FindOutput(effectivePreferredKind) ?? FindOutput(
-                effectivePreferredKind == PlaybackSchedulerOutputKind.Video
-                    ? PlaybackSchedulerOutputKind.Audio
-                    : PlaybackSchedulerOutputKind.Video);
+            var effectivePreferredKind = _restrictOutputToInitialKind
+                ? _initialOutputKind
+                : _hasReservedOutput
+                    ? preferredKind
+                    : _initialOutputKind;
+            var scheduled = FindOutput(effectivePreferredKind);
+            if (scheduled is null && !_restrictOutputToInitialKind)
+            {
+                scheduled = FindOutput(
+                    effectivePreferredKind == PlaybackSchedulerOutputKind.Video
+                        ? PlaybackSchedulerOutputKind.Audio
+                        : PlaybackSchedulerOutputKind.Video);
+            }
+
             if (scheduled is null)
             {
                 _runGate.Release();
