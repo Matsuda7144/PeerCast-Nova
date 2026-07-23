@@ -323,12 +323,31 @@ public sealed class PlaybackControlledWindowsPhysicalRunComposition : IAsyncDisp
                     return PlaybackControlledWindowsPhysicalRunResult.Cancelled;
                 case PlaybackApprovedExternalRuntimeWindowsLifecycleResult.StreamEndOfStream:
                 case PlaybackApprovedExternalRuntimeWindowsLifecycleResult.StreamAlreadyEnded:
-                    return PlaybackControlledWindowsPhysicalRunResult.DeliveryRejected;
+                    return _options.Kind == PlaybackControlledWindowsOutputValidationKind.Audio
+                        ? await DeliverRemainingScheduledAudioAsync(
+                            requiredDeliveryCount,
+                            cancellationToken).ConfigureAwait(false)
+                        : PlaybackControlledWindowsPhysicalRunResult.DeliveryRejected;
                 default:
                     return PlaybackControlledWindowsPhysicalRunResult.DecodeRejected;
             }
         }
         return PlaybackControlledWindowsPhysicalRunResult.DecodeRejected;
+    }
+
+    private async ValueTask<PlaybackControlledWindowsPhysicalRunResult>
+        DeliverRemainingScheduledAudioAsync(
+            int requiredDeliveryCount,
+            CancellationToken cancellationToken)
+    {
+        while (DeliveredCount() < requiredDeliveryCount)
+        {
+            var delivery = await DeliverOneAsync(cancellationToken).ConfigureAwait(false);
+            if (delivery != PlaybackControlledWindowsPhysicalRunResult.Completed)
+                return delivery;
+        }
+
+        return PlaybackControlledWindowsPhysicalRunResult.Completed;
     }
 
     private async ValueTask<PlaybackControlledWindowsPhysicalRunResult> DeliverOneAsync(
