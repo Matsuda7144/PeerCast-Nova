@@ -119,3 +119,38 @@ The reviewed diagnostic boundary:
 
 The next run is diagnostic evidence gathering only. It is not final physical
 audio acceptance, and paired verification remains blocked.
+
+## Windows PowerShell 5.1 host-compatibility review
+
+Clean main `4968e40f801f72bb06a71007a04a47911b6ac377` completed the Release
+runner build but the diagnostic helper failed before physical-child start. No
+audio or failure record was created. Physical output, audio preflight, audible
+observation, and paired verification were not run. Consequently the attempt
+provides no new WASAPI boundary, native exit code, or evidence against PR #112.
+
+The supported helper host remains
+`powershell.exe -NoProfile -ExecutionPolicy Bypass`. The execution-policy
+rejection was before script load, and the process-scoped bypass made no
+persistent policy change. The actual incompatibility was loading a `net10.0`
+assembly and constructing the redirected child boundary inside Windows
+PowerShell 5.1.
+
+The reviewed correction moves exactly one physical-child launch into the
+dedicated `net10.0` runner command
+`--capture-controlled-windows-audio-child`. That command:
+
+- receives the explicit runtime, fixture, digest, two record paths, bounds, and
+  observation hold;
+- starts the same runner assembly at most once with audio-only and native-stage
+  diagnostics fixed on;
+- uses managed `ProcessStartInfo.ArgumentList`;
+- drains stdout and stderr concurrently as bytes;
+- atomically promotes only a complete canonical audio record or one sanitized
+  failure record;
+- preserves the actual child exit in the failure record and never emits raw
+  stderr.
+
+The PowerShell helper continues to own all repository-external path checks and
+the video preflight before invoking the capture command. It performs audio
+preflight only for a canonical child success. PowerShell 7, retry, redelivery,
+fallback, and paired verification are not introduced.

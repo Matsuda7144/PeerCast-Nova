@@ -3,62 +3,55 @@ namespace PeerCast.Nova.Cli.Tests;
 public sealed class ControlledWindowsPhysicalAudioHelperContractTests
 {
     [Fact]
-    public void HelperUsesOneRedirectedVisibleChildAndPromotesOnlyCanonicalOutput()
+    public void HelperUsesOneManagedCaptureCommandWithoutLoadingNet10Assemblies()
     {
         var source = File.ReadAllText(GetHelperPath());
 
-        Assert.Contains("[System.Diagnostics.ProcessStartInfo]::new()", source);
-        Assert.Contains("$startInfo.UseShellExecute = $false", source);
-        Assert.Contains("$startInfo.RedirectStandardOutput = $true", source);
-        Assert.Contains("$startInfo.RedirectStandardError = $true", source);
-        Assert.Contains("$startInfo.CreateNoWindow = $false", source);
-        Assert.Contains(
-            "$physicalProcess.StandardOutput.BaseStream.CopyToAsync($standardOutputBytes)",
-            source);
-        Assert.Contains(
-            "$physicalProcess.StandardError.BaseStream.CopyToAsync($standardErrorBytes)",
-            source);
-        Assert.Equal(1, Count(source, "$physicalProcess.Start()"));
-        Assert.Contains("--diagnose-audio-native-stages", source);
-        Assert.DoesNotMatch(
-            @"(?s)& dotnet \$runnerAssembly\s+`\s*--controlled-windows-physical-run",
-            source);
-
-        var canonical = source.IndexOf("$canonicalRecord =", StringComparison.Ordinal);
-        var audioPromotion = source.IndexOf(
-            "Move-Item -LiteralPath $temporaryAudioRecord",
+        Assert.DoesNotContain("Assembly]::LoadFrom", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("ProcessStartInfo", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("ArgumentList", source, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "PlaybackControlledWindowsAudioProcessFailureDiagnostics",
+            source,
             StringComparison.Ordinal);
-        var failurePromotion = source.IndexOf(
-            "Move-Item -LiteralPath $temporaryFailureRecord",
-            StringComparison.Ordinal);
-        Assert.True(canonical >= 0);
-        Assert.True(audioPromotion > canonical);
-        Assert.True(failurePromotion > canonical);
-        var failureStop = source.IndexOf(
-            "a sanitized external failure record was retained",
-            StringComparison.Ordinal);
-        Assert.True(failureStop > failurePromotion);
-        Assert.True(audioPromotion > failureStop);
+        Assert.DoesNotContain("pwsh -", source, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(
+            1,
+            Count(source, "--capture-controlled-windows-audio-child"));
     }
 
     [Fact]
-    public void AllExternalPathAndVideoGatesPrecedeTheOnlyPhysicalChildStart()
+    public void AllExternalPathAndVideoGatesPrecedeTheOnlyCaptureCommand()
     {
         var source = File.ReadAllText(GetHelperPath());
-        var childStart = source.IndexOf("$physicalProcess.Start()", StringComparison.Ordinal);
+        var capture = source.IndexOf(
+            "--capture-controlled-windows-audio-child",
+            StringComparison.Ordinal);
 
-        Assert.True(childStart > source.IndexOf(
+        Assert.True(capture > source.IndexOf(
             "the requested failure record already exists",
             StringComparison.Ordinal));
-        Assert.True(childStart > source.IndexOf(
+        Assert.True(capture > source.IndexOf(
             "failure, video, and audio record paths must be different",
             StringComparison.Ordinal));
-        Assert.True(childStart > source.IndexOf(
+        Assert.True(capture > source.IndexOf(
             "the failure record must remain repository-external",
             StringComparison.Ordinal));
-        Assert.True(childStart > source.IndexOf(
+        Assert.True(capture > source.IndexOf(
             "the video record gate was not accepted",
             StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void RunbookKeepsWindowsPowerShellBypassHostWithoutPwshRequirement()
+    {
+        var source = File.ReadAllText(GetRunbookPath());
+
+        Assert.Contains(
+            "powershell.exe -NoProfile -ExecutionPolicy Bypass",
+            source,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("pwsh -", source, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -72,6 +65,21 @@ public sealed class ControlledWindowsPhysicalAudioHelperContractTests
         Assert.DoesNotContain("exception.Message", source, StringComparison.Ordinal);
         Assert.DoesNotContain("exception.StackTrace", source, StringComparison.Ordinal);
         Assert.DoesNotContain("InnerException", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DedicatedRunnerDispatchesCaptureBeforePhysicalRunCommand()
+    {
+        var source = File.ReadAllText(GetRunnerProgramPath());
+        var capture = source.IndexOf(
+            "PlaybackControlledWindowsAudioChildCaptureCommand.Argument",
+            StringComparison.Ordinal);
+        var physical = source.IndexOf(
+            "PlaybackControlledWindowsPhysicalRunCommand.RunAsync",
+            StringComparison.Ordinal);
+
+        Assert.True(capture >= 0);
+        Assert.True(physical > capture);
     }
 
     private static string GetHelperPath()
@@ -100,6 +108,18 @@ public sealed class ControlledWindowsPhysicalAudioHelperContractTests
         var root = helper.Directory?.Parent ??
             throw new DirectoryNotFoundException("The repository root was not found.");
         return Path.Combine(root.FullName, "src", "Nova.ControlledWindowsRunner", "Program.cs");
+    }
+
+    private static string GetRunbookPath()
+    {
+        var helper = new FileInfo(GetHelperPath());
+        var root = helper.Directory?.Parent ??
+            throw new DirectoryNotFoundException("The repository root was not found.");
+        return Path.Combine(
+            root.FullName,
+            "docs",
+            "runbooks",
+            "0.0.10d-controlled-windows-audio-validation.md");
     }
 
     private static int Count(string source, string value)

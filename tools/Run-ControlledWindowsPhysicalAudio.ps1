@@ -40,7 +40,6 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$expectedRuntimeBuild = 'btbn.ffmpeg.20260721.win64.lgpl-shared'
 $expectedFixtureSha256 = '32872B300286525F4EF97FEE3533E25419AC8E48BFD4BC2C4FD9545F071B1E15'
 $expectedFixtureBytes = 66939L
 $validationPrefix = 'Controlled audio validation rejected: '
@@ -185,12 +184,6 @@ try {
     if (-not [System.IO.File]::Exists($runnerAssembly)) {
         Stop-Validation 'the controlled Windows runner assembly is unavailable.'
     }
-    $cliAssembly = Join-Path $repoRoot 'src\Nova.Cli\bin\Release\net10.0\Nova.Cli.dll'
-    if (-not [System.IO.File]::Exists($cliAssembly)) {
-        Stop-Validation 'the controlled Windows CLI assembly is unavailable.'
-    }
-    [System.Reflection.Assembly]::LoadFrom($cliAssembly) | Out-Null
-
     $temporaryVideoPreflight = Join-Path $audioRecordDirectory (
         '.pcn-video-gate-' + [System.Guid]::NewGuid().ToString('N') + '.tmp')
     try {
@@ -214,121 +207,34 @@ try {
         Stop-Validation 'the video record gate was not accepted.'
     }
 
-    $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
-    $startInfo.FileName = 'dotnet'
-    $startInfo.WorkingDirectory = $repoRoot
-    $startInfo.UseShellExecute = $false
-    $startInfo.RedirectStandardOutput = $true
-    $startInfo.RedirectStandardError = $true
-    $startInfo.CreateNoWindow = $false
-    $startInfo.StandardOutputEncoding = [System.Text.UTF8Encoding]::new($false)
-    $startInfo.StandardErrorEncoding = [System.Text.UTF8Encoding]::new($false)
-    [void]$startInfo.ArgumentList.Add($runnerAssembly)
-    [void]$startInfo.ArgumentList.Add('--controlled-windows-physical-run')
-    [void]$startInfo.ArgumentList.Add('--runtime-directory')
-    [void]$startInfo.ArgumentList.Add($runtimeFull)
-    [void]$startInfo.ArgumentList.Add('--controlled-fixture')
-    [void]$startInfo.ArgumentList.Add($fixtureFull)
-    [void]$startInfo.ArgumentList.Add('--fixture-sha256')
-    [void]$startInfo.ArgumentList.Add($expectedFixtureSha256)
-    [void]$startInfo.ArgumentList.Add('--output-kind')
-    [void]$startInfo.ArgumentList.Add('audio')
-    [void]$startInfo.ArgumentList.Add('--max-decode-operations')
-    [void]$startInfo.ArgumentList.Add(
-        $MaximumDecodeOperations.ToString([System.Globalization.CultureInfo]::InvariantCulture))
-    [void]$startInfo.ArgumentList.Add('--max-delivery-operations')
-    [void]$startInfo.ArgumentList.Add(
-        $MaximumDeliveryOperations.ToString([System.Globalization.CultureInfo]::InvariantCulture))
-    [void]$startInfo.ArgumentList.Add('--fixture-packet-bytes')
-    [void]$startInfo.ArgumentList.Add(
-        $FixturePacketBytes.ToString([System.Globalization.CultureInfo]::InvariantCulture))
-    [void]$startInfo.ArgumentList.Add('--observation-hold-ms')
-    [void]$startInfo.ArgumentList.Add(
-        $ObservationHoldMilliseconds.ToString(
-            [System.Globalization.CultureInfo]::InvariantCulture))
-    [void]$startInfo.ArgumentList.Add('--diagnose-audio-native-stages')
+    & dotnet $runnerAssembly `
+        --capture-controlled-windows-audio-child `
+        --runtime-directory $runtimeFull `
+        --controlled-fixture $fixtureFull `
+        --fixture-sha256 $expectedFixtureSha256 `
+        --audio-record-path $audioRecordFull `
+        --failure-record-path $failureRecordFull `
+        --max-decode-operations $MaximumDecodeOperations `
+        --max-delivery-operations $MaximumDeliveryOperations `
+        --fixture-packet-bytes $FixturePacketBytes `
+        --observation-hold-ms $ObservationHoldMilliseconds
+    $captureExitCode = $LASTEXITCODE
+    $audioRecordExists = [System.IO.File]::Exists($audioRecordFull)
+    $failureRecordExists = [System.IO.File]::Exists($failureRecordFull)
 
-    $physicalProcess = [System.Diagnostics.Process]::new()
-    $physicalProcess.StartInfo = $startInfo
-    $standardOutputBytes = $null
-    $standardErrorBytes = $null
-    try {
-        if (-not $physicalProcess.Start()) {
-            Stop-Validation 'the controlled physical child process did not start.'
-        }
-        $standardOutputBytes = [System.IO.MemoryStream]::new()
-        $standardErrorBytes = [System.IO.MemoryStream]::new()
-        $standardOutputTask =
-            $physicalProcess.StandardOutput.BaseStream.CopyToAsync($standardOutputBytes)
-        $standardErrorTask =
-            $physicalProcess.StandardError.BaseStream.CopyToAsync($standardErrorBytes)
-        $physicalProcess.WaitForExit()
-        $standardOutputTask.GetAwaiter().GetResult()
-        $standardErrorTask.GetAwaiter().GetResult()
-        $standardOutputByteCount = $standardOutputBytes.Length
-        $standardErrorByteCount = $standardErrorBytes.Length
-        $standardOutput = [System.Text.Encoding]::UTF8.GetString(
-            $standardOutputBytes.ToArray())
-        $standardError = [System.Text.Encoding]::UTF8.GetString(
-            $standardErrorBytes.ToArray())
-        $runExitCode = $physicalProcess.ExitCode
-    }
-    finally {
-        if ($null -ne $standardOutputBytes) {
-            $standardOutputBytes.Dispose()
-        }
-        if ($null -ne $standardErrorBytes) {
-            $standardErrorBytes.Dispose()
-        }
-        $physicalProcess.Dispose()
-    }
-
-    $canonicalRecord = [PeerCast.Nova.Cli.PlaybackControlledWindowsAudioProcessFailureDiagnostics]::IsCanonicalAudioRecord(
-        $standardOutput,
-        $expectedRuntimeBuild,
-        $expectedFixtureSha256)
-    if (-not $canonicalRecord) {
-        $snapshot = [PeerCast.Nova.Cli.PlaybackControlledWindowsAudioProcessFailureDiagnostics]::Analyze(
-            $runExitCode,
-            $standardOutput,
-            $standardOutputByteCount,
-            $standardError,
-            $standardErrorByteCount)
-        $failureRecord = [PeerCast.Nova.Cli.PlaybackControlledWindowsAudioProcessFailureDiagnostics]::SerializeFailureRecord(
-            $snapshot)
-        $temporaryFailureRecord = Join-Path $failureRecordDirectory (
-            '.pcn-audio-process-failure-' +
-            [System.Guid]::NewGuid().ToString('N') +
-            '.tmp')
-        try {
-            [System.IO.File]::WriteAllText(
-                $temporaryFailureRecord,
-                $failureRecord,
-                [System.Text.UTF8Encoding]::new($false))
-            Move-Item -LiteralPath $temporaryFailureRecord -Destination $failureRecordFull
-        }
-        finally {
-            Remove-Item -LiteralPath $temporaryFailureRecord `
-                -Force `
-                -ErrorAction SilentlyContinue
-        }
+    if ($failureRecordExists -and -not $audioRecordExists -and $captureExitCode -eq 2) {
+        Get-Content -LiteralPath $failureRecordFull | ForEach-Object { Write-Output $_ }
         Stop-Validation (
             'the child process terminated before producing a canonical audio record; ' +
             'a sanitized external failure record was retained.')
     }
+    if (-not $audioRecordExists -or
+        $failureRecordExists -or
+        $captureExitCode -notin @(0, 1)) {
+        Stop-Validation 'the managed audio child capture command failed integration checks.'
+    }
 
-    $temporaryAudioRecord = Join-Path $audioRecordDirectory (
-        '.pcn-audio-record-' + [System.Guid]::NewGuid().ToString('N') + '.tmp')
-    try {
-        [System.IO.File]::WriteAllText(
-            $temporaryAudioRecord,
-            $standardOutput,
-            [System.Text.UTF8Encoding]::new($false))
-        Move-Item -LiteralPath $temporaryAudioRecord -Destination $audioRecordFull
-    }
-    finally {
-        Remove-Item -LiteralPath $temporaryAudioRecord -Force -ErrorAction SilentlyContinue
-    }
+    $runExitCode = $captureExitCode
     $recordLines = @(Get-Content -LiteralPath $audioRecordFull)
 
     $audioPreflightAccepted = $false

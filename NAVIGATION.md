@@ -39,8 +39,20 @@ stderr, paths, device identities, pointers, handles, HRESULTs, and media data ar
 not recorded. The next physical audio command is diagnostic only and remains
 blocked from final acceptance and paired verification.
 
+The first diagnostic invocation from main
+`4968e40f801f72bb06a71007a04a47911b6ac377` built the Release runner but
+failed inside the Windows PowerShell 5.1 helper before physical-child start.
+Neither record was created; physical output, preflight, audible observation, and
+paired verification were not run. The corrected boundary keeps the documented
+`powershell.exe -NoProfile -ExecutionPolicy Bypass` host while moving child
+process construction, concurrent byte capture, diagnostics, and atomic record
+promotion into the `net10.0`
+`--capture-controlled-windows-audio-child` command. PowerShell 7 is not required,
+and this host correction adds no WASAPI or final acceptance evidence.
+
 - `docs/adr/ADR-0148-video-gated-controlled-audio-run.md`
 - `docs/reviews/PCN-0156-VIDEO-GATED-CONTROLLED-AUDIO-RUN.md`
+- `src/Nova.Cli/PlaybackControlledWindowsAudioChildCaptureCommand.cs`
 - `tools/Run-ControlledWindowsPhysicalAudio.ps1`
 - `docs/runbooks/0.0.10d-controlled-windows-audio-validation.md`
 

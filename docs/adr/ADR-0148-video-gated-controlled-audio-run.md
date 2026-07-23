@@ -87,3 +87,26 @@ only byte counts, signed and hexadecimal child exit code, an allowlisted stderr
 classification, and the last exact allowlisted native audio stage. Raw stderr is
 never retained. The next physical execution is diagnostic only and cannot serve
 as final physical audio acceptance.
+
+## Windows PowerShell 5.1 diagnostic-host boundary
+
+The first diagnostic helper invocation from clean main
+`4968e40f801f72bb06a71007a04a47911b6ac377` restored and built the Release
+runner successfully, then failed inside the helper before the physical child
+started. Neither the audio record nor the process-failure record was created.
+Physical audio, audio preflight, audible observation, and paired verification
+were not executed.
+
+The root boundary was a host mismatch: the supported runbook invokes
+`powershell.exe`, but that helper attempted to load the `net10.0` CLI assembly
+inside Windows PowerShell 5.1 and used APIs unavailable from that host. The
+earlier execution-policy rejection occurred before script load; process-scoped
+`-ExecutionPolicy Bypass` changed no persistent setting.
+
+The helper now retains Windows PowerShell 5.1 as its supported host and performs
+only validation, Release build, video preflight, and one invocation of a managed
+capture command. The `net10.0` runner owns child `ArgumentList` construction,
+concurrent byte capture, sanitized analysis, and atomic promotion. PowerShell 7
+is not required. This correction supplies no new evidence of WASAPI reachability
+and does not alter the PR #112 initial-media selection correction. The next run
+remains diagnostic rather than final physical audio acceptance.
