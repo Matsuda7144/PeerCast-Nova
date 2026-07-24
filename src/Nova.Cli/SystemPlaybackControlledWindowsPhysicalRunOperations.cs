@@ -73,6 +73,10 @@ internal sealed class SystemPlaybackControlledWindowsPhysicalRunOperations :
         _runner.Snapshot,
         _lifecycle?.Snapshot ?? EmptyLifecycle);
 
+    internal PlaybackControlledWindowsAudioRenderEvidenceSnapshot AudioRenderEvidence =>
+        PlaybackControlledWindowsAudioRenderEvidenceProjection.Capture(
+            _lifecycle?.Snapshot ?? EmptyLifecycle);
+
     public ValueTask<PlaybackWindowsPhysicalRunnerResult> StartRunnerAsync(
         CancellationToken token) => _runner.StartAsync(token);
 
@@ -152,6 +156,7 @@ internal sealed class SystemPlaybackControlledWindowsPhysicalRunOperations :
             },
             Generation = new()
             {
+                CaptureDeliveryObservations = captureAudioRenderTrace,
                 Scheduler = new()
                 {
                     Capacity = PlaybackSchedulerOptions.DefaultCapacity,
