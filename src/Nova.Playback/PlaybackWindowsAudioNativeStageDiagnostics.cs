@@ -27,6 +27,29 @@ internal interface IPlaybackWindowsAudioNativeStageReporter
     void Report(PlaybackWindowsAudioNativeStage stage);
 }
 
+internal interface IPlaybackWindowsAudioRenderTraceConfiguration
+{
+    bool CaptureAudioRenderTrace { get; }
+
+    bool CapturePreStopPadding { get; }
+}
+
+internal sealed class PlaybackWindowsAudioRenderTraceConfiguredReporter(
+    IPlaybackWindowsAudioNativeStageReporter inner,
+    bool capturePreStopPadding) :
+    IPlaybackWindowsAudioNativeStageReporter,
+    IPlaybackWindowsAudioRenderTraceConfiguration
+{
+    private readonly IPlaybackWindowsAudioNativeStageReporter _inner = inner ??
+        throw new ArgumentNullException(nameof(inner));
+
+    public bool CaptureAudioRenderTrace => true;
+
+    public bool CapturePreStopPadding { get; } = capturePreStopPadding;
+
+    public void Report(PlaybackWindowsAudioNativeStage stage) => _inner.Report(stage);
+}
+
 internal sealed class NullPlaybackWindowsAudioNativeStageReporter :
     IPlaybackWindowsAudioNativeStageReporter
 {

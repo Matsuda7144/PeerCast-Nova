@@ -34,6 +34,8 @@ internal sealed class SystemPlaybackControlledWindowsPhysicalRunOperations :
 
     private readonly PlaybackControlledWindowsPhysicalRunOptions _options;
     private readonly PlaybackWindowsPhysicalRunnerHost _runner;
+    private readonly bool _captureAudioRenderTrace;
+    private readonly bool _capturePreStopPadding;
     private PlaybackApprovedExternalRuntimeWindowsLifecycleBoundary? _lifecycle;
     private long _borrowedWindowToken;
     private bool _cleanupValidated;
@@ -41,9 +43,29 @@ internal sealed class SystemPlaybackControlledWindowsPhysicalRunOperations :
 
     internal SystemPlaybackControlledWindowsPhysicalRunOperations(
         PlaybackControlledWindowsPhysicalRunOptions options)
+        : this(
+            options,
+            captureAudioRenderTrace: false,
+            capturePreStopPadding: false)
+    {
+    }
+
+    internal SystemPlaybackControlledWindowsPhysicalRunOperations(
+        PlaybackControlledWindowsPhysicalRunOptions options,
+        bool captureAudioRenderTrace,
+        bool capturePreStopPadding)
     {
         ArgumentNullException.ThrowIfNull(options);
+        if (capturePreStopPadding && !captureAudioRenderTrace)
+        {
+            throw new ArgumentException(
+                "Pre-Stop padding capture requires the bounded audio render trace.",
+                nameof(capturePreStopPadding));
+        }
+
         _options = options with { Runner = options.Runner with { } };
+        _captureAudioRenderTrace = captureAudioRenderTrace;
+        _capturePreStopPadding = capturePreStopPadding;
         _runner = new(_options.Runner);
     }
 
@@ -81,7 +103,9 @@ internal sealed class SystemPlaybackControlledWindowsPhysicalRunOperations :
             CreateLifecycleOptions(
                 _options.AudioBufferDuration,
                 _options.Kind,
-                _options.DiagnoseAudioNativeStages));
+                _options.DiagnoseAudioNativeStages,
+                captureAudioRenderTrace: _captureAudioRenderTrace,
+                capturePreStopPadding: _capturePreStopPadding));
         return await _lifecycle.InitializeAsync(token).ConfigureAwait(false);
     }
 
@@ -89,12 +113,31 @@ internal sealed class SystemPlaybackControlledWindowsPhysicalRunOperations :
         TimeSpan audioBufferDuration,
         PlaybackControlledWindowsOutputValidationKind kind,
         bool diagnoseAudioNativeStages = false,
-        TextWriter? diagnosticOutput = null) => new()
+        TextWriter? diagnosticOutput = null,
+        bool captureAudioRenderTrace = false,
+        bool capturePreStopPadding = false)
+    {
+        if (capturePreStopPadding && !captureAudioRenderTrace)
         {
-            AudioNativeStageReporter = diagnoseAudioNativeStages
-                ? new TextWriterPlaybackWindowsAudioNativeStageReporter(
-                    diagnosticOutput ?? Console.Error)
-                : NullPlaybackWindowsAudioNativeStageReporter.Instance,
+            throw new ArgumentException(
+                "Pre-Stop padding capture requires the bounded audio render trace.",
+                nameof(capturePreStopPadding));
+        }
+
+        IPlaybackWindowsAudioNativeStageReporter reporter = diagnoseAudioNativeStages
+            ? new TextWriterPlaybackWindowsAudioNativeStageReporter(
+                diagnosticOutput ?? Console.Error)
+            : NullPlaybackWindowsAudioNativeStageReporter.Instance;
+        if (captureAudioRenderTrace)
+        {
+            reporter = new PlaybackWindowsAudioRenderTraceConfiguredReporter(
+                reporter,
+                capturePreStopPadding);
+        }
+
+        return new()
+        {
+            AudioNativeStageReporter = reporter,
             AudioBufferDuration = audioBufferDuration,
             Production = new()
             {
@@ -127,6 +170,7 @@ internal sealed class SystemPlaybackControlledWindowsPhysicalRunOperations :
                 },
             },
         };
+    }
 
     public ValueTask<PcpControlledFlvFixtureReplayReport> ReplayFixtureAsync(
         CancellationToken token)

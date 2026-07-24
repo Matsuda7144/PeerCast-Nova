@@ -80,6 +80,52 @@ public sealed class SystemPlaybackControlledWindowsPhysicalRunOperationsTests
     }
 
     [Fact]
+    public void AudioRenderTraceConfigurationIsAbsentByDefaultAndExplicitWhenRequested()
+    {
+        var normal = SystemPlaybackControlledWindowsPhysicalRunOperations.CreateLifecycleOptions(
+            TimeSpan.FromMilliseconds(100),
+            PlaybackControlledWindowsOutputValidationKind.Audio);
+        var normalReporter = GetReporterByReflection(normal);
+        Assert.Null(GetRenderTraceConfigurationInterface(normalReporter));
+
+        var configured =
+            SystemPlaybackControlledWindowsPhysicalRunOperations.CreateLifecycleOptions(
+                TimeSpan.FromMilliseconds(100),
+                PlaybackControlledWindowsOutputValidationKind.Audio,
+                captureAudioRenderTrace: true,
+                capturePreStopPadding: true);
+        var configuredReporter = GetReporterByReflection(configured);
+        var configuration = GetRenderTraceConfigurationInterface(configuredReporter);
+        Assert.NotNull(configuration);
+        Assert.True(ReadBooleanProperty(
+            configuredReporter,
+            configuration!,
+            "CaptureAudioRenderTrace"));
+        Assert.True(ReadBooleanProperty(
+            configuredReporter,
+            configuration!,
+            "CapturePreStopPadding"));
+    }
+
+    [Fact]
+    public void PreStopPaddingCaptureRequiresAudioRenderTrace()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            SystemPlaybackControlledWindowsPhysicalRunOperations.CreateLifecycleOptions(
+                TimeSpan.FromMilliseconds(100),
+                PlaybackControlledWindowsOutputValidationKind.Audio,
+                captureAudioRenderTrace: false,
+                capturePreStopPadding: true));
+
+        var options = new PlaybackControlledWindowsPhysicalRunOptions();
+        Assert.Throws<ArgumentException>(() =>
+            new SystemPlaybackControlledWindowsPhysicalRunOperations(
+                options,
+                captureAudioRenderTrace: false,
+                capturePreStopPadding: true));
+    }
+
+    [Fact]
     public async Task ResumeControlledAudioTimingAsync_ResumesRetainedWaitToDelivery()
     {
         PlaybackApprovedExternalRuntimeWindowsLifecycleResult[] results =
@@ -185,6 +231,17 @@ public sealed class SystemPlaybackControlledWindowsPhysicalRunOperationsTests
         PlaybackApprovedExternalRuntimeWindowsLifecycleOptions options,
         string stageName)
     {
+        var reporter = GetReporterByReflection(options);
+        var method = reporter.GetType().GetMethod("Report");
+        Assert.NotNull(method);
+        var stageType = method.GetParameters()[0].ParameterType;
+        var stage = Enum.Parse(stageType, stageName);
+        method.Invoke(reporter, [stage]);
+    }
+
+    private static object GetReporterByReflection(
+        PlaybackApprovedExternalRuntimeWindowsLifecycleOptions options)
+    {
         var property = options.GetType().GetProperty(
             "AudioNativeStageReporter",
             System.Reflection.BindingFlags.Instance |
@@ -192,10 +249,20 @@ public sealed class SystemPlaybackControlledWindowsPhysicalRunOperationsTests
         Assert.NotNull(property);
         var reporter = property.GetValue(options);
         Assert.NotNull(reporter);
-        var method = reporter.GetType().GetMethod("Report");
-        Assert.NotNull(method);
-        var stageType = method.GetParameters()[0].ParameterType;
-        var stage = Enum.Parse(stageType, stageName);
-        method.Invoke(reporter, [stage]);
+        return reporter!;
+    }
+
+    private static Type? GetRenderTraceConfigurationInterface(object reporter) =>
+        reporter.GetType().GetInterface(
+            "PeerCast.Nova.Playback.IPlaybackWindowsAudioRenderTraceConfiguration");
+
+    private static bool ReadBooleanProperty(
+        object instance,
+        Type interfaceType,
+        string name)
+    {
+        var property = interfaceType.GetProperty(name);
+        Assert.NotNull(property);
+        return Assert.IsType<bool>(property.GetValue(instance));
     }
 }
