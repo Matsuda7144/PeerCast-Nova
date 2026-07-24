@@ -13,6 +13,22 @@ try
             args,
             argument => string.Equals(
                 argument,
+                PlaybackControlledWindowsAudioRenderEvidenceChildCaptureCommand.Argument,
+                StringComparison.OrdinalIgnoreCase)))
+    {
+        Environment.ExitCode =
+            await PlaybackControlledWindowsAudioRenderEvidenceChildCaptureCommand.RunAsync(
+                args,
+                System.Reflection.Assembly.GetEntryAssembly()?.Location ??
+                    throw new InvalidOperationException(
+                        "The controlled runner assembly path is unavailable."),
+                Console.Out,
+                cancellationSource.Token);
+    }
+    else if (Array.Exists(
+            args,
+            argument => string.Equals(
+                argument,
                 PlaybackControlledWindowsAudioRenderEvidenceCommand.Argument,
                 StringComparison.OrdinalIgnoreCase)))
     {
