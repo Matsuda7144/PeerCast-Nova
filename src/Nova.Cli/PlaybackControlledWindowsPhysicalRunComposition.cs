@@ -68,7 +68,20 @@ public sealed record PlaybackControlledWindowsPhysicalRunSnapshot(
     PlaybackApprovedExternalRuntimeWindowsLifecycleState LifecycleState,
     PlaybackControlledWindowsOutputEvidenceResult EvidenceResult,
     bool BorrowedWindowPreserved,
-    bool BorrowedDispatcherPreserved);
+    bool BorrowedDispatcherPreserved)
+{
+    internal PlaybackControlledWindowsAudioRenderEvidenceSnapshot HoldStartAudioRenderEvidence
+    {
+        get;
+        init;
+    }
+
+    internal PlaybackControlledWindowsAudioRenderEvidenceSnapshot PreCleanupAudioRenderEvidence
+    {
+        get;
+        init;
+    }
+}
 
 public sealed class PlaybackControlledWindowsPhysicalRunComposition : IAsyncDisposable
 {
@@ -89,6 +102,8 @@ public sealed class PlaybackControlledWindowsPhysicalRunComposition : IAsyncDisp
     private int _deliveredCount;
     private int _retainedWouldBlockCount;
     private PlaybackControlledWindowsOutputEvidenceResult _evidenceResult;
+    private PlaybackControlledWindowsAudioRenderEvidenceSnapshot _holdStartAudioRenderEvidence;
+    private PlaybackControlledWindowsAudioRenderEvidenceSnapshot _preCleanupAudioRenderEvidence;
     private bool _borrowedWindowPreserved;
     private bool _borrowedDispatcherPreserved;
     private bool _isRunning;
@@ -132,7 +147,11 @@ public sealed class PlaybackControlledWindowsPhysicalRunComposition : IAsyncDisp
                     owned.Lifecycle.State,
                     _evidenceResult,
                     _borrowedWindowPreserved,
-                    _borrowedDispatcherPreserved);
+                    _borrowedDispatcherPreserved)
+                {
+                    HoldStartAudioRenderEvidence = _holdStartAudioRenderEvidence,
+                    PreCleanupAudioRenderEvidence = _preCleanupAudioRenderEvidence,
+                };
             }
         }
     }
@@ -196,6 +215,14 @@ public sealed class PlaybackControlledWindowsPhysicalRunComposition : IAsyncDisp
             if (delivery != PlaybackControlledWindowsPhysicalRunResult.Completed)
                 return Terminal(delivery);
 
+            var holdStart = _operations.Snapshot;
+            lock (_sync)
+            {
+                _holdStartAudioRenderEvidence =
+                    PlaybackControlledWindowsAudioRenderEvidenceProjection.Capture(
+                        holdStart.Lifecycle);
+            }
+
             if (_options.ObservationHoldDuration > TimeSpan.Zero)
             {
                 SetState(PlaybackControlledWindowsPhysicalRunState.HoldingObservation);
@@ -205,6 +232,12 @@ public sealed class PlaybackControlledWindowsPhysicalRunComposition : IAsyncDisp
 
             SetState(PlaybackControlledWindowsPhysicalRunState.CapturingEvidence);
             var preCleanup = _operations.Snapshot;
+            lock (_sync)
+            {
+                _preCleanupAudioRenderEvidence =
+                    PlaybackControlledWindowsAudioRenderEvidenceProjection.Capture(
+                        preCleanup.Lifecycle);
+            }
             if (preCleanup.Lifecycle.OutputReadyGeneration < 0 ||
                 preCleanup.Lifecycle.DecoderGeneration < 0)
                 return Terminal(PlaybackControlledWindowsPhysicalRunResult.EvidenceRejected);
