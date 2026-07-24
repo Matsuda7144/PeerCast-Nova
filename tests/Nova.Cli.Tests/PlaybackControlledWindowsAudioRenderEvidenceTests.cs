@@ -5,7 +5,7 @@ namespace PeerCast.Nova.Cli.Tests;
 public sealed class PlaybackControlledWindowsAudioRenderEvidenceTests
 {
     [Fact]
-    public void Default_lifecycle_projects_absent_traces()
+    public void Default_traces_preserve_the_existing_native_aggregate()
     {
         var lifecycle = CreateLifecycle(default, default);
 
@@ -17,10 +17,11 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceTests
         Assert.Equal(
             default(PlaybackWindowsAudioRenderTraceSnapshot),
             actual.AudioRenderTrace);
+        Assert.Equal(lifecycle.Buffers.NativeEvidence, actual.NativeEvidence);
     }
 
     [Fact]
-    public void Projection_preserves_exact_delivery_and_audio_render_traces()
+    public void Projection_preserves_exact_delivery_and_audio_render_evidence()
     {
         var deliveryTrace = CreateDeliveryTrace(sequence: 3);
         var audioRenderTrace = CreateAudioRenderTrace();
@@ -34,6 +35,13 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceTests
         Assert.Equal(1, actual.AudioRenderTrace.Count);
         Assert.Equal(1024, actual.AudioRenderTrace.First.RequestedFrameCount);
         Assert.Equal(1024, actual.AudioRenderTrace.PreStop.PaddingFrameCount);
+        Assert.Equal(1, actual.NativeEvidence.AudioWriteAttemptCount);
+        Assert.Equal(1, actual.NativeEvidence.AudioWriteAcknowledgementCount);
+        Assert.Equal(1024, actual.NativeEvidence.AudioAcceptedFrameCount);
+        Assert.Equal(8192, actual.NativeEvidence.AudioAcceptedByteCount);
+        Assert.Equal(0, actual.NativeEvidence.AudioWouldBlockCount);
+        Assert.Equal(1, actual.NativeEvidence.AudioStartAcknowledgementCount);
+        Assert.Equal(0, actual.NativeEvidence.AudioDeviceLostCount);
     }
 
     [Fact]

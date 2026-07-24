@@ -4,7 +4,8 @@ namespace PeerCast.Nova.Cli;
 
 internal readonly record struct PlaybackControlledWindowsAudioRenderEvidenceSnapshot(
     PlaybackGenerationMatchedSchedulerDeliveryTraceSnapshot DeliveryTrace,
-    PlaybackWindowsAudioRenderTraceSnapshot AudioRenderTrace);
+    PlaybackWindowsAudioRenderTraceSnapshot AudioRenderTrace,
+    PlaybackWindowsOutputNativeEvidenceSnapshot NativeEvidence);
 
 internal static class PlaybackControlledWindowsAudioRenderEvidenceProjection
 {
@@ -12,5 +13,6 @@ internal static class PlaybackControlledWindowsAudioRenderEvidenceProjection
         PlaybackApprovedExternalRuntimeWindowsLifecycleSnapshot lifecycle) =>
         new(
             lifecycle.DeliveryTrace,
-            lifecycle.Buffers.NativeEvidence.AudioRenderTrace);
+            lifecycle.Buffers.NativeEvidence.AudioRenderTrace,
+            lifecycle.Buffers.NativeEvidence);
 }
