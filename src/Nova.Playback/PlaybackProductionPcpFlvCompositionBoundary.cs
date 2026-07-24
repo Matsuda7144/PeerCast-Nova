@@ -86,7 +86,10 @@ public sealed record PlaybackProductionPcpFlvCompositionSnapshot(
     int VideoWidth,
     int VideoHeight,
     int AudioSampleRate,
-    int AudioChannelCount);
+    int AudioChannelCount)
+{
+    public PlaybackGenerationMatchedSchedulerDeliveryTraceSnapshot DeliveryTrace { get; init; }
+}
 
 public sealed class PlaybackProductionPcpFlvCompositionException : Exception
 {
@@ -286,7 +289,10 @@ public sealed class PlaybackProductionPcpFlvCompositionBoundary :
         {
             lock (_sync)
             {
-                var decode = DecodeSnapshotOrNull(_generation);
+                var generation = _generation;
+                var decode = DecodeSnapshotOrNull(generation);
+                var deliveryTrace =
+                    PlaybackProductionGenerationDeliveryTraceProjection.Capture(generation);
                 var source = _parser.Session;
                 var liveSource = source is { IsDisposed: false };
                 return new(
@@ -313,7 +319,10 @@ public sealed class PlaybackProductionPcpFlvCompositionBoundary :
                     liveSource ? source!.Video.Width : 0,
                     liveSource ? source!.Video.Height : 0,
                     liveSource ? source!.Audio.SampleRate : 0,
-                    liveSource ? source!.Audio.ChannelCount : 0);
+                    liveSource ? source!.Audio.ChannelCount : 0)
+                {
+                    DeliveryTrace = deliveryTrace,
+                };
             }
         }
     }
