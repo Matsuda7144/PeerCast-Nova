@@ -38,6 +38,8 @@ public sealed record PlaybackProductionDecoderGenerationFactoryOptions
     public PlaybackAvTimingTolerances Timing { get; init; } = new();
 
     public PlaybackSourceBoundOneFrameDecodeOptions Decode { get; init; } = new();
+
+    public bool CaptureDeliveryObservations { get; init; }
 }
 
 public readonly record struct PlaybackProductionDecoderGenerationFactorySnapshot(
@@ -810,6 +812,7 @@ public sealed class PlaybackProductionDecoderGenerationFactory : IDisposable, IA
             SchedulerPolicy = options.SchedulerPolicy with { },
             Timing = options.Timing with { },
             Decode = options.Decode with { },
+            CaptureDeliveryObservations = options.CaptureDeliveryObservations,
         };
         ValidateOptions(clone);
         return clone;
@@ -1011,7 +1014,8 @@ internal sealed class PlaybackProductionDecoderGenerationFactoryOperations(
                 scheduler,
                 timing,
                 output,
-                initialSchedulerSequence: 0);
+                initialSchedulerSequence: 0,
+                captureDeliveryObservations: options.CaptureDeliveryObservations);
             decode = null;
             scheduler = null;
             timing = null;
