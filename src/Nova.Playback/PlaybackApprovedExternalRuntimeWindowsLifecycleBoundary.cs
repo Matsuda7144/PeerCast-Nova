@@ -94,7 +94,10 @@ public sealed record PlaybackApprovedExternalRuntimeWindowsLifecycleSnapshot(
     PlaybackWindowsOutputActivationResult ActivationResult,
     PlaybackWindowsOutputBindingSnapshot Binding,
     PlaybackWindowsOutputStreamSnapshot Streams,
-    PlaybackWindowsOutputBufferSnapshot Buffers);
+    PlaybackWindowsOutputBufferSnapshot Buffers)
+{
+    public PlaybackGenerationMatchedSchedulerDeliveryTraceSnapshot DeliveryTrace { get; init; }
+}
 
 internal enum PlaybackApprovedExternalRuntimeOutputConfigurationResult
 {
@@ -295,7 +298,10 @@ public sealed class PlaybackApprovedExternalRuntimeWindowsLifecycleBoundary :
                     owned.ActivationResult,
                     owned.Binding,
                     owned.Streams,
-                    owned.Buffers);
+                    owned.Buffers)
+                {
+                    DeliveryTrace = production?.DeliveryTrace ?? default,
+                };
             }
         }
     }
