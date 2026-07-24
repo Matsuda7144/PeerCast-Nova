@@ -360,11 +360,32 @@ public sealed class PlaybackWindowsOutputBufferProcessingBoundary : IDisposable
         CreateSystemProcessor(NullPlaybackWindowsAudioNativeStageReporter.Instance);
 
     private static IPlaybackWindowsOutputNativeBufferProcessor CreateSystemProcessor(
-        IPlaybackWindowsAudioNativeStageReporter audioNativeStageReporter) =>
-        CreateSystemProcessor(
+        IPlaybackWindowsAudioNativeStageReporter audioNativeStageReporter)
+    {
+        var configuration = ResolveAudioRenderTraceConfiguration(audioNativeStageReporter);
+        return CreateSystemProcessor(
             audioNativeStageReporter,
-            captureAudioRenderTrace: false,
-            capturePreStopPadding: false);
+            configuration.CaptureAudioRenderTrace,
+            configuration.CapturePreStopPadding);
+    }
+
+    internal static (bool CaptureAudioRenderTrace, bool CapturePreStopPadding)
+        ResolveAudioRenderTraceConfiguration(
+            IPlaybackWindowsAudioNativeStageReporter audioNativeStageReporter)
+    {
+        ArgumentNullException.ThrowIfNull(audioNativeStageReporter);
+        if (audioNativeStageReporter is not IPlaybackWindowsAudioRenderTraceConfiguration configuration)
+        {
+            return default;
+        }
+        if (configuration.CapturePreStopPadding && !configuration.CaptureAudioRenderTrace)
+        {
+            throw new ArgumentException(
+                "Pre-Stop padding capture requires the bounded audio render trace.",
+                nameof(audioNativeStageReporter));
+        }
+        return (configuration.CaptureAudioRenderTrace, configuration.CapturePreStopPadding);
+    }
 
     private static IPlaybackWindowsOutputNativeBufferProcessor CreateSystemProcessor(
         IPlaybackWindowsAudioNativeStageReporter audioNativeStageReporter,
