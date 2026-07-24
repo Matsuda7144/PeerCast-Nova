@@ -13,6 +13,20 @@ try
             args,
             argument => string.Equals(
                 argument,
+                PlaybackControlledWindowsAudioRenderEvidenceCommand.Argument,
+                StringComparison.OrdinalIgnoreCase)))
+    {
+        var evidence =
+            await PlaybackControlledWindowsAudioRenderEvidenceCommand.RunAsync(
+                args,
+                Console.Out,
+                cancellationSource.Token);
+        Environment.ExitCode = evidence.ExitCode;
+    }
+    else if (Array.Exists(
+            args,
+            argument => string.Equals(
+                argument,
                 PlaybackControlledWindowsDeliveryDiagnosticChildCaptureCommand.Argument,
                 StringComparison.OrdinalIgnoreCase)))
     {
