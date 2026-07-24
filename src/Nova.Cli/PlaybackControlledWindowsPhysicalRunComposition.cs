@@ -81,6 +81,12 @@ public sealed record PlaybackControlledWindowsPhysicalRunSnapshot(
         get;
         init;
     }
+
+    internal PlaybackControlledWindowsAudioRenderEvidenceSnapshot PostStopAudioRenderEvidence
+    {
+        get;
+        init;
+    }
 }
 
 public sealed class PlaybackControlledWindowsPhysicalRunComposition : IAsyncDisposable
@@ -104,6 +110,7 @@ public sealed class PlaybackControlledWindowsPhysicalRunComposition : IAsyncDisp
     private PlaybackControlledWindowsOutputEvidenceResult _evidenceResult;
     private PlaybackControlledWindowsAudioRenderEvidenceSnapshot _holdStartAudioRenderEvidence;
     private PlaybackControlledWindowsAudioRenderEvidenceSnapshot _preCleanupAudioRenderEvidence;
+    private PlaybackControlledWindowsAudioRenderEvidenceSnapshot _postStopAudioRenderEvidence;
     private bool _borrowedWindowPreserved;
     private bool _borrowedDispatcherPreserved;
     private bool _isRunning;
@@ -151,6 +158,7 @@ public sealed class PlaybackControlledWindowsPhysicalRunComposition : IAsyncDisp
                 {
                     HoldStartAudioRenderEvidence = _holdStartAudioRenderEvidence,
                     PreCleanupAudioRenderEvidence = _preCleanupAudioRenderEvidence,
+                    PostStopAudioRenderEvidence = _postStopAudioRenderEvidence,
                 };
             }
         }
@@ -245,6 +253,13 @@ public sealed class PlaybackControlledWindowsPhysicalRunComposition : IAsyncDisp
             SetState(PlaybackControlledWindowsPhysicalRunState.CleaningUp);
             await _operations.StopLifecycleAsync().ConfigureAwait(false);
             lifecycleStarted = false;
+            var postStop = _operations.Snapshot;
+            lock (_sync)
+            {
+                _postStopAudioRenderEvidence =
+                    PlaybackControlledWindowsAudioRenderEvidenceProjection.Capture(
+                        postStop.Lifecycle);
+            }
             var owners = await _operations.VerifyBorrowedOwnersAsync(cancellationToken)
                 .ConfigureAwait(false);
             lock (_sync)
