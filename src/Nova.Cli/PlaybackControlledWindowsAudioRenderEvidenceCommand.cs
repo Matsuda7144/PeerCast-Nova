@@ -39,13 +39,26 @@ public static class PlaybackControlledWindowsAudioRenderEvidenceCommand
             options,
             operations);
         var result = await composition.RunAsync(cancellationToken).ConfigureAwait(false);
+        var snapshot = composition.Snapshot;
         if (result != PlaybackControlledWindowsPhysicalRunResult.Completed)
         {
-            await output.WriteLineAsync($"Result: {result}").ConfigureAwait(false);
+            if (TryCreateTerminalRecord(snapshot, options, out var terminalRecord))
+            {
+                await PlaybackControlledWindowsAudioTerminalRenderRecordCodec.WriteAsync(
+                        output,
+                        terminalRecord,
+                        CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
+            else
+            {
+                await output.WriteLineAsync($"Result: {result}").ConfigureAwait(false);
+            }
+
             return new(RunFailureExitCode, result);
         }
 
-        var record = CreateRecord(composition.Snapshot, options);
+        var record = CreateRecord(snapshot, options);
         await PlaybackControlledWindowsAudioRenderEvidenceRecordCodec.WriteAsync(
                 output,
                 record,
@@ -100,6 +113,36 @@ public static class PlaybackControlledWindowsAudioRenderEvidenceCommand
             options.ObservationHoldDuration,
             options.AudioBufferDuration,
             physicalRunsExecutedByThisCommand: true);
+
+    internal static bool TryCreateTerminalRecord(
+        PlaybackControlledWindowsPhysicalRunSnapshot snapshot,
+        PlaybackControlledWindowsPhysicalRunOptions options,
+        out PlaybackControlledWindowsAudioTerminalRenderRecord terminalRecord)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        ArgumentNullException.ThrowIfNull(options);
+        try
+        {
+            var candidate = PlaybackControlledWindowsAudioTerminalRenderRecordCodec.Create(
+                snapshot,
+                options.FixtureSha256,
+                options.ObservationHoldDuration,
+                options.AudioBufferDuration,
+                physicalRunStarted: true);
+            _ = PlaybackControlledWindowsAudioTerminalRenderRecordCodec.Serialize(candidate);
+            terminalRecord = candidate;
+            return true;
+        }
+        catch (ArgumentException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+        }
+
+        terminalRecord = null!;
+        return false;
+    }
 
     private static int Count(string[] arguments, string value) =>
         arguments.Count(
