@@ -28,6 +28,20 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceCheckpointTests
         "runner:stop",
         "snapshot:4",
     ];
+    private static readonly string[] ExpectedRejectedLog =
+    [
+        "runner:start",
+        "lifecycle:init",
+        "fixture",
+        "input:complete",
+        "receive:Audio",
+        "deliver",
+        "snapshot:1",
+        "lifecycle:stop",
+        "snapshot:2",
+        "runner:stop",
+        "snapshot:3",
+    ];
 
     [Fact]
     public async Task Completed_audio_run_retains_all_checkpoints_without_extra_operations()
@@ -78,16 +92,18 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceCheckpointTests
     }
 
     [Fact]
-    public async Task Rejected_delivery_leaves_checkpoints_absent()
+    public async Task Rejected_delivery_retains_terminal_cleanup_checkpoints()
     {
+        var terminalPreCleanup = CreateLifecycle(sequenceBase: 30, paddingBase: 300);
+        var terminalPostStop = CreateLifecycle(
+            sequenceBase: 40,
+            paddingBase: 400,
+            preStopPadding: 333,
+            disposed: true);
         var operations = new FakeOperations(
-            CreateLifecycle(sequenceBase: 0, paddingBase: 0),
-            CreateLifecycle(sequenceBase: 10, paddingBase: 100),
-            CreateLifecycle(
-                sequenceBase: 20,
-                paddingBase: 200,
-                preStopPadding: 777,
-                disposed: true))
+            terminalPreCleanup,
+            CreateLifecycle(sequenceBase: 35, paddingBase: 350),
+            terminalPostStop)
         {
             DeliveryResult =
                 PlaybackApprovedExternalRuntimeWindowsLifecycleResult.RetainedWouldBlock,
@@ -109,11 +125,20 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceCheckpointTests
 
         Assert.Equal(PlaybackControlledWindowsPhysicalRunResult.DeliveryRejected, result);
         Assert.Equal(default, snapshot.HoldStartAudioRenderEvidence);
-        Assert.Equal(default, snapshot.PreCleanupAudioRenderEvidence);
-        Assert.Equal(default, snapshot.PostStopAudioRenderEvidence);
-        Assert.Equal(1, operations.SnapshotReadCount);
+        Assert.Equal(
+            PlaybackControlledWindowsAudioRenderEvidenceProjection.Capture(terminalPreCleanup),
+            snapshot.PreCleanupAudioRenderEvidence);
+        Assert.Equal(
+            PlaybackControlledWindowsAudioRenderEvidenceProjection.Capture(terminalPostStop),
+            snapshot.PostStopAudioRenderEvidence);
+        Assert.Equal(1, snapshot.PostStopAudioRenderEvidence.AudioRenderTrace.PreStop.QueryCount);
+        Assert.Equal(
+            333,
+            snapshot.PostStopAudioRenderEvidence.AudioRenderTrace.PreStop.PaddingFrameCount);
+        Assert.Equal(3, operations.SnapshotReadCount);
         Assert.Equal(1, operations.ReceiveCount);
         Assert.Equal(1, operations.DeliveryCount);
+        Assert.Equal(ExpectedRejectedLog, operations.Log);
     }
 
     private static PlaybackApprovedExternalRuntimeWindowsLifecycleSnapshot CreateLifecycle(
@@ -254,6 +279,8 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceCheckpointTests
         PlaybackApprovedExternalRuntimeWindowsLifecycleSnapshot postStop) :
         IPlaybackControlledWindowsPhysicalRunOperations
     {
+        private bool _lifecycleStopped;
+
         public PlaybackApprovedExternalRuntimeWindowsLifecycleResult DeliveryResult { get; init; } =
             PlaybackApprovedExternalRuntimeWindowsLifecycleResult.AudioDelivered;
 
@@ -271,12 +298,11 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceCheckpointTests
             {
                 SnapshotReadCount++;
                 Log.Add($"snapshot:{SnapshotReadCount}");
-                var lifecycle = SnapshotReadCount switch
-                {
-                    1 => holdStart,
-                    2 => preCleanup,
-                    _ => postStop,
-                };
+                var lifecycle = _lifecycleStopped
+                    ? postStop
+                    : SnapshotReadCount == 1
+                        ? holdStart
+                        : preCleanup;
                 return new(
                     new(
                         PlaybackWindowsPhysicalRunnerState.Running,
@@ -359,6 +385,7 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceCheckpointTests
 
         public ValueTask StopLifecycleAsync()
         {
+            _lifecycleStopped = true;
             Log.Add("lifecycle:stop");
             return ValueTask.CompletedTask;
         }

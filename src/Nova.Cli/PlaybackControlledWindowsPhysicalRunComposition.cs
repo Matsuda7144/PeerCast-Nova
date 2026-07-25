@@ -311,8 +311,10 @@ public sealed class PlaybackControlledWindowsPhysicalRunComposition : IAsyncDisp
         {
             if (lifecycleStarted)
             {
+                TryCaptureTerminalPreCleanupAudioRenderEvidence();
                 try { await _operations.StopLifecycleAsync().ConfigureAwait(false); }
                 catch { }
+                TryCaptureTerminalPostStopAudioRenderEvidence();
             }
             if (runnerStarted)
             {
@@ -418,6 +420,52 @@ public sealed class PlaybackControlledWindowsPhysicalRunComposition : IAsyncDisp
         return result == PlaybackApprovedExternalRuntimeWindowsLifecycleResult.Cancelled
             ? PlaybackControlledWindowsPhysicalRunResult.Cancelled
             : PlaybackControlledWindowsPhysicalRunResult.DeliveryRejected;
+    }
+
+    private void TryCaptureTerminalPreCleanupAudioRenderEvidence()
+    {
+        if (_options.Kind != PlaybackControlledWindowsOutputValidationKind.Audio)
+            return;
+
+        try
+        {
+            var terminalPreCleanup = _operations.Snapshot;
+            lock (_sync)
+            {
+                if (_preCleanupAudioRenderEvidence == default)
+                {
+                    _preCleanupAudioRenderEvidence =
+                        PlaybackControlledWindowsAudioRenderEvidenceProjection.Capture(
+                            terminalPreCleanup.Lifecycle);
+                }
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    private void TryCaptureTerminalPostStopAudioRenderEvidence()
+    {
+        if (_options.Kind != PlaybackControlledWindowsOutputValidationKind.Audio)
+            return;
+
+        try
+        {
+            var terminalPostStop = _operations.Snapshot;
+            lock (_sync)
+            {
+                if (_postStopAudioRenderEvidence == default)
+                {
+                    _postStopAudioRenderEvidence =
+                        PlaybackControlledWindowsAudioRenderEvidenceProjection.Capture(
+                            terminalPostStop.Lifecycle);
+                }
+            }
+        }
+        catch
+        {
+        }
     }
 
     private void RecordReplay(PcpControlledFlvFixtureReplayReport report)
