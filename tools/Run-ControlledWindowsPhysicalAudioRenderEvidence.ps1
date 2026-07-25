@@ -46,11 +46,30 @@ $expectedRuntimeBuild = 'btbn.ffmpeg.20260721.win64.lgpl-shared'
 $expectedAudioBufferMilliseconds = 100
 $maximumRecordCharacters = 32768
 $validationPrefix = 'Controlled render evidence rejected: '
+$validationMarker = 'PeerCastNovaControlledRenderEvidenceValidation'
 
 function Stop-Validation {
     param([Parameter(Mandatory = $true)][string]$Message)
 
-    throw ($validationPrefix + $Message)
+    $exception = New-Object `
+        -TypeName System.InvalidOperationException `
+        -ArgumentList ($validationPrefix + $Message)
+    $exception.Data[$validationMarker] = $true
+    throw $exception
+}
+
+function Get-ValidationFailure {
+    param([Parameter(Mandatory = $true)][System.Exception]$Exception)
+
+    $current = $Exception
+    while ($null -ne $current) {
+        if ($current.Data.Contains($validationMarker) -and
+            $current.Data[$validationMarker] -eq $true) {
+            return $current
+        }
+        $current = $current.InnerException
+    }
+    return $null
 }
 
 function Test-IsUnderPath {
@@ -70,15 +89,137 @@ function Test-IsUnderPath {
             [System.StringComparison]::OrdinalIgnoreCase)
 }
 
+function Invoke-SanitizedNativeCommand {
+    param(
+        [Parameter(Mandatory = $true)][string]$FilePath,
+        [Parameter(Mandatory = $true)][string[]]$Arguments,
+        [switch]$CaptureOutput
+    )
+
+    $standardOutputPath = [System.IO.Path]::GetTempFileName()
+    $standardErrorPath = [System.IO.Path]::GetTempFileName()
+    try {
+        $nativeErrorActionPreference = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = 'Continue'
+            & $FilePath @Arguments 1> $standardOutputPath 2> $standardErrorPath
+            $exitCode = $LASTEXITCODE
+        }
+        finally {
+            $ErrorActionPreference = $nativeErrorActionPreference
+        }
+
+        $outputLines = if ($CaptureOutput) {
+            @(Get-Content -LiteralPath $standardOutputPath)
+        }
+        else {
+            @()
+        }
+        $standardErrorBytes = (Get-Item -LiteralPath $standardErrorPath).Length
+        return [pscustomobject]@{
+            ExitCode = $exitCode
+            OutputLines = $outputLines
+            StandardErrorBytes = [long]$standardErrorBytes
+        }
+    }
+    finally {
+        Remove-Item -LiteralPath $standardOutputPath -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $standardErrorPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Get-SanitizedFailureCategory {
+    param([Parameter(Mandatory = $true)][System.Exception]$Exception)
+
+    $current = $Exception
+    while ($null -ne $current) {
+        if ($current -is [System.Management.Automation.CommandNotFoundException]) {
+            return 'CommandUnavailable'
+        }
+        if ($current -is [System.UnauthorizedAccessException] -or
+            $current -is [System.Security.SecurityException]) {
+            return 'AccessDenied'
+        }
+        if ($current -is [System.IO.IOException]) {
+            return 'IoFailure'
+        }
+        if ($current -is [System.ArgumentException]) {
+            return 'InvalidArgument'
+        }
+        if ($current -is [System.InvalidOperationException]) {
+            return 'InvalidOperation'
+        }
+        $current = $current.InnerException
+    }
+    if ($Exception -is [System.Management.Automation.RuntimeException]) {
+        return 'PowerShellRuntime'
+    }
+    return 'UnexpectedException'
+}
+
+function Write-SanitizedHelperFailureRecord {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Phase,
+        [Parameter(Mandatory = $true)][string]$Category
+    )
+
+    $directory = Split-Path -Parent $Path
+    if ([string]::IsNullOrWhiteSpace($directory)) {
+        throw 'The helper failure record directory is unavailable.'
+    }
+
+    $temporary = Join-Path $directory (
+        '.pcn-render-evidence-helper-failure-' +
+        [System.Guid]::NewGuid().ToString('N') +
+        '.tmp')
+    $lines = @(
+        'PEERCAST-NOVA-CONTROLLED-WINDOWS-AUDIO-RENDER-EVIDENCE-HELPER-FAILURE 1',
+        'Milestone: 0.0.10d Phase 5',
+        'Kind: Audio',
+        'Result: HelperFailure',
+        ('Failure-Phase: ' + $Phase),
+        ('Failure-Category: ' + $Category),
+        'Canonical-Render-Evidence-Record-Produced: False',
+        'Sanitized-Child-Failure-Record-Produced: False',
+        'Physical-Run-Completion-Established: False',
+        'Raw-Exception-Published: False',
+        'Raw-Native-Stderr-Published: False',
+        'Audio-Acceptance-Claimed: False',
+        'External-Binary-Or-Payload-Published: False',
+        'END-PEERCAST-NOVA-CONTROLLED-WINDOWS-AUDIO-RENDER-EVIDENCE-HELPER-FAILURE')
+    $content = [string]::Join("`n", $lines) + "`n"
+    try {
+        $utf8NoBom = New-Object `
+            -TypeName System.Text.UTF8Encoding `
+            -ArgumentList $false
+        [System.IO.File]::WriteAllText($temporary, $content, $utf8NoBom)
+        [System.IO.File]::Move($temporary, $Path)
+    }
+    finally {
+        Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
+    }
+}
+
 $locationPushed = $false
 $finalExitCode = 2
+$failurePhase = 'Initialization'
+$failureRecordAuthorized = $false
+$evidenceRecordFull = $null
+$failureRecordFull = $null
 try {
+    $failurePhase = 'OperatingSystemGate'
     if ([System.Environment]::OSVersion.Platform -ne [System.PlatformID]::Win32NT) {
         Stop-Validation 'Windows is required.'
     }
 
-    $repoRootText = @(& git rev-parse --show-toplevel)
-    if ($LASTEXITCODE -ne 0 -or $repoRootText.Count -ne 1) {
+    $failurePhase = 'RepositoryDiscovery'
+    $repoRootCommand = Invoke-SanitizedNativeCommand `
+        -FilePath 'git' `
+        -Arguments @('rev-parse', '--show-toplevel') `
+        -CaptureOutput
+    $repoRootText = @($repoRootCommand.OutputLines)
+    if ($repoRootCommand.ExitCode -ne 0 -or $repoRootText.Count -ne 1) {
         Stop-Validation 'run this command from the PeerCast Nova repository.'
     }
 
@@ -86,21 +227,35 @@ try {
     Push-Location $repoRoot
     $locationPushed = $true
 
-    $branch = (@(& git branch --show-current) -join '').Trim()
-    if ($LASTEXITCODE -ne 0 -or $branch -cne 'main') {
+    $failurePhase = 'RepositoryIdentity'
+    $branchCommand = Invoke-SanitizedNativeCommand `
+        -FilePath 'git' `
+        -Arguments @('branch', '--show-current') `
+        -CaptureOutput
+    $branch = (@($branchCommand.OutputLines) -join '').Trim()
+    if ($branchCommand.ExitCode -ne 0 -or $branch -cne 'main') {
         Stop-Validation 'the checked-out branch must be main.'
     }
 
-    $head = (@(& git rev-parse HEAD) -join '').Trim()
-    if ($LASTEXITCODE -ne 0 -or $head -ine $ExpectedCommit) {
+    $headCommand = Invoke-SanitizedNativeCommand `
+        -FilePath 'git' `
+        -Arguments @('rev-parse', 'HEAD') `
+        -CaptureOutput
+    $head = (@($headCommand.OutputLines) -join '').Trim()
+    if ($headCommand.ExitCode -ne 0 -or $head -ine $ExpectedCommit) {
         Stop-Validation 'HEAD does not match the explicitly approved commit.'
     }
 
-    $status = @(& git status --porcelain --untracked-files=all)
-    if ($LASTEXITCODE -ne 0 -or $status.Count -ne 0) {
+    $statusCommand = Invoke-SanitizedNativeCommand `
+        -FilePath 'git' `
+        -Arguments @('status', '--porcelain', '--untracked-files=all') `
+        -CaptureOutput
+    $status = @($statusCommand.OutputLines)
+    if ($statusCommand.ExitCode -ne 0 -or $status.Count -ne 0) {
         Stop-Validation 'the repository working tree must be clean.'
     }
 
+    $failurePhase = 'ExternalInputValidation'
     $runtimeFull = [System.IO.Path]::GetFullPath($RuntimeDirectory)
     $fixtureFull = [System.IO.Path]::GetFullPath($FixturePath)
     $videoRecordFull = [System.IO.Path]::GetFullPath($VideoRecordPath)
@@ -160,43 +315,52 @@ try {
         [string]::IsNullOrWhiteSpace($failureDirectory)) {
         Stop-Validation 'render evidence and failure paths must include external directories.'
     }
+
+    $failurePhase = 'ExternalDirectoryPreparation'
     $null = New-Item -ItemType Directory -Path $evidenceDirectory -Force
     $null = New-Item -ItemType Directory -Path $failureDirectory -Force
+    $failureRecordAuthorized = $true
 
-    & dotnet restore (Join-Path $repoRoot 'PeerCast-Nova.sln')
-    if ($LASTEXITCODE -ne 0) {
+    $failurePhase = 'SolutionRestore'
+    $restoreCommand = Invoke-SanitizedNativeCommand `
+        -FilePath 'dotnet' `
+        -Arguments @('restore', (Join-Path $repoRoot 'PeerCast-Nova.sln'))
+    if ($restoreCommand.ExitCode -ne 0) {
         Stop-Validation 'solution restore failed.'
     }
 
+    $failurePhase = 'RunnerBuild'
     $runnerProject = Join-Path $repoRoot `
         'src\Nova.ControlledWindowsRunner\Nova.ControlledWindowsRunner.csproj'
-    & dotnet build $runnerProject --configuration Release --no-restore
-    if ($LASTEXITCODE -ne 0) {
+    $buildCommand = Invoke-SanitizedNativeCommand `
+        -FilePath 'dotnet' `
+        -Arguments @('build', $runnerProject, '--configuration', 'Release', '--no-restore')
+    if ($buildCommand.ExitCode -ne 0) {
         Stop-Validation 'controlled Windows runner build failed.'
     }
 
+    $failurePhase = 'RunnerAssemblyValidation'
     $runnerAssembly = Join-Path $repoRoot `
         'src\Nova.ControlledWindowsRunner\bin\Release\net10.0\Nova.ControlledWindowsRunner.dll'
     if (-not [System.IO.File]::Exists($runnerAssembly)) {
         Stop-Validation 'the controlled Windows runner assembly is unavailable.'
     }
 
-    $temporaryVideoPreflight = Join-Path $evidenceDirectory (
-        '.pcn-render-evidence-video-gate-' + [System.Guid]::NewGuid().ToString('N') + '.tmp')
-    try {
-        & dotnet $runnerAssembly `
-            --verify-controlled-windows-run-record `
-            --record $videoRecordFull `
-            --expected-kind video `
-            --fixture-sha256 $expectedFixtureSha256 > $temporaryVideoPreflight
-        $videoPreflightExitCode = $LASTEXITCODE
-        $videoPreflightLines = @(Get-Content -LiteralPath $temporaryVideoPreflight)
-    }
-    finally {
-        Remove-Item -LiteralPath $temporaryVideoPreflight -Force -ErrorAction SilentlyContinue
-    }
-
-    if ($videoPreflightExitCode -ne 0 -or
+    $failurePhase = 'VideoRecordGate'
+    $videoPreflightCommand = Invoke-SanitizedNativeCommand `
+        -FilePath 'dotnet' `
+        -Arguments @(
+            $runnerAssembly,
+            '--verify-controlled-windows-run-record',
+            '--record',
+            $videoRecordFull,
+            '--expected-kind',
+            'video',
+            '--fixture-sha256',
+            $expectedFixtureSha256) `
+        -CaptureOutput
+    $videoPreflightLines = @($videoPreflightCommand.OutputLines)
+    if ($videoPreflightCommand.ExitCode -ne 0 -or
         $videoPreflightLines -cnotcontains 'Result: VideoAccepted' -or
         $videoPreflightLines -cnotcontains 'Expected-Kind: Video' -or
         $videoPreflightLines -cnotcontains 'Record-Accepted: True' -or
@@ -205,19 +369,33 @@ try {
         Stop-Validation 'the video record gate was not accepted.'
     }
 
-    & dotnet $runnerAssembly `
-        --capture-controlled-windows-audio-render-evidence `
-        --runtime-directory $runtimeFull `
-        --controlled-fixture $fixtureFull `
-        --fixture-sha256 $expectedFixtureSha256 `
-        --render-evidence-record-path $evidenceRecordFull `
-        --failure-record-path $failureRecordFull `
-        --max-decode-operations $MaximumDecodeOperations `
-        --max-delivery-operations $MaximumDeliveryOperations `
-        --fixture-packet-bytes $FixturePacketBytes `
-        --observation-hold-ms $ObservationHoldMilliseconds
-    $captureExitCode = $LASTEXITCODE
+    $failurePhase = 'RenderEvidenceCapture'
+    $captureCommand = Invoke-SanitizedNativeCommand `
+        -FilePath 'dotnet' `
+        -Arguments @(
+            $runnerAssembly,
+            '--capture-controlled-windows-audio-render-evidence',
+            '--runtime-directory',
+            $runtimeFull,
+            '--controlled-fixture',
+            $fixtureFull,
+            '--fixture-sha256',
+            $expectedFixtureSha256,
+            '--render-evidence-record-path',
+            $evidenceRecordFull,
+            '--failure-record-path',
+            $failureRecordFull,
+            '--max-decode-operations',
+            $MaximumDecodeOperations.ToString([System.Globalization.CultureInfo]::InvariantCulture),
+            '--max-delivery-operations',
+            $MaximumDeliveryOperations.ToString([System.Globalization.CultureInfo]::InvariantCulture),
+            '--fixture-packet-bytes',
+            $FixturePacketBytes.ToString([System.Globalization.CultureInfo]::InvariantCulture),
+            '--observation-hold-ms',
+            $ObservationHoldMilliseconds.ToString([System.Globalization.CultureInfo]::InvariantCulture))
+    $captureExitCode = $captureCommand.ExitCode
 
+    $failurePhase = 'CaptureIntegration'
     $evidenceExists = [System.IO.File]::Exists($evidenceRecordFull)
     $failureExists = [System.IO.File]::Exists($failureRecordFull)
     if ($failureExists -and -not $evidenceExists -and $captureExitCode -eq 2) {
@@ -230,6 +408,7 @@ try {
         Stop-Validation 'the managed render evidence capture failed integration checks.'
     }
 
+    $failurePhase = 'EvidenceEnvelopeValidation'
     $recordText = [System.IO.File]::ReadAllText($evidenceRecordFull)
     $recordLines = @(Get-Content -LiteralPath $evidenceRecordFull)
     $evidenceValid =
@@ -272,11 +451,17 @@ try {
         Stop-Validation 'the retained render evidence record failed the helper envelope check.'
     }
 
-    $postStatus = @(& git status --porcelain --untracked-files=all)
-    if ($LASTEXITCODE -ne 0 -or $postStatus.Count -ne 0) {
+    $failurePhase = 'PostRunRepositoryCheck'
+    $postStatusCommand = Invoke-SanitizedNativeCommand `
+        -FilePath 'git' `
+        -Arguments @('status', '--porcelain', '--untracked-files=all') `
+        -CaptureOutput
+    $postStatus = @($postStatusCommand.OutputLines)
+    if ($postStatusCommand.ExitCode -ne 0 -or $postStatus.Count -ne 0) {
         Stop-Validation 'the repository changed during physical diagnostics.'
     }
 
+    $failurePhase = 'Completed'
     $recordLines | ForEach-Object { Write-Output $_ }
     Write-Host "Validated commit: $head"
     Write-Host 'Video record gate: Accepted'
@@ -288,13 +473,43 @@ try {
     $finalExitCode = 0
 }
 catch {
-    $failureMessage = $_.Exception.Message
-    if (-not $failureMessage.StartsWith(
-            $validationPrefix,
-            [System.StringComparison]::Ordinal)) {
-        $failureMessage = $validationPrefix + 'unexpected helper failure.'
+    $validationFailure = Get-ValidationFailure -Exception $_.Exception
+    $failureCategory = if ($null -ne $validationFailure) {
+        'ValidationFailure'
     }
-    [System.Console]::Error.WriteLine($failureMessage)
+    else {
+        Get-SanitizedFailureCategory -Exception $_.Exception
+    }
+
+    $helperFailureRecordRetained = $false
+    if ($failureRecordAuthorized -and
+        -not [System.IO.File]::Exists($evidenceRecordFull) -and
+        -not [System.IO.File]::Exists($failureRecordFull)) {
+        try {
+            Write-SanitizedHelperFailureRecord `
+                -Path $failureRecordFull `
+                -Phase $failurePhase `
+                -Category $failureCategory
+            $helperFailureRecordRetained = $true
+        }
+        catch {
+            $helperFailureRecordRetained = $false
+        }
+    }
+
+    if ($null -ne $validationFailure) {
+        [System.Console]::Error.WriteLine($validationFailure.Message)
+    }
+    else {
+        [System.Console]::Error.WriteLine(
+            $validationPrefix + 'unexpected helper failure.')
+    }
+    $retainedText = if ($helperFailureRecordRetained) { 'Yes' } else { 'No' }
+    [System.Console]::Error.WriteLine("Helper failure phase: $failurePhase")
+    [System.Console]::Error.WriteLine("Helper failure category: $failureCategory")
+    [System.Console]::Error.WriteLine(
+        "Sanitized helper failure record retained: $retainedText")
+    [System.Console]::Error.WriteLine('Do not rerun this command.')
     $finalExitCode = 2
 }
 finally {

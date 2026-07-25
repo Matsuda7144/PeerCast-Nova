@@ -10,9 +10,13 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceHelperContractTe
         "[string]$VideoRecordPath",
         "[string]$RenderEvidenceRecordPath",
         "[string]$FailureRecordPath",
-        "git branch --show-current",
-        "git rev-parse HEAD",
-        "git status --porcelain --untracked-files=all",
+        "Invoke-SanitizedNativeCommand",
+        "Get-ValidationFailure",
+        "PeerCastNovaControlledRenderEvidenceValidation",
+        "ValidationFailure",
+        "@('branch', '--show-current')",
+        "@('rev-parse', 'HEAD')",
+        "@('status', '--porcelain', '--untracked-files=all')",
         "--verify-controlled-windows-run-record",
         "--capture-controlled-windows-audio-render-evidence",
         "--render-evidence-record-path",
@@ -23,6 +27,11 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceHelperContractTe
         "Physical-Runs-Executed-By-This-Command: True",
         "Audio-Acceptance-Claimed: False",
         "External-Binary-Or-Payload-Published: False",
+        "Failure-Phase: ",
+        "Failure-Category: ",
+        "Raw-Exception-Published: False",
+        "Raw-Native-Stderr-Published: False",
+        "Sanitized helper failure record retained: ",
         "Operator observation required: Audio audible: Yes / No",
         "Do not rerun this command.",
     ];
@@ -49,6 +58,46 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceHelperContractTe
             Count(
                 script,
                 "--capture-controlled-windows-audio-render-evidence"));
+    }
+
+    [Fact]
+    public void Helper_sanitizes_native_stderr_and_retains_only_bounded_failure_identity()
+    {
+        var script = File.ReadAllText(FindScript());
+
+        Assert.Contains(
+            "1> $standardOutputPath 2> $standardErrorPath",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "$ErrorActionPreference = 'Continue'",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "$ErrorActionPreference = $nativeErrorActionPreference",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "$current.Data.Contains($validationMarker)",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "$current = $current.InnerException",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "$validationPrefix + 'unexpected helper failure.'",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "Physical-Run-Completion-Established: False",
+            script,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("& git ", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("& dotnet ", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("$failureMessage.StartsWith(", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("ScriptStackTrace", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("InvocationInfo", script, StringComparison.Ordinal);
     }
 
     private static string FindScript()
