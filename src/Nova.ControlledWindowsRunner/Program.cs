@@ -142,6 +142,20 @@ try
             args,
             argument => string.Equals(
                 argument,
+                PlaybackControlledWindowsAudioTerminalRenderRecordPreflightCommand.Argument,
+                StringComparison.OrdinalIgnoreCase)))
+    {
+        var preflight =
+            await PlaybackControlledWindowsAudioTerminalRenderRecordPreflightCommand.RunAsync(
+                args,
+                Console.Out,
+                cancellationSource.Token);
+        Environment.ExitCode = preflight.ExitCode;
+    }
+    else if (Array.Exists(
+            args,
+            argument => string.Equals(
+                argument,
                 PlaybackControlledWindowsPhysicalRunRecordPreflightCommand.Argument,
                 StringComparison.OrdinalIgnoreCase)))
     {
