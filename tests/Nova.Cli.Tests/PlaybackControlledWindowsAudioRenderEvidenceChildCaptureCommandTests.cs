@@ -10,7 +10,7 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureComm
         "32872B300286525F4EF97FEE3533E25419AC8E48BFD4BC2C4FD9545F071B1E15";
 
     [Fact]
-    public async Task Valid_render_evidence_is_promoted_without_failure_record()
+    public async Task Valid_render_evidence_is_promoted_without_other_records()
     {
         using var environment = new CaptureEnvironment();
         var evidence = EvidenceRecord();
@@ -23,6 +23,7 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureComm
 
         Assert.Equal(0, result);
         Assert.Equal(1, executor.CallCount);
+        Assert.False(File.Exists(environment.TerminalRecord));
         Assert.False(File.Exists(environment.FailureRecord));
         var bytes = File.ReadAllBytes(environment.EvidenceRecord);
         Assert.Equal(Encoding.UTF8.GetBytes(evidence), bytes);
@@ -34,6 +35,75 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureComm
         Assert.True(record.PhysicalRunsExecutedByThisCommand);
         Assert.False(record.AudioAcceptanceClaimed);
         Assert.Equal(1, record.PostStopAudioRenderTrace.PreStop.QueryCount);
+    }
+
+    [Fact]
+    public async Task Valid_terminal_record_is_promoted_without_other_records()
+    {
+        using var environment = new CaptureEnvironment();
+        var terminal = TerminalRecord();
+        var executor = new RecordingExecutor(
+            PlaybackControlledWindowsAudioRenderEvidenceCommand.RunFailureExitCode,
+            Encoding.UTF8.GetBytes(terminal),
+            Encoding.UTF8.GetBytes("private stderr"));
+
+        var result = await environment.RunAsync(executor);
+
+        Assert.Equal(1, result);
+        Assert.Equal(1, executor.CallCount);
+        Assert.False(File.Exists(environment.EvidenceRecord));
+        Assert.False(File.Exists(environment.FailureRecord));
+        var retained = File.ReadAllText(environment.TerminalRecord);
+        Assert.Equal(terminal, retained);
+        Assert.True(
+            PlaybackControlledWindowsAudioTerminalRenderRecordCodec.TryParse(
+                retained,
+                out var record));
+        Assert.NotNull(record);
+        Assert.True(record.PhysicalRunStarted);
+        Assert.False(record.PhysicalRunCompleted);
+        Assert.False(record.CompletedRenderEvidenceEstablished);
+        Assert.False(record.AudioAcceptanceClaimed);
+    }
+
+    [Theory]
+    [InlineData(0, true)]
+    [InlineData(1, false)]
+    public async Task Contradictory_exit_and_record_promote_only_failure(
+        int exitCode,
+        bool terminalOutput)
+    {
+        using var environment = new CaptureEnvironment();
+        var stdout = terminalOutput ? TerminalRecord() : EvidenceRecord();
+        var executor = new RecordingExecutor(
+            exitCode,
+            Encoding.UTF8.GetBytes(stdout),
+            Encoding.UTF8.GetBytes("private stderr"));
+
+        var result = await environment.RunAsync(executor);
+
+        Assert.Equal(2, result);
+        Assert.False(File.Exists(environment.EvidenceRecord));
+        Assert.False(File.Exists(environment.TerminalRecord));
+        Assert.True(File.Exists(environment.FailureRecord));
+    }
+
+    [Fact]
+    public async Task Missing_optional_terminal_path_preserves_legacy_failure_behavior()
+    {
+        using var environment = new CaptureEnvironment();
+        var executor = new RecordingExecutor(
+            PlaybackControlledWindowsAudioRenderEvidenceCommand.RunFailureExitCode,
+            Encoding.UTF8.GetBytes(TerminalRecord()),
+            []);
+        var options = environment.Options with { TerminalRecordPath = null };
+
+        var result = await environment.RunAsync(executor, options);
+
+        Assert.Equal(2, result);
+        Assert.False(File.Exists(environment.EvidenceRecord));
+        Assert.False(File.Exists(environment.TerminalRecord));
+        Assert.True(File.Exists(environment.FailureRecord));
     }
 
     [Fact]
@@ -49,6 +119,7 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureComm
 
         Assert.Equal(2, result);
         Assert.False(File.Exists(environment.EvidenceRecord));
+        Assert.False(File.Exists(environment.TerminalRecord));
         var failure = File.ReadAllText(environment.FailureRecord);
         Assert.Contains("Result: RenderEvidenceRecordNotProduced\n", failure);
         Assert.Contains("Stdout-Bytes: 2\n", failure);
@@ -60,6 +131,45 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureComm
     }
 
     [Fact]
+    public async Task Executor_exception_promotes_only_sanitized_failure()
+    {
+        using var environment = new CaptureEnvironment();
+        var executor = new ThrowingExecutor();
+
+        var result = await environment.RunAsync(executor);
+
+        Assert.Equal(2, result);
+        Assert.False(File.Exists(environment.EvidenceRecord));
+        Assert.False(File.Exists(environment.TerminalRecord));
+        var failure = File.ReadAllText(environment.FailureRecord);
+        Assert.Contains("Child-Exit-Code-Available: False\n", failure);
+        Assert.Contains("Child-Process-Result-Captured: False\n", failure);
+        Assert.Contains("Stdout-Bytes: 0\n", failure);
+        Assert.Contains("Stderr-Bytes: 0\n", failure);
+        Assert.DoesNotContain("secret", failure, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("InvalidOperationException", failure, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Outcome_promotion_failure_falls_back_to_sanitized_failure()
+    {
+        using var environment = new CaptureEnvironment();
+        var executor = new RecordingExecutor(
+            exitCode: 0,
+            Encoding.UTF8.GetBytes(EvidenceRecord()),
+            []);
+        var promoter = new FirstPromotionFailsPromoter();
+
+        var result = await environment.RunAsync(executor, promoter);
+
+        Assert.Equal(2, result);
+        Assert.Equal(2, promoter.CallCount);
+        Assert.False(File.Exists(environment.EvidenceRecord));
+        Assert.False(File.Exists(environment.TerminalRecord));
+        Assert.True(File.Exists(environment.FailureRecord));
+    }
+
+    [Fact]
     public async Task Repository_owned_record_paths_do_not_start_child()
     {
         using var environment = new CaptureEnvironment();
@@ -68,6 +178,7 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureComm
         var options = environment.Options with
         {
             EvidenceRecordPath = insideRepository,
+            TerminalRecordPath = Path.Combine(environment.RepositoryRoot, "terminal.txt"),
             FailureRecordPath = Path.Combine(environment.RepositoryRoot, "failure.txt"),
         };
 
@@ -78,14 +189,28 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureComm
         Assert.False(File.Exists(insideRepository));
     }
 
-    [Fact]
-    public async Task Same_record_path_does_not_start_child()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task Same_record_path_does_not_start_child(int duplicateKind)
     {
         using var environment = new CaptureEnvironment();
         var executor = new RecordingExecutor(0, [], []);
-        var options = environment.Options with
+        var options = duplicateKind switch
         {
-            FailureRecordPath = environment.EvidenceRecord,
+            0 => environment.Options with
+            {
+                TerminalRecordPath = environment.EvidenceRecord,
+            },
+            1 => environment.Options with
+            {
+                FailureRecordPath = environment.EvidenceRecord,
+            },
+            _ => environment.Options with
+            {
+                FailureRecordPath = environment.TerminalRecord,
+            },
         };
 
         var result = await environment.RunAsync(executor, options);
@@ -93,6 +218,21 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureComm
         Assert.Equal(3, result);
         Assert.Equal(0, executor.CallCount);
         Assert.False(File.Exists(environment.EvidenceRecord));
+        Assert.False(File.Exists(environment.TerminalRecord));
+    }
+
+    [Fact]
+    public async Task Existing_terminal_record_does_not_start_child()
+    {
+        using var environment = new CaptureEnvironment();
+        File.WriteAllText(environment.TerminalRecord, "existing");
+        var executor = new RecordingExecutor(0, [], []);
+
+        var result = await environment.RunAsync(executor);
+
+        Assert.Equal(3, result);
+        Assert.Equal(0, executor.CallCount);
+        Assert.Equal("existing", File.ReadAllText(environment.TerminalRecord));
     }
 
     [Fact]
@@ -103,6 +243,7 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureComm
             @"C:\fixture with spaces\controlled.flv",
             FixtureSha256,
             @"C:\records\render evidence.txt",
+            @"C:\records\terminal render.txt",
             @"C:\records\render failure.txt",
             128,
             128,
@@ -121,6 +262,9 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureComm
             startInfo.ArgumentList);
         Assert.Contains(@"C:\runtime with spaces", startInfo.ArgumentList);
         Assert.Contains(@"C:\fixture with spaces\controlled.flv", startInfo.ArgumentList);
+        Assert.DoesNotContain(options.EvidenceRecordPath, startInfo.ArgumentList);
+        Assert.DoesNotContain(options.TerminalRecordPath!, startInfo.ArgumentList);
+        Assert.DoesNotContain(options.FailureRecordPath, startInfo.ArgumentList);
         Assert.DoesNotContain(
             PlaybackControlledWindowsAudioRenderEvidenceChildCaptureCommand.Argument,
             startInfo.ArgumentList);
@@ -130,13 +274,13 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureComm
     }
 
     [Fact]
-    public async Task Command_rejects_duplicate_evidence_record_argument_before_executor()
+    public async Task Command_rejects_duplicate_terminal_record_argument_before_executor()
     {
         using var environment = new CaptureEnvironment();
         var executor = new RecordingExecutor(0, [], []);
         using var output = new StringWriter();
         var arguments = environment.Arguments.Concat(
-            ["--render-evidence-record-path", environment.EvidenceRecord]).ToArray();
+            ["--terminal-render-record-path", environment.TerminalRecord]).ToArray();
 
         var result =
             await PlaybackControlledWindowsAudioRenderEvidenceChildCaptureCommand.RunAsync(
@@ -152,6 +296,30 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureComm
     }
 
     [Fact]
+    public async Task Command_reports_terminal_record_production()
+    {
+        using var environment = new CaptureEnvironment();
+        var executor = new RecordingExecutor(
+            PlaybackControlledWindowsAudioRenderEvidenceCommand.RunFailureExitCode,
+            Encoding.UTF8.GetBytes(TerminalRecord()),
+            []);
+        using var output = new StringWriter();
+
+        var result =
+            await PlaybackControlledWindowsAudioRenderEvidenceChildCaptureCommand.RunAsync(
+                environment.Arguments,
+                environment.RunnerAssembly,
+                environment.RepositoryRoot,
+                output,
+                executor);
+
+        Assert.Equal(1, result);
+        Assert.Equal(
+            "Result: TerminalRenderRecordProduced" + Environment.NewLine,
+            output.ToString());
+    }
+
+    [Fact]
     public void Failure_record_contains_only_bounded_sanitized_fields()
     {
         var record =
@@ -161,10 +329,18 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureComm
                     stdoutByteCount: 17,
                     stderrByteCount: 29);
 
+        Assert.StartsWith(
+            "PEERCAST-NOVA-CONTROLLED-WINDOWS-AUDIO-RENDER-EVIDENCE-FAILURE 2\n",
+            record,
+            StringComparison.Ordinal);
+        Assert.Contains("Milestone: 0.0.10d Phase 6\n", record);
+        Assert.Contains("Child-Exit-Code-Available: True\n", record);
         Assert.Contains("Child-Exit-Code-Signed: -1073741819\n", record);
         Assert.Contains("Child-Exit-Code-Hex: C0000005\n", record);
         Assert.Contains("Stdout-Bytes: 17\n", record);
         Assert.Contains("Stderr-Bytes: 29\n", record);
+        Assert.Contains("Canonical-Terminal-Render-Record-Produced: False\n", record);
+        Assert.Contains("Child-Process-Result-Captured: True\n", record);
         Assert.Contains("Audio-Acceptance-Claimed: False\n", record);
         Assert.Contains("External-Binary-Or-Payload-Published: False\n", record);
         Assert.DoesNotContain("Path", record, StringComparison.Ordinal);
@@ -204,6 +380,52 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureComm
                 TimeSpan.FromSeconds(1),
                 TimeSpan.FromMilliseconds(100),
                 physicalRunsExecutedByThisCommand: true));
+    }
+
+    private static string TerminalRecord()
+    {
+        var preCleanupAudio = default(PlaybackWindowsAudioRenderTraceSnapshot);
+        var postStopAudio = preCleanupAudio with
+        {
+            PreStop = new(
+                QueryCount: 1,
+                Available: false,
+                PaddingFrameCount: 0,
+                Overflowed: false),
+        };
+        var snapshot = new PlaybackControlledWindowsPhysicalRunSnapshot(
+            PlaybackControlledWindowsPhysicalRunState.Faulted,
+            PlaybackControlledWindowsPhysicalRunResult.DecodeRejected,
+            PlaybackControlledWindowsOutputValidationKind.Audio,
+            FixtureSha256,
+            FixtureByteCount: 66_939,
+            FixturePacketCount: 2,
+            DecodeOperationCount: 1,
+            DeliveryAttemptCount: 0,
+            DeliveredCount: 0,
+            RetainedWouldBlockCount: 0,
+            PlaybackWindowsPhysicalRunnerState.Stopped,
+            PlaybackApprovedExternalRuntimeWindowsLifecycleState.Disposed,
+            EvidenceResult: default,
+            BorrowedWindowPreserved: false,
+            BorrowedDispatcherPreserved: false)
+        {
+            PreCleanupAudioRenderEvidence = new(
+                DeliveryTrace: default,
+                preCleanupAudio,
+                EmptyNativeEvidence(preCleanupAudio)),
+            PostStopAudioRenderEvidence = new(
+                DeliveryTrace: default,
+                postStopAudio,
+                EmptyNativeEvidence(postStopAudio)),
+        };
+        return PlaybackControlledWindowsAudioTerminalRenderRecordCodec.Serialize(
+            PlaybackControlledWindowsAudioTerminalRenderRecordCodec.Create(
+                snapshot,
+                FixtureSha256,
+                TimeSpan.FromSeconds(1),
+                TimeSpan.FromMilliseconds(100),
+                physicalRunStarted: true));
     }
 
     private static PlaybackControlledWindowsAudioRenderEvidenceSnapshot Checkpoint(
@@ -300,6 +522,39 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureComm
             AudioRenderTrace = audioTrace,
         };
 
+    private static PlaybackWindowsOutputNativeEvidenceSnapshot EmptyNativeEvidence(
+        PlaybackWindowsAudioRenderTraceSnapshot audioTrace) =>
+        new(
+            PlaybackControlledWindowsOutputEvidenceSource.SystemWindows,
+            CounterOverflowed: false,
+            VideoConfigurationConflict: false,
+            VideoPixelFormat: default,
+            VideoWidth: 0,
+            VideoHeight: 0,
+            VideoStride: 0,
+            VideoGeneration: -1,
+            VideoPresentAttemptCount: 0,
+            VideoPresentAcknowledgementCount: 0,
+            VideoAcceptedByteCount: 0,
+            VideoWouldBlockCount: 0,
+            VideoResizeCount: 0,
+            VideoDeviceLostCount: 0,
+            AudioConfigurationConflict: false,
+            AudioSampleFormat: default,
+            AudioSampleRate: 0,
+            AudioChannelCount: 0,
+            AudioGeneration: -1,
+            AudioWriteAttemptCount: 0,
+            AudioWriteAcknowledgementCount: 0,
+            AudioAcceptedFrameCount: 0,
+            AudioAcceptedByteCount: 0,
+            AudioWouldBlockCount: 0,
+            AudioStartAcknowledgementCount: 0,
+            AudioDeviceLostCount: 0)
+        {
+            AudioRenderTrace = audioTrace,
+        };
+
     private sealed class RecordingExecutor(
         int exitCode,
         byte[] standardOutput,
@@ -324,6 +579,39 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureComm
         }
     }
 
+    private sealed class ThrowingExecutor :
+        IPlaybackControlledWindowsAudioRenderEvidenceChildProcessExecutor
+    {
+        public ValueTask<PlaybackControlledWindowsAudioChildProcessResult> ExecuteAsync(
+            string runnerAssemblyPath,
+            PlaybackControlledWindowsAudioRenderEvidenceChildCaptureOptions options,
+            CancellationToken cancellationToken) =>
+            throw new InvalidOperationException(
+                $"private InvalidOperationException path {runnerAssemblyPath} {options.FixturePath}");
+    }
+
+    private sealed class FirstPromotionFailsPromoter :
+        IPlaybackControlledWindowsAudioRenderEvidenceRecordPromoter
+    {
+        private readonly SystemPlaybackControlledWindowsAudioRenderEvidenceRecordPromoter _inner =
+            new();
+
+        public int CallCount { get; private set; }
+
+        public ValueTask PromoteAsync(
+            string destination,
+            string content,
+            CancellationToken cancellationToken)
+        {
+            CallCount++;
+            if (CallCount == 1)
+            {
+                throw new IOException("private outcome promotion failure");
+            }
+            return _inner.PromoteAsync(destination, content, cancellationToken);
+        }
+    }
+
     private sealed class CaptureEnvironment : IDisposable
     {
         private readonly string _root = Path.Combine(
@@ -337,6 +625,7 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureComm
             RuntimeDirectory = Path.Combine(external, "runtime");
             FixturePath = Path.Combine(external, "fixture.flv");
             EvidenceRecord = Path.Combine(external, "render evidence.txt");
+            TerminalRecord = Path.Combine(external, "terminal render.txt");
             FailureRecord = Path.Combine(external, "render failure.txt");
             RunnerAssembly = Path.Combine(RepositoryRoot, "runner.dll");
             Directory.CreateDirectory(RepositoryRoot);
@@ -349,6 +638,7 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureComm
         public string RuntimeDirectory { get; }
         public string FixturePath { get; }
         public string EvidenceRecord { get; }
+        public string TerminalRecord { get; }
         public string FailureRecord { get; }
         public string RunnerAssembly { get; }
 
@@ -357,6 +647,7 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureComm
             FixturePath,
             FixtureSha256,
             EvidenceRecord,
+            TerminalRecord,
             FailureRecord,
             128,
             128,
@@ -374,6 +665,8 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureComm
             FixtureSha256,
             "--render-evidence-record-path",
             EvidenceRecord,
+            "--terminal-render-record-path",
+            TerminalRecord,
             "--failure-record-path",
             FailureRecord,
             "--max-decode-operations",
@@ -393,6 +686,20 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureComm
             var composition =
                 new PlaybackControlledWindowsAudioRenderEvidenceChildCaptureComposition(
                     executor,
+                    RunnerAssembly,
+                    RepositoryRoot);
+            return composition.RunAsync(options ?? Options, CancellationToken.None);
+        }
+
+        public ValueTask<int> RunAsync(
+            IPlaybackControlledWindowsAudioRenderEvidenceChildProcessExecutor executor,
+            IPlaybackControlledWindowsAudioRenderEvidenceRecordPromoter promoter,
+            PlaybackControlledWindowsAudioRenderEvidenceChildCaptureOptions? options = null)
+        {
+            var composition =
+                new PlaybackControlledWindowsAudioRenderEvidenceChildCaptureComposition(
+                    executor,
+                    promoter,
                     RunnerAssembly,
                     RepositoryRoot);
             return composition.RunAsync(options ?? Options, CancellationToken.None);
