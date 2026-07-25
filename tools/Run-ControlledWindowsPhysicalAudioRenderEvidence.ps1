@@ -22,6 +22,10 @@ param(
 
     [Parameter(Mandatory = $true)]
     [ValidateNotNullOrEmpty()]
+    [string]$TerminalRenderRecordPath,
+
+    [Parameter(Mandatory = $true)]
+    [ValidateNotNullOrEmpty()]
     [string]$FailureRecordPath,
 
     [ValidateRange(4, 4096)]
@@ -174,13 +178,14 @@ function Write-SanitizedHelperFailureRecord {
         [System.Guid]::NewGuid().ToString('N') +
         '.tmp')
     $lines = @(
-        'PEERCAST-NOVA-CONTROLLED-WINDOWS-AUDIO-RENDER-EVIDENCE-HELPER-FAILURE 1',
-        'Milestone: 0.0.10d Phase 5',
+        'PEERCAST-NOVA-CONTROLLED-WINDOWS-AUDIO-RENDER-EVIDENCE-HELPER-FAILURE 2',
+        'Milestone: 0.0.10d Phase 6',
         'Kind: Audio',
         'Result: HelperFailure',
         ('Failure-Phase: ' + $Phase),
         ('Failure-Category: ' + $Category),
         'Canonical-Render-Evidence-Record-Produced: False',
+        'Canonical-Terminal-Render-Record-Produced: False',
         'Sanitized-Child-Failure-Record-Produced: False',
         'Physical-Run-Completion-Established: False',
         'Raw-Exception-Published: False',
@@ -201,11 +206,117 @@ function Write-SanitizedHelperFailureRecord {
     }
 }
 
+function Get-ValidatedTerminalRecordLines {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$ExpectedRuntimeBuild,
+        [Parameter(Mandatory = $true)][string]$ExpectedFixtureSha256,
+        [Parameter(Mandatory = $true)][int]$ExpectedObservationHoldMilliseconds,
+        [Parameter(Mandatory = $true)][int]$ExpectedAudioBufferMilliseconds,
+        [Parameter(Mandatory = $true)][int]$MaximumCharacters
+    )
+
+    try {
+        $text = [System.IO.File]::ReadAllText($Path)
+        $lines = @(Get-Content -LiteralPath $Path)
+        if ($text.Length -gt $MaximumCharacters -or
+            $lines.Count -ne 3 -or
+            $lines[0] -cne `
+                'PEERCAST-NOVA-CONTROLLED-WINDOWS-AUDIO-TERMINAL-RENDER 1' -or
+            -not $lines[1].StartsWith('Record: ', [System.StringComparison]::Ordinal) -or
+            $lines[2] -cne `
+                'END-PEERCAST-NOVA-CONTROLLED-WINDOWS-AUDIO-TERMINAL-RENDER') {
+            return
+        }
+
+        $record = $lines[1].Substring('Record: '.Length) | ConvertFrom-Json
+        $expectedProperties = @(
+            'SchemaVersion',
+            'Milestone',
+            'Kind',
+            'RuntimeBuildId',
+            'FixtureSha256',
+            'Result',
+            'EvidenceResult',
+            'FixtureByteCount',
+            'FixturePacketCount',
+            'DecodeOperationCount',
+            'DeliveryAttemptCount',
+            'DeliveredCount',
+            'RetainedWouldBlockCount',
+            'ObservationHoldMilliseconds',
+            'AudioBufferMilliseconds',
+            'RunnerState',
+            'LifecycleState',
+            'BorrowedWindowPreserved',
+            'BorrowedDispatcherPreserved',
+            'PreCleanupDeliveryTrace',
+            'PreCleanupAudioRenderTrace',
+            'PreCleanupNativeEvidence',
+            'PostStopDeliveryTrace',
+            'PostStopAudioRenderTrace',
+            'PostStopNativeEvidence',
+            'PhysicalRunStarted',
+            'PhysicalRunCompleted',
+            'CompletedRenderEvidenceEstablished',
+            'AudioAcceptanceClaimed',
+            'ExternalBinaryOrPayloadPublished')
+        $actualProperties = @(
+            $record.PSObject.Properties | ForEach-Object { $_.Name })
+        if ($actualProperties.Count -ne $expectedProperties.Count) {
+            return
+        }
+        for ($index = 0; $index -lt $expectedProperties.Count; $index++) {
+            if ($actualProperties[$index] -cne $expectedProperties[$index]) {
+                return
+            }
+        }
+
+        $reviewedResults = @(
+            'DecodeRejected',
+            'DeliveryRejected',
+            'EvidenceRejected',
+            'Cancelled',
+            'Faulted')
+        if ([int]$record.SchemaVersion -ne 1 -or
+            [string]$record.Milestone -cne '0.0.10d Phase 6' -or
+            [string]$record.Kind -cne 'Audio' -or
+            [string]$record.RuntimeBuildId -cne $ExpectedRuntimeBuild -or
+            [string]$record.FixtureSha256 -cne $ExpectedFixtureSha256 -or
+            $reviewedResults -cnotcontains [string]$record.Result -or
+            [string]$record.EvidenceResult -ceq 'Accepted' -or
+            [int]$record.ObservationHoldMilliseconds -ne `
+                $ExpectedObservationHoldMilliseconds -or
+            [int]$record.AudioBufferMilliseconds -ne $ExpectedAudioBufferMilliseconds -or
+            [string]$record.RunnerState -cne 'Stopped' -or
+            [string]$record.LifecycleState -cne 'Disposed' -or
+            [bool]$record.PhysicalRunStarted -ne $true -or
+            [bool]$record.PhysicalRunCompleted -ne $false -or
+            [bool]$record.CompletedRenderEvidenceEstablished -ne $false -or
+            [bool]$record.AudioAcceptanceClaimed -ne $false -or
+            [bool]$record.ExternalBinaryOrPayloadPublished -ne $false -or
+            $null -eq $record.PreCleanupDeliveryTrace -or
+            $null -eq $record.PreCleanupAudioRenderTrace -or
+            $null -eq $record.PreCleanupNativeEvidence -or
+            $null -eq $record.PostStopDeliveryTrace -or
+            $null -eq $record.PostStopAudioRenderTrace -or
+            $null -eq $record.PostStopNativeEvidence) {
+            return
+        }
+
+        $lines | ForEach-Object { Write-Output $_ }
+    }
+    catch {
+        return
+    }
+}
+
 $locationPushed = $false
 $finalExitCode = 2
 $failurePhase = 'Initialization'
 $failureRecordAuthorized = $false
 $evidenceRecordFull = $null
+$terminalRecordFull = $null
 $failureRecordFull = $null
 try {
     $failurePhase = 'OperatingSystemGate'
@@ -260,6 +371,7 @@ try {
     $fixtureFull = [System.IO.Path]::GetFullPath($FixturePath)
     $videoRecordFull = [System.IO.Path]::GetFullPath($VideoRecordPath)
     $evidenceRecordFull = [System.IO.Path]::GetFullPath($RenderEvidenceRecordPath)
+    $terminalRecordFull = [System.IO.Path]::GetFullPath($TerminalRenderRecordPath)
     $failureRecordFull = [System.IO.Path]::GetFullPath($FailureRecordPath)
 
     if (-not [System.IO.Directory]::Exists($runtimeFull)) {
@@ -274,19 +386,28 @@ try {
     if ([System.IO.File]::Exists($evidenceRecordFull)) {
         Stop-Validation 'the requested render evidence record already exists; use a new path.'
     }
+    if ([System.IO.File]::Exists($terminalRecordFull)) {
+        Stop-Validation 'the requested terminal render record already exists; use a new path.'
+    }
     if ([System.IO.File]::Exists($failureRecordFull)) {
         Stop-Validation 'the requested failure record already exists; use a new path.'
     }
-    if ($evidenceRecordFull.Equals(
-            $failureRecordFull,
-            [System.StringComparison]::OrdinalIgnoreCase) -or
-        $evidenceRecordFull.Equals(
-            $videoRecordFull,
-            [System.StringComparison]::OrdinalIgnoreCase) -or
-        $failureRecordFull.Equals(
-            $videoRecordFull,
-            [System.StringComparison]::OrdinalIgnoreCase)) {
-        Stop-Validation 'video, render evidence, and failure record paths must be distinct.'
+
+    $recordPaths = @(
+        $videoRecordFull,
+        $evidenceRecordFull,
+        $terminalRecordFull,
+        $failureRecordFull)
+    for ($left = 0; $left -lt $recordPaths.Count; $left++) {
+        for ($right = $left + 1; $right -lt $recordPaths.Count; $right++) {
+            if ($recordPaths[$left].Equals(
+                    $recordPaths[$right],
+                    [System.StringComparison]::OrdinalIgnoreCase)) {
+                Stop-Validation (
+                    'video, completed evidence, terminal, and failure record paths ' +
+                    'must be pairwise distinct.')
+            }
+        }
     }
 
     foreach ($externalPath in @(
@@ -294,6 +415,7 @@ try {
             $fixtureFull,
             $videoRecordFull,
             $evidenceRecordFull,
+            $terminalRecordFull,
             $failureRecordFull)) {
         if (Test-IsUnderPath -Candidate $externalPath -Parent $repoRoot) {
             Stop-Validation 'runtime, fixture, and records must remain repository-external.'
@@ -310,14 +432,19 @@ try {
     }
 
     $evidenceDirectory = Split-Path -Parent $evidenceRecordFull
+    $terminalDirectory = Split-Path -Parent $terminalRecordFull
     $failureDirectory = Split-Path -Parent $failureRecordFull
     if ([string]::IsNullOrWhiteSpace($evidenceDirectory) -or
+        [string]::IsNullOrWhiteSpace($terminalDirectory) -or
         [string]::IsNullOrWhiteSpace($failureDirectory)) {
-        Stop-Validation 'render evidence and failure paths must include external directories.'
+        Stop-Validation (
+            'completed evidence, terminal, and failure paths must include ' +
+            'external directories.')
     }
 
     $failurePhase = 'ExternalDirectoryPreparation'
     $null = New-Item -ItemType Directory -Path $evidenceDirectory -Force
+    $null = New-Item -ItemType Directory -Path $terminalDirectory -Force
     $null = New-Item -ItemType Directory -Path $failureDirectory -Force
     $failureRecordAuthorized = $true
 
@@ -383,6 +510,8 @@ try {
             $expectedFixtureSha256,
             '--render-evidence-record-path',
             $evidenceRecordFull,
+            '--terminal-render-record-path',
+            $terminalRecordFull,
             '--failure-record-path',
             $failureRecordFull,
             '--max-decode-operations',
@@ -397,58 +526,97 @@ try {
 
     $failurePhase = 'CaptureIntegration'
     $evidenceExists = [System.IO.File]::Exists($evidenceRecordFull)
+    $terminalExists = [System.IO.File]::Exists($terminalRecordFull)
     $failureExists = [System.IO.File]::Exists($failureRecordFull)
-    if ($failureExists -and -not $evidenceExists -and $captureExitCode -eq 2) {
+    if ($failureExists -and
+        -not $evidenceExists -and
+        -not $terminalExists -and
+        $captureExitCode -eq 2) {
         Get-Content -LiteralPath $failureRecordFull | ForEach-Object { Write-Output $_ }
         Stop-Validation (
             'the child did not produce valid bounded render evidence; ' +
             'a sanitized external failure record was retained.')
     }
-    if (-not $evidenceExists -or $failureExists -or $captureExitCode -ne 0) {
+
+    $captureOutcome = if ($evidenceExists -and
+        -not $terminalExists -and
+        -not $failureExists -and
+        $captureExitCode -eq 0) {
+        'Completed'
+    }
+    elseif ($terminalExists -and
+        -not $evidenceExists -and
+        -not $failureExists -and
+        $captureExitCode -eq 1) {
+        'Terminal'
+    }
+    else {
+        $null
+    }
+    if ($null -eq $captureOutcome) {
         Stop-Validation 'the managed render evidence capture failed integration checks.'
     }
 
-    $failurePhase = 'EvidenceEnvelopeValidation'
-    $recordText = [System.IO.File]::ReadAllText($evidenceRecordFull)
-    $recordLines = @(Get-Content -LiteralPath $evidenceRecordFull)
-    $evidenceValid =
-        $recordText.Length -le $maximumRecordCharacters -and
-        $recordLines.Count -eq 26 -and
-        $recordLines[0] -ceq `
-            'PEERCAST-NOVA-CONTROLLED-WINDOWS-AUDIO-RENDER-EVIDENCE 1' -and
-        $recordLines[1] -ceq 'Milestone: 0.0.10d Phase 5' -and
-        $recordLines[2] -ceq 'Kind: Audio' -and
-        $recordLines[3] -ceq ('Runtime-Build: ' + $expectedRuntimeBuild) -and
-        $recordLines[4] -ceq ('Fixture-SHA256: ' + $expectedFixtureSha256) -and
-        $recordLines[5] -ceq 'Result: Completed' -and
-        $recordLines[6] -ceq 'Evidence: Accepted' -and
-        $recordLines[10] -ceq 'Delivery-Attempts: 4' -and
-        $recordLines[11] -ceq 'Delivered: 4' -and
-        $recordLines[12] -ceq 'Retained-WouldBlock: 0' -and
-        $recordLines[13] -ceq (
-            'Observation-Hold-Milliseconds: ' + $ObservationHoldMilliseconds) -and
-        $recordLines[14] -ceq (
-            'Audio-Buffer-Milliseconds: ' + $expectedAudioBufferMilliseconds) -and
-        $recordLines[15] -ceq 'Runner-State: Stopped' -and
-        $recordLines[16] -ceq 'Lifecycle-State: Disposed' -and
-        $recordLines[17] -ceq 'Borrowed-Window-Preserved: True' -and
-        $recordLines[18] -ceq 'Borrowed-Dispatcher-Preserved: True' -and
-        $recordLines[19] -ceq 'Physical-Runs-Executed-By-This-Command: True' -and
-        $recordLines[20] -ceq 'Audio-Acceptance-Claimed: False' -and
-        $recordLines[21] -ceq 'External-Binary-Or-Payload-Published: False' -and
-        $recordLines[22].StartsWith(
-            'Hold-Start-Checkpoint: ',
-            [System.StringComparison]::Ordinal) -and
-        $recordLines[23].StartsWith(
-            'Pre-Cleanup-Checkpoint: ',
-            [System.StringComparison]::Ordinal) -and
-        $recordLines[24].StartsWith(
-            'Post-Stop-Checkpoint: ',
-            [System.StringComparison]::Ordinal) -and
-        $recordLines[25] -ceq `
-            'END-PEERCAST-NOVA-CONTROLLED-WINDOWS-AUDIO-RENDER-EVIDENCE'
-    if (-not $evidenceValid) {
-        Stop-Validation 'the retained render evidence record failed the helper envelope check.'
+    $retainedRecordLines = @()
+    if ($captureOutcome -ceq 'Completed') {
+        $failurePhase = 'EvidenceEnvelopeValidation'
+        $recordText = [System.IO.File]::ReadAllText($evidenceRecordFull)
+        $recordLines = @(Get-Content -LiteralPath $evidenceRecordFull)
+        $evidenceValid =
+            $recordText.Length -le $maximumRecordCharacters -and
+            $recordLines.Count -eq 26 -and
+            $recordLines[0] -ceq `
+                'PEERCAST-NOVA-CONTROLLED-WINDOWS-AUDIO-RENDER-EVIDENCE 1' -and
+            $recordLines[1] -ceq 'Milestone: 0.0.10d Phase 5' -and
+            $recordLines[2] -ceq 'Kind: Audio' -and
+            $recordLines[3] -ceq ('Runtime-Build: ' + $expectedRuntimeBuild) -and
+            $recordLines[4] -ceq ('Fixture-SHA256: ' + $expectedFixtureSha256) -and
+            $recordLines[5] -ceq 'Result: Completed' -and
+            $recordLines[6] -ceq 'Evidence: Accepted' -and
+            $recordLines[10] -ceq 'Delivery-Attempts: 4' -and
+            $recordLines[11] -ceq 'Delivered: 4' -and
+            $recordLines[12] -ceq 'Retained-WouldBlock: 0' -and
+            $recordLines[13] -ceq (
+                'Observation-Hold-Milliseconds: ' + $ObservationHoldMilliseconds) -and
+            $recordLines[14] -ceq (
+                'Audio-Buffer-Milliseconds: ' + $expectedAudioBufferMilliseconds) -and
+            $recordLines[15] -ceq 'Runner-State: Stopped' -and
+            $recordLines[16] -ceq 'Lifecycle-State: Disposed' -and
+            $recordLines[17] -ceq 'Borrowed-Window-Preserved: True' -and
+            $recordLines[18] -ceq 'Borrowed-Dispatcher-Preserved: True' -and
+            $recordLines[19] -ceq 'Physical-Runs-Executed-By-This-Command: True' -and
+            $recordLines[20] -ceq 'Audio-Acceptance-Claimed: False' -and
+            $recordLines[21] -ceq 'External-Binary-Or-Payload-Published: False' -and
+            $recordLines[22].StartsWith(
+                'Hold-Start-Checkpoint: ',
+                [System.StringComparison]::Ordinal) -and
+            $recordLines[23].StartsWith(
+                'Pre-Cleanup-Checkpoint: ',
+                [System.StringComparison]::Ordinal) -and
+            $recordLines[24].StartsWith(
+                'Post-Stop-Checkpoint: ',
+                [System.StringComparison]::Ordinal) -and
+            $recordLines[25] -ceq `
+                'END-PEERCAST-NOVA-CONTROLLED-WINDOWS-AUDIO-RENDER-EVIDENCE'
+        if (-not $evidenceValid) {
+            Stop-Validation 'the retained render evidence record failed the helper envelope check.'
+        }
+        $retainedRecordLines = $recordLines
+    }
+    else {
+        $failurePhase = 'TerminalEnvelopeValidation'
+        $terminalLines = @(
+            Get-ValidatedTerminalRecordLines `
+                -Path $terminalRecordFull `
+                -ExpectedRuntimeBuild $expectedRuntimeBuild `
+                -ExpectedFixtureSha256 $expectedFixtureSha256 `
+                -ExpectedObservationHoldMilliseconds $ObservationHoldMilliseconds `
+                -ExpectedAudioBufferMilliseconds $expectedAudioBufferMilliseconds `
+                -MaximumCharacters $maximumRecordCharacters)
+        if ($terminalLines.Count -ne 3) {
+            Stop-Validation 'the retained terminal render record failed the helper envelope check.'
+        }
+        $retainedRecordLines = $terminalLines
     }
 
     $failurePhase = 'PostRunRepositoryCheck'
@@ -462,15 +630,23 @@ try {
     }
 
     $failurePhase = 'Completed'
-    $recordLines | ForEach-Object { Write-Output $_ }
+    $retainedRecordLines | ForEach-Object { Write-Output $_ }
     Write-Host "Validated commit: $head"
     Write-Host 'Video record gate: Accepted'
     Write-Host "Audio observation hold: $ObservationHoldMilliseconds ms"
-    Write-Host 'Render evidence record: Produced'
+    if ($captureOutcome -ceq 'Completed') {
+        Write-Host 'Render evidence record: Produced'
+        Write-Host 'Completed render evidence: Established'
+        $finalExitCode = 0
+    }
+    else {
+        Write-Host 'Terminal render record: Produced'
+        Write-Host 'Completed render evidence: Not established'
+        $finalExitCode = 1
+    }
     Write-Host 'Audio acceptance claimed: No'
     Write-Host 'Operator observation required: Audio audible: Yes / No'
     Write-Host 'Do not rerun this command.'
-    $finalExitCode = 0
 }
 catch {
     $validationFailure = Get-ValidationFailure -Exception $_.Exception
@@ -484,6 +660,7 @@ catch {
     $helperFailureRecordRetained = $false
     if ($failureRecordAuthorized -and
         -not [System.IO.File]::Exists($evidenceRecordFull) -and
+        -not [System.IO.File]::Exists($terminalRecordFull) -and
         -not [System.IO.File]::Exists($failureRecordFull)) {
         try {
             Write-SanitizedHelperFailureRecord `
