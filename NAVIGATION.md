@@ -233,34 +233,38 @@ The bounded FLV decoder configures the exact parser stream time base through pub
 
 ## 現在地
 
-**0.0.10d — Controlled Physical Windows Video／Audio Output Validation — Phase 5 Fixed-Kind Scheduler Reservation Review**
+**0.0.10d — Controlled Physical Windows Video／Audio Output Validation — Phase 7 Readiness-gated Audio Authorization**
 
-- corrected D3D11 texture-copy pattern: deterministic success, visible `Yes`;
-- corrected production `UpdateSubresource` pattern: deterministic success, visible `Yes`;
+- current reviewed main: `0dc658b7009823f48cd24ca029aa8efcb65173a4`;
 - corrected decoded physical video: `Completed／Accepted`, `VideoAccepted`, visible `Yes`;
 - known 80 ms tone and decoded fixture slice: accepted and recognizable;
-- four-frame physical audio at `63f8be0c` and retained-timing run at `955ffcda`: both stopped at the second outer delivery with `3 / 2 / 1 / 0` counters and audible `No`;
-- delivery diagnostic at `fe427fdc`: exact outer results `AudioDelivered` then `VideoDropped`, audible `No`;
-- root cause: normal A/V post-audio video preference leaked into the audio-only validation generation;
-- current gate: final-head review and CI for controlled-audio-only fixed-kind scheduler reservation;
-- no further physical audio run is authorized before the correction is merged and its exact main commit is separately approved;
-- paired verification remains blocked until a later canonical audio record is `AudioAccepted` and audible observation is recorded separately;
+- ordinary controlled fixture audio: recognizable audibility and stable deterministic delivery remain unestablished;
+- retained contradictory ordinary／diagnostic results remain historical evidence and must not be rerun;
+- the one authorized render-evidence helper invocation at `4abadd280ceeae310b2528b6ea62f377211b1273` retained neither requested record, had `Audio audible: No`, and permanently consumed its authorization;
+- prospective completed／terminal／child-failure／helper-failure retention and strict offline review are implemented;
+- non-physical readiness validation, atomic readiness capture, and the readiness-required one-run entrypoint are implemented;
+- no current physical audio run is authorized;
+- Issue #129 remains open and paired verification remains blocked;
+- additional evidence plumbing must not be added without a concrete newly identified gap;
 - approved runtime: `btbn.ffmpeg.20260721.win64.lgpl-shared`;
 - fixture: `66,939` bytes, SHA-256 `32872B300286525F4EF97FEE3533E25419AC8E48BFD4BC2C4FD9545F071B1E15`;
 - no runtime path, fixture path, record path, device／endpoint identity, HWND, thread ID, pointer, handle, HRESULT, raw process output, or payload is retained in the repository.
 
+A future controlled physical audio render run requires a separately merged exact `main`, final-head and post-merge CircleCI success, a newly captured and independently revalidated readiness record, fresh repository-external outcome paths, a new explicit one-run authorization, and exactly one invocation through the readiness-required entrypoint. Readiness and the literal invocation guard are not authorization.
+
 ## CI
 
-GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして使用します。最終headでrestore、Release build with analyzers、full solution tests、format verificationを通してからmergeします。
+GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして使用します。最終headでrestore、Release build with analyzers、full solution tests、format verificationを通してからmergeします。Physical Windows execution remains a separate explicit authorization boundary and is never implied by routine CI.
 
 ## 最新の入口
 
-- `docs/adr/ADR-0157-controlled-audio-fixed-kind-scheduler-reservation.md`
-- `docs/reviews/PCN-0165-CONTROLLED-AUDIO-FIXED-KIND-SCHEDULER-RESERVATION.md`
-- `docs/runbooks/0.0.10d-controlled-audio-fixed-kind-scheduler-reservation.md`
-- `src/Nova.Playback/BoundedPlaybackScheduler.cs`
-- `src/Nova.Cli/SystemPlaybackControlledWindowsPhysicalRunOperations.cs`
-- `tests/Nova.Playback.Tests/BoundedPlaybackSchedulerRestrictedOutputTests.cs`
-- `tests/Nova.Cli.Tests/SystemPlaybackControlledWindowsPhysicalRunOperationsTests.cs`
-- `docs/runbooks/0.0.10d-controlled-windows-audio-validation.md`
-- `tools/Run-ControlledWindowsPhysicalAudio.ps1`
+- `docs/reviews/PCN-0166-CONTROLLED-AUDIO-RENDER-AUTHORIZATION-STATE.md`
+- [Issue #129](https://github.com/Matsuda7144/PeerCast-Nova/issues/129)
+- `docs/runbooks/0.0.10d-controlled-audio-render-readiness.md`
+- `tools/Test-ControlledWindowsPhysicalAudioRenderEvidenceReadiness.ps1`
+- `docs/runbooks/0.0.10d-controlled-audio-render-readiness-capture.md`
+- `tools/Save-ControlledWindowsPhysicalAudioRenderEvidenceReadiness.ps1`
+- `docs/runbooks/0.0.10d-controlled-audio-render-readiness-record-preflight.md`
+- `docs/runbooks/0.0.10d-controlled-audio-render-authorization-entrypoint.md`
+- `tools/Run-ControlledWindowsPhysicalAudioRenderEvidenceWithReadiness.ps1`
+- `docs/runbooks/0.0.10d-controlled-audio-render-evidence.md`
