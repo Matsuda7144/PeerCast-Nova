@@ -80,9 +80,9 @@
 
 ## 0.0.10 Controlled Native Activation and Output Evidence — In Progress
 
-### 0.0.10a Approved FFmpeg Candidate Manifest Refresh — Implemented
+### 0.0.10a Approved FFmpeg Candidate Manifest Refresh — Complete
 
-The reviewed BtbN 2026-07-21 win64 LGPL shared candidate is now the exact built-in manifest identity:
+The reviewed BtbN 2026-07-21 win64 LGPL shared candidate is the exact built-in manifest identity:
 
 - active build ID `btbn.ffmpeg.20260721.win64.lgpl-shared` with fixed release, archive, BtbN, and FFmpeg identity;
 - exact five load-role hashes plus complete ten-file reviewed `bin` inventory;
@@ -90,17 +90,80 @@ The reviewed BtbN 2026-07-21 win64 LGPL shared candidate is now the exact built-
 - GPL／nonfree disabled and shared／static policy enforced by the manifest;
 - 2026-07-15 identity and hashes retained as superseded rejection history;
 - four additional Windows system dependencies classified and allow-listed without bundling;
-- no native load, decode, D3D11／WASAPI activation, or FFmpeg binary distribution.
+- no FFmpeg binary included in Git, build, publish, installer, or release artifacts.
 
-### Next: 0.0.10b Controlled Real External-Runtime Native Decode Validation
+### 0.0.10b Controlled Real External-Runtime Native Decode Validation — Complete
 
-Use the exact approved external runtime and controlled FLV fixture on one explicit Windows runner to record finite H.264／AAC context, packet, frame, metadata, bounds, failure, and cleanup evidence. Keep D3D11／WASAPI rendering and audible／visible playback in later milestones.
+The exact approved external runtime and retained FLV fixture completed one controlled bounded native decode validation:
+
+- H.264 packets／frames: `10 / 10`;
+- AAC packets／frames: `48 / 48`;
+- decoded audio samples: `49,152`;
+- decode errors: `0`;
+- complete context, packet, frame, runtime, and ABI cleanup;
+- padded planar／packed audio line sizes accepted while copying only logical sample bytes.
+
+D3D11／WASAPI output was intentionally outside this milestone.
+
+### 0.0.10c Controlled Windows Video／Audio Output Validation Review — Complete
+
+The review selected:
+
+- an application-owned real window, message loop, and owner-thread dispatcher;
+- one finite playback-owned D3D11／DXGI／WASAPI lifecycle;
+- independent video and audio physical evidence records;
+- deterministic evidence plus separate operator visible／audible observations;
+- no hidden retry, resident loop, device fallback, or device recreation.
+
+### 0.0.10d Controlled Physical Windows Video／Audio Output Validation — In Progress
+
+#### Established
+
+- Phase 1 evidence admission, Phase 2 native counter capture, finite Windows runner, and explicit controlled physical composition are implemented;
+- corrected D3D11 COM vtable declarations restore the production upload and texture-copy paths;
+- known-pattern and texture-copy physical probes were visible;
+- controlled fixture video produced `Completed／Accepted`, passed `VideoAccepted`, and was visibly recognizable;
+- the known 80 ms managed tone and decoded 80 ms fixture slice were recognizably audible;
+- bounded scheduler delivery, WASAPI write/padding, lifecycle checkpoints, native aggregate, completed record, terminal record, and sanitized failure evidence are implemented;
+- completed, terminal, child-failure, helper-failure, and readiness records have strict offline preflights;
+- non-physical readiness validation, atomic readiness capture, and the readiness-required authorization entrypoint are implemented.
+
+#### Not established
+
+- recognizable ordinary controlled fixture audio;
+- stable deterministic controlled audio delivery across the retained contradictory runs;
+- one independently accepted completed audio record plus separate `Audio audible: Yes` observation;
+- paired video／audio admission;
+- completion of 0.0.10d.
+
+#### Retained blocking evidence
+
+The one approved render-evidence helper invocation at main `4abadd280ceeae310b2528b6ea62f377211b1273` returned an unexpected helper failure, retained neither requested record, and had `Audio audible: No`. The exact trigger is unrecoverable; the confirmed defect was evidence loss. That authorization is consumed.
+
+Issue #129 remains open. Historical helpers and diagnostics must not be rerun.
+
+#### Current gate
+
+No additional physical-output-free evidence plumbing is required before the next authorization decision.
+
+A future controlled physical audio render run requires:
+
+1. a separately merged exact `main` commit;
+2. final-head and post-merge CircleCI success;
+3. a newly captured and independently revalidated canonical readiness record for that exact commit and operation bounds;
+4. new repository-external completed, terminal, and failure paths;
+5. a new explicit one-run authorization;
+6. execution exactly once through `tools/Run-ControlledWindowsPhysicalAudioRenderEvidenceWithReadiness.ps1`.
+
+The underlying helper must not be invoked directly. Readiness evidence and the literal invocation guard are not authorization.
+
+Current-state review: `docs/reviews/PCN-0166-CONTROLLED-AUDIO-RENDER-AUTHORIZATION-STATE.md`.
 
 ### Later sequence
 
-1. implement controlled real external-runtime native decode validation;
-2. review and implement controlled Windows audio／video output validation;
-3. add the application window／message loop and user-facing lifecycle;
+1. resolve the one readiness-gated controlled physical audio decision and complete or explicitly defer 0.0.10d;
+2. add the user-facing application window／message-loop composition without duplicating the controlled runner ownership model;
+3. add the application dispatcher implementation and legal／About surface;
 4. expand packaging only after the preceding gates pass.
 
 ### Deferred
@@ -113,12 +176,12 @@ Use the exact approved external runtime and controlled FLV fixture on one explic
 - discontinuity reset and `avcodec_flush_buffers`
 - duration cutoff
 - independent audio recovery generation changes
-- complete synchronization
-- controlled audible／visible playback
+- complete synchronization／resampling／drift correction
+- GUI、installer、recorder until the native/output gates are complete
 
 ## CI policy
 
-Routine Linux CI uses CircleCI while GitHub Actions usage is exhausted. Final branch heads must pass restore, Release build with analyzers, all tests, and format verification. Windows CI remains reserved for explicit milestone or release validation.
+Routine Linux CI uses CircleCI while GitHub Actions usage is exhausted. Final branch heads must pass restore, Release build with analyzers, all tests, and format verification. Windows execution remains reserved for a separately approved milestone validation and is never implied by routine CI.
 
 ## Platform and dependency policy
 
@@ -133,6 +196,8 @@ Routine Linux CI uses CircleCI while GitHub Actions usage is exhausted. Final br
 - keep output generation equal to the active decoder generation
 - make device loss terminal unless a later ADR defines a new complete lifecycle
 - distinguish controlled managed integration from physical native activation evidence
+- distinguish readiness evidence from physical authorization
+- never reuse a consumed one-run authorization
 - record provenance and redistribution permission for third-party assets
 
 ## 0.1.0 Genesis gate
@@ -142,5 +207,7 @@ Routine Linux CI uses CircleCI while GitHub Actions usage is exhausted. Final br
 - finite application-owned Windows lifecycle composition
 - finite decoded buffering and output lifecycle
 - controlled real native decode evidence
-- controlled audible／visible verification
+- controlled accepted visible video evidence
+- controlled accepted and recognizable audio evidence
+- paired video／audio admission
 - user-facing application and packaging

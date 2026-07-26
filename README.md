@@ -9,20 +9,27 @@ License: **Apache License 2.0**
 
 ## 現在地
 
-**Milestone 0.0.10a — Approved FFmpeg Candidate Manifest Refresh**
+**Milestone 0.0.10d — Controlled Physical Windows Video／Audio Output Validation — In Progress**
 
-`ApprovedForManifestImplementation`となったBtbN 2026-07-21 win64 LGPL shared候補へbuilt-in manifestを更新し、旧2026-07-15候補をsuperseded履歴として保持しました。archive、complete inventory、5 load-role DLL、build configuration、PE dependency、ABI／symbol条件をtext evidenceとtestsで固定しています。
+0.0.10a〜0.0.10cを経て、exact approved external FFmpeg runtime、controlled native decode、Windows output validation architectureは実装・検証済みです。
 
 - active build ID `btbn.ffmpeg.20260721.win64.lgpl-shared`
-- fixed archive size／SHA-256とcomplete 223-file expanded inventory
-- exact ten-file `bin` integrity inventory、load対象は5 DLLのみ
-- GPL／nonfree disabled、shared enabled、static disabledをmanifest条件化
-- `d2d1.dll`、`dwrite.dll`、`iphlpapi.dll`、`usp10.dll`をWindows system dependencyとして分類
-- verbatim `-buildconf`／`-L` text evidenceを保持
-- FFmpeg archive／EXE／DLLはGit、build、publish、release artifactへ含めない
-- native load、ABI／symbol runtime execution、decoder context、packet、decodeは未実施
+- 0.0.10b controlled native decode: H.264 `10` packets／frames、AAC `48` packets／frames、audio samples `49,152`、decode errors `0`、complete cleanup
+- 0.0.10c controlled Windows video／audio output validation review: complete
+- corrected D3D11 texture-copy／production upload probes: visible `Yes`
+- corrected controlled fixture video: `Completed／Accepted`、`VideoAccepted`、`Video visible: Yes`
+- known 80 ms managed tone and decoded 80 ms fixture slice: recognizable audio
+- ordinary controlled fixture audio: contradictory delivery evidence and recognizable audibility not established
+- Issue #129 remains open; paired video／audio admission remains blocked
 
-このmilestoneはapproved manifest implementationです。physical COM／D3D11／WASAPI、実FFmpeg runtime activation、native decode、application window／message loop、audible／visible playbackはまだ検証していません。
+The one authorized direct render-evidence helper invocation at main `4abadd280ceeae310b2528b6ea62f377211b1273` returned a bounded unexpected helper failure, retained neither requested record, and had operator observation `Audio audible: No`. That authorization is consumed and the exact trigger cannot be reconstructed.
+
+Prospective non-physical hardening is complete: bounded scheduler／WASAPI traces, completed／terminal／failure records, offline strict preflights, readiness validation, atomic readiness capture, and the readiness-required one-run authorization entrypoint are merged. No new physical run is currently authorized.
+
+Current-state review:
+
+- [PCN-0166 Controlled Audio Render Authorization State](docs/reviews/PCN-0166-CONTROLLED-AUDIO-RENDER-AUTHORIZATION-STATE.md)
+- [Issue #129](https://github.com/Matsuda7144/PeerCast-Nova/issues/129)
 
 ## 実装済みの主な領域
 
@@ -80,6 +87,10 @@ License: **Apache License 2.0**
 - controlled retained-fixture production lifecycle integration validation
 - approved 2026-07-21 FFmpeg candidate manifest and superseded-candidate history
 - complete candidate inventory／buildconf／license text evidence
+- controlled real external-runtime native H.264／AAC decode validation
+- controlled application-owned Windows runner and finite physical-run composition
+- accepted visible controlled fixture video
+- bounded controlled audio render evidence, terminal evidence, failure retention, offline review, and readiness-required authorization boundaries
 
 詳細:
 
@@ -95,25 +106,37 @@ License: **Apache License 2.0**
 
 PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信アプリではありません。
 
-- controlled real FFmpeg native decode validation
-- controlled Windows video／audio output validation
-- Windows application window／message-loop implementation
-- application-provided dispatcher implementation
+- recognizable controlled physical fixture audio
+- stable controlled ordinary audio delivery evidence
+- independent accepted audio record plus separate audible observation
+- paired video／audio admission and completion of 0.0.10d
+- user-facing Windows application window／message-loop composition
+- application-provided dispatcher implementation for the final app surface
 - legal／about surfaceからのFFmpeg notice表示
 - MP4／fragmented MP4 parser
 - decoded-buffer duration cutoff
 - discontinuity-time native reset semantics
 - complete A/V synchronization、resampling、drift correction
-- controlled audible／visible real-media playback
 - GUI、installer、recorder
 
 FFmpeg binary bundling／redistributionは既定方針として禁止です。別runtime packを将来検討する場合は、新しいADRとexact corresponding source／build／notice compliance archiveが必要です。
 
-## 次のマイルストーン
+## 次のゲート
 
-**0.0.10b — Controlled Real External-Runtime Native Decode Validation**
+**0.0.10d — One readiness-gated controlled physical audio render decision**
 
-0.0.10aで固定したexact approved built-in runtimeとcontrolled FLV fixtureを明示Windows環境でのみ使用し、runtime verificationからH.264／AAC context、finite packet／frame、cleanupまでを証跡化します。D3D11／WASAPIとphysical audio／video outputは後続gateとして分離します。
+追加の非物理evidence plumbingは完了しています。次の物理実行を行う場合は、次をすべて満たす必要があります。
+
+1. separately merged exact `main` commit
+2. final-head／post-merge CircleCI success
+3. exact commitとoperation boundsに対する新しいcanonical readiness record
+4. new repository-external completed／terminal／failure paths
+5. new explicit one-run authorization
+6. `tools/Run-ControlledWindowsPhysicalAudioRenderEvidenceWithReadiness.ps1`からexactly once実行
+
+The underlying helper must not be invoked directly. The literal authorization statement required by the entrypoint is an accidental-invocation guard and does not itself grant authorization.
+
+Until a new explicit authorization exists, historical helpers／diagnostics must not be rerun and 0.0.10d must not be marked complete.
 
 ## 必要環境
 
@@ -148,6 +171,8 @@ dotnet format PeerCast-Nova.sln --verify-no-changes --no-restore
 - output generationはactive decoder generationと一致させる
 - device lossは旧generation revivalなしのterminal lifecycle resultとして扱う
 - controlled fixture validationをphysical native activationの証拠へ読み替えない
+- readiness evidenceをphysical authorizationへ読み替えない
+- consumed one-run authorizationを再利用しない
 
 ## ライセンス
 
