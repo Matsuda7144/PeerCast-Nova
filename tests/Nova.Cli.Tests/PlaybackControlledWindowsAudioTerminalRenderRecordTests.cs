@@ -200,6 +200,73 @@ public sealed class PlaybackControlledWindowsAudioTerminalRenderRecordTests
     }
 
     [Fact]
+    public void Validation_reports_exact_pre_cleanup_checkpoint_category()
+    {
+        var valid = CreateValidRecord();
+        Assert.Equal(
+            PlaybackControlledWindowsAudioTerminalRecordRejection
+                .PreCleanupDeliveryTraceRejected,
+            PlaybackControlledWindowsAudioTerminalRenderRecordCodec.GetValidationFailure(
+                valid with
+                {
+                    PreCleanupDeliveryTrace = valid.PreCleanupDeliveryTrace with
+                    {
+                        Overflowed = true,
+                    },
+                }));
+        Assert.Equal(
+            PlaybackControlledWindowsAudioTerminalRecordRejection
+                .PreCleanupAudioTraceRejected,
+            PlaybackControlledWindowsAudioTerminalRenderRecordCodec.GetValidationFailure(
+                valid with
+                {
+                    PreCleanupNativeEvidence = valid.PreCleanupNativeEvidence with
+                    {
+                        AudioConfigurationConflict = true,
+                    },
+                }));
+
+        var shorterDelivery = valid.PreCleanupDeliveryTrace with
+        {
+            Count = 2,
+            Third = default,
+        };
+        Assert.Equal(
+            PlaybackControlledWindowsAudioTerminalRecordRejection
+                .PreCleanupTraceCardinalityRejected,
+            PlaybackControlledWindowsAudioTerminalRenderRecordCodec.GetValidationFailure(
+                valid with { PreCleanupDeliveryTrace = shorterDelivery }));
+
+        var twoWrites = valid.PreCleanupAudioRenderTrace with
+        {
+            Count = 2,
+            Third = default,
+        };
+        var inconsistentDelivery = shorterDelivery with
+        {
+            Second = shorterDelivery.Second with
+            {
+                Result =
+                    PlaybackGenerationMatchedSchedulerDeliveryResult.RetainedWouldBlock,
+                Completion =
+                    PlaybackGenerationMatchedSchedulerReservationCompletion.Retained,
+            },
+        };
+        Assert.Equal(
+            PlaybackControlledWindowsAudioTerminalRecordRejection
+                .PreCleanupTraceResultConsistencyRejected,
+            PlaybackControlledWindowsAudioTerminalRenderRecordCodec.GetValidationFailure(
+                valid with
+                {
+                    DeliveredCount = 1,
+                    RetainedWouldBlockCount = 1,
+                    PreCleanupDeliveryTrace = inconsistentDelivery,
+                    PreCleanupAudioRenderTrace = twoWrites,
+                    PreCleanupNativeEvidence = Native(twoWrites),
+                }));
+    }
+
+    [Fact]
     public void Serialize_rejects_abandoned_retention_and_nonterminal_failed_write()
     {
         var valid = CreateValidRecord();

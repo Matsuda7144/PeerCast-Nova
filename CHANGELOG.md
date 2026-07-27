@@ -5,6 +5,14 @@
 Detailed history through 0.0.8g remains preserved in Git history at commit
 `f078dab5372a45a8c577c1c802a697ab72b45c02` and in milestone ADR/PCN records.
 
+### 0.0.10d Phase 6 - Granular pre-cleanup checkpoint diagnostics
+
+- Split the aggregate pre-cleanup terminal-record rejection into fixed delivery-trace, audio/native-trace, trace-cardinality, and trace-result-consistency categories.
+- Kept the previous aggregate category readable for retained failure records while new projections emit the exact fixed category.
+- Recorded the consumed one-run evidence from exact main `7fbeb8b0dabd9c6af5b2dc9d065d66fd05faf53d`: child exit `1`, `DeliveryRejected`, `PreCleanupCheckpointRejected`, final native stage `ActivationCleanupCompleted`, no completed or terminal record, and failure-record SHA-256 `C60F9E2901F710DABC80DD1C26D0E5ADCB7DCEF5C50A767F989DAF6798F604A8`.
+- Recorded the separate operator observation `Audio audible: Yes` for a recognizable beep; physical completion and formal audio acceptance remain unestablished.
+- Performed no additional readiness capture, physical output, probe, or diagnostic as part of this change.
+
 ### 0.0.10d Phase 6 - Bounded readiness failure reasons
 
 - Allowed the readiness capture wrapper to republish an inner failure reason only when stderr has the exact three-line non-authorizing shape and the reason exactly matches one of the readiness script's 19 fixed gate failures.

@@ -163,6 +163,9 @@ public sealed class PlaybackControlledWindowsAudioProcessFailureDiagnosticsTests
         "private stderr\r\nPCN-AUDIO-TERMINAL-RECORD-REJECTION: PreCleanupCheckpointRejected\r\n",
         "PreCleanupCheckpointRejected")]
     [InlineData(
+        "PCN-AUDIO-TERMINAL-RECORD-REJECTION: PreCleanupAudioTraceRejected\r\n",
+        "PreCleanupAudioTraceRejected")]
+    [InlineData(
         "PCN-AUDIO-TERMINAL-RECORD-REJECTION: None\r\n",
         "None")]
     [InlineData(

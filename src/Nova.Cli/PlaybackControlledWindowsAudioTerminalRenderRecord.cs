@@ -44,6 +44,10 @@ public enum PlaybackControlledWindowsAudioTerminalRecordRejection
     RunnerOrLifecycleStateRejected,
     TerminalClaimsRejected,
     PreCleanupCheckpointRejected,
+    PreCleanupDeliveryTraceRejected,
+    PreCleanupAudioTraceRejected,
+    PreCleanupTraceCardinalityRejected,
+    PreCleanupTraceResultConsistencyRejected,
     PostStopCheckpointRejected,
     TraceCounterConsistencyRejected,
     CleanupStabilityRejected,
@@ -293,15 +297,16 @@ public static class PlaybackControlledWindowsAudioTerminalRenderRecordCodec
                 .TerminalClaimsRejected;
         }
 
-        if (!IsValidPreCleanupCheckpoint(
-                record.PreCleanupDeliveryTrace,
-                record.PreCleanupAudioRenderTrace,
-                record.PreCleanupNativeEvidence,
-                out var deliveredObservations,
-                out var wouldBlockObservations))
+        var preCleanupRejection = GetPreCleanupCheckpointRejection(
+            record.PreCleanupDeliveryTrace,
+            record.PreCleanupAudioRenderTrace,
+            record.PreCleanupNativeEvidence,
+            out var deliveredObservations,
+            out var wouldBlockObservations);
+        if (preCleanupRejection !=
+            PlaybackControlledWindowsAudioTerminalRecordRejection.None)
         {
-            return PlaybackControlledWindowsAudioTerminalRecordRejection
-                .PreCleanupCheckpointRejected;
+            return preCleanupRejection;
         }
 
         if (!IsValidPostStopCheckpoint(
@@ -343,7 +348,8 @@ public static class PlaybackControlledWindowsAudioTerminalRenderRecordCodec
             PlaybackControlledWindowsPhysicalRunResult.Cancelled or
             PlaybackControlledWindowsPhysicalRunResult.Faulted;
 
-    private static bool IsValidPreCleanupCheckpoint(
+    private static PlaybackControlledWindowsAudioTerminalRecordRejection
+        GetPreCleanupCheckpointRejection(
         PlaybackGenerationMatchedSchedulerDeliveryTraceSnapshot delivery,
         PlaybackWindowsAudioRenderTraceSnapshot audio,
         PlaybackWindowsOutputNativeEvidenceSnapshot native,
@@ -355,17 +361,34 @@ public static class PlaybackControlledWindowsAudioTerminalRenderRecordCodec
         if (!IsValidDeliveryTrace(
                 delivery,
                 out deliveredObservations,
-                out wouldBlockObservations) ||
-            !IsValidAudioTrace(audio, requirePreStop: false, native) ||
-            audio.Count > delivery.Count)
+                out wouldBlockObservations))
         {
-            return false;
+            return PlaybackControlledWindowsAudioTerminalRecordRejection
+                .PreCleanupDeliveryTraceRejected;
         }
 
-        return CountAudioResult(audio, PlaybackWindowsAudioRenderWriteResult.Processed) ==
-                deliveredObservations &&
-            CountAudioResult(audio, PlaybackWindowsAudioRenderWriteResult.WouldBlock) ==
-                wouldBlockObservations;
+        if (!IsValidAudioTrace(audio, requirePreStop: false, native))
+        {
+            return PlaybackControlledWindowsAudioTerminalRecordRejection
+                .PreCleanupAudioTraceRejected;
+        }
+
+        if (audio.Count > delivery.Count)
+        {
+            return PlaybackControlledWindowsAudioTerminalRecordRejection
+                .PreCleanupTraceCardinalityRejected;
+        }
+
+        if (CountAudioResult(audio, PlaybackWindowsAudioRenderWriteResult.Processed) !=
+                deliveredObservations ||
+            CountAudioResult(audio, PlaybackWindowsAudioRenderWriteResult.WouldBlock) !=
+                wouldBlockObservations)
+        {
+            return PlaybackControlledWindowsAudioTerminalRecordRejection
+                .PreCleanupTraceResultConsistencyRejected;
+        }
+
+        return PlaybackControlledWindowsAudioTerminalRecordRejection.None;
     }
 
     private static bool IsValidPostStopCheckpoint(
