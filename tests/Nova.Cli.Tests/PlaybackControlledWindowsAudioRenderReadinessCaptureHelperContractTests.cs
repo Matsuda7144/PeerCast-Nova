@@ -134,21 +134,42 @@ public sealed class PlaybackControlledWindowsAudioRenderReadinessCaptureHelperCo
             script,
             StringComparison.Ordinal);
         Assert.Contains(
-            "Start-Process",
+            "New-Object System.Diagnostics.ProcessStartInfo",
             script,
             StringComparison.Ordinal);
         Assert.Contains(
-            "-RedirectStandardOutput $readinessStandardOutputPath",
+            "$readinessStartInfo.UseShellExecute = $false",
             script,
             StringComparison.Ordinal);
         Assert.Contains(
-            "-RedirectStandardError $readinessStandardErrorPath",
+            "$readinessStartInfo.RedirectStandardOutput = $true",
             script,
             StringComparison.Ordinal);
         Assert.Contains(
-            "$readinessExitCode = $readinessProcess.ExitCode",
+            "$readinessStartInfo.RedirectStandardError = $true",
             script,
             StringComparison.Ordinal);
+        Assert.Contains(
+            "$readinessProcess.StandardOutput.ReadToEndAsync()",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "$readinessProcess.StandardError.ReadToEndAsync()",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "Write-PrivateUtf8Text",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "[System.IO.FileMode]::Truncate",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "[System.IO.FileShare]::None",
+            script,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("Start-Process", script, StringComparison.Ordinal);
         Assert.DoesNotContain(
             "& 'powershell.exe' @readinessArguments",
             script,

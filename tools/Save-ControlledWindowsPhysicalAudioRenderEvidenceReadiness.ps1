@@ -160,6 +160,37 @@ function ConvertTo-WindowsProcessArgument {
     return '"' + $escaped + '"'
 }
 
+function Write-PrivateUtf8Text {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Text,
+        [Parameter(Mandatory = $true)][System.Text.Encoding]$Encoding
+    )
+
+    $stream = New-Object `
+        -TypeName System.IO.FileStream `
+        -ArgumentList @(
+            $Path,
+            [System.IO.FileMode]::Truncate,
+            [System.IO.FileAccess]::Write,
+            [System.IO.FileShare]::None)
+    try {
+        $writer = New-Object `
+            -TypeName System.IO.StreamWriter `
+            -ArgumentList @($stream, $Encoding, 4096, $true)
+        try {
+            $writer.Write($Text)
+            $writer.Flush()
+        }
+        finally {
+            $writer.Dispose()
+        }
+    }
+    finally {
+        $stream.Dispose()
+    }
+}
+
 function Test-IsUnderPath {
     param(
         [Parameter(Mandatory = $true)][string]$Candidate,
@@ -331,15 +362,42 @@ try {
             ForEach-Object {
                 ConvertTo-WindowsProcessArgument -Value ([string]$_)
             }) -join ' '
-    $readinessProcess = Start-Process `
-        -FilePath 'powershell.exe' `
-        -ArgumentList $readinessCommandLine `
-        -NoNewWindow `
-        -Wait `
-        -PassThru `
-        -RedirectStandardOutput $readinessStandardOutputPath `
-        -RedirectStandardError $readinessStandardErrorPath
-    $readinessExitCode = $readinessProcess.ExitCode
+    $readinessStartInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $readinessStartInfo.FileName = 'powershell.exe'
+    $readinessStartInfo.Arguments = $readinessCommandLine
+    $readinessStartInfo.UseShellExecute = $false
+    $readinessStartInfo.CreateNoWindow = $true
+    $readinessStartInfo.RedirectStandardOutput = $true
+    $readinessStartInfo.RedirectStandardError = $true
+    $readinessProcess = New-Object System.Diagnostics.Process
+    $readinessProcess.StartInfo = $readinessStartInfo
+    try {
+        if (-not $readinessProcess.Start()) {
+            Stop-CaptureValidation 'the readiness script process did not start.'
+        }
+        $readinessOutputTask =
+            $readinessProcess.StandardOutput.ReadToEndAsync()
+        $readinessErrorTask =
+            $readinessProcess.StandardError.ReadToEndAsync()
+        $readinessProcess.WaitForExit()
+        $readinessOutputText =
+            $readinessOutputTask.GetAwaiter().GetResult()
+        $readinessErrorText =
+            $readinessErrorTask.GetAwaiter().GetResult()
+        $readinessExitCode = $readinessProcess.ExitCode
+    }
+    finally {
+        $readinessProcess.Dispose()
+    }
+    $privateUtf8 = New-Object System.Text.UTF8Encoding($false, $true)
+    Write-PrivateUtf8Text `
+        -Path $readinessStandardOutputPath `
+        -Text $readinessOutputText `
+        -Encoding $privateUtf8
+    Write-PrivateUtf8Text `
+        -Path $readinessStandardErrorPath `
+        -Text $readinessErrorText `
+        -Encoding $privateUtf8
 
     $readinessOutputBytes = [long](
         Get-Item -LiteralPath $readinessStandardOutputPath).Length
