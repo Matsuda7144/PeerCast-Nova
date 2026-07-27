@@ -235,7 +235,7 @@ The bounded FLV decoder configures the exact parser stream time base through pub
 
 **0.0.10d — Controlled Physical Windows Video／Audio Output Validation — Phase 7 Readiness-gated Audio Authorization**
 
-- current reviewed main: `0dc658b7009823f48cd24ca029aa8efcb65173a4`;
+- authoritative state: `docs/reviews/PCN-0166-CONTROLLED-AUDIO-RENDER-AUTHORIZATION-STATE.md` and Issue #129; later documentation-only merges do not grant or select physical authorization;
 - corrected decoded physical video: `Completed／Accepted`, `VideoAccepted`, visible `Yes`;
 - known 80 ms tone and decoded fixture slice: accepted and recognizable;
 - ordinary controlled fixture audio: recognizable audibility and stable deterministic delivery remain unestablished;
@@ -250,7 +250,7 @@ The bounded FLV decoder configures the exact parser stream time base through pub
 - fixture: `66,939` bytes, SHA-256 `32872B300286525F4EF97FEE3533E25419AC8E48BFD4BC2C4FD9545F071B1E15`;
 - no runtime path, fixture path, record path, device／endpoint identity, HWND, thread ID, pointer, handle, HRESULT, raw process output, or payload is retained in the repository.
 
-A future controlled physical audio render run requires a separately merged exact `main`, final-head and post-merge CircleCI success, a newly captured and independently revalidated readiness record, fresh repository-external outcome paths, a new explicit one-run authorization, and exactly one invocation through the readiness-required entrypoint. Readiness and the literal invocation guard are not authorization.
+A future controlled physical audio render run requires a separately merged exact `main` explicitly selected by a new authorization, final-head and post-merge CircleCI success for that exact commit, a newly captured and independently revalidated readiness record, fresh repository-external outcome paths, and exactly one invocation through the readiness-required entrypoint. Readiness, a documentation-only merge, and the literal invocation guard are not authorization.
 
 ## CI
 
