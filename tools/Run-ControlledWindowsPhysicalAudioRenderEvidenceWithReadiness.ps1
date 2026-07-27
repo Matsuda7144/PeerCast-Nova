@@ -345,7 +345,8 @@ try {
         $readinessLines -cnotcontains 'Ready-For-Separate-Authorization: True' -or
         $readinessLines -cnotcontains 'Physical-Run-Authorization-Granted: False' -or
         $readinessLines -cnotcontains 'Physical-Runs-Executed-By-This-Command: False' -or
-        $readinessLines -cnotcontains 'Audio-Acceptance-Claimed: False') {
+        $readinessLines -cnotcontains 'Audio-Acceptance-Claimed: False' -or
+        $readinessLines -cnotcontains 'External-Binary-Or-Payload-Published: False') {
         Stop-GateValidation 'the retained readiness record failed strict managed validation.'
     }
 

@@ -21,6 +21,7 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceAuthorizationGat
             "Physical-Run-Authorization-Granted: False",
             "Physical-Runs-Executed-By-This-Command: False",
             "Audio-Acceptance-Claimed: False",
+            "External-Binary-Or-Payload-Published: False",
             "$readinessDigestBefore",
             "$readinessDigestAfter",
             "the retained readiness record changed during validation",
