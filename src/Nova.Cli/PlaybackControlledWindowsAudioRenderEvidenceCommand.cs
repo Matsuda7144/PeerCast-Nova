@@ -102,7 +102,8 @@ public static class PlaybackControlledWindowsAudioRenderEvidenceCommand
         new(
             options,
             captureAudioRenderTrace: true,
-            capturePreStopPadding: true);
+            capturePreStopPadding: true,
+            captureAudioNativeStages: true);
 
     internal static PlaybackControlledWindowsAudioRenderEvidenceRecord CreateRecord(
         PlaybackControlledWindowsPhysicalRunSnapshot snapshot,

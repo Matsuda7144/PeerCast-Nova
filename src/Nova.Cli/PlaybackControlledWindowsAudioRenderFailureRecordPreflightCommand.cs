@@ -54,6 +54,7 @@ public sealed record PlaybackControlledWindowsAudioRenderChildFailureRecord(
     int ChildExitCode,
     long StdoutByteCount,
     long StderrByteCount,
+    string LastNativeAudioStage,
     bool ChildProcessResultCaptured);
 
 public sealed record PlaybackControlledWindowsAudioRenderHelperFailureRecord(
@@ -64,12 +65,15 @@ public sealed record PlaybackControlledWindowsAudioRenderHelperFailureRecord(
 
 public static class PlaybackControlledWindowsAudioRenderChildFailureRecordCodec
 {
-    public const int CurrentSchemaVersion = 2;
+    public const int CurrentSchemaVersion = 3;
     public const string CurrentMilestone = "0.0.10d Phase 6";
     public const int MaximumRecordCharacterCount = 32 * 1024;
 
-    private const string Header =
+    private const int LegacySchemaVersion = 2;
+    private const string LegacyHeader =
         "PEERCAST-NOVA-CONTROLLED-WINDOWS-AUDIO-RENDER-EVIDENCE-FAILURE 2";
+    private const string Header =
+        "PEERCAST-NOVA-CONTROLLED-WINDOWS-AUDIO-RENDER-EVIDENCE-FAILURE 3";
     private const string Footer =
         "END-PEERCAST-NOVA-CONTROLLED-WINDOWS-AUDIO-RENDER-EVIDENCE-FAILURE";
 
@@ -85,7 +89,9 @@ public static class PlaybackControlledWindowsAudioRenderChildFailureRecordCodec
         }
 
         var builder = new StringBuilder(896);
-        Append(builder, Header);
+        Append(
+            builder,
+            record.SchemaVersion == LegacySchemaVersion ? LegacyHeader : Header);
         Append(builder, $"Milestone: {record.Milestone}");
         Append(builder, "Kind: Audio");
         Append(builder, "Result: RenderEvidenceRecordNotProduced");
@@ -101,6 +107,10 @@ public static class PlaybackControlledWindowsAudioRenderChildFailureRecordCodec
         Append(
             builder,
             $"Stderr-Bytes: {record.StderrByteCount.ToString(CultureInfo.InvariantCulture)}");
+        if (record.SchemaVersion == CurrentSchemaVersion)
+        {
+            Append(builder, $"Last-Native-Audio-Stage: {record.LastNativeAudioStage}");
+        }
         Append(builder, "Raw-Stdout-Published: False");
         Append(builder, "Raw-Stderr-Published: False");
         Append(builder, "Canonical-Render-Evidence-Record-Produced: False");
@@ -124,13 +134,35 @@ public static class PlaybackControlledWindowsAudioRenderChildFailureRecordCodec
         out PlaybackControlledWindowsAudioRenderChildFailureRecord? record)
     {
         record = null;
+        return TryParseVersion(
+                text,
+                CurrentSchemaVersion,
+                Header,
+                expectedLineCount: 19,
+                out record) ||
+            TryParseVersion(
+                text,
+                LegacySchemaVersion,
+                LegacyHeader,
+                expectedLineCount: 18,
+                out record);
+    }
+
+    private static bool TryParseVersion(
+        string? text,
+        int schemaVersion,
+        string header,
+        int expectedLineCount,
+        out PlaybackControlledWindowsAudioRenderChildFailureRecord? record)
+    {
+        record = null;
         if (!PlaybackControlledWindowsAudioRenderFailureRecordText.TryGetLines(
                 text,
                 MaximumRecordCharacterCount,
-                expectedLineCount: 18,
+                expectedLineCount,
                 out var normalized,
                 out var lines) ||
-            !string.Equals(lines[0], Header, StringComparison.Ordinal) ||
+            !string.Equals(lines[0], header, StringComparison.Ordinal) ||
             !PlaybackControlledWindowsAudioRenderFailureRecordText.TryReadExact(
                 lines[1],
                 "Milestone: ",
@@ -160,42 +192,69 @@ public static class PlaybackControlledWindowsAudioRenderChildFailureRecordCodec
             !PlaybackControlledWindowsAudioRenderFailureRecordText.TryReadInt64(
                 lines[8],
                 "Stderr-Bytes: ",
-                out var stderrBytes) ||
-            !string.Equals(lines[9], "Raw-Stdout-Published: False", StringComparison.Ordinal) ||
-            !string.Equals(lines[10], "Raw-Stderr-Published: False", StringComparison.Ordinal) ||
+                out var stderrBytes))
+        {
+            return false;
+        }
+
+        var offset = schemaVersion == CurrentSchemaVersion ? 1 : 0;
+        var lastNativeAudioStage = "None";
+        if (offset == 1 &&
+            (!PlaybackControlledWindowsAudioRenderFailureRecordText.TryReadExact(
+                lines[9],
+                "Last-Native-Audio-Stage: ",
+                out lastNativeAudioStage) ||
+             !PlaybackControlledWindowsAudioProcessFailureDiagnostics
+                 .IsNativeAudioStageOrNone(lastNativeAudioStage)))
+        {
+            return false;
+        }
+
+        if (!string.Equals(
+                lines[9 + offset],
+                "Raw-Stdout-Published: False",
+                StringComparison.Ordinal) ||
             !string.Equals(
-                lines[11],
+                lines[10 + offset],
+                "Raw-Stderr-Published: False",
+                StringComparison.Ordinal) ||
+            !string.Equals(
+                lines[11 + offset],
                 "Canonical-Render-Evidence-Record-Produced: False",
                 StringComparison.Ordinal) ||
             !string.Equals(
-                lines[12],
+                lines[12 + offset],
                 "Canonical-Terminal-Render-Record-Produced: False",
                 StringComparison.Ordinal) ||
             !PlaybackControlledWindowsAudioRenderFailureRecordText.TryReadBoolean(
-                lines[13],
+                lines[13 + offset],
                 "Child-Process-Result-Captured: ",
                 out var childResultCaptured) ||
             !string.Equals(
-                lines[14],
+                lines[14 + offset],
                 "Physical-Run-Completion-Established: False",
                 StringComparison.Ordinal) ||
-            !string.Equals(lines[15], "Audio-Acceptance-Claimed: False", StringComparison.Ordinal) ||
             !string.Equals(
-                lines[16],
+                lines[15 + offset],
+                "Audio-Acceptance-Claimed: False",
+                StringComparison.Ordinal) ||
+            !string.Equals(
+                lines[16 + offset],
                 "External-Binary-Or-Payload-Published: False",
                 StringComparison.Ordinal) ||
-            !string.Equals(lines[17], Footer, StringComparison.Ordinal))
+            !string.Equals(lines[17 + offset], Footer, StringComparison.Ordinal))
         {
             return false;
         }
 
         var candidate = new PlaybackControlledWindowsAudioRenderChildFailureRecord(
-            CurrentSchemaVersion,
+            schemaVersion,
             milestone,
             exitAvailable,
             exitCode,
             stdoutBytes,
             stderrBytes,
+            lastNativeAudioStage,
             childResultCaptured);
         if (!IsValid(candidate) ||
             !string.Equals(Serialize(candidate), normalized + "\n", StringComparison.Ordinal))
@@ -209,10 +268,14 @@ public static class PlaybackControlledWindowsAudioRenderChildFailureRecordCodec
 
     private static bool IsValid(
         PlaybackControlledWindowsAudioRenderChildFailureRecord record) =>
-        record.SchemaVersion == CurrentSchemaVersion &&
+        record.SchemaVersion is LegacySchemaVersion or CurrentSchemaVersion &&
         string.Equals(record.Milestone, CurrentMilestone, StringComparison.Ordinal) &&
         record.StdoutByteCount >= 0 &&
         record.StderrByteCount >= 0 &&
+        PlaybackControlledWindowsAudioProcessFailureDiagnostics
+            .IsNativeAudioStageOrNone(record.LastNativeAudioStage) &&
+        (record.SchemaVersion != LegacySchemaVersion ||
+            string.Equals(record.LastNativeAudioStage, "None", StringComparison.Ordinal)) &&
         record.ChildExitCodeAvailable == record.ChildProcessResultCaptured &&
         (record.ChildExitCodeAvailable || record.ChildExitCode == 0);
 
@@ -483,6 +546,9 @@ public static class PlaybackControlledWindowsAudioRenderFailureRecordPreflightCo
         await output.WriteLineAsync(
                 "Stderr-Bytes: " +
                 (child?.StderrByteCount ?? 0).ToString(CultureInfo.InvariantCulture))
+            .ConfigureAwait(false);
+        await output.WriteLineAsync(
+                $"Last-Native-Audio-Stage: {child?.LastNativeAudioStage ?? "None"}")
             .ConfigureAwait(false);
         await output.WriteLineAsync(
                 $"Child-Process-Result-Captured: {child?.ChildProcessResultCaptured ?? false}")

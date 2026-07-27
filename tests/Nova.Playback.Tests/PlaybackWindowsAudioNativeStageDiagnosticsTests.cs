@@ -25,6 +25,16 @@ public sealed class PlaybackWindowsAudioNativeStageDiagnosticsTests
                 "StopCompleted",
                 "ResetEntering",
                 "ResetCompleted",
+                "ProductionCleanupEntering",
+                "ProductionCleanupCompleted",
+                "BufferCleanupEntering",
+                "BufferCleanupCompleted",
+                "StreamCleanupEntering",
+                "StreamCleanupCompleted",
+                "BindingCleanupEntering",
+                "BindingCleanupCompleted",
+                "ActivationCleanupEntering",
+                "ActivationCleanupCompleted",
             ],
             Enum.GetNames<PlaybackWindowsAudioNativeStage>());
     }

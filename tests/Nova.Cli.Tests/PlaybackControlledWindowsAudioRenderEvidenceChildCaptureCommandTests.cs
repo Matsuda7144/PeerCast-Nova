@@ -131,6 +131,33 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureComm
     }
 
     [Fact]
+    public async Task Child_failure_retains_only_last_allowlisted_native_stage()
+    {
+        using var environment = new CaptureEnvironment();
+        var stderr = string.Join(
+            Environment.NewLine,
+            "private path C:\\secret",
+            "PCN-AUDIO-NATIVE-STAGE: StartCompleted",
+            "PCN-AUDIO-NATIVE-STAGE: ProductionCleanupEntering",
+            "PCN-AUDIO-NATIVE-STAGE: PrivateStage");
+        var executor = new RecordingExecutor(
+            unchecked((int)0xC0000374),
+            [],
+            Encoding.UTF8.GetBytes(stderr));
+
+        var result = await environment.RunAsync(executor);
+
+        Assert.Equal(2, result);
+        var failure = File.ReadAllText(environment.FailureRecord);
+        Assert.Contains(
+            "Last-Native-Audio-Stage: ProductionCleanupEntering\n",
+            failure);
+        Assert.DoesNotContain("StartCompleted", failure, StringComparison.Ordinal);
+        Assert.DoesNotContain("PrivateStage", failure, StringComparison.Ordinal);
+        Assert.DoesNotContain("secret", failure, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Executor_exception_promotes_only_sanitized_failure()
     {
         using var environment = new CaptureEnvironment();
@@ -330,7 +357,7 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureComm
                     stderrByteCount: 29);
 
         Assert.StartsWith(
-            "PEERCAST-NOVA-CONTROLLED-WINDOWS-AUDIO-RENDER-EVIDENCE-FAILURE 2\n",
+            "PEERCAST-NOVA-CONTROLLED-WINDOWS-AUDIO-RENDER-EVIDENCE-FAILURE 3\n",
             record,
             StringComparison.Ordinal);
         Assert.Contains("Milestone: 0.0.10d Phase 6\n", record);
@@ -339,6 +366,7 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureComm
         Assert.Contains("Child-Exit-Code-Hex: C0000005\n", record);
         Assert.Contains("Stdout-Bytes: 17\n", record);
         Assert.Contains("Stderr-Bytes: 29\n", record);
+        Assert.Contains("Last-Native-Audio-Stage: None\n", record);
         Assert.Contains("Canonical-Terminal-Render-Record-Produced: False\n", record);
         Assert.Contains("Child-Process-Result-Captured: True\n", record);
         Assert.Contains("Audio-Acceptance-Claimed: False\n", record);

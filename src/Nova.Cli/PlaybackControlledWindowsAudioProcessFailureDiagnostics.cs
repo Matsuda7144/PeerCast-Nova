@@ -98,7 +98,7 @@ public static class PlaybackControlledWindowsAudioProcessFailureDiagnostics
         if (snapshot.StdoutByteCount < 0 ||
             snapshot.StderrByteCount < 0 ||
             !Enum.IsDefined(snapshot.StderrClassification) ||
-            !IsStageOrNone(snapshot.LastNativeAudioStage))
+            !IsNativeAudioStageOrNone(snapshot.LastNativeAudioStage))
         {
             throw new ArgumentException(
                 "The controlled process failure snapshot is invalid.",
@@ -198,7 +198,7 @@ public static class PlaybackControlledWindowsAudioProcessFailureDiagnostics
                 StringComparison.Ordinal);
     }
 
-    private static bool IsStageOrNone(string value) =>
+    internal static bool IsNativeAudioStageOrNone(string value) =>
         string.Equals(value, "None", StringComparison.Ordinal) ||
         Enum.TryParse<PlaybackWindowsAudioNativeStage>(
             value,

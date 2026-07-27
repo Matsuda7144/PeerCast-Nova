@@ -80,6 +80,24 @@ public sealed class SystemPlaybackControlledWindowsPhysicalRunOperationsTests
     }
 
     [Fact]
+    public void RenderEvidenceCanCaptureNativeStagesWithoutDiagnosticCommandFlag()
+    {
+        var output = new StringWriter();
+        var options = SystemPlaybackControlledWindowsPhysicalRunOperations.CreateLifecycleOptions(
+            TimeSpan.FromMilliseconds(100),
+            PlaybackControlledWindowsOutputValidationKind.Audio,
+            diagnoseAudioNativeStages: false,
+            diagnosticOutput: output,
+            captureAudioNativeStages: true);
+
+        ReportStageByReflection(options, "ProductionCleanupEntering");
+
+        Assert.Equal(
+            "PCN-AUDIO-NATIVE-STAGE: ProductionCleanupEntering" + Environment.NewLine,
+            output.ToString());
+    }
+
+    [Fact]
     public void AudioRenderTraceConfigurationIsAbsentByDefaultAndExplicitWhenRequested()
     {
         var normal = SystemPlaybackControlledWindowsPhysicalRunOperations.CreateLifecycleOptions(

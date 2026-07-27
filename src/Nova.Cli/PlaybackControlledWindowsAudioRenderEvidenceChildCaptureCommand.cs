@@ -192,6 +192,7 @@ internal sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureCo
                     childExitCode: null,
                     stdoutByteCount: 0,
                     stderrByteCount: 0,
+                    lastNativeAudioStage: "None",
                     childProcessResultCaptured: false)
                 .ConfigureAwait(false);
         }
@@ -205,6 +206,7 @@ internal sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureCo
         {
             standardOutput = string.Empty;
         }
+        var lastNativeAudioStage = GetLastNativeAudioStage(child);
 
         if (IsCompletedRecord(child.ExitCode, standardOutput, options))
         {
@@ -236,6 +238,7 @@ internal sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureCo
                 child.ExitCode,
                 child.StandardOutput.LongLength,
                 child.StandardError.LongLength,
+                lastNativeAudioStage,
                 childProcessResultCaptured: true)
             .ConfigureAwait(false);
     }
@@ -243,54 +246,36 @@ internal sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureCo
     internal static string SerializeFailureRecord(
         int childExitCode,
         long stdoutByteCount,
-        long stderrByteCount) =>
+        long stderrByteCount,
+        string lastNativeAudioStage = "None") =>
         SerializeFailureRecord(
             childExitCode,
             stdoutByteCount,
             stderrByteCount,
+            lastNativeAudioStage,
             childProcessResultCaptured: true);
 
     internal static string SerializeFailureRecord(
         int? childExitCode,
         long stdoutByteCount,
         long stderrByteCount,
+        string lastNativeAudioStage,
         bool childProcessResultCaptured)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(stdoutByteCount);
         ArgumentOutOfRangeException.ThrowIfNegative(stderrByteCount);
         var available = childExitCode.HasValue;
         var normalizedExitCode = childExitCode.GetValueOrDefault();
-        var builder = new StringBuilder(896);
-        Append(
-            builder,
-            "PEERCAST-NOVA-CONTROLLED-WINDOWS-AUDIO-RENDER-EVIDENCE-FAILURE 2");
-        Append(builder, "Milestone: 0.0.10d Phase 6");
-        Append(builder, "Kind: Audio");
-        Append(builder, "Result: RenderEvidenceRecordNotProduced");
-        Append(builder, $"Child-Exit-Code-Available: {available}");
-        Append(
-            builder,
-            "Child-Exit-Code-Signed: " +
-            normalizedExitCode.ToString(CultureInfo.InvariantCulture));
-        Append(builder, $"Child-Exit-Code-Hex: {unchecked((uint)normalizedExitCode):X8}");
-        Append(
-            builder,
-            $"Stdout-Bytes: {stdoutByteCount.ToString(CultureInfo.InvariantCulture)}");
-        Append(
-            builder,
-            $"Stderr-Bytes: {stderrByteCount.ToString(CultureInfo.InvariantCulture)}");
-        Append(builder, "Raw-Stdout-Published: False");
-        Append(builder, "Raw-Stderr-Published: False");
-        Append(builder, "Canonical-Render-Evidence-Record-Produced: False");
-        Append(builder, "Canonical-Terminal-Render-Record-Produced: False");
-        Append(builder, $"Child-Process-Result-Captured: {childProcessResultCaptured}");
-        Append(builder, "Physical-Run-Completion-Established: False");
-        Append(builder, "Audio-Acceptance-Claimed: False");
-        Append(builder, "External-Binary-Or-Payload-Published: False");
-        Append(
-            builder,
-            "END-PEERCAST-NOVA-CONTROLLED-WINDOWS-AUDIO-RENDER-EVIDENCE-FAILURE");
-        return builder.ToString();
+        return PlaybackControlledWindowsAudioRenderChildFailureRecordCodec.Serialize(
+            new(
+                PlaybackControlledWindowsAudioRenderChildFailureRecordCodec.CurrentSchemaVersion,
+                PlaybackControlledWindowsAudioRenderChildFailureRecordCodec.CurrentMilestone,
+                available,
+                normalizedExitCode,
+                stdoutByteCount,
+                stderrByteCount,
+                lastNativeAudioStage,
+                childProcessResultCaptured));
     }
 
     private async ValueTask<int> PromoteOutcomeOrFailureAsync(
@@ -313,6 +298,7 @@ internal sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureCo
                     child.ExitCode,
                     child.StandardOutput.LongLength,
                     child.StandardError.LongLength,
+                    GetLastNativeAudioStage(child),
                     childProcessResultCaptured: true)
                 .ConfigureAwait(false);
         }
@@ -323,12 +309,14 @@ internal sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureCo
         int? childExitCode,
         long stdoutByteCount,
         long stderrByteCount,
+        string lastNativeAudioStage,
         bool childProcessResultCaptured)
     {
         var failureRecord = SerializeFailureRecord(
             childExitCode,
             stdoutByteCount,
             stderrByteCount,
+            lastNativeAudioStage,
             childProcessResultCaptured);
         try
         {
@@ -344,6 +332,26 @@ internal sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureCo
         {
             return PlaybackControlledWindowsAudioRenderEvidenceChildCaptureCommand
                 .InvalidConfigurationExitCode;
+        }
+    }
+
+    private static string GetLastNativeAudioStage(
+        PlaybackControlledWindowsAudioChildProcessResult child)
+    {
+        try
+        {
+            var standardError = StrictUtf8.GetString(child.StandardError);
+            return PlaybackControlledWindowsAudioProcessFailureDiagnostics.Analyze(
+                    child.ExitCode,
+                    standardOutput: string.Empty,
+                    standardOutputByteCount: child.StandardOutput.LongLength,
+                    standardError,
+                    standardErrorByteCount: child.StandardError.LongLength)
+                .LastNativeAudioStage;
+        }
+        catch (DecoderFallbackException)
+        {
+            return "None";
         }
     }
 
@@ -458,8 +466,6 @@ internal sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureCo
                 StringComparison.OrdinalIgnoreCase);
     }
 
-    private static void Append(StringBuilder builder, string value) =>
-        builder.Append(value).Append('\n');
 }
 
 public static class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureCommand

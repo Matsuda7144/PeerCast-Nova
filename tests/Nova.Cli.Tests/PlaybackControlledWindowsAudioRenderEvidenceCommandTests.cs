@@ -100,6 +100,23 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceCommandTests
     }
 
     [Fact]
+    public void Direct_render_evidence_enables_only_internal_native_stage_capture()
+    {
+        Assert.True(
+            PlaybackControlledWindowsAudioRenderEvidenceCommand.TryParse(
+                ValidArguments,
+                out var options));
+
+        var operations =
+            PlaybackControlledWindowsAudioRenderEvidenceCommand.CreateOperations(options);
+
+        Assert.False(options.DiagnoseAudioNativeStages);
+        Assert.True(ReadBooleanField(operations, "_captureAudioNativeStages"));
+        Assert.True(ReadBooleanField(operations, "_captureAudioRenderTrace"));
+        Assert.True(ReadBooleanField(operations, "_capturePreStopPadding"));
+    }
+
+    [Fact]
     public void Parser_rejects_duplicate_command_or_required_option()
     {
         string[] duplicateCommand =
@@ -257,6 +274,16 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceCommandTests
                 postStopAudio,
                 Native(postStopAudio)),
         };
+    }
+
+    private static bool ReadBooleanField(object instance, string name)
+    {
+        var field = instance.GetType().GetField(
+            name,
+            System.Reflection.BindingFlags.Instance |
+            System.Reflection.BindingFlags.NonPublic);
+        Assert.NotNull(field);
+        return Assert.IsType<bool>(field.GetValue(instance));
     }
 
     private static PlaybackWindowsOutputNativeEvidenceSnapshot Native(

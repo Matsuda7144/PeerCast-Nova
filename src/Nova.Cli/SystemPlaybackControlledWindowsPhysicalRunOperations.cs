@@ -36,6 +36,7 @@ internal sealed class SystemPlaybackControlledWindowsPhysicalRunOperations :
     private readonly PlaybackWindowsPhysicalRunnerHost _runner;
     private readonly bool _captureAudioRenderTrace;
     private readonly bool _capturePreStopPadding;
+    private readonly bool _captureAudioNativeStages;
     private PlaybackApprovedExternalRuntimeWindowsLifecycleBoundary? _lifecycle;
     private long _borrowedWindowToken;
     private bool _cleanupValidated;
@@ -46,14 +47,16 @@ internal sealed class SystemPlaybackControlledWindowsPhysicalRunOperations :
         : this(
             options,
             captureAudioRenderTrace: false,
-            capturePreStopPadding: false)
+            capturePreStopPadding: false,
+            captureAudioNativeStages: false)
     {
     }
 
     internal SystemPlaybackControlledWindowsPhysicalRunOperations(
         PlaybackControlledWindowsPhysicalRunOptions options,
         bool captureAudioRenderTrace,
-        bool capturePreStopPadding)
+        bool capturePreStopPadding,
+        bool captureAudioNativeStages = false)
     {
         ArgumentNullException.ThrowIfNull(options);
         if (capturePreStopPadding && !captureAudioRenderTrace)
@@ -66,6 +69,7 @@ internal sealed class SystemPlaybackControlledWindowsPhysicalRunOperations :
         _options = options with { Runner = options.Runner with { } };
         _captureAudioRenderTrace = captureAudioRenderTrace;
         _capturePreStopPadding = capturePreStopPadding;
+        _captureAudioNativeStages = captureAudioNativeStages;
         _runner = new(_options.Runner);
     }
 
@@ -108,6 +112,7 @@ internal sealed class SystemPlaybackControlledWindowsPhysicalRunOperations :
                 _options.AudioBufferDuration,
                 _options.Kind,
                 _options.DiagnoseAudioNativeStages,
+                captureAudioNativeStages: _captureAudioNativeStages,
                 captureAudioRenderTrace: _captureAudioRenderTrace,
                 capturePreStopPadding: _capturePreStopPadding));
         return await _lifecycle.InitializeAsync(token).ConfigureAwait(false);
@@ -118,6 +123,7 @@ internal sealed class SystemPlaybackControlledWindowsPhysicalRunOperations :
         PlaybackControlledWindowsOutputValidationKind kind,
         bool diagnoseAudioNativeStages = false,
         TextWriter? diagnosticOutput = null,
+        bool captureAudioNativeStages = false,
         bool captureAudioRenderTrace = false,
         bool capturePreStopPadding = false)
     {
@@ -128,7 +134,8 @@ internal sealed class SystemPlaybackControlledWindowsPhysicalRunOperations :
                 nameof(capturePreStopPadding));
         }
 
-        IPlaybackWindowsAudioNativeStageReporter reporter = diagnoseAudioNativeStages
+        IPlaybackWindowsAudioNativeStageReporter reporter =
+            diagnoseAudioNativeStages || captureAudioNativeStages
             ? new TextWriterPlaybackWindowsAudioNativeStageReporter(
                 diagnosticOutput ?? Console.Error)
             : NullPlaybackWindowsAudioNativeStageReporter.Instance;

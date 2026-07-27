@@ -459,12 +459,16 @@ internal sealed class PlaybackApprovedExternalRuntimeWindowsLifecycleOperations 
 
         try
         {
+            _options.AudioNativeStageReporter.Report(
+                PlaybackWindowsAudioNativeStage.ProductionCleanupEntering);
             await production.StopAsync().ConfigureAwait(false);
         }
         finally
         {
             await production.DisposeAsync().ConfigureAwait(false);
         }
+        _options.AudioNativeStageReporter.Report(
+            PlaybackWindowsAudioNativeStage.ProductionCleanupCompleted);
     }
 
     public async ValueTask<PlaybackApprovedExternalRuntimeOutputConfigurationResult>
@@ -504,23 +508,39 @@ internal sealed class PlaybackApprovedExternalRuntimeWindowsLifecycleOperations 
 
                     try
                     {
+                        _options.AudioNativeStageReporter.Report(
+                            PlaybackWindowsAudioNativeStage.BufferCleanupEntering);
                         buffers?.Dispose();
+                        _options.AudioNativeStageReporter.Report(
+                            PlaybackWindowsAudioNativeStage.BufferCleanupCompleted);
                     }
                     finally
                     {
                         try
                         {
+                            _options.AudioNativeStageReporter.Report(
+                                PlaybackWindowsAudioNativeStage.StreamCleanupEntering);
                             streams?.Dispose();
+                            _options.AudioNativeStageReporter.Report(
+                                PlaybackWindowsAudioNativeStage.StreamCleanupCompleted);
                         }
                         finally
                         {
                             try
                             {
+                                _options.AudioNativeStageReporter.Report(
+                                    PlaybackWindowsAudioNativeStage.BindingCleanupEntering);
                                 binding?.Dispose();
+                                _options.AudioNativeStageReporter.Report(
+                                    PlaybackWindowsAudioNativeStage.BindingCleanupCompleted);
                             }
                             finally
                             {
+                                _options.AudioNativeStageReporter.Report(
+                                    PlaybackWindowsAudioNativeStage.ActivationCleanupEntering);
                                 activation?.Dispose();
+                                _options.AudioNativeStageReporter.Report(
+                                    PlaybackWindowsAudioNativeStage.ActivationCleanupCompleted);
                             }
                         }
                     }

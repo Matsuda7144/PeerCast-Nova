@@ -20,6 +20,16 @@ internal enum PlaybackWindowsAudioNativeStage
     StopCompleted,
     ResetEntering,
     ResetCompleted,
+    ProductionCleanupEntering,
+    ProductionCleanupCompleted,
+    BufferCleanupEntering,
+    BufferCleanupCompleted,
+    StreamCleanupEntering,
+    StreamCleanupCompleted,
+    BindingCleanupEntering,
+    BindingCleanupCompleted,
+    ActivationCleanupEntering,
+    ActivationCleanupCompleted,
 }
 
 internal interface IPlaybackWindowsAudioNativeStageReporter
