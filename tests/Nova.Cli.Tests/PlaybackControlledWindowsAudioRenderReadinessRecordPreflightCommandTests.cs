@@ -119,6 +119,34 @@ public sealed class PlaybackControlledWindowsAudioRenderReadinessRecordPreflight
                 result.Result);
             Assert.True(result.Validated);
             var report = output.ToString();
+            string[] expectedLines =
+            [
+                "Milestone: " +
+                PlaybackControlledWindowsAudioRenderReadinessRecordCodec.CurrentMilestone,
+                "Result: ReadinessReportValidated",
+                $"Validated-Commit: {Commit}",
+                $"Expected-Runtime-Build: {PlaybackFfmpegBackendCandidate.BuildId}",
+                "Fixture-SHA256: " +
+                PlaybackControlledWindowsAudioRenderReadinessRecordCodec.ApprovedFixtureSha256,
+                "Fixture-Bytes: " +
+                PlaybackControlledWindowsAudioRenderReadinessRecordCodec.ApprovedFixtureBytes,
+                "Maximum-Decode-Operations: 128",
+                "Maximum-Delivery-Operations: 128",
+                "Fixture-Packet-Bytes: 65536",
+                "Observation-Hold-Milliseconds: 1000",
+                "Audio-Buffer-Milliseconds: 100",
+                "Readiness-Report-Validated: True",
+                "Ready-For-Separate-Authorization: True",
+                "Physical-Run-Authorization-Granted: False",
+                "Physical-Runs-Executed-By-This-Command: False",
+                "Audio-Acceptance-Claimed: False",
+                "External-Binary-Or-Payload-Published: False",
+            ];
+            Assert.Equal(17, expectedLines.Length);
+            Assert.Equal(17, report.Count(character => character == '\n'));
+            Assert.Equal(
+                string.Join(Environment.NewLine, expectedLines) + Environment.NewLine,
+                report);
             Assert.Contains("Result: ReadinessReportValidated", report, StringComparison.Ordinal);
             Assert.Contains("Readiness-Report-Validated: True", report, StringComparison.Ordinal);
             Assert.Contains(

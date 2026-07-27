@@ -458,6 +458,7 @@ public sealed class PlaybackWindowsPhysicalRunnerHost :
                         break;
                 }
             }
+            work.PublishCompletion();
         }
     }
 
@@ -585,6 +586,8 @@ internal abstract class PlaybackWindowsPhysicalRunnerWorkItem
 {
     public abstract PlaybackWindowsPhysicalRunnerWorkItemOutcome Execute();
 
+    public abstract void PublishCompletion();
+
     public abstract void CompleteShutdown();
 }
 
@@ -594,6 +597,7 @@ internal sealed class PlaybackWindowsPhysicalRunnerWorkItem<T>(
 {
     private readonly TaskCompletionSource<PlaybackWindowsOutputDispatcherInvocation<T>> _completion =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private PlaybackWindowsOutputDispatcherInvocation<T> _invocation;
 
     public Task<PlaybackWindowsOutputDispatcherInvocation<T>> Task => _completion.Task;
 
@@ -606,26 +610,28 @@ internal sealed class PlaybackWindowsPhysicalRunnerWorkItem<T>(
             var value = pending.IsCompletedSuccessfully
                 ? pending.Result
                 : pending.AsTask().GetAwaiter().GetResult();
-            _completion.TrySetResult(new(
+            _invocation = new(
                 PlaybackWindowsOutputDispatcherInvocationResult.Completed,
-                value));
+                value);
             return PlaybackWindowsPhysicalRunnerWorkItemOutcome.Completed;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            _completion.TrySetResult(new(
+            _invocation = new(
                 PlaybackWindowsOutputDispatcherInvocationResult.Cancelled,
-                default!));
+                default!);
             return PlaybackWindowsPhysicalRunnerWorkItemOutcome.Cancelled;
         }
         catch
         {
-            _completion.TrySetResult(new(
+            _invocation = new(
                 PlaybackWindowsOutputDispatcherInvocationResult.Faulted,
-                default!));
+                default!);
             return PlaybackWindowsPhysicalRunnerWorkItemOutcome.Faulted;
         }
     }
+
+    public override void PublishCompletion() => _completion.TrySetResult(_invocation);
 
     public override void CompleteShutdown() => _completion.TrySetResult(new(
         PlaybackWindowsOutputDispatcherInvocationResult.Shutdown,

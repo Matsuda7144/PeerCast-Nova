@@ -5,6 +5,25 @@ namespace PeerCast.Nova.Cli.Tests;
 public sealed class PlaybackWindowsPhysicalRunnerHostTests
 {
     [Fact]
+    public async Task WorkItemCompletionIsPublishedOnlyAfterOutcomeAccounting()
+    {
+        var work = new PlaybackWindowsPhysicalRunnerWorkItem<int>(
+            _ => ValueTask.FromResult(42),
+            CancellationToken.None);
+
+        var outcome = work.Execute();
+
+        Assert.Equal(PlaybackWindowsPhysicalRunnerWorkItemOutcome.Completed, outcome);
+        Assert.False(work.Task.IsCompleted);
+
+        work.PublishCompletion();
+
+        var invocation = await work.Task;
+        Assert.Equal(PlaybackWindowsOutputDispatcherInvocationResult.Completed, invocation.Result);
+        Assert.Equal(42, invocation.Value);
+    }
+
+    [Fact]
     public async Task StartInvokeAndStopUseOneApplicationOwnedThreadAndWindow()
     {
         using var native = new FakeNative();
