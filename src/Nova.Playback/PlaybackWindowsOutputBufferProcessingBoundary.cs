@@ -180,7 +180,7 @@ public sealed class PlaybackWindowsOutputBufferProcessingBoundary : IDisposable
         try
         {
             if (_isDisposed) return PlaybackWindowsOutputBufferProcessingResult.Disposed;
-            var prerequisite = ValidatePrerequisites(video: false, samples.Generation);
+            var prerequisite = ValidatePrerequisites(samples);
             if (prerequisite != PlaybackWindowsOutputBufferProcessingResult.Processed) return prerequisite;
             var start = !_audioStarted;
             var borrowed = _activation.BorrowActivatedResources(resources =>
@@ -242,6 +242,20 @@ public sealed class PlaybackWindowsOutputBufferProcessingBoundary : IDisposable
         if (streamGeneration != generation)
             return PlaybackWindowsOutputBufferProcessingResult.InitializationRequired;
         return PlaybackWindowsOutputBufferProcessingResult.Processed;
+    }
+
+    private PlaybackWindowsOutputBufferProcessingResult ValidatePrerequisites(
+        PlaybackWindowsAudioSampleBuffer samples)
+    {
+        var prerequisite = ValidatePrerequisites(video: false, samples.Generation);
+        if (prerequisite != PlaybackWindowsOutputBufferProcessingResult.Processed)
+            return prerequisite;
+        var stream = _initialization.Snapshot;
+        return stream.AudioSampleFormat == samples.SampleFormat &&
+            stream.AudioSampleRate == samples.SampleRate &&
+            stream.AudioChannelCount == samples.ChannelCount
+            ? PlaybackWindowsOutputBufferProcessingResult.Processed
+            : PlaybackWindowsOutputBufferProcessingResult.InvalidConfiguration;
     }
 
     private async ValueTask<PlaybackWindowsOutputBufferResetResult> ResetAsync(

@@ -16,8 +16,14 @@ public sealed class PlaybackWindowsOutputStreamInitializationBoundaryTests
 
         Assert.Equal(PlaybackWindowsOutputStreamInitializationResult.Initialized,
             await boundary.InitializeAsync(Video(7), Audio(11, format), default));
-        Assert.Equal(new(PlaybackWindowsOutputStreamState.Initialized,
-            PlaybackWindowsOutputStreamState.Initialized, 7, 11), boundary.Snapshot);
+        Assert.Equal(new PlaybackWindowsOutputStreamSnapshot(
+            PlaybackWindowsOutputStreamState.Initialized,
+            PlaybackWindowsOutputStreamState.Initialized, 7, 11)
+        {
+            AudioSampleFormat = format,
+            AudioSampleRate = 48_000,
+            AudioChannelCount = 2,
+        }, boundary.Snapshot);
         Assert.Empty(setup.ActivationNative.Released);
     }
 
@@ -124,6 +130,9 @@ public sealed class PlaybackWindowsOutputStreamInitializationBoundaryTests
         Assert.Equal(PlaybackWindowsOutputStreamResetResult.DeviceLost,
             await boundary.ResetAudioAsync(12, default));
         Assert.Equal(12, boundary.Snapshot.AudioGeneration);
+        Assert.Equal(default, boundary.Snapshot.AudioSampleFormat);
+        Assert.Equal(0, boundary.Snapshot.AudioSampleRate);
+        Assert.Equal(0, boundary.Snapshot.AudioChannelCount);
         Assert.Equal(PlaybackWindowsOutputStreamResetResult.DeviceLost,
             await boundary.ResetVideoAsync(8, default));
         Assert.Equal(8, boundary.Snapshot.VideoGeneration);

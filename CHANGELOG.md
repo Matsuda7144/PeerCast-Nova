@@ -5,6 +5,15 @@
 Detailed history through 0.0.8g remains preserved in Git history at commit
 `f078dab5372a45a8c577c1c802a697ab72b45c02` and in milestone ADR/PCN records.
 
+### 0.0.10d Phase 6 - Fail-closed audio render format contract
+
+- Required each audio buffer's sample format, sample rate, and channel count to exactly match the initialized WASAPI stream before any native buffer access.
+- Retained the initialized audio configuration in the managed stream snapshot and cleared it on reset or rollback.
+- Configured controlled retained-fixture runs for packed 32-bit float output, matching the managed conversion of the fixture's decoded planar-float AAC frames.
+- Added focused tests proving that format, rate, and channel mismatches cannot reach native audio processing.
+- Recorded the consumed one-run evidence from exact main `757b3ad2f429efe9add83201f2656bf284d236b9`: child exit `C0000005`, last stage `ReleaseBufferEntering`, no completed or terminal record, and operator observation `Audio audible: No` for silence.
+- Performed no additional readiness capture, physical output, probe, or diagnostic as part of this change.
+
 ### 0.0.10d Phase 6 - Bounded production cleanup stage diagnostics
 
 - Added fixed native-audio stage markers around decoder-generation, parser, and generation-factory cleanup inside the production composition stop boundary.

@@ -39,6 +39,9 @@ public sealed class SystemPlaybackControlledWindowsPhysicalRunOperationsTests
             expectedOutputRestriction,
             options.Generation.Scheduler.RestrictOutputToInitialKind);
         Assert.Equal(expectedMediaSelection, options.Production.MediaSelection);
+        Assert.Equal(
+            PlaybackDecodedAudioSampleFormat.PcmFloat32Interleaved,
+            options.AudioFormat);
     }
 
     [Fact]

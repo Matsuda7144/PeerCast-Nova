@@ -19,7 +19,8 @@ public sealed class PlaybackWindowsOutputBufferProcessingBoundaryTests
     [Fact]
     public async Task ProcessesFloatAudioAndStartsOnlyOnce()
     {
-        using var setup = await SetupAsync();
+        using var setup = await SetupAsync(
+            audioFormat: PlaybackDecodedAudioSampleFormat.PcmFloat32Interleaved);
         var native = new RecordingProcessor();
         using var boundary = Create(setup, native);
         var audio = Audio(PlaybackDecodedAudioSampleFormat.PcmFloat32Interleaved);
@@ -29,6 +30,34 @@ public sealed class PlaybackWindowsOutputBufferProcessingBoundaryTests
         Assert.Equal(PlaybackWindowsOutputBufferProcessingResult.Processed,
             await boundary.ProcessAudioAsync(audio, default));
         Assert.Equal([true, false], native.Starts);
+    }
+
+    [Theory]
+    [InlineData(PlaybackDecodedAudioSampleFormat.PcmFloat32Interleaved, 48_000, 2)]
+    [InlineData(PlaybackDecodedAudioSampleFormat.PcmSigned16Interleaved, 44_100, 2)]
+    [InlineData(PlaybackDecodedAudioSampleFormat.PcmSigned16Interleaved, 48_000, 1)]
+    public async Task AudioConfigurationMismatchFailsBeforeNativeAccess(
+        PlaybackDecodedAudioSampleFormat format,
+        int sampleRate,
+        int channelCount)
+    {
+        using var setup = await SetupAsync();
+        var native = new RecordingProcessor();
+        using var boundary = Create(setup, native);
+        var bytesPerSample =
+            format == PlaybackDecodedAudioSampleFormat.PcmSigned16Interleaved ? 2 : 4;
+        var audio = new PlaybackWindowsAudioSampleBuffer(
+            format,
+            sampleRate,
+            channelCount,
+            2,
+            new byte[2 * channelCount * bytesPerSample],
+            11);
+
+        Assert.Equal(
+            PlaybackWindowsOutputBufferProcessingResult.InvalidConfiguration,
+            await boundary.ProcessAudioAsync(audio, default));
+        Assert.Empty(native.Starts);
     }
 
     [Fact]
@@ -171,7 +200,10 @@ public sealed class PlaybackWindowsOutputBufferProcessingBoundaryTests
         Setup setup, IPlaybackWindowsOutputNativeBufferProcessor native) =>
         new(setup.Activation, setup.Binding, setup.Initialization, native, static () => true);
 
-    private static async Task<Setup> SetupAsync(bool initialize = true)
+    private static async Task<Setup> SetupAsync(
+        bool initialize = true,
+        PlaybackDecodedAudioSampleFormat audioFormat =
+            PlaybackDecodedAudioSampleFormat.PcmSigned16Interleaved)
     {
         var activation = new PlaybackWindowsOutputActivationBoundary(
             new RecordingActivation(), static () => true);
@@ -180,14 +212,14 @@ public sealed class PlaybackWindowsOutputBufferProcessingBoundaryTests
             activation, new RecordingBinding(), static () => true);
         Assert.Equal(PlaybackWindowsOutputBindingResult.Bound,
             await binding.ConfigureAsync(new(PlaybackDecodedVideoPixelFormat.Bgra32, 2, 2, 8, 7),
-                new(PlaybackDecodedAudioSampleFormat.PcmSigned16Interleaved, 48_000, 2, 11), default));
+                new(audioFormat, 48_000, 2, 11), default));
         var initialization = new PlaybackWindowsOutputStreamInitializationBoundary(
             activation, binding, new RecordingInitializer(), static () => true);
         if (initialize)
             Assert.Equal(PlaybackWindowsOutputStreamInitializationResult.Initialized,
                 await initialization.InitializeAsync(
                     new(1, 2, 2, PlaybackDecodedVideoPixelFormat.Bgra32, 7),
-                    new(PlaybackDecodedAudioSampleFormat.PcmSigned16Interleaved, 48_000, 2,
+                    new(audioFormat, 48_000, 2,
                         TimeSpan.FromMilliseconds(100), 11), default));
         return new(activation, binding, initialization);
     }

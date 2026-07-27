@@ -149,6 +149,7 @@ internal sealed class SystemPlaybackControlledWindowsPhysicalRunOperations :
         return new()
         {
             AudioNativeStageReporter = reporter,
+            AudioFormat = PlaybackDecodedAudioSampleFormat.PcmFloat32Interleaved,
             AudioBufferDuration = audioBufferDuration,
             Production = new()
             {

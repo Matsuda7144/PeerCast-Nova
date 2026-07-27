@@ -56,7 +56,12 @@ public readonly record struct PlaybackWindowsOutputStreamSnapshot(
     PlaybackWindowsOutputStreamState VideoState,
     PlaybackWindowsOutputStreamState AudioState,
     long VideoGeneration,
-    long AudioGeneration);
+    long AudioGeneration)
+{
+    public PlaybackDecodedAudioSampleFormat AudioSampleFormat { get; init; }
+    public int AudioSampleRate { get; init; }
+    public int AudioChannelCount { get; init; }
+}
 
 public sealed class PlaybackWindowsOutputStreamInitializationBoundary : IDisposable
 {
@@ -71,6 +76,9 @@ public sealed class PlaybackWindowsOutputStreamInitializationBoundary : IDisposa
     private PlaybackWindowsOutputStreamState _audioState;
     private long _videoGeneration;
     private long _audioGeneration;
+    private PlaybackDecodedAudioSampleFormat _audioSampleFormat;
+    private int _audioSampleRate;
+    private int _audioChannelCount;
     private bool _videoInitialized;
     private bool _audioInitialized;
     private volatile bool _isDisposed;
@@ -105,7 +113,12 @@ public sealed class PlaybackWindowsOutputStreamInitializationBoundary : IDisposa
     }
 
     public PlaybackWindowsOutputStreamSnapshot Snapshot => new(
-        _videoState, _audioState, _videoGeneration, _audioGeneration);
+        _videoState, _audioState, _videoGeneration, _audioGeneration)
+    {
+        AudioSampleFormat = _audioSampleFormat,
+        AudioSampleRate = _audioSampleRate,
+        AudioChannelCount = _audioChannelCount,
+    };
 
     public async ValueTask<PlaybackWindowsOutputStreamInitializationResult> InitializeAsync(
         PlaybackWindowsVideoStreamConfiguration video,
@@ -265,6 +278,9 @@ public sealed class PlaybackWindowsOutputStreamInitializationBoundary : IDisposa
         _audioInitialized = true;
         _audioState = PlaybackWindowsOutputStreamState.Initialized;
         _audioGeneration = audio.Generation;
+        _audioSampleFormat = audio.SampleFormat;
+        _audioSampleRate = audio.SampleRate;
+        _audioChannelCount = audio.ChannelCount;
         return PlaybackWindowsOutputResourceBorrowResult.Success;
     }
 
@@ -295,6 +311,7 @@ public sealed class PlaybackWindowsOutputStreamInitializationBoundary : IDisposa
                 _audioInitialized = false;
                 _audioState = PlaybackWindowsOutputStreamState.Uninitialized;
                 _audioGeneration = generation;
+                ClearAudioConfiguration();
             }
             return lost ? PlaybackWindowsOutputStreamResetResult.DeviceLost :
                 PlaybackWindowsOutputStreamResetResult.Reset;
@@ -312,6 +329,7 @@ public sealed class PlaybackWindowsOutputStreamInitializationBoundary : IDisposa
         });
         _audioState = PlaybackWindowsOutputStreamState.Uninitialized;
         _videoState = PlaybackWindowsOutputStreamState.Uninitialized;
+        ClearAudioConfiguration();
     }
 
     private void RollbackBorrowed(PlaybackWindowsOutputBorrowedResources resources)
@@ -336,6 +354,13 @@ public sealed class PlaybackWindowsOutputStreamInitializationBoundary : IDisposa
             else TryCleanup(() => _native.ResetAudio(resources.Wasapi));
             return PlaybackWindowsOutputResourceBorrowResult.Success;
         });
+    }
+
+    private void ClearAudioConfiguration()
+    {
+        _audioSampleFormat = default;
+        _audioSampleRate = 0;
+        _audioChannelCount = 0;
     }
 
     private async ValueTask<bool> EnterAsync(CancellationToken cancellationToken)
