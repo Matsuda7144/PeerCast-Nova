@@ -8,9 +8,11 @@ Detailed history through 0.0.8g remains preserved in Git history at commit
 ### 0.0.10d Phase 6 - Bounded readiness failure reasons
 
 - Allowed the readiness capture wrapper to republish an inner failure reason only when stderr has the exact three-line non-authorizing shape and the reason exactly matches one of the readiness script's 19 fixed gate failures.
+- Captured the inner Windows PowerShell process through direct stdout and stderr file redirection so parent-shell error-record decoration cannot corrupt that exact shape.
 - Kept unknown, unexpected, additional, missing, oversized, or otherwise noncanonical inner stderr behind the existing generic failure.
 - Continued to suppress raw stderr, paths, command output, exceptions, and arbitrary child text.
 - Added a contract test that derives every fixed inner gate reason and requires the wrapper allowlist to remain synchronized.
+- Recorded the consumed one-time readiness capture from exact main `14af68e564edb4dda6b5d627f06537722bb08748`: exit `1`, generic inner-script failure, no retained record, zero physical runs, and no activation of the conditional physical authorization.
 - Performed no readiness capture, physical output, standalone preflight, probe, or diagnostic as part of this change.
 
 ### 0.0.10d Phase 6 - Fail-closed audio render format contract

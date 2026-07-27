@@ -138,6 +138,28 @@ function Get-AllowlistedReadinessFailureReason {
     return $null
 }
 
+function ConvertTo-WindowsProcessArgument {
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
+        [string]$Value
+    )
+
+    if ($Value.Length -gt 0 -and $Value -notmatch '[\s"]') {
+        return $Value
+    }
+
+    $escaped = [System.Text.RegularExpressions.Regex]::Replace(
+        $Value,
+        '(\\*)"',
+        '$1$1\"')
+    $escaped = [System.Text.RegularExpressions.Regex]::Replace(
+        $escaped,
+        '(\\+)$',
+        '$1$1')
+    return '"' + $escaped + '"'
+}
+
 function Test-IsUnderPath {
     param(
         [Parameter(Mandatory = $true)][string]$Candidate,
@@ -304,17 +326,20 @@ try {
         $ObservationHoldMilliseconds.ToString([System.Globalization.CultureInfo]::InvariantCulture)
     )
 
-    $nativeErrorActionPreference = $ErrorActionPreference
-    try {
-        $ErrorActionPreference = 'Continue'
-        & 'powershell.exe' @readinessArguments `
-            1> $readinessStandardOutputPath `
-            2> $readinessStandardErrorPath
-        $readinessExitCode = $LASTEXITCODE
-    }
-    finally {
-        $ErrorActionPreference = $nativeErrorActionPreference
-    }
+    $readinessCommandLine = @(
+        $readinessArguments |
+            ForEach-Object {
+                ConvertTo-WindowsProcessArgument -Value ([string]$_)
+            }) -join ' '
+    $readinessProcess = Start-Process `
+        -FilePath 'powershell.exe' `
+        -ArgumentList $readinessCommandLine `
+        -NoNewWindow `
+        -Wait `
+        -PassThru `
+        -RedirectStandardOutput $readinessStandardOutputPath `
+        -RedirectStandardError $readinessStandardErrorPath
+    $readinessExitCode = $readinessProcess.ExitCode
 
     $readinessOutputBytes = [long](
         Get-Item -LiteralPath $readinessStandardOutputPath).Length

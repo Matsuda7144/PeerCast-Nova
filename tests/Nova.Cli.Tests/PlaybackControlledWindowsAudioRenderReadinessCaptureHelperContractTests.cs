@@ -129,6 +129,30 @@ public sealed class PlaybackControlledWindowsAudioRenderReadinessCaptureHelperCo
             "'the readiness script reported: ' + $readinessFailureReason",
             script,
             StringComparison.Ordinal);
+        Assert.Contains(
+            "ConvertTo-WindowsProcessArgument",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "Start-Process",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "-RedirectStandardOutput $readinessStandardOutputPath",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "-RedirectStandardError $readinessStandardErrorPath",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "$readinessExitCode = $readinessProcess.ExitCode",
+            script,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "& 'powershell.exe' @readinessArguments",
+            script,
+            StringComparison.Ordinal);
         Assert.DoesNotContain(
             "WriteLine($errorLines",
             script,
