@@ -56,6 +56,31 @@ $maximumNativeOutputBytes = 32 * 1024
 $maximumNativeErrorBytes = 32 * 1024
 $validationPrefix = 'Controlled render readiness capture rejected: '
 $validationMarker = 'PeerCastNovaControlledRenderReadinessCaptureValidation'
+$readinessFailurePrefix = 'Controlled render readiness rejected: '
+$readinessFailurePhysicalClaim = 'Physical runs executed by this command: No'
+$readinessFailureAuthorizationClaim =
+    'Readiness does not authorize physical execution.'
+$allowedReadinessFailureReasons = @(
+    'Windows is required.',
+    'run this command from the PeerCast Nova repository.',
+    'the checked-out branch must be main.',
+    'HEAD does not match the reviewed commit.',
+    'the repository working tree must be clean.',
+    'the external runtime directory is unavailable.',
+    'the retained controlled fixture is unavailable.',
+    'the accepted video record is unavailable.',
+    'every future output record path must be fresh.',
+    'every future output record parent directory must exist.',
+    'future output record paths must be pairwise distinct.',
+    'runtime, fixture, video record, and future outputs must remain repository-external.',
+    'the controlled fixture byte count does not match.',
+    'the controlled fixture SHA-256 does not match.',
+    'solution restore failed.',
+    'controlled Windows runner build failed.',
+    'the controlled Windows runner assembly is unavailable.',
+    'the video record gate was not accepted.',
+    'the repository changed during readiness validation.'
+)
 
 function Stop-CaptureValidation {
     param([Parameter(Mandatory = $true)][string]$Message)
@@ -78,6 +103,38 @@ function Get-CaptureValidationFailure {
         }
         $current = $current.InnerException
     }
+    return $null
+}
+
+function Get-AllowlistedReadinessFailureReason {
+    param(
+        [Parameter(Mandatory = $true)][string]$ErrorPath,
+        [Parameter(Mandatory = $true)][long]$ErrorBytes
+    )
+
+    if ($ErrorBytes -le 0 -or $ErrorBytes -gt $maximumReadinessErrorBytes) {
+        return $null
+    }
+
+    try {
+        $errorLines = @(Get-Content -LiteralPath $ErrorPath)
+    }
+    catch {
+        return $null
+    }
+
+    if ($errorLines.Count -ne 3 -or
+        $errorLines[1] -cne $readinessFailurePhysicalClaim -or
+        $errorLines[2] -cne $readinessFailureAuthorizationClaim) {
+        return $null
+    }
+
+    foreach ($reason in $allowedReadinessFailureReasons) {
+        if ($errorLines[0] -ceq ($readinessFailurePrefix + $reason)) {
+            return $reason
+        }
+    }
+
     return $null
 }
 
@@ -264,6 +321,13 @@ try {
     $readinessErrorBytes = [long](
         Get-Item -LiteralPath $readinessStandardErrorPath).Length
     if ($readinessExitCode -ne 0) {
+        $readinessFailureReason = Get-AllowlistedReadinessFailureReason `
+            -ErrorPath $readinessStandardErrorPath `
+            -ErrorBytes $readinessErrorBytes
+        if ($null -ne $readinessFailureReason) {
+            Stop-CaptureValidation (
+                'the readiness script reported: ' + $readinessFailureReason)
+        }
         Stop-CaptureValidation 'the readiness script did not succeed.'
     }
     if ($readinessOutputBytes -le 0 -or

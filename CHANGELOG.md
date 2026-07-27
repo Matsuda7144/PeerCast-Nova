@@ -5,6 +5,14 @@
 Detailed history through 0.0.8g remains preserved in Git history at commit
 `f078dab5372a45a8c577c1c802a697ab72b45c02` and in milestone ADR/PCN records.
 
+### 0.0.10d Phase 6 - Bounded readiness failure reasons
+
+- Allowed the readiness capture wrapper to republish an inner failure reason only when stderr has the exact three-line non-authorizing shape and the reason exactly matches one of the readiness script's 19 fixed gate failures.
+- Kept unknown, unexpected, additional, missing, oversized, or otherwise noncanonical inner stderr behind the existing generic failure.
+- Continued to suppress raw stderr, paths, command output, exceptions, and arbitrary child text.
+- Added a contract test that derives every fixed inner gate reason and requires the wrapper allowlist to remain synchronized.
+- Performed no readiness capture, physical output, standalone preflight, probe, or diagnostic as part of this change.
+
 ### 0.0.10d Phase 6 - Fail-closed audio render format contract
 
 - Required each audio buffer's sample format, sample rate, and channel count to exactly match the initialized WASAPI stream before any native buffer access.

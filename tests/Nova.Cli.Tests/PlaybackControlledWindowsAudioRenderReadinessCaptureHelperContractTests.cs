@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace PeerCast.Nova.Cli.Tests;
 
 public sealed class PlaybackControlledWindowsAudioRenderReadinessCaptureHelperContractTests
@@ -103,9 +105,65 @@ public sealed class PlaybackControlledWindowsAudioRenderReadinessCaptureHelperCo
             Assert.Contains(fragment, script, StringComparison.Ordinal);
         }
 
-        Assert.DoesNotContain("Get-Content -LiteralPath $readinessStandardErrorPath", script);
+        Assert.Contains(
+            "Get-Content -LiteralPath $ErrorPath",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "$errorLines.Count -ne 3",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "$errorLines[1] -cne $readinessFailurePhysicalClaim",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "$errorLines[2] -cne $readinessFailureAuthorizationClaim",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "$errorLines[0] -ceq ($readinessFailurePrefix + $reason)",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "'the readiness script reported: ' + $readinessFailureReason",
+            script,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "WriteLine($errorLines",
+            script,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "Write-Output $errorLines",
+            script,
+            StringComparison.Ordinal);
         Assert.DoesNotContain("Write-Output $readinessRecordFull", script);
         Assert.DoesNotContain("Write-Output $canonicalReadinessText", script);
+    }
+
+    [Fact]
+    public void Capture_wrapper_allowlists_every_fixed_inner_readiness_gate_reason()
+    {
+        var wrapper = File.ReadAllText(FindScript());
+        var readiness = File.ReadAllText(FindReadinessScript());
+        var reasons = Regex.Matches(
+                readiness,
+                "Stop-ReadinessValidation '([^']+)'",
+                RegexOptions.CultureInvariant)
+            .Select(match => match.Groups[1].Value)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(19, reasons.Length);
+        foreach (var reason in reasons)
+        {
+            Assert.Contains($"'{reason}'", wrapper, StringComparison.Ordinal);
+        }
+
+        Assert.DoesNotContain(
+            "'unexpected readiness failure.'",
+            wrapper,
+            StringComparison.Ordinal);
     }
 
     private static string FindScript()
@@ -127,6 +185,11 @@ public sealed class PlaybackControlledWindowsAudioRenderReadinessCaptureHelperCo
 
         throw new FileNotFoundException("The readiness capture wrapper was not found.");
     }
+
+    private static string FindReadinessScript() =>
+        Path.Combine(
+            Path.GetDirectoryName(FindScript())!,
+            "Test-ControlledWindowsPhysicalAudioRenderEvidenceReadiness.ps1");
 
     private static int Count(string value, string fragment)
     {
