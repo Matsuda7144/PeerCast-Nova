@@ -138,7 +138,7 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureComm
             Environment.NewLine,
             "private path C:\\secret",
             "PCN-AUDIO-NATIVE-STAGE: StartCompleted",
-            "PCN-AUDIO-NATIVE-STAGE: ProductionCleanupEntering",
+            "PCN-AUDIO-NATIVE-STAGE: ProductionGenerationCleanupEntering",
             "PCN-AUDIO-NATIVE-STAGE: PrivateStage");
         var executor = new RecordingExecutor(
             unchecked((int)0xC0000374),
@@ -150,7 +150,7 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureComm
         Assert.Equal(2, result);
         var failure = File.ReadAllText(environment.FailureRecord);
         Assert.Contains(
-            "Last-Native-Audio-Stage: ProductionCleanupEntering\n",
+            "Last-Native-Audio-Stage: ProductionGenerationCleanupEntering\n",
             failure);
         Assert.DoesNotContain("StartCompleted", failure, StringComparison.Ordinal);
         Assert.DoesNotContain("PrivateStage", failure, StringComparison.Ordinal);

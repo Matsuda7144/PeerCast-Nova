@@ -179,6 +179,7 @@ public sealed class PlaybackProductionPcpFlvCompositionBoundary :
     private readonly PlaybackPcpFlvAwaitedDecodeOptions _options;
     private readonly PlaybackOneEventFinalEosFlvParser _parser;
     private readonly IPlaybackProductionDecoderGenerationCreator _factory;
+    private readonly IPlaybackWindowsAudioNativeStageReporter _audioNativeStageReporter;
 
     private PlaybackProductionDecoderGeneration? _generation;
     private PlaybackProductionPcpFlvCompositionState _state =
@@ -224,6 +225,7 @@ public sealed class PlaybackProductionPcpFlvCompositionBoundary :
                     policy,
                     generationOptions,
                     clock)),
+            NullPlaybackWindowsAudioNativeStageReporter.Instance,
             initialPacketSequence,
             options,
             parserOptions)
@@ -236,6 +238,7 @@ public sealed class PlaybackProductionPcpFlvCompositionBoundary :
         string runtimeDirectory,
         PlaybackWindowsOutputBufferProcessingBoundary output,
         IPlaybackProductionDecoderGenerationCreator factory,
+        IPlaybackWindowsAudioNativeStageReporter? audioNativeStageReporter = null,
         long initialPacketSequence = 0,
         PlaybackPcpFlvAwaitedDecodeOptions? options = null,
         PlaybackBoundedFlvParserOptions? parserOptions = null)
@@ -279,6 +282,8 @@ public sealed class PlaybackProductionPcpFlvCompositionBoundary :
         _runtimeDirectory = runtimeDirectory;
         _output = output;
         _factory = factory;
+        _audioNativeStageReporter = audioNativeStageReporter ??
+            NullPlaybackWindowsAudioNativeStageReporter.Instance;
         _nextPacketSequence = initialPacketSequence;
         _parser = new PlaybackOneEventFinalEosFlvParser(parserOptions);
     }
@@ -1389,6 +1394,8 @@ public sealed class PlaybackProductionPcpFlvCompositionBoundary :
         _generation = null;
         if (generation is not null)
         {
+            _audioNativeStageReporter.Report(
+                PlaybackWindowsAudioNativeStage.ProductionGenerationCleanupEntering);
             try
             {
                 await generation.StopAsync().ConfigureAwait(false);
@@ -1397,8 +1404,12 @@ public sealed class PlaybackProductionPcpFlvCompositionBoundary :
             {
                 // Preserve the first fixed terminal result.
             }
+            _audioNativeStageReporter.Report(
+                PlaybackWindowsAudioNativeStage.ProductionGenerationCleanupCompleted);
         }
 
+        _audioNativeStageReporter.Report(
+            PlaybackWindowsAudioNativeStage.ProductionParserCleanupEntering);
         try
         {
             _parser.Dispose();
@@ -1407,7 +1418,11 @@ public sealed class PlaybackProductionPcpFlvCompositionBoundary :
         {
             // Preserve the first fixed terminal result.
         }
+        _audioNativeStageReporter.Report(
+            PlaybackWindowsAudioNativeStage.ProductionParserCleanupCompleted);
 
+        _audioNativeStageReporter.Report(
+            PlaybackWindowsAudioNativeStage.ProductionFactoryCleanupEntering);
         try
         {
             await _factory.DisposeAsync().ConfigureAwait(false);
@@ -1416,6 +1431,8 @@ public sealed class PlaybackProductionPcpFlvCompositionBoundary :
         {
             // Preserve the first fixed terminal result.
         }
+        _audioNativeStageReporter.Report(
+            PlaybackWindowsAudioNativeStage.ProductionFactoryCleanupCompleted);
     }
 
     private void ValidatePacket(PcpChannelPacket packet)

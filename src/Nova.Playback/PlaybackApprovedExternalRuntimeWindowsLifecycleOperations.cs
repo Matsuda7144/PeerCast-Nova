@@ -216,6 +216,7 @@ internal sealed class PlaybackApprovedExternalRuntimeWindowsLifecycleOperations 
                 _runtimeDirectory,
                 buffers,
                 creator,
+                _options.AudioNativeStageReporter,
                 _options.InitialPacketSequence,
                 _options.Production,
                 _options.Parser);

@@ -244,7 +244,8 @@ public sealed class PlaybackProductionPcpFlvCompositionBoundaryTests
     {
         using var output = new OutputHarness();
         var creator = new FakeCreator();
-        await using var boundary = CreateBoundary(creator, output.Output);
+        var reporter = new RecordingStageReporter();
+        await using var boundary = CreateBoundary(creator, output.Output, reporter);
         await boundary.ConsumeAsync(CreatePacket(0, BuildBootstrap()), default);
         var generation = Assert.Single(creator.Generations);
 
@@ -259,17 +260,36 @@ public sealed class PlaybackProductionPcpFlvCompositionBoundaryTests
         Assert.NotEqual(
             PlaybackWindowsOutputBufferState.Disposed,
             output.Output.Snapshot.AudioState);
+        Assert.Equal(
+            [
+                PlaybackWindowsAudioNativeStage.ProductionGenerationCleanupEntering,
+                PlaybackWindowsAudioNativeStage.ProductionGenerationCleanupCompleted,
+                PlaybackWindowsAudioNativeStage.ProductionParserCleanupEntering,
+                PlaybackWindowsAudioNativeStage.ProductionParserCleanupCompleted,
+                PlaybackWindowsAudioNativeStage.ProductionFactoryCleanupEntering,
+                PlaybackWindowsAudioNativeStage.ProductionFactoryCleanupCompleted,
+            ],
+            reporter.Stages);
     }
 
     private static PlaybackProductionPcpFlvCompositionBoundary CreateBoundary(
         FakeCreator creator,
-        PlaybackWindowsOutputBufferProcessingBoundary output) =>
+        PlaybackWindowsOutputBufferProcessingBoundary output,
+        IPlaybackWindowsAudioNativeStageReporter? reporter = null) =>
         new(
             ChannelId,
             SessionId,
             "C:\\verified-runtime",
             output,
-            creator);
+            creator,
+            reporter);
+
+    private sealed class RecordingStageReporter : IPlaybackWindowsAudioNativeStageReporter
+    {
+        public List<PlaybackWindowsAudioNativeStage> Stages { get; } = [];
+
+        public void Report(PlaybackWindowsAudioNativeStage stage) => Stages.Add(stage);
+    }
 
     private static byte[] ConcatForTest(params byte[][] values)
     {

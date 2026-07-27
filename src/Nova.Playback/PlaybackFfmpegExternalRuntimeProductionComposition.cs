@@ -144,6 +144,7 @@ public static class PlaybackFfmpegExternalRuntimeComposition
             runtimeDirectory,
             output,
             new PlaybackFfmpegExternalRuntimeGenerationCreator(factory),
+            audioNativeStageReporter: null,
             initialPacketSequence,
             options,
             parserOptions);

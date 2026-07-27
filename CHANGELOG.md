@@ -5,6 +5,15 @@
 Detailed history through 0.0.8g remains preserved in Git history at commit
 `f078dab5372a45a8c577c1c802a697ab72b45c02` and in milestone ADR/PCN records.
 
+### 0.0.10d Phase 6 - Bounded production cleanup stage diagnostics
+
+- Added fixed native-audio stage markers around decoder-generation, parser, and generation-factory cleanup inside the production composition stop boundary.
+- Preserved the existing outer production, buffer, stream, binding, and activation cleanup markers and the exact sanitized failure-record schema.
+- Routed the existing non-perturbing render-evidence reporter into production cleanup only; ordinary paths retain the null reporter.
+- Added exact allowlist and production cleanup ordering tests without loading the external runtime or starting physical output.
+- Recorded the consumed one-run evidence from exact main `95ed72c1e02ca73052f236c4ab93fd2ed94f037e`: child exit `C0000374`, last stage `ProductionCleanupEntering`, no completed or terminal record, and operator observation `Audio audible: No` for noise-only output.
+- The new sub-stages are prospective diagnostics only and do not authorize or repeat that physical run.
+
 ### 0.0.10d Phase 6 - Bounded terminal record rejection diagnostics
 
 - Added fixed, reviewed terminal-record rejection categories for projection, identity and bounds, runner and lifecycle state, terminal claims, pre-cleanup and post-stop checkpoints, trace counters, cleanup stability, and canonical size.
