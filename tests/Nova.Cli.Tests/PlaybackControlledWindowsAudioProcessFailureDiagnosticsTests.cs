@@ -154,4 +154,31 @@ public sealed class PlaybackControlledWindowsAudioProcessFailureDiagnosticsTests
             PlaybackControlledWindowsAudioProcessFailureDiagnostics
                 .GetControlledRunResultOrNone(standardOutput));
     }
+
+    [Theory]
+    [InlineData(
+        "PCN-AUDIO-TERMINAL-RECORD-REJECTION: TraceCounterConsistencyRejected\r\n",
+        "TraceCounterConsistencyRejected")]
+    [InlineData(
+        "private stderr\r\nPCN-AUDIO-TERMINAL-RECORD-REJECTION: PreCleanupCheckpointRejected\r\n",
+        "PreCleanupCheckpointRejected")]
+    [InlineData(
+        "PCN-AUDIO-TERMINAL-RECORD-REJECTION: None\r\n",
+        "None")]
+    [InlineData(
+        "PCN-AUDIO-TERMINAL-RECORD-REJECTION: private\r\n",
+        "None")]
+    [InlineData(
+        "PCN-AUDIO-TERMINAL-RECORD-REJECTION: PreCleanupCheckpointRejected\r\n" +
+        "PCN-AUDIO-TERMINAL-RECORD-REJECTION: PostStopCheckpointRejected\r\n",
+        "None")]
+    public void Only_one_exact_allowlisted_terminal_rejection_is_retained(
+        string standardError,
+        string expected)
+    {
+        Assert.Equal(
+            expected,
+            PlaybackControlledWindowsAudioProcessFailureDiagnostics
+                .GetTerminalRecordRejectionOrNone(standardError));
+    }
 }

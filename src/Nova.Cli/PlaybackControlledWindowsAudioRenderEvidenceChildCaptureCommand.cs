@@ -194,6 +194,7 @@ internal sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureCo
                     stderrByteCount: 0,
                     lastNativeAudioStage: "None",
                     controlledRunResult: "None",
+                    terminalRecordRejection: "None",
                     childProcessResultCaptured: false)
                 .ConfigureAwait(false);
         }
@@ -211,6 +212,7 @@ internal sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureCo
         var controlledRunResult =
             PlaybackControlledWindowsAudioProcessFailureDiagnostics
                 .GetControlledRunResultOrNone(standardOutput);
+        var terminalRecordRejection = GetTerminalRecordRejection(child);
 
         if (IsCompletedRecord(child.ExitCode, standardOutput, options))
         {
@@ -244,6 +246,7 @@ internal sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureCo
                 child.StandardError.LongLength,
                 lastNativeAudioStage,
                 controlledRunResult,
+                terminalRecordRejection,
                 childProcessResultCaptured: true)
             .ConfigureAwait(false);
     }
@@ -259,6 +262,7 @@ internal sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureCo
             stderrByteCount,
             lastNativeAudioStage,
             controlledRunResult: "None",
+            terminalRecordRejection: "None",
             childProcessResultCaptured: true);
 
     internal static string SerializeFailureRecord(
@@ -267,6 +271,7 @@ internal sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureCo
         long stderrByteCount,
         string lastNativeAudioStage,
         string controlledRunResult,
+        string terminalRecordRejection,
         bool childProcessResultCaptured)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(stdoutByteCount);
@@ -285,6 +290,7 @@ internal sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureCo
                 childProcessResultCaptured)
             {
                 ControlledRunResult = controlledRunResult,
+                TerminalRecordRejection = terminalRecordRejection,
             });
     }
 
@@ -310,6 +316,7 @@ internal sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureCo
                     child.StandardError.LongLength,
                     GetLastNativeAudioStage(child),
                     GetControlledRunResult(child),
+                    GetTerminalRecordRejection(child),
                     childProcessResultCaptured: true)
                 .ConfigureAwait(false);
         }
@@ -322,6 +329,7 @@ internal sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureCo
         long stderrByteCount,
         string lastNativeAudioStage,
         string controlledRunResult,
+        string terminalRecordRejection,
         bool childProcessResultCaptured)
     {
         var failureRecord = SerializeFailureRecord(
@@ -330,6 +338,7 @@ internal sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureCo
             stderrByteCount,
             lastNativeAudioStage,
             controlledRunResult,
+            terminalRecordRejection,
             childProcessResultCaptured);
         try
         {
@@ -375,6 +384,21 @@ internal sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureCo
         {
             return PlaybackControlledWindowsAudioProcessFailureDiagnostics
                 .GetControlledRunResultOrNone(StrictUtf8.GetString(child.StandardOutput));
+        }
+        catch (DecoderFallbackException)
+        {
+            return "None";
+        }
+    }
+
+    private static string GetTerminalRecordRejection(
+        PlaybackControlledWindowsAudioChildProcessResult child)
+    {
+        try
+        {
+            return PlaybackControlledWindowsAudioProcessFailureDiagnostics
+                .GetTerminalRecordRejectionOrNone(
+                    StrictUtf8.GetString(child.StandardError));
         }
         catch (DecoderFallbackException)
         {

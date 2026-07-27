@@ -18,10 +18,18 @@ public static class PlaybackControlledWindowsAudioRenderEvidenceCommand
     public const int RunFailureExitCode = 1;
     public const int InvalidConfigurationExitCode = 2;
 
+    public static ValueTask<PlaybackControlledWindowsAudioRenderEvidenceCommandResult>
+        RunAsync(
+            string[] arguments,
+            TextWriter output,
+            CancellationToken cancellationToken = default) =>
+        RunAsync(arguments, output, diagnosticOutput: null, cancellationToken);
+
     public static async ValueTask<PlaybackControlledWindowsAudioRenderEvidenceCommandResult>
         RunAsync(
             string[] arguments,
             TextWriter output,
+            TextWriter? diagnosticOutput,
             CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(arguments);
@@ -42,7 +50,11 @@ public static class PlaybackControlledWindowsAudioRenderEvidenceCommand
         var snapshot = composition.Snapshot;
         if (result != PlaybackControlledWindowsPhysicalRunResult.Completed)
         {
-            if (TryCreateTerminalRecord(snapshot, options, out var terminalRecord))
+            if (TryCreateTerminalRecord(
+                    snapshot,
+                    options,
+                    out var terminalRecord,
+                    out var rejection))
             {
                 await PlaybackControlledWindowsAudioTerminalRenderRecordCodec.WriteAsync(
                         output,
@@ -52,6 +64,14 @@ public static class PlaybackControlledWindowsAudioRenderEvidenceCommand
             }
             else
             {
+                if (diagnosticOutput is not null)
+                {
+                    await diagnosticOutput.WriteLineAsync(
+                            "PCN-AUDIO-TERMINAL-RECORD-REJECTION: " + rejection)
+                        .ConfigureAwait(false);
+                    await diagnosticOutput.FlushAsync(CancellationToken.None)
+                        .ConfigureAwait(false);
+                }
                 await output.WriteLineAsync($"Result: {result}").ConfigureAwait(false);
             }
 
@@ -118,7 +138,14 @@ public static class PlaybackControlledWindowsAudioRenderEvidenceCommand
     internal static bool TryCreateTerminalRecord(
         PlaybackControlledWindowsPhysicalRunSnapshot snapshot,
         PlaybackControlledWindowsPhysicalRunOptions options,
-        out PlaybackControlledWindowsAudioTerminalRenderRecord terminalRecord)
+        out PlaybackControlledWindowsAudioTerminalRenderRecord terminalRecord) =>
+        TryCreateTerminalRecord(snapshot, options, out terminalRecord, out _);
+
+    internal static bool TryCreateTerminalRecord(
+        PlaybackControlledWindowsPhysicalRunSnapshot snapshot,
+        PlaybackControlledWindowsPhysicalRunOptions options,
+        out PlaybackControlledWindowsAudioTerminalRenderRecord terminalRecord,
+        out PlaybackControlledWindowsAudioTerminalRecordRejection rejection)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         ArgumentNullException.ThrowIfNull(options);
@@ -130,15 +157,29 @@ public static class PlaybackControlledWindowsAudioRenderEvidenceCommand
                 options.ObservationHoldDuration,
                 options.AudioBufferDuration,
                 physicalRunStarted: true);
+            rejection =
+                PlaybackControlledWindowsAudioTerminalRenderRecordCodec
+                    .GetValidationFailure(candidate);
+            if (rejection != PlaybackControlledWindowsAudioTerminalRecordRejection.None)
+            {
+                terminalRecord = null!;
+                return false;
+            }
             _ = PlaybackControlledWindowsAudioTerminalRenderRecordCodec.Serialize(candidate);
             terminalRecord = candidate;
+            rejection = PlaybackControlledWindowsAudioTerminalRecordRejection.None;
             return true;
         }
         catch (ArgumentException)
         {
+            rejection =
+                PlaybackControlledWindowsAudioTerminalRecordRejection.ProjectionRejected;
         }
         catch (InvalidOperationException)
         {
+            rejection =
+                PlaybackControlledWindowsAudioTerminalRecordRejection
+                    .CanonicalSizeLimitRejected;
         }
 
         terminalRecord = null!;

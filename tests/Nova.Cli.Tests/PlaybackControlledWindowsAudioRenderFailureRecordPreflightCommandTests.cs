@@ -23,29 +23,33 @@ public sealed class PlaybackControlledWindowsAudioRenderFailureRecordPreflightCo
     }
 
     [Fact]
-    public void Child_failure_v4_has_exact_canonical_shape()
+    public void Child_failure_v5_has_exact_canonical_shape()
     {
         var record = ChildRecord(unchecked((int)0xC0000374), 0, 184) with
         {
             LastNativeAudioStage = "ProductionCleanupEntering",
             ControlledRunResult = "DeliveryRejected",
+            TerminalRecordRejection = "TraceCounterConsistencyRejected",
         };
 
         var serialized =
             PlaybackControlledWindowsAudioRenderChildFailureRecordCodec.Serialize(record);
         var lines = serialized.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
-        Assert.Equal(20, lines.Length);
+        Assert.Equal(21, lines.Length);
         Assert.Equal(
-            "PEERCAST-NOVA-CONTROLLED-WINDOWS-AUDIO-RENDER-EVIDENCE-FAILURE 4",
+            "PEERCAST-NOVA-CONTROLLED-WINDOWS-AUDIO-RENDER-EVIDENCE-FAILURE 5",
             lines[0]);
         Assert.Equal(
             "Last-Native-Audio-Stage: ProductionCleanupEntering",
             lines[9]);
         Assert.Equal("Controlled-Run-Result: DeliveryRejected", lines[10]);
         Assert.Equal(
+            "Terminal-Record-Rejection: TraceCounterConsistencyRejected",
+            lines[11]);
+        Assert.Equal(
             "END-PEERCAST-NOVA-CONTROLLED-WINDOWS-AUDIO-RENDER-EVIDENCE-FAILURE",
-            lines[19]);
+            lines[20]);
         Assert.EndsWith("\n", serialized, StringComparison.Ordinal);
 
         var extraLine = serialized.Insert(
@@ -90,6 +94,12 @@ public sealed class PlaybackControlledWindowsAudioRenderFailureRecordPreflightCo
     [InlineData("Last-Native-Audio-Stage: None", "Last-Native-Audio-Stage: 10")]
     [InlineData("Controlled-Run-Result: None", "Controlled-Run-Result: PrivateResult")]
     [InlineData("Controlled-Run-Result: None", "Controlled-Run-Result: None\nLeaked: value")]
+    [InlineData(
+        "Terminal-Record-Rejection: None",
+        "Terminal-Record-Rejection: PrivateReason")]
+    [InlineData(
+        "Terminal-Record-Rejection: None",
+        "Terminal-Record-Rejection: None\nLeaked: value")]
     public void Child_failure_codec_rejects_contradictions(
         string original,
         string replacement)
@@ -151,6 +161,36 @@ public sealed class PlaybackControlledWindowsAudioRenderFailureRecordPreflightCo
             serialized,
             StringComparison.Ordinal);
         Assert.DoesNotContain("Controlled-Run-Result:", serialized, StringComparison.Ordinal);
+        Assert.True(
+            PlaybackControlledWindowsAudioRenderChildFailureRecordCodec.TryParse(
+                serialized,
+                out var parsed));
+        Assert.Equal(previous, parsed);
+    }
+
+    [Fact]
+    public void Child_failure_codec_accepts_canonical_previous_v4_record()
+    {
+        var previous = ChildRecord(1, 26, 1771) with
+        {
+            SchemaVersion = 4,
+            LastNativeAudioStage = "ActivationCleanupCompleted",
+            ControlledRunResult = "DeliveryRejected",
+            TerminalRecordRejection = "None",
+        };
+
+        var serialized =
+            PlaybackControlledWindowsAudioRenderChildFailureRecordCodec.Serialize(previous);
+
+        Assert.StartsWith(
+            "PEERCAST-NOVA-CONTROLLED-WINDOWS-AUDIO-RENDER-EVIDENCE-FAILURE 4\n",
+            serialized,
+            StringComparison.Ordinal);
+        Assert.Contains("Controlled-Run-Result: DeliveryRejected\n", serialized);
+        Assert.DoesNotContain(
+            "Terminal-Record-Rejection:",
+            serialized,
+            StringComparison.Ordinal);
         Assert.True(
             PlaybackControlledWindowsAudioRenderChildFailureRecordCodec.TryParse(
                 serialized,
@@ -277,6 +317,7 @@ public sealed class PlaybackControlledWindowsAudioRenderFailureRecordPreflightCo
                         "Stderr-Bytes: 29",
                         "Last-Native-Audio-Stage: None",
                         "Controlled-Run-Result: None",
+                        "Terminal-Record-Rejection: None",
                         "Child-Process-Result-Captured: True",
                         "Helper-Failure-Phase: None",
                         "Helper-Failure-Category: None",

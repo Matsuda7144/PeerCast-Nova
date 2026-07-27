@@ -108,16 +108,17 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceCheckpointTests
             DeliveryResult =
                 PlaybackApprovedExternalRuntimeWindowsLifecycleResult.RetainedWouldBlock,
         };
+        var options = new PlaybackControlledWindowsPhysicalRunOptions
+        {
+            Kind = PlaybackControlledWindowsOutputValidationKind.Audio,
+            RuntimeDirectory = "C:\\controlled-runtime",
+            FixturePath = "C:\\controlled-fixture.flv",
+            FixtureSha256 = FixtureSha256,
+            MaximumDecodeOperations = 4,
+            MaximumDeliveryOperations = 4,
+        };
         await using var composition = new PlaybackControlledWindowsPhysicalRunComposition(
-            new()
-            {
-                Kind = PlaybackControlledWindowsOutputValidationKind.Audio,
-                RuntimeDirectory = "C:\\controlled-runtime",
-                FixturePath = "C:\\controlled-fixture.flv",
-                FixtureSha256 = FixtureSha256,
-                MaximumDecodeOperations = 4,
-                MaximumDeliveryOperations = 4,
-            },
+            options,
             operations);
 
         var result = await composition.RunAsync();
@@ -139,6 +140,17 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceCheckpointTests
         Assert.Equal(1, operations.ReceiveCount);
         Assert.Equal(1, operations.DeliveryCount);
         Assert.Equal(ExpectedRejectedLog, operations.Log);
+
+        Assert.False(
+            PlaybackControlledWindowsAudioRenderEvidenceCommand.TryCreateTerminalRecord(
+                snapshot,
+                options,
+                out _,
+                out var rejection));
+        Assert.Equal(
+            PlaybackControlledWindowsAudioTerminalRecordRejection
+                .TraceCounterConsistencyRejected,
+            rejection);
     }
 
     private static PlaybackApprovedExternalRuntimeWindowsLifecycleSnapshot CreateLifecycle(
@@ -280,6 +292,7 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceCheckpointTests
         IPlaybackControlledWindowsPhysicalRunOperations
     {
         private bool _lifecycleStopped;
+        private bool _runnerStopped;
 
         public PlaybackApprovedExternalRuntimeWindowsLifecycleResult DeliveryResult { get; init; } =
             PlaybackApprovedExternalRuntimeWindowsLifecycleResult.AudioDelivered;
@@ -305,17 +318,21 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceCheckpointTests
                         : preCleanup;
                 return new(
                     new(
-                        PlaybackWindowsPhysicalRunnerState.Running,
-                        PlaybackWindowsPhysicalRunnerResult.Started,
-                        WindowToken: 7144,
+                        _runnerStopped
+                            ? PlaybackWindowsPhysicalRunnerState.Stopped
+                            : PlaybackWindowsPhysicalRunnerState.Running,
+                        _runnerStopped
+                            ? PlaybackWindowsPhysicalRunnerResult.Stopped
+                            : PlaybackWindowsPhysicalRunnerResult.Started,
+                        WindowToken: _runnerStopped ? 0 : 7144,
                         OwnerManagedThreadId: 7,
                         PendingOperationCount: 0,
                         AcceptedOperationCount: 1,
                         CompletedOperationCount: 1,
                         CancelledOperationCount: 0,
                         RejectedOperationCount: 0,
-                        HasMessageLoop: true,
-                        AdmissionClosed: false),
+                        HasMessageLoop: !_runnerStopped,
+                        AdmissionClosed: _runnerStopped),
                     lifecycle);
             }
         }
@@ -403,6 +420,7 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceCheckpointTests
 
         public ValueTask<PlaybackWindowsPhysicalRunnerResult> StopRunnerAsync()
         {
+            _runnerStopped = true;
             Log.Add("runner:stop");
             return ValueTask.FromResult(PlaybackWindowsPhysicalRunnerResult.Stopped);
         }

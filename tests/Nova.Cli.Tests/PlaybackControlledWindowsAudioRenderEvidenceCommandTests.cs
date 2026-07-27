@@ -185,7 +185,8 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceCommandTests
             PlaybackControlledWindowsAudioRenderEvidenceCommand.TryCreateTerminalRecord(
                 snapshot,
                 options,
-                out var record));
+                out var record,
+                out var rejection));
         var text = PlaybackControlledWindowsAudioTerminalRenderRecordCodec.Serialize(record);
 
         Assert.True(
@@ -197,6 +198,9 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceCommandTests
         Assert.False(parsed.PhysicalRunCompleted);
         Assert.False(parsed.CompletedRenderEvidenceEstablished);
         Assert.False(parsed.AudioAcceptanceClaimed);
+        Assert.Equal(
+            PlaybackControlledWindowsAudioTerminalRecordRejection.None,
+            rejection);
         Assert.DoesNotContain("Result: ", text, StringComparison.Ordinal);
     }
 
@@ -233,7 +237,11 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceCommandTests
             PlaybackControlledWindowsAudioRenderEvidenceCommand.TryCreateTerminalRecord(
                 snapshot,
                 options,
-                out _));
+                out _,
+                out var rejection));
+        Assert.Equal(
+            PlaybackControlledWindowsAudioTerminalRecordRejection.IdentityOrBoundsRejected,
+            rejection);
     }
 
     private static PlaybackControlledWindowsPhysicalRunSnapshot CreateTerminalSnapshot(

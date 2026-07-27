@@ -58,6 +58,7 @@ public sealed record PlaybackControlledWindowsAudioRenderChildFailureRecord(
     bool ChildProcessResultCaptured)
 {
     public string ControlledRunResult { get; init; } = "None";
+    public string TerminalRecordRejection { get; init; } = "None";
 }
 
 public sealed record PlaybackControlledWindowsAudioRenderHelperFailureRecord(
@@ -68,18 +69,21 @@ public sealed record PlaybackControlledWindowsAudioRenderHelperFailureRecord(
 
 public static class PlaybackControlledWindowsAudioRenderChildFailureRecordCodec
 {
-    public const int CurrentSchemaVersion = 4;
+    public const int CurrentSchemaVersion = 5;
     public const string CurrentMilestone = "0.0.10d Phase 6";
     public const int MaximumRecordCharacterCount = 32 * 1024;
 
     private const int LegacySchemaVersion = 2;
-    private const int PreviousSchemaVersion = 3;
+    private const int NativeStageSchemaVersion = 3;
+    private const int ControlledRunResultSchemaVersion = 4;
     private const string LegacyHeader =
         "PEERCAST-NOVA-CONTROLLED-WINDOWS-AUDIO-RENDER-EVIDENCE-FAILURE 2";
     private const string PreviousHeader =
         "PEERCAST-NOVA-CONTROLLED-WINDOWS-AUDIO-RENDER-EVIDENCE-FAILURE 3";
-    private const string Header =
+    private const string ControlledRunResultHeader =
         "PEERCAST-NOVA-CONTROLLED-WINDOWS-AUDIO-RENDER-EVIDENCE-FAILURE 4";
+    private const string Header =
+        "PEERCAST-NOVA-CONTROLLED-WINDOWS-AUDIO-RENDER-EVIDENCE-FAILURE 5";
     private const string Footer =
         "END-PEERCAST-NOVA-CONTROLLED-WINDOWS-AUDIO-RENDER-EVIDENCE-FAILURE";
 
@@ -100,7 +104,8 @@ public static class PlaybackControlledWindowsAudioRenderChildFailureRecordCodec
             record.SchemaVersion switch
             {
                 LegacySchemaVersion => LegacyHeader,
-                PreviousSchemaVersion => PreviousHeader,
+                NativeStageSchemaVersion => PreviousHeader,
+                ControlledRunResultSchemaVersion => ControlledRunResultHeader,
                 _ => Header,
             });
         Append(builder, $"Milestone: {record.Milestone}");
@@ -118,13 +123,19 @@ public static class PlaybackControlledWindowsAudioRenderChildFailureRecordCodec
         Append(
             builder,
             $"Stderr-Bytes: {record.StderrByteCount.ToString(CultureInfo.InvariantCulture)}");
-        if (record.SchemaVersion >= PreviousSchemaVersion)
+        if (record.SchemaVersion >= NativeStageSchemaVersion)
         {
             Append(builder, $"Last-Native-Audio-Stage: {record.LastNativeAudioStage}");
         }
-        if (record.SchemaVersion == CurrentSchemaVersion)
+        if (record.SchemaVersion >= ControlledRunResultSchemaVersion)
         {
             Append(builder, $"Controlled-Run-Result: {record.ControlledRunResult}");
+        }
+        if (record.SchemaVersion == CurrentSchemaVersion)
+        {
+            Append(
+                builder,
+                $"Terminal-Record-Rejection: {record.TerminalRecordRejection}");
         }
         Append(builder, "Raw-Stdout-Published: False");
         Append(builder, "Raw-Stderr-Published: False");
@@ -153,11 +164,17 @@ public static class PlaybackControlledWindowsAudioRenderChildFailureRecordCodec
                 text,
                 CurrentSchemaVersion,
                 Header,
+                expectedLineCount: 21,
+                out record) ||
+            TryParseVersion(
+                text,
+                ControlledRunResultSchemaVersion,
+                ControlledRunResultHeader,
                 expectedLineCount: 20,
                 out record) ||
             TryParseVersion(
                 text,
-                PreviousSchemaVersion,
+                NativeStageSchemaVersion,
                 PreviousHeader,
                 expectedLineCount: 19,
                 out record) ||
@@ -218,8 +235,10 @@ public static class PlaybackControlledWindowsAudioRenderChildFailureRecordCodec
             return false;
         }
 
-        var hasNativeStage = schemaVersion >= PreviousSchemaVersion;
-        var hasControlledRunResult = schemaVersion == CurrentSchemaVersion;
+        var hasNativeStage = schemaVersion >= NativeStageSchemaVersion;
+        var hasControlledRunResult =
+            schemaVersion >= ControlledRunResultSchemaVersion;
+        var hasTerminalRecordRejection = schemaVersion == CurrentSchemaVersion;
         var offset = hasNativeStage ? 1 : 0;
         var lastNativeAudioStage = "None";
         if (hasNativeStage &&
@@ -245,6 +264,22 @@ public static class PlaybackControlledWindowsAudioRenderChildFailureRecordCodec
             return false;
         }
         if (hasControlledRunResult)
+        {
+            offset++;
+        }
+
+        var terminalRecordRejection = "None";
+        if (hasTerminalRecordRejection &&
+            (!PlaybackControlledWindowsAudioRenderFailureRecordText.TryReadExact(
+                lines[11],
+                "Terminal-Record-Rejection: ",
+                out terminalRecordRejection) ||
+             !PlaybackControlledWindowsAudioProcessFailureDiagnostics
+                 .IsTerminalRecordRejectionOrNone(terminalRecordRejection)))
+        {
+            return false;
+        }
+        if (hasTerminalRecordRejection)
         {
             offset++;
         }
@@ -297,6 +332,7 @@ public static class PlaybackControlledWindowsAudioRenderChildFailureRecordCodec
             childResultCaptured)
         {
             ControlledRunResult = controlledRunResult,
+            TerminalRecordRejection = terminalRecordRejection,
         };
         if (!IsValid(candidate) ||
             !string.Equals(Serialize(candidate), normalized + "\n", StringComparison.Ordinal))
@@ -310,8 +346,8 @@ public static class PlaybackControlledWindowsAudioRenderChildFailureRecordCodec
 
     private static bool IsValid(
         PlaybackControlledWindowsAudioRenderChildFailureRecord record) =>
-        record.SchemaVersion is LegacySchemaVersion or PreviousSchemaVersion or
-            CurrentSchemaVersion &&
+        record.SchemaVersion is LegacySchemaVersion or NativeStageSchemaVersion or
+            ControlledRunResultSchemaVersion or CurrentSchemaVersion &&
         string.Equals(record.Milestone, CurrentMilestone, StringComparison.Ordinal) &&
         record.StdoutByteCount >= 0 &&
         record.StderrByteCount >= 0 &&
@@ -319,10 +355,17 @@ public static class PlaybackControlledWindowsAudioRenderChildFailureRecordCodec
             .IsNativeAudioStageOrNone(record.LastNativeAudioStage) &&
         PlaybackControlledWindowsAudioProcessFailureDiagnostics
             .IsControlledRunResultOrNone(record.ControlledRunResult) &&
+        PlaybackControlledWindowsAudioProcessFailureDiagnostics
+            .IsTerminalRecordRejectionOrNone(record.TerminalRecordRejection) &&
         (record.SchemaVersion != LegacySchemaVersion ||
             string.Equals(record.LastNativeAudioStage, "None", StringComparison.Ordinal)) &&
-        (record.SchemaVersion == CurrentSchemaVersion ||
+        (record.SchemaVersion >= ControlledRunResultSchemaVersion ||
             string.Equals(record.ControlledRunResult, "None", StringComparison.Ordinal)) &&
+        (record.SchemaVersion == CurrentSchemaVersion ||
+            string.Equals(
+                record.TerminalRecordRejection,
+                "None",
+                StringComparison.Ordinal)) &&
         record.ChildExitCodeAvailable == record.ChildProcessResultCaptured &&
         (record.ChildExitCodeAvailable || record.ChildExitCode == 0);
 
@@ -599,6 +642,9 @@ public static class PlaybackControlledWindowsAudioRenderFailureRecordPreflightCo
             .ConfigureAwait(false);
         await output.WriteLineAsync(
                 $"Controlled-Run-Result: {child?.ControlledRunResult ?? "None"}")
+            .ConfigureAwait(false);
+        await output.WriteLineAsync(
+                $"Terminal-Record-Rejection: {child?.TerminalRecordRejection ?? "None"}")
             .ConfigureAwait(false);
         await output.WriteLineAsync(
                 $"Child-Process-Result-Captured: {child?.ChildProcessResultCaptured ?? false}")

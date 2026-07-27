@@ -36,6 +36,20 @@ public sealed record PlaybackControlledWindowsAudioTerminalRenderRecord(
     bool AudioAcceptanceClaimed,
     bool ExternalBinaryOrPayloadPublished);
 
+public enum PlaybackControlledWindowsAudioTerminalRecordRejection
+{
+    None,
+    ProjectionRejected,
+    IdentityOrBoundsRejected,
+    RunnerOrLifecycleStateRejected,
+    TerminalClaimsRejected,
+    PreCleanupCheckpointRejected,
+    PostStopCheckpointRejected,
+    TraceCounterConsistencyRejected,
+    CleanupStabilityRejected,
+    CanonicalSizeLimitRejected,
+}
+
 /// <summary>
 /// Strict bounded codec for a controlled audio run that reached the system lifecycle
 /// but did not establish the completed render-evidence contract. The canonical payload
@@ -208,7 +222,19 @@ public static class PlaybackControlledWindowsAudioTerminalRenderRecordCodec
 
     private static bool IsSyntacticallyValid(
         PlaybackControlledWindowsAudioTerminalRenderRecord record,
-        out string normalizedDigest)
+        out string normalizedDigest) =>
+        GetValidationFailure(record, out normalizedDigest) ==
+            PlaybackControlledWindowsAudioTerminalRecordRejection.None;
+
+    internal static PlaybackControlledWindowsAudioTerminalRecordRejection
+        GetValidationFailure(
+            PlaybackControlledWindowsAudioTerminalRenderRecord record) =>
+        GetValidationFailure(record, out _);
+
+    private static PlaybackControlledWindowsAudioTerminalRecordRejection
+        GetValidationFailure(
+            PlaybackControlledWindowsAudioTerminalRenderRecord record,
+            out string normalizedDigest)
     {
         normalizedDigest = string.Empty;
         if (record.SchemaVersion != CurrentSchemaVersion ||
@@ -239,40 +265,74 @@ public static class PlaybackControlledWindowsAudioTerminalRenderRecordCodec
             record.AudioBufferMilliseconds < 1 ||
             record.AudioBufferMilliseconds >
                 PlaybackWindowsOutputStreamInitializationBoundary.MaximumAudioBufferDuration
-                    .TotalMilliseconds ||
+                    .TotalMilliseconds)
+        {
+            return PlaybackControlledWindowsAudioTerminalRecordRejection
+                .IdentityOrBoundsRejected;
+        }
+
+        if (
             record.RunnerState != PlaybackWindowsPhysicalRunnerState.Stopped ||
             record.LifecycleState !=
-                PlaybackApprovedExternalRuntimeWindowsLifecycleState.Disposed ||
+                PlaybackApprovedExternalRuntimeWindowsLifecycleState.Disposed)
+        {
+            return PlaybackControlledWindowsAudioTerminalRecordRejection
+                .RunnerOrLifecycleStateRejected;
+        }
+
+        if (
             !record.PhysicalRunStarted ||
             record.PhysicalRunCompleted ||
             record.CompletedRenderEvidenceEstablished ||
             record.AudioAcceptanceClaimed ||
             record.ExternalBinaryOrPayloadPublished ||
             (record.Result != PlaybackControlledWindowsPhysicalRunResult.EvidenceRejected &&
-                record.EvidenceResult != default) ||
-            !IsValidPreCleanupCheckpoint(
+                record.EvidenceResult != default))
+        {
+            return PlaybackControlledWindowsAudioTerminalRecordRejection
+                .TerminalClaimsRejected;
+        }
+
+        if (!IsValidPreCleanupCheckpoint(
                 record.PreCleanupDeliveryTrace,
                 record.PreCleanupAudioRenderTrace,
                 record.PreCleanupNativeEvidence,
                 out var deliveredObservations,
-                out var wouldBlockObservations) ||
-            !IsValidPostStopCheckpoint(
+                out var wouldBlockObservations))
+        {
+            return PlaybackControlledWindowsAudioTerminalRecordRejection
+                .PreCleanupCheckpointRejected;
+        }
+
+        if (!IsValidPostStopCheckpoint(
                 record.PostStopDeliveryTrace,
                 record.PostStopAudioRenderTrace,
-                record.PostStopNativeEvidence) ||
+                record.PostStopNativeEvidence))
+        {
+            return PlaybackControlledWindowsAudioTerminalRecordRejection
+                .PostStopCheckpointRejected;
+        }
+
+        if (
             deliveredObservations != record.DeliveredCount ||
-            wouldBlockObservations != record.RetainedWouldBlockCount ||
-            !SameAudioWrites(
+            wouldBlockObservations != record.RetainedWouldBlockCount)
+        {
+            return PlaybackControlledWindowsAudioTerminalRecordRejection
+                .TraceCounterConsistencyRejected;
+        }
+
+        if (!SameAudioWrites(
                 record.PreCleanupAudioRenderTrace,
                 record.PostStopAudioRenderTrace) ||
             !SameAudioAggregate(
                 record.PreCleanupNativeEvidence,
                 record.PostStopNativeEvidence))
         {
-            return false;
+            return PlaybackControlledWindowsAudioTerminalRecordRejection
+                .CleanupStabilityRejected;
         }
 
-        return true;
+        return PlaybackControlledWindowsAudioTerminalRecordRejection.None;
     }
 
     private static bool IsReviewedTerminalResult(

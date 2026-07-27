@@ -5,6 +5,16 @@
 Detailed history through 0.0.8g remains preserved in Git history at commit
 `f078dab5372a45a8c577c1c802a697ab72b45c02` and in milestone ADR/PCN records.
 
+### 0.0.10d Phase 6 - Bounded terminal record rejection diagnostics
+
+- Added fixed, reviewed terminal-record rejection categories for projection, identity and bounds, runner and lifecycle state, terminal claims, pre-cleanup and post-stop checkpoints, trace counters, cleanup stability, and canonical size.
+- Kept the render command stdout contract unchanged while emitting at most one exact managed rejection marker to private child stderr when terminal-record projection fails.
+- Advanced the sanitized child failure record to version 5 with one `Terminal-Record-Rejection` field.
+- Retained a terminal-record rejection only from exactly one canonical allowlisted marker; unknown, additional, malformed, and noncanonical stderr becomes `None`.
+- Kept canonical version 4, version 3, and version 2 child failure records readable with an effective terminal-record rejection of `None`.
+- Added focused codec, command, child-capture, preflight, canonical-shape, legacy-compatibility, and fail-closed parsing tests.
+- Performed no physical output, readiness capture, diagnostic, probe, or authorization-entrypoint execution as part of this change.
+
 ### 0.0.10d Phase 6 - Bounded controlled run result diagnostics
 
 - Advanced the sanitized child failure record to version 4 with one `Controlled-Run-Result` field.

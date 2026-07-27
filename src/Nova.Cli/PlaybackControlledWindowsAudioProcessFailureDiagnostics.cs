@@ -29,6 +29,8 @@ public static class PlaybackControlledWindowsAudioProcessFailureDiagnostics
     public const string ManagedUnhandledExceptionMarker =
         "PCN-CONTROLLED-RUNNER-FAILURE: ManagedUnhandledException";
     private const string NativeStagePrefix = "PCN-AUDIO-NATIVE-STAGE: ";
+    private const string TerminalRecordRejectionPrefix =
+        "PCN-AUDIO-TERMINAL-RECORD-REJECTION: ";
 
     public static bool IsCanonicalAudioRecord(
         string? standardOutput,
@@ -246,6 +248,52 @@ public static class PlaybackControlledWindowsAudioProcessFailureDiagnostics
         IsControlledRunFailureResult(result) &&
         string.Equals(value, result.ToString(), StringComparison.Ordinal);
 
+    internal static string GetTerminalRecordRejectionOrNone(string? standardError)
+    {
+        if (string.IsNullOrEmpty(standardError))
+        {
+            return "None";
+        }
+
+        var result = "None";
+        var count = 0;
+        foreach (var line in GetLines(standardError))
+        {
+            if (!line.StartsWith(TerminalRecordRejectionPrefix, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            count++;
+            if (count != 1 ||
+                !Enum.TryParse<PlaybackControlledWindowsAudioTerminalRecordRejection>(
+                    line[TerminalRecordRejectionPrefix.Length..],
+                    ignoreCase: false,
+                    out var rejection) ||
+                !IsTerminalRecordRejection(rejection) ||
+                !string.Equals(
+                    line,
+                    TerminalRecordRejectionPrefix + rejection,
+                    StringComparison.Ordinal))
+            {
+                return "None";
+            }
+
+            result = rejection.ToString();
+        }
+
+        return result;
+    }
+
+    internal static bool IsTerminalRecordRejectionOrNone(string value) =>
+        string.Equals(value, "None", StringComparison.Ordinal) ||
+        Enum.TryParse<PlaybackControlledWindowsAudioTerminalRecordRejection>(
+            value,
+            ignoreCase: false,
+            out var rejection) &&
+        IsTerminalRecordRejection(rejection) &&
+        string.Equals(value, rejection.ToString(), StringComparison.Ordinal);
+
     private static bool IsControlledRunFailureResult(
         PlaybackControlledWindowsPhysicalRunResult result) =>
         result is PlaybackControlledWindowsPhysicalRunResult.InvalidConfiguration or
@@ -259,6 +307,11 @@ public static class PlaybackControlledWindowsAudioProcessFailureDiagnostics
             PlaybackControlledWindowsPhysicalRunResult.AlreadyRunning or
             PlaybackControlledWindowsPhysicalRunResult.Faulted or
             PlaybackControlledWindowsPhysicalRunResult.Disposed;
+
+    private static bool IsTerminalRecordRejection(
+        PlaybackControlledWindowsAudioTerminalRecordRejection rejection) =>
+        rejection != PlaybackControlledWindowsAudioTerminalRecordRejection.None &&
+        Enum.IsDefined(rejection);
 
     private static string[] GetLines(string value) =>
         value.Replace("\r\n", "\n", StringComparison.Ordinal)

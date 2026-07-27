@@ -36,6 +36,7 @@ try
             await PlaybackControlledWindowsAudioRenderEvidenceCommand.RunAsync(
                 args,
                 Console.Out,
+                Console.Error,
                 cancellationSource.Token);
         Environment.ExitCode = evidence.ExitCode;
     }
