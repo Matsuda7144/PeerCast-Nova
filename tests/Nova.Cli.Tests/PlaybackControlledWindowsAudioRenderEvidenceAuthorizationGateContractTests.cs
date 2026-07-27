@@ -15,6 +15,7 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceAuthorizationGat
             "$AuthorizationStatement -cne $requiredAuthorizationStatement",
             "the exact explicit one-run authorization statement is required",
             "--verify-controlled-windows-audio-render-readiness-record",
+            "$readinessLines.Count -ne 17",
             "Result: ReadinessReportValidated",
             "Readiness-Report-Validated: True",
             "Ready-For-Separate-Authorization: True",

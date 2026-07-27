@@ -340,6 +340,7 @@ try {
     if (-not $readinessPreflight.WithinBounds -or
         $readinessPreflight.ExitCode -ne 0 -or
         $readinessPreflight.StandardErrorBytes -ne 0 -or
+        $readinessLines.Count -ne 17 -or
         $readinessLines -cnotcontains 'Result: ReadinessReportValidated' -or
         $readinessLines -cnotcontains 'Readiness-Report-Validated: True' -or
         $readinessLines -cnotcontains 'Ready-For-Separate-Authorization: True' -or
