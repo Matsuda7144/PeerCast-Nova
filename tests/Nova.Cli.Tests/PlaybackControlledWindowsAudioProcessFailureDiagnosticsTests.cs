@@ -136,4 +136,22 @@ public sealed class PlaybackControlledWindowsAudioProcessFailureDiagnosticsTests
         Assert.Equal(17, snapshot.StdoutByteCount);
         Assert.Equal(29, snapshot.StderrByteCount);
     }
+
+    [Theory]
+    [InlineData("Result: DeliveryRejected\r\n", "DeliveryRejected")]
+    [InlineData("Result: Faulted\n", "Faulted")]
+    [InlineData("Result: deliveryRejected\r\n", "None")]
+    [InlineData("Result: None\r\n", "None")]
+    [InlineData("Result: Completed\r\n", "None")]
+    [InlineData("Result: DeliveryRejected\r\nprivate output\r\n", "None")]
+    [InlineData("private output", "None")]
+    public void Only_exact_single_line_controlled_run_result_is_retained(
+        string standardOutput,
+        string expected)
+    {
+        Assert.Equal(
+            expected,
+            PlaybackControlledWindowsAudioProcessFailureDiagnostics
+                .GetControlledRunResultOrNone(standardOutput));
+    }
 }

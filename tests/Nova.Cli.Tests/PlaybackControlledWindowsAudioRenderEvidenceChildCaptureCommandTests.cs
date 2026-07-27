@@ -158,6 +158,23 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureComm
     }
 
     [Fact]
+    public async Task Child_failure_retains_only_exact_allowlisted_controlled_run_result()
+    {
+        using var environment = new CaptureEnvironment();
+        var executor = new RecordingExecutor(
+            PlaybackControlledWindowsAudioRenderEvidenceCommand.RunFailureExitCode,
+            Encoding.UTF8.GetBytes("Result: DeliveryRejected\r\n"),
+            Encoding.UTF8.GetBytes("private stderr"));
+
+        var result = await environment.RunAsync(executor);
+
+        Assert.Equal(2, result);
+        var failure = File.ReadAllText(environment.FailureRecord);
+        Assert.Contains("Controlled-Run-Result: DeliveryRejected\n", failure);
+        Assert.DoesNotContain("private stderr", failure, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Executor_exception_promotes_only_sanitized_failure()
     {
         using var environment = new CaptureEnvironment();
@@ -357,7 +374,7 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureComm
                     stderrByteCount: 29);
 
         Assert.StartsWith(
-            "PEERCAST-NOVA-CONTROLLED-WINDOWS-AUDIO-RENDER-EVIDENCE-FAILURE 3\n",
+            "PEERCAST-NOVA-CONTROLLED-WINDOWS-AUDIO-RENDER-EVIDENCE-FAILURE 4\n",
             record,
             StringComparison.Ordinal);
         Assert.Contains("Milestone: 0.0.10d Phase 6\n", record);
@@ -367,6 +384,7 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureComm
         Assert.Contains("Stdout-Bytes: 17\n", record);
         Assert.Contains("Stderr-Bytes: 29\n", record);
         Assert.Contains("Last-Native-Audio-Stage: None\n", record);
+        Assert.Contains("Controlled-Run-Result: None\n", record);
         Assert.Contains("Canonical-Terminal-Render-Record-Produced: False\n", record);
         Assert.Contains("Child-Process-Result-Captured: True\n", record);
         Assert.Contains("Audio-Acceptance-Claimed: False\n", record);

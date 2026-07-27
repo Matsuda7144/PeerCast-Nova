@@ -5,6 +5,15 @@
 Detailed history through 0.0.8g remains preserved in Git history at commit
 `f078dab5372a45a8c577c1c802a697ab72b45c02` and in milestone ADR/PCN records.
 
+### 0.0.10d Phase 6 - Bounded controlled run result diagnostics
+
+- Advanced the sanitized child failure record to version 4 with one `Controlled-Run-Result` field.
+- Retained a controlled run result only when private child stdout is exactly one canonical `Result: <reviewed enum>` line; unknown, additional, malformed, and noncanonical output becomes `None`.
+- Preserved raw stdout and stderr privacy, exact byte counts, the bounded native cleanup stage, and all existing non-acceptance claims.
+- Kept canonical version 3 and version 2 child failure records readable with an effective controlled run result of `None`.
+- Added focused codec, child-capture, preflight, canonical-shape, legacy-compatibility, and fail-closed parsing tests.
+- Performed no physical output, readiness capture, diagnostic, probe, or authorization-entrypoint execution as part of this change.
+
 ### 0.0.10d Phase 5 - Explicit decoder packet time-base propagation
 
 - Added a fail-closed `av_opt_set_q` boundary that applies the exact bounded FLV stream time base to `AVCodecContext` option `pkt_timebase` after parameter transfer and before codec open.

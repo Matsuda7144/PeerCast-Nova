@@ -55,7 +55,10 @@ public sealed record PlaybackControlledWindowsAudioRenderChildFailureRecord(
     long StdoutByteCount,
     long StderrByteCount,
     string LastNativeAudioStage,
-    bool ChildProcessResultCaptured);
+    bool ChildProcessResultCaptured)
+{
+    public string ControlledRunResult { get; init; } = "None";
+}
 
 public sealed record PlaybackControlledWindowsAudioRenderHelperFailureRecord(
     int SchemaVersion,
@@ -65,15 +68,18 @@ public sealed record PlaybackControlledWindowsAudioRenderHelperFailureRecord(
 
 public static class PlaybackControlledWindowsAudioRenderChildFailureRecordCodec
 {
-    public const int CurrentSchemaVersion = 3;
+    public const int CurrentSchemaVersion = 4;
     public const string CurrentMilestone = "0.0.10d Phase 6";
     public const int MaximumRecordCharacterCount = 32 * 1024;
 
     private const int LegacySchemaVersion = 2;
+    private const int PreviousSchemaVersion = 3;
     private const string LegacyHeader =
         "PEERCAST-NOVA-CONTROLLED-WINDOWS-AUDIO-RENDER-EVIDENCE-FAILURE 2";
-    private const string Header =
+    private const string PreviousHeader =
         "PEERCAST-NOVA-CONTROLLED-WINDOWS-AUDIO-RENDER-EVIDENCE-FAILURE 3";
+    private const string Header =
+        "PEERCAST-NOVA-CONTROLLED-WINDOWS-AUDIO-RENDER-EVIDENCE-FAILURE 4";
     private const string Footer =
         "END-PEERCAST-NOVA-CONTROLLED-WINDOWS-AUDIO-RENDER-EVIDENCE-FAILURE";
 
@@ -91,7 +97,12 @@ public static class PlaybackControlledWindowsAudioRenderChildFailureRecordCodec
         var builder = new StringBuilder(896);
         Append(
             builder,
-            record.SchemaVersion == LegacySchemaVersion ? LegacyHeader : Header);
+            record.SchemaVersion switch
+            {
+                LegacySchemaVersion => LegacyHeader,
+                PreviousSchemaVersion => PreviousHeader,
+                _ => Header,
+            });
         Append(builder, $"Milestone: {record.Milestone}");
         Append(builder, "Kind: Audio");
         Append(builder, "Result: RenderEvidenceRecordNotProduced");
@@ -107,9 +118,13 @@ public static class PlaybackControlledWindowsAudioRenderChildFailureRecordCodec
         Append(
             builder,
             $"Stderr-Bytes: {record.StderrByteCount.ToString(CultureInfo.InvariantCulture)}");
-        if (record.SchemaVersion == CurrentSchemaVersion)
+        if (record.SchemaVersion >= PreviousSchemaVersion)
         {
             Append(builder, $"Last-Native-Audio-Stage: {record.LastNativeAudioStage}");
+        }
+        if (record.SchemaVersion == CurrentSchemaVersion)
+        {
+            Append(builder, $"Controlled-Run-Result: {record.ControlledRunResult}");
         }
         Append(builder, "Raw-Stdout-Published: False");
         Append(builder, "Raw-Stderr-Published: False");
@@ -138,6 +153,12 @@ public static class PlaybackControlledWindowsAudioRenderChildFailureRecordCodec
                 text,
                 CurrentSchemaVersion,
                 Header,
+                expectedLineCount: 20,
+                out record) ||
+            TryParseVersion(
+                text,
+                PreviousSchemaVersion,
+                PreviousHeader,
                 expectedLineCount: 19,
                 out record) ||
             TryParseVersion(
@@ -197,9 +218,11 @@ public static class PlaybackControlledWindowsAudioRenderChildFailureRecordCodec
             return false;
         }
 
-        var offset = schemaVersion == CurrentSchemaVersion ? 1 : 0;
+        var hasNativeStage = schemaVersion >= PreviousSchemaVersion;
+        var hasControlledRunResult = schemaVersion == CurrentSchemaVersion;
+        var offset = hasNativeStage ? 1 : 0;
         var lastNativeAudioStage = "None";
-        if (offset == 1 &&
+        if (hasNativeStage &&
             (!PlaybackControlledWindowsAudioRenderFailureRecordText.TryReadExact(
                 lines[9],
                 "Last-Native-Audio-Stage: ",
@@ -208,6 +231,22 @@ public static class PlaybackControlledWindowsAudioRenderChildFailureRecordCodec
                  .IsNativeAudioStageOrNone(lastNativeAudioStage)))
         {
             return false;
+        }
+
+        var controlledRunResult = "None";
+        if (hasControlledRunResult &&
+            (!PlaybackControlledWindowsAudioRenderFailureRecordText.TryReadExact(
+                lines[10],
+                "Controlled-Run-Result: ",
+                out controlledRunResult) ||
+             !PlaybackControlledWindowsAudioProcessFailureDiagnostics
+                 .IsControlledRunResultOrNone(controlledRunResult)))
+        {
+            return false;
+        }
+        if (hasControlledRunResult)
+        {
+            offset++;
         }
 
         if (!string.Equals(
@@ -255,7 +294,10 @@ public static class PlaybackControlledWindowsAudioRenderChildFailureRecordCodec
             stdoutBytes,
             stderrBytes,
             lastNativeAudioStage,
-            childResultCaptured);
+            childResultCaptured)
+        {
+            ControlledRunResult = controlledRunResult,
+        };
         if (!IsValid(candidate) ||
             !string.Equals(Serialize(candidate), normalized + "\n", StringComparison.Ordinal))
         {
@@ -268,14 +310,19 @@ public static class PlaybackControlledWindowsAudioRenderChildFailureRecordCodec
 
     private static bool IsValid(
         PlaybackControlledWindowsAudioRenderChildFailureRecord record) =>
-        record.SchemaVersion is LegacySchemaVersion or CurrentSchemaVersion &&
+        record.SchemaVersion is LegacySchemaVersion or PreviousSchemaVersion or
+            CurrentSchemaVersion &&
         string.Equals(record.Milestone, CurrentMilestone, StringComparison.Ordinal) &&
         record.StdoutByteCount >= 0 &&
         record.StderrByteCount >= 0 &&
         PlaybackControlledWindowsAudioProcessFailureDiagnostics
             .IsNativeAudioStageOrNone(record.LastNativeAudioStage) &&
+        PlaybackControlledWindowsAudioProcessFailureDiagnostics
+            .IsControlledRunResultOrNone(record.ControlledRunResult) &&
         (record.SchemaVersion != LegacySchemaVersion ||
             string.Equals(record.LastNativeAudioStage, "None", StringComparison.Ordinal)) &&
+        (record.SchemaVersion == CurrentSchemaVersion ||
+            string.Equals(record.ControlledRunResult, "None", StringComparison.Ordinal)) &&
         record.ChildExitCodeAvailable == record.ChildProcessResultCaptured &&
         (record.ChildExitCodeAvailable || record.ChildExitCode == 0);
 
@@ -549,6 +596,9 @@ public static class PlaybackControlledWindowsAudioRenderFailureRecordPreflightCo
             .ConfigureAwait(false);
         await output.WriteLineAsync(
                 $"Last-Native-Audio-Stage: {child?.LastNativeAudioStage ?? "None"}")
+            .ConfigureAwait(false);
+        await output.WriteLineAsync(
+                $"Controlled-Run-Result: {child?.ControlledRunResult ?? "None"}")
             .ConfigureAwait(false);
         await output.WriteLineAsync(
                 $"Child-Process-Result-Captured: {child?.ChildProcessResultCaptured ?? false}")

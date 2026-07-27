@@ -23,27 +23,29 @@ public sealed class PlaybackControlledWindowsAudioRenderFailureRecordPreflightCo
     }
 
     [Fact]
-    public void Child_failure_v3_has_exact_canonical_shape()
+    public void Child_failure_v4_has_exact_canonical_shape()
     {
         var record = ChildRecord(unchecked((int)0xC0000374), 0, 184) with
         {
             LastNativeAudioStage = "ProductionCleanupEntering",
+            ControlledRunResult = "DeliveryRejected",
         };
 
         var serialized =
             PlaybackControlledWindowsAudioRenderChildFailureRecordCodec.Serialize(record);
         var lines = serialized.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
-        Assert.Equal(19, lines.Length);
+        Assert.Equal(20, lines.Length);
         Assert.Equal(
-            "PEERCAST-NOVA-CONTROLLED-WINDOWS-AUDIO-RENDER-EVIDENCE-FAILURE 3",
+            "PEERCAST-NOVA-CONTROLLED-WINDOWS-AUDIO-RENDER-EVIDENCE-FAILURE 4",
             lines[0]);
         Assert.Equal(
             "Last-Native-Audio-Stage: ProductionCleanupEntering",
             lines[9]);
+        Assert.Equal("Controlled-Run-Result: DeliveryRejected", lines[10]);
         Assert.Equal(
             "END-PEERCAST-NOVA-CONTROLLED-WINDOWS-AUDIO-RENDER-EVIDENCE-FAILURE",
-            lines[18]);
+            lines[19]);
         Assert.EndsWith("\n", serialized, StringComparison.Ordinal);
 
         var extraLine = serialized.Insert(
@@ -86,6 +88,8 @@ public sealed class PlaybackControlledWindowsAudioRenderFailureRecordPreflightCo
     [InlineData("Raw-Stderr-Published: False", "Raw-Stderr-Published: True")]
     [InlineData("Last-Native-Audio-Stage: None", "Last-Native-Audio-Stage: PrivateStage")]
     [InlineData("Last-Native-Audio-Stage: None", "Last-Native-Audio-Stage: 10")]
+    [InlineData("Controlled-Run-Result: None", "Controlled-Run-Result: PrivateResult")]
+    [InlineData("Controlled-Run-Result: None", "Controlled-Run-Result: None\nLeaked: value")]
     public void Child_failure_codec_rejects_contradictions(
         string original,
         string replacement)
@@ -123,6 +127,35 @@ public sealed class PlaybackControlledWindowsAudioRenderFailureRecordPreflightCo
                 serialized,
                 out var parsed));
         Assert.Equal(legacy, parsed);
+    }
+
+    [Fact]
+    public void Child_failure_codec_accepts_canonical_previous_v3_record()
+    {
+        var previous = ChildRecord(unchecked((int)0xC0000374), 0, 48) with
+        {
+            SchemaVersion = 3,
+            LastNativeAudioStage = "ActivationCleanupCompleted",
+            ControlledRunResult = "None",
+        };
+
+        var serialized =
+            PlaybackControlledWindowsAudioRenderChildFailureRecordCodec.Serialize(previous);
+
+        Assert.StartsWith(
+            "PEERCAST-NOVA-CONTROLLED-WINDOWS-AUDIO-RENDER-EVIDENCE-FAILURE 3\n",
+            serialized,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "Last-Native-Audio-Stage: ActivationCleanupCompleted\n",
+            serialized,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("Controlled-Run-Result:", serialized, StringComparison.Ordinal);
+        Assert.True(
+            PlaybackControlledWindowsAudioRenderChildFailureRecordCodec.TryParse(
+                serialized,
+                out var parsed));
+        Assert.Equal(previous, parsed);
     }
 
     [Fact]
@@ -243,6 +276,7 @@ public sealed class PlaybackControlledWindowsAudioRenderFailureRecordPreflightCo
                         "Stdout-Bytes: 17",
                         "Stderr-Bytes: 29",
                         "Last-Native-Audio-Stage: None",
+                        "Controlled-Run-Result: None",
                         "Child-Process-Result-Captured: True",
                         "Helper-Failure-Phase: None",
                         "Helper-Failure-Category: None",

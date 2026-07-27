@@ -207,6 +207,59 @@ public static class PlaybackControlledWindowsAudioProcessFailureDiagnostics
         Enum.IsDefined(stage) &&
         string.Equals(value, stage.ToString(), StringComparison.Ordinal);
 
+    internal static string GetControlledRunResultOrNone(string? standardOutput)
+    {
+        if (string.IsNullOrEmpty(standardOutput))
+        {
+            return "None";
+        }
+
+        var normalized = standardOutput.Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n');
+        if (normalized.EndsWith('\n'))
+        {
+            normalized = normalized[..^1];
+        }
+
+        const string prefix = "Result: ";
+        if (normalized.Contains('\n') ||
+            !normalized.StartsWith(prefix, StringComparison.Ordinal) ||
+            !Enum.TryParse<PlaybackControlledWindowsPhysicalRunResult>(
+                normalized[prefix.Length..],
+                ignoreCase: false,
+                out var result) ||
+            !IsControlledRunFailureResult(result) ||
+            !string.Equals(normalized, prefix + result, StringComparison.Ordinal))
+        {
+            return "None";
+        }
+
+        return result.ToString();
+    }
+
+    internal static bool IsControlledRunResultOrNone(string value) =>
+        string.Equals(value, "None", StringComparison.Ordinal) ||
+        Enum.TryParse<PlaybackControlledWindowsPhysicalRunResult>(
+            value,
+            ignoreCase: false,
+            out var result) &&
+        IsControlledRunFailureResult(result) &&
+        string.Equals(value, result.ToString(), StringComparison.Ordinal);
+
+    private static bool IsControlledRunFailureResult(
+        PlaybackControlledWindowsPhysicalRunResult result) =>
+        result is PlaybackControlledWindowsPhysicalRunResult.InvalidConfiguration or
+            PlaybackControlledWindowsPhysicalRunResult.RunnerRejected or
+            PlaybackControlledWindowsPhysicalRunResult.LifecycleRejected or
+            PlaybackControlledWindowsPhysicalRunResult.FixtureRejected or
+            PlaybackControlledWindowsPhysicalRunResult.DecodeRejected or
+            PlaybackControlledWindowsPhysicalRunResult.DeliveryRejected or
+            PlaybackControlledWindowsPhysicalRunResult.EvidenceRejected or
+            PlaybackControlledWindowsPhysicalRunResult.Cancelled or
+            PlaybackControlledWindowsPhysicalRunResult.AlreadyRunning or
+            PlaybackControlledWindowsPhysicalRunResult.Faulted or
+            PlaybackControlledWindowsPhysicalRunResult.Disposed;
+
     private static string[] GetLines(string value) =>
         value.Replace("\r\n", "\n", StringComparison.Ordinal)
             .Replace('\r', '\n')

@@ -193,6 +193,7 @@ internal sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureCo
                     stdoutByteCount: 0,
                     stderrByteCount: 0,
                     lastNativeAudioStage: "None",
+                    controlledRunResult: "None",
                     childProcessResultCaptured: false)
                 .ConfigureAwait(false);
         }
@@ -207,6 +208,9 @@ internal sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureCo
             standardOutput = string.Empty;
         }
         var lastNativeAudioStage = GetLastNativeAudioStage(child);
+        var controlledRunResult =
+            PlaybackControlledWindowsAudioProcessFailureDiagnostics
+                .GetControlledRunResultOrNone(standardOutput);
 
         if (IsCompletedRecord(child.ExitCode, standardOutput, options))
         {
@@ -239,6 +243,7 @@ internal sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureCo
                 child.StandardOutput.LongLength,
                 child.StandardError.LongLength,
                 lastNativeAudioStage,
+                controlledRunResult,
                 childProcessResultCaptured: true)
             .ConfigureAwait(false);
     }
@@ -253,6 +258,7 @@ internal sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureCo
             stdoutByteCount,
             stderrByteCount,
             lastNativeAudioStage,
+            controlledRunResult: "None",
             childProcessResultCaptured: true);
 
     internal static string SerializeFailureRecord(
@@ -260,6 +266,7 @@ internal sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureCo
         long stdoutByteCount,
         long stderrByteCount,
         string lastNativeAudioStage,
+        string controlledRunResult,
         bool childProcessResultCaptured)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(stdoutByteCount);
@@ -275,7 +282,10 @@ internal sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureCo
                 stdoutByteCount,
                 stderrByteCount,
                 lastNativeAudioStage,
-                childProcessResultCaptured));
+                childProcessResultCaptured)
+            {
+                ControlledRunResult = controlledRunResult,
+            });
     }
 
     private async ValueTask<int> PromoteOutcomeOrFailureAsync(
@@ -299,6 +309,7 @@ internal sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureCo
                     child.StandardOutput.LongLength,
                     child.StandardError.LongLength,
                     GetLastNativeAudioStage(child),
+                    GetControlledRunResult(child),
                     childProcessResultCaptured: true)
                 .ConfigureAwait(false);
         }
@@ -310,6 +321,7 @@ internal sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureCo
         long stdoutByteCount,
         long stderrByteCount,
         string lastNativeAudioStage,
+        string controlledRunResult,
         bool childProcessResultCaptured)
     {
         var failureRecord = SerializeFailureRecord(
@@ -317,6 +329,7 @@ internal sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureCo
             stdoutByteCount,
             stderrByteCount,
             lastNativeAudioStage,
+            controlledRunResult,
             childProcessResultCaptured);
         try
         {
@@ -348,6 +361,20 @@ internal sealed class PlaybackControlledWindowsAudioRenderEvidenceChildCaptureCo
                     standardError,
                     standardErrorByteCount: child.StandardError.LongLength)
                 .LastNativeAudioStage;
+        }
+        catch (DecoderFallbackException)
+        {
+            return "None";
+        }
+    }
+
+    private static string GetControlledRunResult(
+        PlaybackControlledWindowsAudioChildProcessResult child)
+    {
+        try
+        {
+            return PlaybackControlledWindowsAudioProcessFailureDiagnostics
+                .GetControlledRunResultOrNone(StrictUtf8.GetString(child.StandardOutput));
         }
         catch (DecoderFallbackException)
         {
