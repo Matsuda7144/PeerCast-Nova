@@ -36,9 +36,10 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceRecordTests
     [Fact]
     public void Create_copies_all_three_checkpoints_and_fixed_run_metadata()
     {
-        var holdStart = CreateCheckpoint(includePreStop: false);
-        var preCleanup = CreateCheckpoint(includePreStop: false);
-        var postStop = CreateCheckpoint(includePreStop: true);
+        var delivery = CreateDeliveryTrace();
+        var holdStart = CreateCheckpoint(delivery, includePreStop: false);
+        var preCleanup = CreateCheckpoint(delivery, includePreStop: false);
+        var postStop = CreateCheckpoint(delivery, includePreStop: true);
         var snapshot = new PlaybackControlledWindowsPhysicalRunSnapshot(
             PlaybackControlledWindowsPhysicalRunState.Completed,
             PlaybackControlledWindowsPhysicalRunResult.Completed,
@@ -141,6 +142,39 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceRecordTests
     }
 
     [Fact]
+    public void Serializer_accepts_legacy_default_post_stop_delivery_trace()
+    {
+        var source = CreateRecord();
+
+        var text = PlaybackControlledWindowsAudioRenderEvidenceRecordCodec.Serialize(
+            source with { PostStopDeliveryTrace = default });
+
+        Assert.True(
+            PlaybackControlledWindowsAudioRenderEvidenceRecordCodec.TryParse(
+                text,
+                out var parsed));
+        var actual = Assert.IsType<PlaybackControlledWindowsAudioRenderEvidenceRecord>(parsed);
+        Assert.Equal(default, actual.PostStopDeliveryTrace);
+    }
+
+    [Fact]
+    public void Serializer_rejects_changed_retained_post_stop_delivery_trace()
+    {
+        var source = CreateRecord();
+        var changed = source.PostStopDeliveryTrace with
+        {
+            Fourth = source.PostStopDeliveryTrace.Fourth with
+            {
+                Sequence = source.PostStopDeliveryTrace.Fourth.Sequence + 1,
+            },
+        };
+
+        Assert.Throws<ArgumentException>(() =>
+            PlaybackControlledWindowsAudioRenderEvidenceRecordCodec.Serialize(
+                source with { PostStopDeliveryTrace = changed }));
+    }
+
+    [Fact]
     public void Create_rejects_non_integral_milliseconds()
     {
         var snapshot = CreateSnapshot();
@@ -167,9 +201,10 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceRecordTests
 
     private static PlaybackControlledWindowsPhysicalRunSnapshot CreateSnapshot()
     {
-        var holdStart = CreateCheckpoint(includePreStop: false);
-        var preCleanup = CreateCheckpoint(includePreStop: false);
-        var postStop = CreateCheckpoint(includePreStop: true);
+        var delivery = CreateDeliveryTrace();
+        var holdStart = CreateCheckpoint(delivery, includePreStop: false);
+        var preCleanup = CreateCheckpoint(delivery, includePreStop: false);
+        var postStop = CreateCheckpoint(delivery, includePreStop: true);
         return new(
             PlaybackControlledWindowsPhysicalRunState.Completed,
             PlaybackControlledWindowsPhysicalRunResult.Completed,
@@ -194,9 +229,9 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceRecordTests
     }
 
     private static PlaybackControlledWindowsAudioRenderEvidenceSnapshot CreateCheckpoint(
+        PlaybackGenerationMatchedSchedulerDeliveryTraceSnapshot delivery,
         bool includePreStop)
     {
-        var delivery = includePreStop ? default : CreateDeliveryTrace();
         var audio = CreateAudioTrace(includePreStop);
         return new(
             delivery,

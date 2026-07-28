@@ -312,7 +312,8 @@ public static class PlaybackControlledWindowsAudioTerminalRenderRecordCodec
         if (!IsValidPostStopCheckpoint(
                 record.PostStopDeliveryTrace,
                 record.PostStopAudioRenderTrace,
-                record.PostStopNativeEvidence))
+                record.PostStopNativeEvidence,
+                record.PreCleanupDeliveryTrace))
         {
             return PlaybackControlledWindowsAudioTerminalRecordRejection
                 .PostStopCheckpointRejected;
@@ -394,8 +395,10 @@ public static class PlaybackControlledWindowsAudioTerminalRenderRecordCodec
     private static bool IsValidPostStopCheckpoint(
         PlaybackGenerationMatchedSchedulerDeliveryTraceSnapshot delivery,
         PlaybackWindowsAudioRenderTraceSnapshot audio,
-        PlaybackWindowsOutputNativeEvidenceSnapshot native) =>
-        delivery == default && IsValidAudioTrace(audio, requirePreStop: true, native);
+        PlaybackWindowsOutputNativeEvidenceSnapshot native,
+        PlaybackGenerationMatchedSchedulerDeliveryTraceSnapshot preCleanupDelivery) =>
+        (delivery == default || delivery == preCleanupDelivery) &&
+        IsValidAudioTrace(audio, requirePreStop: true, native);
 
     private static bool IsValidDeliveryTrace(
         PlaybackGenerationMatchedSchedulerDeliveryTraceSnapshot value,

@@ -182,7 +182,16 @@ public sealed class PlaybackControlledWindowsAudioTerminalRenderRecordTests
                 AudioWriteAcknowledgementCount = 3,
             },
         });
-        AssertInvalid(valid with { PostStopDeliveryTrace = valid.PreCleanupDeliveryTrace });
+        AssertInvalid(valid with
+        {
+            PostStopDeliveryTrace = valid.PostStopDeliveryTrace with
+            {
+                Third = valid.PostStopDeliveryTrace.Third with
+                {
+                    Sequence = valid.PostStopDeliveryTrace.Third.Sequence + 1,
+                },
+            },
+        });
         AssertInvalid(valid with
         {
             PostStopAudioRenderTrace = valid.PostStopAudioRenderTrace with
@@ -197,6 +206,21 @@ public sealed class PlaybackControlledWindowsAudioTerminalRenderRecordTests
         {
             PreCleanupNativeEvidence = WithVideoEvidence(valid.PreCleanupNativeEvidence),
         });
+    }
+
+    [Fact]
+    public void Serialize_accepts_legacy_default_post_stop_delivery_trace()
+    {
+        var valid = CreateValidRecord() with { PostStopDeliveryTrace = default };
+
+        var text = PlaybackControlledWindowsAudioTerminalRenderRecordCodec.Serialize(valid);
+
+        Assert.True(
+            PlaybackControlledWindowsAudioTerminalRenderRecordCodec.TryParse(
+                text,
+                out var parsed));
+        var actual = Assert.IsType<PlaybackControlledWindowsAudioTerminalRenderRecord>(parsed);
+        Assert.Equal(default, actual.PostStopDeliveryTrace);
     }
 
     [Fact]
@@ -413,7 +437,7 @@ public sealed class PlaybackControlledWindowsAudioTerminalRenderRecordTests
             PreCleanupDeliveryTrace = delivery,
             PreCleanupAudioRenderTrace = preCleanupAudio,
             PreCleanupNativeEvidence = Native(preCleanupAudio),
-            PostStopDeliveryTrace = default,
+            PostStopDeliveryTrace = delivery,
             PostStopAudioRenderTrace = postStopAudio,
             PostStopNativeEvidence = Native(postStopAudio),
         };

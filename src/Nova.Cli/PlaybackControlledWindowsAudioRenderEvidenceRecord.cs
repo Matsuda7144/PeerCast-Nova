@@ -474,12 +474,11 @@ public static class PlaybackControlledWindowsAudioRenderEvidenceRecordCodec
                 record.PreCleanupNativeEvidence,
                 requireDeliveryTrace: true,
                 requirePreStop: false) &&
-            IsValidCheckpoint(
+            IsValidPostStopCheckpoint(
                 record.PostStopDeliveryTrace,
                 record.PostStopAudioRenderTrace,
                 record.PostStopNativeEvidence,
-                requireDeliveryTrace: false,
-                requirePreStop: true) &&
+                record.PreCleanupDeliveryTrace) &&
             record.HoldStartDeliveryTrace == record.PreCleanupDeliveryTrace &&
             record.HoldStartAudioRenderTrace == record.PreCleanupAudioRenderTrace &&
             SameAudioAggregate(
@@ -491,6 +490,31 @@ public static class PlaybackControlledWindowsAudioRenderEvidenceRecordCodec
             SameAudioAggregate(
                 record.HoldStartNativeEvidence,
                 record.PostStopNativeEvidence);
+    }
+
+    private static bool IsValidPostStopCheckpoint(
+        PlaybackGenerationMatchedSchedulerDeliveryTraceSnapshot delivery,
+        PlaybackWindowsAudioRenderTraceSnapshot audio,
+        PlaybackWindowsOutputNativeEvidenceSnapshot native,
+        PlaybackGenerationMatchedSchedulerDeliveryTraceSnapshot preCleanupDelivery)
+    {
+        if (delivery == default)
+        {
+            return IsValidCheckpoint(
+                delivery,
+                audio,
+                native,
+                requireDeliveryTrace: false,
+                requirePreStop: true);
+        }
+
+        return delivery == preCleanupDelivery &&
+            IsValidCheckpoint(
+                delivery,
+                audio,
+                native,
+                requireDeliveryTrace: true,
+                requirePreStop: true);
     }
 
     private static bool IsValidCheckpoint(
