@@ -46,6 +46,50 @@ public sealed class PlaybackGenerationMatchedSchedulerDeliveryTraceTests
     }
 
     [Fact]
+    public async Task Opt_in_audio_trace_ignores_video_deliveries_before_four_audio_deliveries()
+    {
+        using var harness = new Harness(discontinuityGeneration: 0);
+        var operations = new TraceOperations();
+        await using var boundary = CreateBoundary(harness, operations, capture: true);
+
+        operations.DeliveryResults.Enqueue(
+            PlaybackGenerationMatchedCanonicalDeliveryResult.VideoProcessed);
+        TransferFrame(
+            boundary,
+            harness,
+            CreateVideoFrame(TimeSpan.FromMilliseconds(100)),
+            PlaybackBoundedDemuxMediaKind.Video);
+        Assert.Equal(
+            PlaybackGenerationMatchedSchedulerDeliveryResult.VideoDelivered,
+            await boundary.DeliverOneAsync());
+
+        for (var index = 0; index < 4; index++)
+        {
+            TransferFrame(
+                boundary,
+                harness,
+                CreateAudioFrame(TimeSpan.FromMilliseconds(120 + (index * 20))),
+                PlaybackBoundedDemuxMediaKind.Audio);
+            Assert.Equal(
+                PlaybackGenerationMatchedSchedulerDeliveryResult.AudioDelivered,
+                await boundary.DeliverOneAsync());
+        }
+
+        var trace = boundary.Snapshot.DeliveryTrace;
+        Assert.Equal(4, trace.Count);
+        Assert.False(trace.Overflowed);
+        for (var index = 0; index < trace.Count; index++)
+        {
+            var observation = trace.GetObservation(index);
+            Assert.Equal(PlaybackPolicyMediaKind.Audio, observation.MediaKind);
+            Assert.Equal((long)(index + 1), observation.Sequence);
+            Assert.Equal(
+                TimeSpan.FromMilliseconds(index * 20).Ticks,
+                observation.PresentationTimestampOffsetTicks);
+        }
+    }
+
+    [Fact]
     public async Task Retained_wait_and_later_delivery_preserve_same_sequence_in_order()
     {
         using var harness = new Harness(discontinuityGeneration: 0);
@@ -161,7 +205,9 @@ public sealed class PlaybackGenerationMatchedSchedulerDeliveryTraceTests
     private static void TransferFrame(
         PlaybackGenerationMatchedSchedulerDeliveryBoundary boundary,
         Harness harness,
-        PlaybackDecoderFfmpegManagedFrame frame)
+        PlaybackDecoderFfmpegManagedFrame frame,
+        PlaybackBoundedDemuxMediaKind mediaKind =
+            PlaybackBoundedDemuxMediaKind.Audio)
     {
         harness.ReceiveOperations.Results.Enqueue(new(
             PlaybackDecoderFfmpegManagedFrameCopyResult.Copied,
@@ -169,8 +215,8 @@ public sealed class PlaybackGenerationMatchedSchedulerDeliveryTraceTests
         var operation = harness.Boundary.ReceiveOne(
             harness.Source,
             harness.DecoderGeneration,
-            PlaybackBoundedDemuxMediaKind.Audio,
-            StreamId(PlaybackBoundedDemuxMediaKind.Audio),
+            mediaKind,
+            StreamId(mediaKind),
             PlaybackSourceBoundOneFrameDecodeMode.Ordinary);
         Assert.Equal(PlaybackSourceBoundOneFrameDecodeResult.FrameAvailable, operation.Result);
         var completion = Assert.IsType<PlaybackSourceBoundDecodedFrameCompletion>(
@@ -190,6 +236,24 @@ public sealed class PlaybackGenerationMatchedSchedulerDeliveryTraceTests
             48_000,
             2,
             1,
+            PlaybackDecoderFfmpegFrameTime.Known(timestamp),
+            PlaybackDecoderFfmpegFrameTime.Known(timestamp),
+            PlaybackDecoderFfmpegFrameTime.Known(TimeSpan.FromMilliseconds(20)));
+        return new(
+            metadata,
+            [new PlaybackDecoderFfmpegManagedPlane(0, 4, 1, 4, new byte[] { 1, 2, 3, 4 })]);
+    }
+
+    private static PlaybackDecoderFfmpegManagedFrame CreateVideoFrame(TimeSpan timestamp)
+    {
+        var metadata = new PlaybackDecoderFfmpegFrameMetadata(
+            PlaybackDecoderFfmpegFrameMediaKind.Video,
+            PlaybackDecoderFfmpegFrameFormat.VideoBgra32,
+            1,
+            1,
+            0,
+            0,
+            0,
             PlaybackDecoderFfmpegFrameTime.Known(timestamp),
             PlaybackDecoderFfmpegFrameTime.Known(timestamp),
             PlaybackDecoderFfmpegFrameTime.Known(TimeSpan.FromMilliseconds(20)));

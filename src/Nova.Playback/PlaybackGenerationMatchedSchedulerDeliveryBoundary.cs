@@ -1186,7 +1186,8 @@ public sealed class PlaybackGenerationMatchedSchedulerDeliveryBoundary :
         PlaybackGenerationMatchedSchedulerDeliveryResult result,
         PlaybackGenerationMatchedSchedulerReservationCompletion completion)
     {
-        if (_deliveryObservations is null || !hasReservation)
+        if (_deliveryObservations is null || !hasReservation ||
+            timingItem.MediaKind != PlaybackPolicyMediaKind.Audio)
         {
             return;
         }
