@@ -324,6 +324,48 @@ public sealed class PlaybackWindowsPhysicalRunnerHost :
         }
     }
 
+    public async ValueTask<PlaybackWindowsPhysicalRunnerResult> WaitForExitAsync(
+        CancellationToken cancellationToken = default)
+    {
+        lock (_sync)
+        {
+            if (_isDisposed)
+            {
+                return SetResult(PlaybackWindowsPhysicalRunnerResult.Disposed);
+            }
+
+            if (_state == PlaybackWindowsPhysicalRunnerState.Created)
+            {
+                return SetResult(PlaybackWindowsPhysicalRunnerResult.InvalidConfiguration);
+            }
+
+            if (_state == PlaybackWindowsPhysicalRunnerState.Faulted)
+            {
+                return SetResult(PlaybackWindowsPhysicalRunnerResult.Faulted);
+            }
+
+            if (_state == PlaybackWindowsPhysicalRunnerState.Stopped)
+            {
+                return SetResult(PlaybackWindowsPhysicalRunnerResult.Stopped);
+            }
+        }
+
+        try
+        {
+            await _stopped.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            lock (_sync)
+            {
+                return _state == PlaybackWindowsPhysicalRunnerState.Faulted
+                    ? SetResult(PlaybackWindowsPhysicalRunnerResult.Faulted)
+                    : SetResult(PlaybackWindowsPhysicalRunnerResult.Stopped);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return PlaybackWindowsPhysicalRunnerResult.Cancelled;
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
         lock (_sync)

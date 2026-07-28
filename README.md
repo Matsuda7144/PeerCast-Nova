@@ -108,6 +108,7 @@ Current-state review:
 - accepted visible controlled fixture video
 - bounded controlled audio render evidence, terminal evidence, failure retention, offline review, and readiness-required authorization boundaries
 - shared `Nova.Windows` application window／message-loop／bounded-dispatcher ownership assembly
+- minimal `Nova.App` startup composition with one shared host and finite close/cancel shutdown
 
 詳細:
 
@@ -127,7 +128,6 @@ PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信�
 - canonical completed／accepted audio record from the same run as a recognizable audible observation
 - independent completed-record preflight for that run
 - paired video／audio admission and completion of 0.0.10d
-- user-facing Windows startup composition above the shared `Nova.Windows` host
 - legal／about surfaceからのFFmpeg notice表示
 - MP4／fragmented MP4 parser
 - decoded-buffer duration cutoff
@@ -141,7 +141,7 @@ FFmpeg binary bundling／redistributionは既定方針として禁止です。�
 
 **0.0.10e — User-facing Windows application composition**
 
-0.0.10d is explicitly deferred, not completed. Its evidence gaps and Issue #129 remain open. The application-owned Win32 host has moved from `Nova.Cli` into the shared `Nova.Windows` assembly without changing the controlled physical command behavior. The next slice adds normal user-facing startup composition and the legal／About projection above that single host.
+0.0.10d is explicitly deferred, not completed. Its evidence gaps and Issue #129 remain open. `Nova.App` now provides the normal user-facing start/close/cancel boundary above the single shared `Nova.Windows` host without changing controlled physical command behavior. The next slice adds the legal/About projection through that application layer.
 
 新しい物理実行を検討する場合は、次をすべて満たす必要があります。
 

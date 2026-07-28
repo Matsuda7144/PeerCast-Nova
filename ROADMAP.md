@@ -185,16 +185,18 @@ Current-state reviews: `docs/reviews/PCN-0166-CONTROLLED-AUDIO-RENDER-AUTHORIZAT
 - keep one implementation rather than copying the controlled runner ownership model;
 - keep `Nova.Playback` limited to the borrowed dispatcher contract and window token;
 - preserve all controlled physical command behavior and authorization boundaries;
-- next add the user-facing startup composition and legal／About projection above this shared host.
+- add `Nova.App` as the user-facing start/close/cancel composition above exactly one shared host;
+- keep the default application graph free of controlled commands and FFmpeg bundling;
+- next add the legal/About projection through the application entry layer.
 
-Current review: `docs/reviews/PCN-0170-SHARED-WINDOWS-APPLICATION-OWNERSHIP.md`.
+Current reviews: `docs/reviews/PCN-0170-SHARED-WINDOWS-APPLICATION-OWNERSHIP.md`
+and `docs/reviews/PCN-0171-USER-FACING-WINDOWS-STARTUP-COMPOSITION.md`.
 
 ### Later sequence
 
-1. add the user-facing Windows startup composition above `Nova.Windows`;
-2. add the legal／About projection;
-3. expand packaging only after the preceding gates pass;
-4. revisit deferred 0.0.10d only through a separate reviewed authorization decision.
+1. add the legal/About projection through `Nova.App`;
+2. expand packaging only after the preceding gates pass;
+3. revisit deferred 0.0.10d only through a separate reviewed authorization decision.
 
 ### Deferred
 

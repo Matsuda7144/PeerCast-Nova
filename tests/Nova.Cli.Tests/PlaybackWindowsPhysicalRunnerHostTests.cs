@@ -216,14 +216,35 @@ public sealed class PlaybackWindowsPhysicalRunnerHostTests
         await using var host = CreateHost(native);
         Assert.Equal(PlaybackWindowsPhysicalRunnerResult.Started, await host.StartAsync());
 
+        var exit = host.WaitForExitAsync().AsTask();
         native.CloseFromNative();
-        await native.RunCompleted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(
+            PlaybackWindowsPhysicalRunnerResult.Stopped,
+            await exit.WaitAsync(TimeSpan.FromSeconds(5)));
         var stop = await host.StopAsync();
         var invocation = await host.InvokeAsync(_ => ValueTask.FromResult(1));
 
         Assert.Equal(PlaybackWindowsPhysicalRunnerResult.Stopped, stop);
         Assert.Equal(PlaybackWindowsOutputDispatcherInvocationResult.Shutdown, invocation.Result);
         Assert.Equal(PlaybackWindowsPhysicalRunnerState.Stopped, host.Snapshot.State);
+    }
+
+    [Fact]
+    public async Task CancelledExitWaitLeavesExplicitStopToApplicationOwner()
+    {
+        using var native = new FakeNative();
+        await using var host = CreateHost(native);
+        Assert.Equal(PlaybackWindowsPhysicalRunnerResult.Started, await host.StartAsync());
+        using var cancellation = new CancellationTokenSource();
+        await cancellation.CancelAsync();
+
+        var exit = await host.WaitForExitAsync(cancellation.Token);
+
+        Assert.Equal(PlaybackWindowsPhysicalRunnerResult.Cancelled, exit);
+        Assert.Equal(PlaybackWindowsPhysicalRunnerState.Running, host.Snapshot.State);
+        Assert.Equal(
+            PlaybackWindowsPhysicalRunnerResult.Stopped,
+            await host.StopAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5)));
     }
 
     private static PlaybackWindowsPhysicalRunnerHost CreateHost(
