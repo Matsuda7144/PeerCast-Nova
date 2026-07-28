@@ -6,6 +6,18 @@ public readonly record struct PlaybackControlledWindowsAudioRenderEvidenceComman
     int ExitCode,
     PlaybackControlledWindowsPhysicalRunResult Result);
 
+internal enum PlaybackControlledWindowsAudioRenderEvidenceManagedFailurePhase
+{
+    None,
+    OperationCreation,
+    CompositionRun,
+    SnapshotCapture,
+    TerminalProjection,
+    CompletedProjection,
+    OutcomeWrite,
+    CompositionDispose,
+}
+
 /// <summary>
 /// Runs one controlled audio composition with the bounded generation and WASAPI
 /// render traces enabled. It uses the system operations directly and does not add
@@ -17,6 +29,11 @@ public static class PlaybackControlledWindowsAudioRenderEvidenceCommand
     public const int CompletedExitCode = 0;
     public const int RunFailureExitCode = 1;
     public const int InvalidConfigurationExitCode = 2;
+
+    private const string ManagedFailurePhasePrefix =
+        "PCN-AUDIO-MANAGED-FAILURE-PHASE: ";
+    private const string TerminalRecordRejectionPrefix =
+        "PCN-AUDIO-TERMINAL-RECORD-REJECTION: ";
 
     public static ValueTask<PlaybackControlledWindowsAudioRenderEvidenceCommandResult>
         RunAsync(
@@ -42,49 +59,132 @@ public static class PlaybackControlledWindowsAudioRenderEvidenceCommand
                 PlaybackControlledWindowsPhysicalRunResult.InvalidConfiguration);
         }
 
-        var operations = CreateOperations(options);
-        await using var composition = new PlaybackControlledWindowsPhysicalRunComposition(
-            options,
-            operations);
-        var result = await composition.RunAsync(cancellationToken).ConfigureAwait(false);
-        var snapshot = composition.Snapshot;
-        if (result != PlaybackControlledWindowsPhysicalRunResult.Completed)
+        var phase = PlaybackControlledWindowsAudioRenderEvidenceManagedFailurePhase
+            .OperationCreation;
+        var outcomeWritten = false;
+        try
         {
-            if (TryCreateTerminalRecord(
-                    snapshot,
-                    options,
-                    out var terminalRecord,
-                    out var rejection))
+            var operations = CreateOperations(options);
+            await using var composition = new PlaybackControlledWindowsPhysicalRunComposition(
+                options,
+                operations);
+
+            phase = PlaybackControlledWindowsAudioRenderEvidenceManagedFailurePhase.CompositionRun;
+            var result = await composition.RunAsync(cancellationToken).ConfigureAwait(false);
+
+            phase = PlaybackControlledWindowsAudioRenderEvidenceManagedFailurePhase.SnapshotCapture;
+            var snapshot = composition.Snapshot;
+            if (result != PlaybackControlledWindowsPhysicalRunResult.Completed)
             {
-                await PlaybackControlledWindowsAudioTerminalRenderRecordCodec.WriteAsync(
-                        output,
-                        terminalRecord,
-                        CancellationToken.None)
-                    .ConfigureAwait(false);
-            }
-            else
-            {
-                if (diagnosticOutput is not null)
+                phase = PlaybackControlledWindowsAudioRenderEvidenceManagedFailurePhase
+                    .TerminalProjection;
+                if (TryCreateTerminalRecord(
+                        snapshot,
+                        options,
+                        out var terminalRecord,
+                        out var rejection))
                 {
-                    await diagnosticOutput.WriteLineAsync(
-                            "PCN-AUDIO-TERMINAL-RECORD-REJECTION: " + rejection)
+                    phase = PlaybackControlledWindowsAudioRenderEvidenceManagedFailurePhase
+                        .OutcomeWrite;
+                    await PlaybackControlledWindowsAudioTerminalRenderRecordCodec.WriteAsync(
+                            output,
+                            terminalRecord,
+                            CancellationToken.None)
                         .ConfigureAwait(false);
-                    await diagnosticOutput.FlushAsync(CancellationToken.None)
-                        .ConfigureAwait(false);
+                    outcomeWritten = true;
                 }
-                await output.WriteLineAsync($"Result: {result}").ConfigureAwait(false);
+                else
+                {
+                    if (diagnosticOutput is not null)
+                    {
+                        await diagnosticOutput.WriteLineAsync(
+                                TerminalRecordRejectionPrefix + rejection)
+                            .ConfigureAwait(false);
+                        await diagnosticOutput.FlushAsync(CancellationToken.None)
+                            .ConfigureAwait(false);
+                    }
+                    phase = PlaybackControlledWindowsAudioRenderEvidenceManagedFailurePhase
+                        .OutcomeWrite;
+                    await output.WriteLineAsync($"Result: {result}").ConfigureAwait(false);
+                    outcomeWritten = true;
+                }
+
+                phase = PlaybackControlledWindowsAudioRenderEvidenceManagedFailurePhase
+                    .CompositionDispose;
+                return new(RunFailureExitCode, result);
             }
 
-            return new(RunFailureExitCode, result);
+            phase = PlaybackControlledWindowsAudioRenderEvidenceManagedFailurePhase
+                .CompletedProjection;
+            var record = CreateRecord(snapshot, options);
+            phase = PlaybackControlledWindowsAudioRenderEvidenceManagedFailurePhase.OutcomeWrite;
+            await PlaybackControlledWindowsAudioRenderEvidenceRecordCodec.WriteAsync(
+                    output,
+                    record,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            outcomeWritten = true;
+            phase = PlaybackControlledWindowsAudioRenderEvidenceManagedFailurePhase
+                .CompositionDispose;
+            return new(CompletedExitCode, result);
+        }
+        catch
+        {
+            await WriteManagedFailureDiagnosticAsync(diagnosticOutput, phase).ConfigureAwait(false);
+            if (!outcomeWritten)
+            {
+                await TryWriteFaultedResultAsync(output).ConfigureAwait(false);
+            }
+
+            return new(
+                RunFailureExitCode,
+                PlaybackControlledWindowsPhysicalRunResult.Faulted);
+        }
+    }
+
+    internal static async ValueTask WriteManagedFailureDiagnosticAsync(
+        TextWriter? diagnosticOutput,
+        PlaybackControlledWindowsAudioRenderEvidenceManagedFailurePhase phase)
+    {
+        if (diagnosticOutput is null)
+        {
+            return;
         }
 
-        var record = CreateRecord(snapshot, options);
-        await PlaybackControlledWindowsAudioRenderEvidenceRecordCodec.WriteAsync(
-                output,
-                record,
-                cancellationToken)
-            .ConfigureAwait(false);
-        return new(CompletedExitCode, result);
+        try
+        {
+            await diagnosticOutput.WriteLineAsync(ManagedFailurePhasePrefix + phase)
+                .ConfigureAwait(false);
+            if (phase is PlaybackControlledWindowsAudioRenderEvidenceManagedFailurePhase
+                    .SnapshotCapture or
+                PlaybackControlledWindowsAudioRenderEvidenceManagedFailurePhase
+                    .TerminalProjection)
+            {
+                await diagnosticOutput.WriteLineAsync(
+                        TerminalRecordRejectionPrefix +
+                        PlaybackControlledWindowsAudioTerminalRecordRejection.ProjectionRejected)
+                    .ConfigureAwait(false);
+            }
+            await diagnosticOutput.FlushAsync(CancellationToken.None).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Diagnostics are bounded and must not replace the selected failure result.
+        }
+    }
+
+    internal static async ValueTask TryWriteFaultedResultAsync(TextWriter output)
+    {
+        try
+        {
+            await output.WriteLineAsync(
+                    $"Result: {PlaybackControlledWindowsPhysicalRunResult.Faulted}")
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            // The child-capture boundary still retains byte counts and fixed stderr markers.
+        }
     }
 
     internal static bool TryParse(
