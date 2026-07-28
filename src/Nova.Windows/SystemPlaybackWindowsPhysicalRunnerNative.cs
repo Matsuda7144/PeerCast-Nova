@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace PeerCast.Nova.Cli;
+namespace PeerCast.Nova.Windows;
 
 internal sealed class SystemPlaybackWindowsPhysicalRunnerNative :
     IPlaybackWindowsPhysicalRunnerNative

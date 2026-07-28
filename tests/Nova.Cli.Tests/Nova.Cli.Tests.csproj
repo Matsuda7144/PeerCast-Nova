@@ -15,5 +15,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/Nova.Cli/Nova.Cli.csproj" />
+    <ProjectReference Include="../../src/Nova.Windows/Nova.Windows.csproj" />
   </ItemGroup>
 </Project>

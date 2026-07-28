@@ -151,10 +151,17 @@ The following are not established:
 - permission to reuse any consumed readiness or outcome path;
 - permission to substitute another endpoint, fixture, buffer duration, timing policy, operation bound, probe, or output path.
 
-## Next project decision
+## Project decision
 
-A separately reviewed decision is required before any later readiness capture or physical run. Additional wrappers, codecs, record variants, probes, or physical reruns should not be added unless a concrete new evidence gap is identified.
+0.0.10d is explicitly deferred without claiming canonical audio completion,
+physical completion, formal acceptance, paired admission, or milestone
+completion. Issue #129 remains open and all retained evidence keeps its existing
+meaning.
 
-Until a new explicit physical authorization is granted, project work may include documentation reconciliation or a separately reviewed milestone that does not reinterpret 0.0.10d as complete.
+A separately reviewed decision is still required before any later readiness capture or physical run. Additional wrappers, codecs, record variants, probes, or physical reruns should not be added unless a concrete new evidence gap is identified.
+
+Project work continues in 0.0.10e through the shared non-physical Windows
+application ownership boundary described by ADR-0160 and PCN-0170. This does not
+reinterpret 0.0.10d as complete or grant physical authorization.
 
 Paired verification remains blocked until one later canonical completed audio record passes its independent preflight and the separate operator observation for that same run confirms recognizable audio.

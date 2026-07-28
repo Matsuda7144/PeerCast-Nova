@@ -9,7 +9,7 @@ License: **Apache License 2.0**
 
 ## 現在地
 
-**Milestone 0.0.10d — Controlled Physical Windows Video／Audio Output Validation — In Progress**
+**Milestone 0.0.10e — Shared Windows Application Ownership Boundary — In Progress**
 
 0.0.10a〜0.0.10cを経て、exact approved external FFmpeg runtime、controlled native decode、Windows output validation architectureは実装・検証済みです。
 
@@ -22,6 +22,8 @@ License: **Apache License 2.0**
 - ordinary controlled fixture audio: three consumed readiness-gated runs produced a recognizable beep with `Audio audible: Yes`
 - stable deterministic delivery、canonical completed audio evidence、formal audio acceptance、and paired video／audio admission remain unestablished
 - Issue #129 remains open
+- 0.0.10d is explicitly deferred without claiming physical completion, formal audio acceptance, paired admission, or milestone completion
+- the existing application-owned Win32 host is extracted into `Nova.Windows` so the user-facing application can reuse one window／message-loop／dispatcher ownership model
 
 The one authorized direct render-evidence helper invocation at main `4abadd280ceeae310b2528b6ea62f377211b1273` returned a bounded unexpected helper failure, retained neither requested record, and had operator observation `Audio audible: No`. That authorization is consumed and the exact trigger cannot be reconstructed.
 
@@ -105,6 +107,7 @@ Current-state review:
 - controlled application-owned Windows runner and finite physical-run composition
 - accepted visible controlled fixture video
 - bounded controlled audio render evidence, terminal evidence, failure retention, offline review, and readiness-required authorization boundaries
+- shared `Nova.Windows` application window／message-loop／bounded-dispatcher ownership assembly
 
 詳細:
 
@@ -124,8 +127,7 @@ PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信�
 - canonical completed／accepted audio record from the same run as a recognizable audible observation
 - independent completed-record preflight for that run
 - paired video／audio admission and completion of 0.0.10d
-- user-facing Windows application window／message-loop composition
-- application-provided dispatcher implementation for the final app surface
+- user-facing Windows startup composition above the shared `Nova.Windows` host
 - legal／about surfaceからのFFmpeg notice表示
 - MP4／fragmented MP4 parser
 - decoded-buffer duration cutoff
@@ -137,9 +139,9 @@ FFmpeg binary bundling／redistributionは既定方針として禁止です。�
 
 ## 次のゲート
 
-**0.0.10d — Separate decision on any later readiness-gated physical audio run**
+**0.0.10e — User-facing Windows application composition**
 
-Terminal scheduler-trace retention, managed command failure bounding, and managed phase record v6 are merged. No additional concrete non-physical evidence gap is currently identified. This does not authorize a readiness capture or physical run. Historical commands and consumed paths must not be reused.
+0.0.10d is explicitly deferred, not completed. Its evidence gaps and Issue #129 remain open. The application-owned Win32 host has moved from `Nova.Cli` into the shared `Nova.Windows` assembly without changing the controlled physical command behavior. The next slice adds normal user-facing startup composition and the legal／About projection above that single host.
 
 新しい物理実行を検討する場合は、次をすべて満たす必要があります。
 
@@ -152,7 +154,7 @@ Terminal scheduler-trace retention, managed command failure bounding, and manage
 
 The underlying helper must not be invoked directly. The literal authorization statement required by the entrypoint is an accidental-invocation guard and does not itself grant authorization.
 
-Until a new explicit authorization exists, historical helpers／diagnostics must not be rerun and 0.0.10d must not be marked complete.
+Until a new explicit authorization exists, historical helpers／diagnostics must not be rerun and deferred 0.0.10d must not be marked complete.
 
 ## 必要環境
 

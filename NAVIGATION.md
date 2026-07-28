@@ -233,7 +233,16 @@ The bounded FLV decoder configures the exact parser stream time base through pub
 
 ## 現在地
 
-**0.0.10d — Controlled Physical Windows Video／Audio Output Validation — Phase 7 Separate Authorization Decision**
+**0.0.10e — Shared Windows Application Ownership Boundary — In Progress**
+
+- 0.0.10d is explicitly deferred without claiming completion; Issue #129 and every missing audio／paired evidence gate remain open;
+- `Nova.Windows` now owns the single reusable application window, Win32 message loop, owner thread, and bounded dispatcher implementation;
+- `Nova.Cli` references that shared host for controlled commands rather than owning or duplicating it;
+- `Nova.Playback` continues to borrow only the dispatcher contract and window token;
+- current review: `docs/reviews/PCN-0170-SHARED-WINDOWS-APPLICATION-OWNERSHIP.md`;
+- next: user-facing startup composition and legal／About projection.
+
+**Deferred 0.0.10d — Controlled Physical Windows Video／Audio Output Validation**
 
 - authoritative state: `docs/reviews/PCN-0166-CONTROLLED-AUDIO-RENDER-AUTHORIZATION-STATE.md`, `docs/reviews/PCN-0167-MANAGED-AUDIO-FAILURE-BOUNDARY.md`, and Issue #129; documentation, CI, and readiness do not grant or select physical authorization;
 - corrected decoded physical video: `Completed／Accepted`, `VideoAccepted`, visible `Yes`;

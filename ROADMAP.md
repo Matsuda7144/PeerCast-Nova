@@ -115,7 +115,7 @@ The review selected:
 - deterministic evidence plus separate operator visible／audible observations;
 - no hidden retry, resident loop, device fallback, or device recreation.
 
-### 0.0.10d Controlled Physical Windows Video／Audio Output Validation — In Progress
+### 0.0.10d Controlled Physical Windows Video／Audio Output Validation — Deferred
 
 #### Established
 
@@ -162,9 +162,9 @@ The helper console line `Sanitized helper failure record retained: No` refers on
 
 Issue #129 remains open. Historical helpers and diagnostics must not be rerun.
 
-#### Current gate
+#### Deferral gate
 
-No additional concrete non-physical evidence gap is currently identified after PR #205. A later controlled physical run is a separate authorization decision; merge, documentation, CI, existing readiness evidence, fresh-looking paths, and the literal entrypoint guard do not grant it. Do not repeat readiness capture or physical output without a new explicit one-run authorization.
+No additional concrete non-physical evidence gap is currently identified after PR #205. The milestone is explicitly deferred without claiming physical completion, formal audio acceptance, paired admission, or completion. Issue #129 remains open. A later controlled physical run is a separate authorization decision; merge, documentation, CI, existing readiness evidence, fresh-looking paths, and the literal entrypoint guard do not grant it. Do not repeat readiness capture or physical output without a new explicit one-run authorization.
 
 A future controlled physical audio render run requires:
 
@@ -179,12 +179,22 @@ The underlying helper must not be invoked directly. Readiness evidence and the l
 
 Current-state reviews: `docs/reviews/PCN-0166-CONTROLLED-AUDIO-RENDER-AUTHORIZATION-STATE.md` and `docs/reviews/PCN-0167-MANAGED-AUDIO-FAILURE-BOUNDARY.md`.
 
+### 0.0.10e Shared Windows Application Ownership Boundary — In Progress
+
+- move the existing application-owned Win32 window, message loop, owner thread, and bounded dispatcher from `Nova.Cli` into `Nova.Windows`;
+- keep one implementation rather than copying the controlled runner ownership model;
+- keep `Nova.Playback` limited to the borrowed dispatcher contract and window token;
+- preserve all controlled physical command behavior and authorization boundaries;
+- next add the user-facing startup composition and legal／About projection above this shared host.
+
+Current review: `docs/reviews/PCN-0170-SHARED-WINDOWS-APPLICATION-OWNERSHIP.md`.
+
 ### Later sequence
 
-1. make a separate reviewed decision on any later readiness-gated physical audio run and then complete or explicitly defer 0.0.10d;
-2. add the user-facing application window／message-loop composition without duplicating the controlled runner ownership model;
-3. add the application dispatcher implementation and legal／About surface;
-4. expand packaging only after the preceding gates pass.
+1. add the user-facing Windows startup composition above `Nova.Windows`;
+2. add the legal／About projection;
+3. expand packaging only after the preceding gates pass;
+4. revisit deferred 0.0.10d only through a separate reviewed authorization decision.
 
 ### Deferred
 

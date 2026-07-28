@@ -1,6 +1,6 @@
 using PeerCast.Nova.Playback;
 
-namespace PeerCast.Nova.Cli;
+namespace PeerCast.Nova.Windows;
 
 public enum PlaybackWindowsPhysicalRunnerState
 {

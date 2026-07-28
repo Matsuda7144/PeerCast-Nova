@@ -5,6 +5,16 @@ namespace PeerCast.Nova.Cli.Tests;
 public sealed class PlaybackWindowsPhysicalRunnerHostTests
 {
     [Fact]
+    public void HostIsOwnedBySharedWindowsAssembly()
+    {
+        var hostAssembly = typeof(PlaybackWindowsPhysicalRunnerHost).Assembly;
+        var cliAssembly = typeof(PlaybackControlledWindowsPhysicalRunComposition).Assembly;
+
+        Assert.Equal("PeerCast.Nova.Windows", hostAssembly.GetName().Name);
+        Assert.NotSame(cliAssembly, hostAssembly);
+    }
+
+    [Fact]
     public async Task WorkItemCompletionIsPublishedOnlyAfterOutcomeAccounting()
     {
         var work = new PlaybackWindowsPhysicalRunnerWorkItem<int>(
