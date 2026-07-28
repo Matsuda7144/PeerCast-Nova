@@ -180,6 +180,8 @@ public sealed class PlaybackProductionPcpFlvCompositionBoundary :
     private readonly PlaybackOneEventFinalEosFlvParser _parser;
     private readonly IPlaybackProductionDecoderGenerationCreator _factory;
     private readonly IPlaybackWindowsAudioNativeStageReporter _audioNativeStageReporter;
+    private readonly PlaybackProductionGenerationDeliveryTraceRetention _deliveryTraceRetention =
+        new();
 
     private PlaybackProductionDecoderGeneration? _generation;
     private PlaybackProductionPcpFlvCompositionState _state =
@@ -296,8 +298,7 @@ public sealed class PlaybackProductionPcpFlvCompositionBoundary :
             {
                 var generation = _generation;
                 var decode = DecodeSnapshotOrNull(generation);
-                var deliveryTrace =
-                    PlaybackProductionGenerationDeliveryTraceProjection.Capture(generation);
+                var deliveryTrace = _deliveryTraceRetention.Select(generation);
                 var source = _parser.Session;
                 var liveSource = source is { IsDisposed: false };
                 return new(
@@ -1253,6 +1254,7 @@ public sealed class PlaybackProductionPcpFlvCompositionBoundary :
         }
 
         _generation = generation;
+        _deliveryTraceRetention.Reset();
         _nextDecoderGeneration = checked(decoderGeneration + 1);
         lock (_sync)
         {
@@ -1264,6 +1266,7 @@ public sealed class PlaybackProductionPcpFlvCompositionBoundary :
     private async ValueTask StopGenerationForReplacementAsync()
     {
         var generation = _generation;
+        _deliveryTraceRetention.Capture(generation);
         _generation = null;
         lock (_sync)
         {
@@ -1391,6 +1394,7 @@ public sealed class PlaybackProductionPcpFlvCompositionBoundary :
 
         _ownedDisposed = true;
         var generation = _generation;
+        _deliveryTraceRetention.Capture(generation);
         _generation = null;
         if (generation is not null)
         {

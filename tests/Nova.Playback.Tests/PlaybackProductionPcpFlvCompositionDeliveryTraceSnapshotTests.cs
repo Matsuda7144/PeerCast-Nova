@@ -28,7 +28,48 @@ public sealed class PlaybackProductionPcpFlvCompositionDeliveryTraceSnapshotTest
         Assert.Equal(3L, boundary.Snapshot.DeliveryTrace.First.Sequence);
     }
 
-    private static PlaybackGenerationMatchedSchedulerDeliveryTraceSnapshot Trace(long sequence)
+    [Fact]
+    public async Task Delivery_rejection_retains_trace_after_terminal_generation_cleanup()
+    {
+        using var output = new OutputHarness();
+        var expected = Trace(
+            sequence: 7,
+            PlaybackGenerationMatchedSchedulerDeliveryResult.OutputFailure,
+            PlaybackGenerationMatchedSchedulerReservationCompletion.Retained);
+        var creator = new FakeCreator(
+            expected,
+            PlaybackGenerationMatchedSchedulerDeliveryResult.OutputFailure);
+        await using var boundary = new PlaybackProductionPcpFlvCompositionBoundary(
+            ChannelId,
+            SessionId,
+            "C:\\verified-runtime",
+            output.Output,
+            creator);
+        await boundary.ConsumeAsync(CreatePacket(0, BuildBootstrap()), default);
+
+        var exception = await Assert.ThrowsAsync<PlaybackProductionPcpFlvCompositionException>(
+            () => boundary.DeliverOneAsync().AsTask());
+
+        Assert.Equal(
+            PlaybackProductionPcpFlvCompositionResult.DeliveryRejected,
+            exception.Result);
+        var terminal = boundary.Snapshot;
+        Assert.Equal(PlaybackProductionPcpFlvCompositionState.Faulted, terminal.State);
+        Assert.Equal(
+            PlaybackProductionPcpFlvCompositionResult.DeliveryRejected,
+            terminal.Result);
+        Assert.False(terminal.HasDecoderGeneration);
+        Assert.Equal(-1, terminal.DecoderGeneration);
+        Assert.Equal(expected, terminal.DeliveryTrace);
+        Assert.True(creator.IsDisposed);
+    }
+
+    private static PlaybackGenerationMatchedSchedulerDeliveryTraceSnapshot Trace(
+        long sequence,
+        PlaybackGenerationMatchedSchedulerDeliveryResult result =
+            PlaybackGenerationMatchedSchedulerDeliveryResult.AudioDelivered,
+        PlaybackGenerationMatchedSchedulerReservationCompletion completion =
+            PlaybackGenerationMatchedSchedulerReservationCompletion.Delivered)
     {
         var observation = new PlaybackGenerationMatchedSchedulerDeliveryObservation(
             Sequence: sequence,
@@ -38,8 +79,8 @@ public sealed class PlaybackProductionPcpFlvCompositionDeliveryTraceSnapshotTest
             HasTimingDecision: true,
             TimingResult: PlaybackAvTimingDecisionResult.ProcessNow,
             TimingWaitTicks: 0,
-            Result: PlaybackGenerationMatchedSchedulerDeliveryResult.AudioDelivered,
-            Completion: PlaybackGenerationMatchedSchedulerReservationCompletion.Delivered);
+            Result: result,
+            Completion: completion);
         return new(
             Count: 1,
             Overflowed: false,
@@ -50,7 +91,9 @@ public sealed class PlaybackProductionPcpFlvCompositionDeliveryTraceSnapshotTest
     }
 
     private sealed class FakeCreator(
-        PlaybackGenerationMatchedSchedulerDeliveryTraceSnapshot trace) :
+        PlaybackGenerationMatchedSchedulerDeliveryTraceSnapshot trace,
+        PlaybackGenerationMatchedSchedulerDeliveryResult deliveryResult =
+            PlaybackGenerationMatchedSchedulerDeliveryResult.Empty) :
         IPlaybackProductionDecoderGenerationCreator
     {
         public bool IsDisposed { get; private set; }
@@ -71,7 +114,8 @@ public sealed class PlaybackProductionPcpFlvCompositionDeliveryTraceSnapshotTest
                 source,
                 decoderGeneration,
                 discontinuityGeneration,
-                trace);
+                trace,
+                deliveryResult);
             return ValueTask.FromResult(
                 new PlaybackProductionDecoderGenerationCreation(
                     PlaybackProductionDecoderGenerationFactoryResult.Created,
@@ -96,17 +140,20 @@ public sealed class PlaybackProductionPcpFlvCompositionDeliveryTraceSnapshotTest
         IPlaybackProductionDecoderGenerationIngressForwarder
     {
         private readonly PlaybackGenerationMatchedSchedulerDeliveryTraceSnapshot _trace;
+        private readonly PlaybackGenerationMatchedSchedulerDeliveryResult _deliveryResult;
 
         public FakeRoot(
             PlaybackBoundedDemuxSession sourceSession,
             int decoderGeneration,
             int discontinuityGeneration,
-            PlaybackGenerationMatchedSchedulerDeliveryTraceSnapshot trace)
+            PlaybackGenerationMatchedSchedulerDeliveryTraceSnapshot trace,
+            PlaybackGenerationMatchedSchedulerDeliveryResult deliveryResult)
         {
             SourceSession = sourceSession;
             DecoderGeneration = decoderGeneration;
             DiscontinuityGeneration = discontinuityGeneration;
             _trace = trace;
+            _deliveryResult = deliveryResult;
         }
 
         public PlaybackBoundedDemuxSession SourceSession { get; }
@@ -212,7 +259,7 @@ public sealed class PlaybackProductionPcpFlvCompositionDeliveryTraceSnapshotTest
                 ? PlaybackGenerationMatchedSchedulerDeliveryResult.Disposed
                 : cancellationToken.IsCancellationRequested
                     ? PlaybackGenerationMatchedSchedulerDeliveryResult.Cancelled
-                    : PlaybackGenerationMatchedSchedulerDeliveryResult.Empty);
+                    : _deliveryResult);
 
         public ValueTask<PlaybackGenerationMatchedSchedulerResetResult> ResetAsync(
             CancellationToken cancellationToken) =>

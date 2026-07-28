@@ -199,6 +199,8 @@ public sealed class PlaybackApprovedExternalRuntimeWindowsLifecycleBoundary :
     private readonly PlaybackApprovedExternalRuntimeWindowsLifecycleOptions _options;
     private readonly IPlaybackApprovedExternalRuntimeWindowsLifecycleOperations _operations;
     private readonly PlaybackApprovedExternalRuntimeWindowsLifecycleResult _preflightResult;
+    private readonly PlaybackApprovedExternalRuntimeWindowsDeliveryTraceRetention
+        _deliveryTraceRetention = new();
 
     private PlaybackApprovedExternalRuntimeWindowsLifecycleState _state =
         PlaybackApprovedExternalRuntimeWindowsLifecycleState.Created;
@@ -300,7 +302,7 @@ public sealed class PlaybackApprovedExternalRuntimeWindowsLifecycleBoundary :
                     owned.Streams,
                     owned.Buffers)
                 {
-                    DeliveryTrace = production?.DeliveryTrace ?? default,
+                    DeliveryTrace = _deliveryTraceRetention.Select(production),
                 };
             }
         }
@@ -446,6 +448,7 @@ public sealed class PlaybackApprovedExternalRuntimeWindowsLifecycleBoundary :
         try
         {
             _operations.CreateProduction();
+            _deliveryTraceRetention.Reset();
             _productionCreated = true;
         }
         catch
@@ -473,6 +476,8 @@ public sealed class PlaybackApprovedExternalRuntimeWindowsLifecycleBoundary :
         {
             productionResult = exception.Result;
         }
+
+        CaptureDeliveryTrace();
 
         if (HasDeviceLoss(_operations.Snapshot))
         {
@@ -817,6 +822,18 @@ public sealed class PlaybackApprovedExternalRuntimeWindowsLifecycleBoundary :
         lock (_sync)
         {
             _hasActiveOperation = value;
+        }
+    }
+
+    private void CaptureDeliveryTrace()
+    {
+        try
+        {
+            _deliveryTraceRetention.Capture(_operations.Snapshot.Production);
+        }
+        catch
+        {
+            // Snapshot-only evidence must not alter the selected lifecycle result.
         }
     }
 
