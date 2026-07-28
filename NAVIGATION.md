@@ -241,8 +241,9 @@ The bounded FLV decoder configures the exact parser stream time base through pub
 - `Nova.Playback` continues to borrow only the dispatcher contract and window token;
 - `Nova.App` now creates exactly one shared host, waits for close or cancellation, then stops and disposes it without any controlled-command startup;
 - `Nova.App` now provides an immutable, size-bounded legal/About model from the exact retained FFmpeg notice, provenance, and runtime-replacement text and projects it only through the shared dispatcher with a finite lifetime;
-- current reviews: `docs/reviews/PCN-0170-SHARED-WINDOWS-APPLICATION-OWNERSHIP.md`, `docs/reviews/PCN-0171-USER-FACING-WINDOWS-STARTUP-COMPOSITION.md`, and `docs/reviews/PCN-0172-BOUNDED-LEGAL-ABOUT-PROJECTION.md`;
-- next: expand packaging only after the current ownership and legal gates remain satisfied.
+- `Nova.App` now has a framework-dependent `win-x64` portable publish contract that copies the project license material and exact FFmpeg legal allowlist without any external runtime payload;
+- current reviews: `docs/reviews/PCN-0170-SHARED-WINDOWS-APPLICATION-OWNERSHIP.md`, `docs/reviews/PCN-0171-USER-FACING-WINDOWS-STARTUP-COMPOSITION.md`, `docs/reviews/PCN-0172-BOUNDED-LEGAL-ABOUT-PROJECTION.md`, and `docs/reviews/PCN-0173-FRAMEWORK-DEPENDENT-WINDOWS-PORTABLE-PACKAGE.md`;
+- next: review installer, signing, and update boundaries separately.
 
 **Deferred 0.0.10d — Controlled Physical Windows Video／Audio Output Validation**
 

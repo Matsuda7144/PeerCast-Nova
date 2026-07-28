@@ -191,14 +191,17 @@ Current-state reviews: `docs/reviews/PCN-0166-CONTROLLED-AUDIO-RENDER-AUTHORIZAT
   text as an immutable legal/About model through the shared dispatcher;
 - keep projection lifetime finite and fail closed without adding a binary,
   downloader, installer, runtime invocation, or application-resource owner.
+- add a framework-dependent `win-x64` portable publish profile with the exact
+  project and FFmpeg legal-material allowlist and no external runtime payload.
 
 Current reviews: `docs/reviews/PCN-0170-SHARED-WINDOWS-APPLICATION-OWNERSHIP.md`,
 `docs/reviews/PCN-0171-USER-FACING-WINDOWS-STARTUP-COMPOSITION.md`, and
-`docs/reviews/PCN-0172-BOUNDED-LEGAL-ABOUT-PROJECTION.md`.
+`docs/reviews/PCN-0172-BOUNDED-LEGAL-ABOUT-PROJECTION.md`, and
+`docs/reviews/PCN-0173-FRAMEWORK-DEPENDENT-WINDOWS-PORTABLE-PACKAGE.md`.
 
 ### Later sequence
 
-1. expand packaging only after the preceding gates pass;
+1. review installer, signing, and update boundaries separately;
 2. revisit deferred 0.0.10d only through a separate reviewed authorization decision.
 
 ### Deferred

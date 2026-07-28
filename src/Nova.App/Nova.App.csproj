@@ -20,4 +20,42 @@
                       LogicalName="PeerCast.Nova.App.Legal.FFmpeg.RUNTIME-REPLACEMENT.md" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="..\..\LICENSE"
+          Link="LICENSE"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="PreserveNewest" />
+    <None Include="..\..\NOTICE"
+          Link="NOTICE"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="PreserveNewest" />
+
+    <FfmpegLegalMaterial Include="..\..\THIRD-PARTY-LICENSES\FFmpeg\CANDIDATE-20260721-INVENTORY.txt" />
+    <FfmpegLegalMaterial Include="..\..\THIRD-PARTY-LICENSES\FFmpeg\COPYING.GPLv3" />
+    <FfmpegLegalMaterial Include="..\..\THIRD-PARTY-LICENSES\FFmpeg\COPYING.GPLv3.gz" />
+    <FfmpegLegalMaterial Include="..\..\THIRD-PARTY-LICENSES\FFmpeg\COPYING.GPLv3.README" />
+    <FfmpegLegalMaterial Include="..\..\THIRD-PARTY-LICENSES\FFmpeg\COPYING.LGPLv3" />
+    <FfmpegLegalMaterial Include="..\..\THIRD-PARTY-LICENSES\FFmpeg\ffmpeg-candidate-buildconf.txt" />
+    <FfmpegLegalMaterial Include="..\..\THIRD-PARTY-LICENSES\FFmpeg\ffmpeg-candidate-license.txt" />
+    <FfmpegLegalMaterial Include="..\..\THIRD-PARTY-LICENSES\FFmpeg\NOTICE.md" />
+    <FfmpegLegalMaterial Include="..\..\THIRD-PARTY-LICENSES\FFmpeg\NOVA-DISTRIBUTION-GUARD.md" />
+    <FfmpegLegalMaterial Include="..\..\THIRD-PARTY-LICENSES\FFmpeg\PROVENANCE.md" />
+    <FfmpegLegalMaterial Include="..\..\THIRD-PARTY-LICENSES\FFmpeg\RUNTIME-REPLACEMENT.md" />
+    <FfmpegLegalMaterial Include="..\..\THIRD-PARTY-LICENSES\FFmpeg\SHA256SUMS" />
+
+    <None Include="@(FfmpegLegalMaterial)"
+          Link="THIRD-PARTY-LICENSES\FFmpeg\%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Target Name="RemoveWindowsPortableDebugSymbols"
+          AfterTargets="Publish"
+          Condition="'$(PublishProfile)' == 'WindowsPortable'">
+    <ItemGroup>
+      <WindowsPortableDebugSymbol Include="$(PublishDir)**\*.pdb" />
+    </ItemGroup>
+    <Delete Files="@(WindowsPortableDebugSymbol)" />
+  </Target>
+
 </Project>
