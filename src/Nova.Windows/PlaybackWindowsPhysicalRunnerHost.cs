@@ -26,6 +26,19 @@ public enum PlaybackWindowsPhysicalRunnerResult
     Disposed,
 }
 
+public enum PlaybackWindowsApplicationDispatcherResult
+{
+    None,
+    Completed,
+    Cancelled,
+    Shutdown,
+    Faulted,
+}
+
+public sealed record PlaybackWindowsApplicationDispatcherInvocation<T>(
+    PlaybackWindowsApplicationDispatcherResult Result,
+    T Value);
+
 public sealed record PlaybackWindowsPhysicalRunnerOptions
 {
     public int ClientWidth { get; init; } = 640;
@@ -264,6 +277,27 @@ public sealed class PlaybackWindowsPhysicalRunnerHost :
         }
 
         return new(work.Task);
+    }
+
+    public async ValueTask<PlaybackWindowsApplicationDispatcherInvocation<T>>
+        InvokeApplicationAsync<T>(
+            Func<CancellationToken, ValueTask<T>> operation,
+            CancellationToken cancellationToken = default)
+    {
+        var invocation = await InvokeAsync(operation, cancellationToken)
+            .ConfigureAwait(false);
+        return new(
+            invocation.Result switch
+            {
+                PlaybackWindowsOutputDispatcherInvocationResult.Completed =>
+                    PlaybackWindowsApplicationDispatcherResult.Completed,
+                PlaybackWindowsOutputDispatcherInvocationResult.Cancelled =>
+                    PlaybackWindowsApplicationDispatcherResult.Cancelled,
+                PlaybackWindowsOutputDispatcherInvocationResult.Shutdown =>
+                    PlaybackWindowsApplicationDispatcherResult.Shutdown,
+                _ => PlaybackWindowsApplicationDispatcherResult.Faulted,
+            },
+            invocation.Value);
     }
 
     public async ValueTask<PlaybackWindowsPhysicalRunnerResult> StopAsync(

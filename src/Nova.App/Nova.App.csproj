@@ -11,4 +11,13 @@
     <ProjectReference Include="..\Nova.Windows\Nova.Windows.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\THIRD-PARTY-LICENSES\FFmpeg\NOTICE.md"
+                      LogicalName="PeerCast.Nova.App.Legal.FFmpeg.NOTICE.md" />
+    <EmbeddedResource Include="..\..\THIRD-PARTY-LICENSES\FFmpeg\PROVENANCE.md"
+                      LogicalName="PeerCast.Nova.App.Legal.FFmpeg.PROVENANCE.md" />
+    <EmbeddedResource Include="..\..\THIRD-PARTY-LICENSES\FFmpeg\RUNTIME-REPLACEMENT.md"
+                      LogicalName="PeerCast.Nova.App.Legal.FFmpeg.RUNTIME-REPLACEMENT.md" />
+  </ItemGroup>
+
 </Project>

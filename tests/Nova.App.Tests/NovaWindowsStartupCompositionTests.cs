@@ -80,7 +80,7 @@ public sealed class NovaWindowsStartupCompositionTests
     }
 
     [Fact]
-    public void DefaultApplicationGraphHasNoPhysicalCommandOrFfmpegReference()
+    public void DefaultApplicationGraphHasNoPhysicalCommandOrFfmpegBinaryReference()
     {
         var project = File.ReadAllText(FindRepositoryFile(
             "src",
@@ -94,7 +94,10 @@ public sealed class NovaWindowsStartupCompositionTests
         Assert.Contains(@"..\Nova.Windows\Nova.Windows.csproj", project, StringComparison.Ordinal);
         Assert.DoesNotContain("Nova.Cli", project, StringComparison.Ordinal);
         Assert.DoesNotContain("Nova.Playback", project, StringComparison.Ordinal);
-        Assert.DoesNotContain("FFmpeg", project, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("FFmpeg\\**\\*", project, StringComparison.Ordinal);
+        Assert.DoesNotContain(".dll", project, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(".exe", project, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(".zip", project, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Physical", program, StringComparison.Ordinal);
         Assert.DoesNotContain("Readiness", program, StringComparison.Ordinal);
         Assert.DoesNotContain("Probe", program, StringComparison.Ordinal);

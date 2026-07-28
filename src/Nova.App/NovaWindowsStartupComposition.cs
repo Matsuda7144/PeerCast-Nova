@@ -49,15 +49,44 @@ public sealed class NovaWindowsStartupComposition
     }
 
     public async ValueTask<NovaWindowsStartupResult> RunAsync(
+        CancellationToken cancellationToken = default) =>
+        await RunAsync(projectionTarget: null, cancellationToken).ConfigureAwait(false);
+
+    public async ValueTask<NovaWindowsStartupResult> RunAsync(
+        INovaAboutLegalProjectionTarget? projectionTarget,
         CancellationToken cancellationToken = default)
     {
         await using var host = _hostFactory.Create(_options.Host);
+        IAsyncDisposable? projectionLifetime = null;
         try
         {
             var start = await host.StartAsync(cancellationToken).ConfigureAwait(false);
             if (start != PlaybackWindowsPhysicalRunnerResult.Started)
             {
                 return MapStartResult(start);
+            }
+
+            if (projectionTarget is not null)
+            {
+                if (host is not INovaAboutLegalDispatcher dispatcher)
+                {
+                    return NovaWindowsStartupResult.Faulted;
+                }
+
+                var projection = await NovaAboutLegalProjection.OpenAsync(
+                    dispatcher,
+                    projectionTarget,
+                    cancellationToken).ConfigureAwait(false);
+                if (projection.Result != NovaAboutLegalProjectionResult.Projected ||
+                    projection.Lifetime is null)
+                {
+                    return projection.Result ==
+                        NovaAboutLegalProjectionResult.PlatformUnsupported
+                            ? NovaWindowsStartupResult.PlatformUnsupported
+                            : NovaWindowsStartupResult.Faulted;
+                }
+
+                projectionLifetime = projection.Lifetime;
             }
 
             var exit = await host.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
@@ -80,6 +109,18 @@ public sealed class NovaWindowsStartupComposition
         }
         finally
         {
+            if (projectionLifetime is not null)
+            {
+                try
+                {
+                    await projectionLifetime.DisposeAsync().ConfigureAwait(false);
+                }
+                catch
+                {
+                    // Host cleanup must still run after a rejected projection close.
+                }
+            }
+
             await host.StopAsync(CancellationToken.None).ConfigureAwait(false);
         }
     }
@@ -127,7 +168,9 @@ internal sealed class SystemNovaWindowsStartupHostFactory :
         new SystemNovaWindowsStartupHost(new(options));
 }
 
-internal sealed class SystemNovaWindowsStartupHost : INovaWindowsStartupHost
+internal sealed class SystemNovaWindowsStartupHost :
+    INovaWindowsStartupHost,
+    INovaAboutLegalDispatcher
 {
     private readonly PlaybackWindowsPhysicalRunnerHost _host;
 
@@ -145,6 +188,25 @@ internal sealed class SystemNovaWindowsStartupHost : INovaWindowsStartupHost
 
     public ValueTask<PlaybackWindowsPhysicalRunnerResult> StopAsync(
         CancellationToken cancellationToken) => _host.StopAsync(cancellationToken);
+
+    public async ValueTask<NovaAboutLegalDispatcherInvocation> InvokeAsync(
+        Func<CancellationToken, ValueTask<IAsyncDisposable?>> operation,
+        CancellationToken cancellationToken)
+    {
+        var invocation = await _host.InvokeApplicationAsync(
+            operation,
+            cancellationToken).ConfigureAwait(false);
+        return invocation.Result switch
+        {
+            PlaybackWindowsApplicationDispatcherResult.Completed =>
+                new(NovaAboutLegalDispatcherResult.Completed, invocation.Value),
+            PlaybackWindowsApplicationDispatcherResult.Cancelled =>
+                new(NovaAboutLegalDispatcherResult.Cancelled, null),
+            PlaybackWindowsApplicationDispatcherResult.Faulted =>
+                new(NovaAboutLegalDispatcherResult.Faulted, null),
+            _ => new(NovaAboutLegalDispatcherResult.Rejected, null),
+        };
+    }
 
     public ValueTask DisposeAsync() => _host.DisposeAsync();
 }

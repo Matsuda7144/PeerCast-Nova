@@ -240,8 +240,9 @@ The bounded FLV decoder configures the exact parser stream time base through pub
 - `Nova.Cli` references that shared host for controlled commands rather than owning or duplicating it;
 - `Nova.Playback` continues to borrow only the dispatcher contract and window token;
 - `Nova.App` now creates exactly one shared host, waits for close or cancellation, then stops and disposes it without any controlled-command startup;
-- current reviews: `docs/reviews/PCN-0170-SHARED-WINDOWS-APPLICATION-OWNERSHIP.md` and `docs/reviews/PCN-0171-USER-FACING-WINDOWS-STARTUP-COMPOSITION.md`;
-- next: bounded legal/About projection through the application layer.
+- `Nova.App` now provides an immutable, size-bounded legal/About model from the exact retained FFmpeg notice, provenance, and runtime-replacement text and projects it only through the shared dispatcher with a finite lifetime;
+- current reviews: `docs/reviews/PCN-0170-SHARED-WINDOWS-APPLICATION-OWNERSHIP.md`, `docs/reviews/PCN-0171-USER-FACING-WINDOWS-STARTUP-COMPOSITION.md`, and `docs/reviews/PCN-0172-BOUNDED-LEGAL-ABOUT-PROJECTION.md`;
+- next: expand packaging only after the current ownership and legal gates remain satisfied.
 
 **Deferred 0.0.10d — Controlled Physical Windows Video／Audio Output Validation**
 

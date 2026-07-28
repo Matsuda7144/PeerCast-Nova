@@ -141,7 +141,7 @@ FFmpeg binary bundling／redistributionは既定方針として禁止です。�
 
 **0.0.10e — User-facing Windows application composition**
 
-0.0.10d is explicitly deferred, not completed. Its evidence gaps and Issue #129 remain open. `Nova.App` now provides the normal user-facing start/close/cancel boundary above the single shared `Nova.Windows` host without changing controlled physical command behavior. The next slice adds the legal/About projection through that application layer.
+0.0.10d is explicitly deferred, not completed. Its evidence gaps and Issue #129 remain open. `Nova.App` provides the normal user-facing start/close/cancel boundary above the single shared `Nova.Windows` host and now projects the exact bounded FFmpeg notice, provenance, and runtime-replacement material as an immutable legal/About model through that host's dispatcher. It adds no FFmpeg binary, acquisition, installation, or invocation behavior and does not change controlled physical commands.
 
 新しい物理実行を検討する場合は、次をすべて満たす必要があります。
 
