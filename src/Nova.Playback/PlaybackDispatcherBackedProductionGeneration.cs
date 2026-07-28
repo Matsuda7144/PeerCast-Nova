@@ -90,7 +90,8 @@ internal sealed class PlaybackDispatcherBackedProductionGenerationFactoryOperati
                 discontinuityGeneration,
                 scheduler,
                 initialSchedulerSequence: 0,
-                deliveryOperations);
+                deliveryOperations,
+                captureDeliveryObservations: options.CaptureDeliveryObservations);
             decode = null;
             scheduler = null;
             deliveryOperations = null;
