@@ -6,7 +6,7 @@ Tracking issue: #129
 
 ## Purpose
 
-Record the exact current boundary after the contradictory controlled physical audio runs, the consumed one-run render-evidence attempt, and the completed prospective non-physical hardening.
+Record the exact current boundary after the contradictory controlled physical audio runs, the two later audible but technically incomplete one-run results, the consumed authorizations, and the completed prospective non-physical hardening.
 
 This review supersedes older roadmap and navigation text that still presents 0.0.10b or the fixed-kind scheduler review as the active next gate.
 
@@ -48,20 +48,32 @@ Controlled Windows video output is established for the retained fixture:
 
 ## Retained physical audio evidence
 
-The retained audio evidence remains contradictory and does not establish recognizable fixture audio:
+The retained audio evidence remains contradictory. It establishes two recognizable ordinary fixture-audio observations, but it does not establish canonical completed audio evidence, stable delivery, physical completion, or formal audio acceptance:
 
 1. an ordinary controlled run retained `3 / 2` delivery accounting and a noise-like transient;
 2. a delivery-result diagnostic retained four caller-visible `AudioDelivered` results and no recognizable audio;
 3. the known 80 ms managed tone and decoded 80 ms fixture slice were both recognizable, establishing canonical Float32 WASAPI output and decoded fixture sample interpretation;
-4. the direct render-evidence helper executed once from approved main `4abadd280ceeae310b2528b6ea62f377211b1273`, returned `unexpected helper failure`, retained neither the requested canonical evidence nor the requested failure record, and had operator observation `Audio audible: No`.
+4. the direct render-evidence helper executed once from approved main `4abadd280ceeae310b2528b6ea62f377211b1273`, returned `unexpected helper failure`, retained neither the requested canonical evidence nor the requested failure record, and had operator observation `Audio audible: No`;
+5. the readiness-gated run from exact main `7fbeb8b0dabd9c6af5b2dc9d065d66fd05faf53d` returned child exit `1`, `DeliveryRejected`, terminal rejection `PreCleanupCheckpointRejected`, and final native stage `ActivationCleanupCompleted`; it produced no canonical completed or terminal record, retained a sanitized failure record with SHA-256 `C60F9E2901F710DABC80DD1C26D0E5ADCB7DCEF5C50A767F989DAF6798F604A8`, and had separate operator observation `Audio audible: Yes` for a recognizable beep;
+6. the later readiness-gated run from exact main `77a947f98e7a9449523b49a39bc8b4e8d7ed430b` returned child exit `1`, `DeliveryRejected`, terminal rejection `PreCleanupTraceCardinalityRejected`, and final native stage `ActivationCleanupCompleted`; it produced no canonical completed or terminal record, retained a `798`-byte／`21`-line sanitized failure record with SHA-256 `E5AA6E01A55E662E18E9E70089CFDE46125153A57064BF38C2166AACB2DE2ECE`, and again had separate operator observation `Audio audible: Yes` for a recognizable beep.
 
 The exact failure trigger for the consumed `4abadd280...` invocation is unknowable. The confirmed defect was evidence loss. Native stderr and Windows PowerShell `ErrorActionPreference` interaction was plausible but not proven.
 
-No retained result establishes both canonical completed render evidence and recognizable audible fixture audio.
+The `7fbeb8...` and `77a947f...` observations establish that recognizable ordinary fixture audio reached the operator in two separately authorized runs. Neither run establishes physical completion or formal audio acceptance because neither produced a canonical completed record or a canonical terminal record.
+
+## Static root cause of `PreCleanupTraceCardinalityRejected`
+
+The latest rejection does not prove an extra native audio write.
+
+Production `DeliveryRejected` maps to lifecycle `OutputRejected`. The lifecycle then performs owned cleanup before returning the delivery result. `StopProductionAsync` clears the `_production` owner before awaiting production stop and disposal. A later lifecycle snapshot therefore has no live production snapshot and projects the scheduler-delivery trace as default. The output-buffer owner remains referenced, and its native audio render trace remains available. The terminal codec consequently sees an audio trace count greater than the delivery trace count and reports `PreCleanupTraceCardinalityRejected`.
+
+This is a bounded terminal-evidence retention asymmetry. The correction is to retain the last immutable production delivery trace before clearing the production owner and use it only when no live production snapshot remains. That change must not alter delivery, timing, endpoint selection, buffers, samples, native writes, or cleanup ordering.
+
+No retained result establishes both canonical completed render evidence and recognizable audible fixture audio in the same run.
 
 ## Completed prospective non-physical boundary
 
-The repository now contains all prospective evidence and authorization mechanics required before any later decision:
+The repository now contains the prospective evidence and authorization mechanics needed to review later decisions:
 
 - non-perturbing fixed four-slot scheduler delivery trace;
 - fixed four-slot WASAPI write and padding trace;
@@ -70,6 +82,11 @@ The repository now contains all prospective evidence and authorization mechanics
 - strict bounded completed and terminal render-record codecs;
 - exclusive completed, terminal, child-failure, or helper-failure retention;
 - offline strict preflights for completed, terminal, child-failure, and helper-failure records;
+- bounded retention of exact controlled-run failure result and terminal-record rejection;
+- exact initialized-stream versus decoded-buffer format validation;
+- bounded production and cleanup-stage diagnostics;
+- fixed allowlisted readiness failure disclosure and direct readiness child-process capture;
+- granular pre-cleanup terminal rejection categories for delivery trace, audio/native trace, trace cardinality, and trace result consistency;
 - a non-physical readiness preflight for exact clean `main`, reviewed inputs, fresh paths, runner build, and accepted video record;
 - a strict canonical readiness-record codec and offline preflight;
 - atomic UTF-8-no-BOM readiness-record capture;
@@ -87,7 +104,9 @@ That literal string is not authorization by itself.
 
 Issue #129 remains open.
 
-The historical authorization at `4abadd280ceeae310b2528b6ea62f377211b1273` is permanently consumed. No current commit has a new physical-run authorization.
+All recorded readiness-capture and physical-run authorizations through the consumed `77a947f98e7a9449523b49a39bc8b4e8d7ed430b` run are permanently consumed. No current commit has a new readiness-capture or physical-run authorization.
+
+Before another authorization decision, implement and test non-physical retention of the last immutable production delivery trace across terminal cleanup. The same readiness or physical command must not be repeated merely to rediscover the retained gate.
 
 A future controlled physical audio render run requires all of the following:
 
@@ -104,7 +123,8 @@ The underlying helper must not be invoked directly.
 
 The following are not established:
 
-- completed recognizable physical fixture audio;
+- canonical completed／accepted audio evidence for either run with recognizable fixture audio;
+- physical completion or formal audio acceptance for either run;
 - stable or deterministic ordinary controlled audio delivery;
 - paired video/audio admission;
 - completion of 0.0.10d;
@@ -113,8 +133,8 @@ The following are not established:
 
 ## Next project decision
 
-No additional physical-output-free evidence plumbing is required before the next authorization decision. Additional wrappers, codecs, or record variants should not be added without a concrete newly identified evidence gap.
+Retain the terminal scheduler delivery trace before production cleanup and add focused non-physical tests proving a rejected delivery can still form a structurally consistent terminal checkpoint. Additional wrappers, codecs, record variants, probes, or physical reruns should not be added unless that implementation exposes a concrete new evidence gap.
 
-Until a new explicit physical authorization is granted, project work should be limited to documentation reconciliation or a separately reviewed milestone that does not reinterpret 0.0.10d as complete.
+Until a new explicit physical authorization is granted, project work may include that non-physical correction with tests, documentation reconciliation, or a separately reviewed milestone that does not reinterpret 0.0.10d as complete.
 
-Paired verification remains blocked until one later canonical audio record passes its independent preflight and the separate operator observation confirms recognizable audio.
+Paired verification remains blocked until one later canonical completed audio record passes its independent preflight and the separate operator observation for that same run confirms recognizable audio.

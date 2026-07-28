@@ -124,15 +124,24 @@ The review selected:
 - known-pattern and texture-copy physical probes were visible;
 - controlled fixture video produced `Completed／Accepted`, passed `VideoAccepted`, and was visibly recognizable;
 - the known 80 ms managed tone and decoded 80 ms fixture slice were recognizably audible;
+- one consumed readiness-gated ordinary controlled fixture-audio run at `7fbeb8b0dabd9c6af5b2dc9d065d66fd05faf53d` had separate operator observation `Audio audible: Yes` for a recognizable beep;
+- that run returned child exit `1`, `DeliveryRejected`, terminal rejection `PreCleanupCheckpointRejected`, and final native stage `ActivationCleanupCompleted`; it retained a sanitized failure record but no canonical completed or terminal record;
+- a later consumed readiness-gated run at `77a947f98e7a9449523b49a39bc8b4e8d7ed430b` again had operator observation `Audio audible: Yes` for a recognizable beep;
+- the latest run returned child exit `1`, `DeliveryRejected`, terminal rejection `PreCleanupTraceCardinalityRejected`, and final native stage `ActivationCleanupCompleted`; it retained a sanitized failure record but no canonical completed or terminal record;
+- static source review established that `DeliveryRejected` is mapped to lifecycle `OutputRejected`, which performs cleanup before returning; production is cleared before stop while the buffer/native trace owner remains, so the terminal snapshot loses the scheduler trace but retains the audio trace;
+- the granular rejection is therefore a terminal-evidence retention asymmetry, not proof of an extra native audio write;
 - bounded scheduler delivery, WASAPI write/padding, lifecycle checkpoints, native aggregate, completed record, terminal record, and sanitized failure evidence are implemented;
 - completed, terminal, child-failure, helper-failure, and readiness records have strict offline preflights;
+- bounded controlled-run result and terminal-rejection retention, exact audio stream-format validation, bounded readiness failure disclosure, direct readiness child capture, and granular pre-cleanup rejection categories are implemented;
 - non-physical readiness validation, atomic readiness capture, and the readiness-required authorization entrypoint are implemented.
 
 #### Not established
 
-- recognizable ordinary controlled fixture audio;
+- non-physical retention of the last immutable production delivery trace across terminal cleanup;
 - stable deterministic controlled audio delivery across the retained contradictory runs;
-- one independently accepted completed audio record plus separate `Audio audible: Yes` observation;
+- canonical completed／accepted audio evidence from the same run as recognizable fixture audio;
+- independent completed-record preflight for that same run;
+- physical completion and formal audio acceptance for either recognizable run;
 - paired video／audio admission;
 - completion of 0.0.10d.
 
@@ -140,11 +149,15 @@ The review selected:
 
 The one approved render-evidence helper invocation at main `4abadd280ceeae310b2528b6ea62f377211b1273` returned an unexpected helper failure, retained neither requested record, and had `Audio audible: No`. The exact trigger is unrecoverable; the confirmed defect was evidence loss. That authorization is consumed.
 
+The separately authorized run at `7fbeb8b0dabd9c6af5b2dc9d065d66fd05faf53d` established recognizable ordinary fixture audio only as a separate operator observation. Its `DeliveryRejected` result and aggregate `PreCleanupCheckpointRejected` terminal projection mean technical completion and formal acceptance remain unestablished. That authorization is consumed.
+
+The latest separately authorized run at `77a947f98e7a9449523b49a39bc8b4e8d7ed430b` reproduced the recognizable beep while narrowing the terminal rejection to `PreCleanupTraceCardinalityRejected`. Its readiness record SHA-256 was `DC27A6EDDEA5BE31DA7E816DC3B057C4B00FCB11D4F924C40DBEE43C82EE0A3B`; its sanitized failure record was `798` bytes／`21` lines with SHA-256 `E5AA6E01A55E662E18E9E70089CFDE46125153A57064BF38C2166AACB2DE2ECE`. It did not establish physical completion or formal audio acceptance. That authorization is consumed.
+
 Issue #129 remains open. Historical helpers and diagnostics must not be rerun.
 
 #### Current gate
 
-No additional physical-output-free evidence plumbing is required before the next authorization decision.
+Retain the last immutable production delivery trace before `StopProductionAsync` clears the production owner, then project that retained trace only when no live production snapshot remains. The correction must not alter delivery, timing, endpoint, audio buffer, samples, cleanup ordering, or output behavior. Add focused tests proving the terminal snapshot retains scheduler and audio traces consistently after a rejected delivery. Merge only after final-head and post-merge CircleCI success. Do not repeat readiness capture or physical output merely to rediscover the same gate.
 
 A future controlled physical audio render run requires:
 
@@ -161,7 +174,7 @@ Current-state review: `docs/reviews/PCN-0166-CONTROLLED-AUDIO-RENDER-AUTHORIZATI
 
 ### Later sequence
 
-1. resolve the one readiness-gated controlled physical audio decision and complete or explicitly defer 0.0.10d;
+1. retain the terminal scheduler delivery trace across production cleanup and then complete or explicitly defer 0.0.10d;
 2. add the user-facing application window／message-loop composition without duplicating the controlled runner ownership model;
 3. add the application dispatcher implementation and legal／About surface;
 4. expand packaging only after the preceding gates pass.

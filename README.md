@@ -19,12 +19,17 @@ License: **Apache License 2.0**
 - corrected D3D11 texture-copy／production upload probes: visible `Yes`
 - corrected controlled fixture video: `Completed／Accepted`、`VideoAccepted`、`Video visible: Yes`
 - known 80 ms managed tone and decoded 80 ms fixture slice: recognizable audio
-- ordinary controlled fixture audio: contradictory delivery evidence and recognizable audibility not established
-- Issue #129 remains open; paired video／audio admission remains blocked
+- ordinary controlled fixture audio: two consumed readiness-gated runs produced a recognizable beep with `Audio audible: Yes`
+- stable deterministic delivery、canonical completed audio evidence、formal audio acceptance、and paired video／audio admission remain unestablished
+- Issue #129 remains open
 
 The one authorized direct render-evidence helper invocation at main `4abadd280ceeae310b2528b6ea62f377211b1273` returned a bounded unexpected helper failure, retained neither requested record, and had operator observation `Audio audible: No`. That authorization is consumed and the exact trigger cannot be reconstructed.
 
-Prospective non-physical hardening is complete: bounded scheduler／WASAPI traces, completed／terminal／failure records, offline strict preflights, readiness validation, atomic readiness capture, and the readiness-required one-run authorization entrypoint are merged. No new physical run is currently authorized.
+A later separately authorized run at exact main `7fbeb8b0dabd9c6af5b2dc9d065d66fd05faf53d` ended with child exit `1`, `DeliveryRejected`, and terminal rejection `PreCleanupCheckpointRejected`. It retained no canonical completed or terminal record, but the operator separately reported a recognizable beep and `Audio audible: Yes`.
+
+The latest separately authorized run at exact main `77a947f98e7a9449523b49a39bc8b4e8d7ed430b` also ended with child exit `1` and `DeliveryRejected`, but the merged granular gate identified `PreCleanupTraceCardinalityRejected`. Static source review established that the lifecycle maps `DeliveryRejected` to `OutputRejected`, clears and stops production before the terminal snapshot, and thereby loses the current-generation scheduler trace while the retained buffer/native audio trace remains available. The rejection is therefore a terminal-evidence retention asymmetry, not proof of an extra native write. The run produced no canonical completed or terminal record and again had operator observation `Audio audible: Yes` for a recognizable beep. Both authorizations are consumed; physical completion and formal audio acceptance remain unestablished.
+
+Prospective non-physical hardening is implemented: bounded scheduler／WASAPI traces, completed／terminal／failure records, offline strict preflights, readiness validation, atomic readiness capture, the readiness-required one-run authorization entrypoint, bounded controlled-run result and terminal-rejection retention, exact stream-format validation, bounded readiness failure disclosure, and granular pre-cleanup rejection diagnostics. No new physical run is currently authorized.
 
 Current-state review:
 
@@ -106,9 +111,10 @@ Current-state review:
 
 PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信アプリではありません。
 
-- recognizable controlled physical fixture audio
+- non-physical retention correction for the scheduler delivery trace before production cleanup
 - stable controlled ordinary audio delivery evidence
-- independent accepted audio record plus separate audible observation
+- canonical completed／accepted audio record from the same run as a recognizable audible observation
+- independent completed-record preflight for that run
 - paired video／audio admission and completion of 0.0.10d
 - user-facing Windows application window／message-loop composition
 - application-provided dispatcher implementation for the final app surface
@@ -123,9 +129,11 @@ FFmpeg binary bundling／redistributionは既定方針として禁止です。�
 
 ## 次のゲート
 
-**0.0.10d — One readiness-gated controlled physical audio render decision**
+**0.0.10d — Retain terminal scheduler trace before production cleanup**
 
-追加の非物理evidence plumbingは完了しています。次の物理実行を行う場合は、次をすべて満たす必要があります。
+`DeliveryRejected`時のlifecycle cleanupは、terminal snapshotより先にproduction ownerを外すため、generation-local scheduler traceだけを失います。次は最後のimmutable delivery traceをproduction cleanup前に保持し、buffer/native traceと同じterminal snapshotへ投影する非物理修正とfocused testsです。delivery、timing、endpoint、buffer、sample、audio output behaviorは変更しません。readiness capture、physical output、probe、diagnosticは自動実行しません。
+
+その後に新しい物理実行を検討する場合は、次をすべて満たす必要があります。
 
 1. separately merged exact `main` commit
 2. final-head／post-merge CircleCI success
