@@ -33,9 +33,11 @@ PR #201 merged at main `7e31627151f5a6dba7fb9e3f0b03cd08be3b14cf` and retains th
 
 The latest separately authorized run at exact main `774342a03c33713b1b7f70e2cb664397c04f8d04` ended with child exit `1`, stdout／stderr byte counts `0／3122`, and final native stage `ActivationCleanupCompleted`. It produced neither canonical completed nor terminal evidence and retained a valid version 5 sanitized child failure record with SHA-256 `F8B8A0553A6DDF0935BFD2C075FFE32E541659E3A13C1275130E655363B5FAF5`. The operator again reported a recognizable beep and `Audio audible: Yes`. The retained record cannot prove the private stderr classification, so the exact historical managed exception source remains unestablished.
 
-PR #203 merged as main `e265a2b47731214a2f26a0b4a4227721158490b2` and prospectively bounds unexpected direct managed-command failures. When no canonical outcome has already been written, it emits one exact `Result: Faulted` line for the existing sanitized child-failure codec, uses the existing `ProjectionRejected` category for snapshot／terminal-projection failures, and publishes no raw exception or private process detail. It changes no physical-output behavior.
+PR #203 merged as main `e265a2b47731214a2f26a0b4a4227721158490b2` and prospectively bounds unexpected direct managed-command failures. When no canonical outcome has already been written, it emits one exact `Result: Faulted` line for the sanitized child-failure codec, uses the existing `ProjectionRejected` category for snapshot／terminal-projection failures, and publishes no raw exception or private process detail. It changes no physical-output behavior.
 
-Prospective non-physical hardening is implemented: bounded scheduler／WASAPI traces, completed／terminal／failure records, offline strict preflights, readiness validation, atomic readiness capture, the readiness-required one-run authorization entrypoint, bounded controlled-run result and terminal-rejection retention, exact stream-format validation, bounded readiness failure disclosure, granular pre-cleanup rejection diagnostics, terminal scheduler-trace retention, and managed command failure bounding. No new physical run is currently authorized.
+PR #205 merged as main `46a9ff163e8b0fb4582175d4ff1d56cd753fdeb9` and adds a strict 22-line child failure record version 6. The real child-capture path can retain exactly one allowlisted `Managed-Failure-Phase`; unknown, numeric, extended, or duplicate markers collapse to `None`. Versions 2 through 5 remain readable with effective phase `None`, and legacy v5 serializer/preflight report shape remains compatible.
+
+Prospective non-physical hardening is implemented: bounded scheduler／WASAPI traces, completed／terminal／failure records, offline strict preflights, readiness validation, atomic readiness capture, the readiness-required one-run authorization entrypoint, bounded controlled-run result and terminal-rejection retention, exact stream-format validation, bounded readiness failure disclosure, granular pre-cleanup rejection diagnostics, terminal scheduler-trace retention, managed command failure bounding, and managed failure phase retention. No new physical run is currently authorized.
 
 Current-state review:
 
@@ -137,7 +139,7 @@ FFmpeg binary bundling／redistributionは既定方針として禁止です。�
 
 **0.0.10d — Separate decision on any later readiness-gated physical audio run**
 
-Terminal scheduler-trace retention and managed command failure bounding are merged at exact main `e265a2b47731214a2f26a0b4a4227721158490b2`. No additional concrete non-physical evidence gap is currently identified. This does not authorize a readiness capture or physical run. Historical commands and consumed paths must not be reused.
+Terminal scheduler-trace retention, managed command failure bounding, and managed phase record v6 are merged. No additional concrete non-physical evidence gap is currently identified. This does not authorize a readiness capture or physical run. Historical commands and consumed paths must not be reused.
 
 新しい物理実行を検討する場合は、次をすべて満たす必要があります。
 

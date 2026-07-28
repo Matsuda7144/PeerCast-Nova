@@ -133,9 +133,10 @@ The review selected:
 - the later `774342a...` run returned child exit `1`, stdout／stderr bytes `0／3122`, final native stage `ActivationCleanupCompleted`, controlled result `None`, and terminal rejection `None`; it retained a `755`-byte／`21`-line sanitized failure record with SHA-256 `F8B8A0553A6DDF0935BFD2C075FFE32E541659E3A13C1275130E655363B5FAF5` but no canonical completed or terminal record;
 - the retained version 5 record cannot prove the private stderr classification, so the exact historical managed exception source is not established;
 - PR #203 merged as main `e265a2b47731214a2f26a0b4a4227721158490b2` and prospectively converts unexpected direct managed-command failures into bounded `Faulted` output, fixed private phase diagnostics, and `ProjectionRejected` for snapshot／terminal-projection failures;
+- PR #205 merged as main `46a9ff163e8b0fb4582175d4ff1d56cd753fdeb9` and adds strict child failure record v6 with one allowlisted managed phase, exact 22-line canonical shape, v2-v5 compatibility, and legacy preflight report compatibility;
 - bounded scheduler delivery, WASAPI write/padding, lifecycle checkpoints, native aggregate, completed record, terminal record, and sanitized failure evidence are implemented;
 - completed, terminal, child-failure, helper-failure, and readiness records have strict offline preflights;
-- bounded controlled-run result and terminal-rejection retention, exact audio stream-format validation, bounded readiness failure disclosure, direct readiness child capture, granular pre-cleanup rejection categories, terminal trace retention, and managed command failure bounding are implemented;
+- bounded controlled-run result and terminal-rejection retention, exact audio stream-format validation, bounded readiness failure disclosure, direct readiness child capture, granular pre-cleanup rejection categories, terminal trace retention, managed command failure bounding, and managed failure phase retention are implemented;
 - non-physical readiness validation, atomic readiness capture, and the readiness-required authorization entrypoint are implemented.
 
 #### Not established
@@ -163,7 +164,7 @@ Issue #129 remains open. Historical helpers and diagnostics must not be rerun.
 
 #### Current gate
 
-No additional concrete non-physical evidence gap is currently identified after PR #203. A later controlled physical run is a separate authorization decision; merge, documentation, CI, existing readiness evidence, fresh-looking paths, and the literal entrypoint guard do not grant it. Do not repeat readiness capture or physical output without a new explicit one-run authorization.
+No additional concrete non-physical evidence gap is currently identified after PR #205. A later controlled physical run is a separate authorization decision; merge, documentation, CI, existing readiness evidence, fresh-looking paths, and the literal entrypoint guard do not grant it. Do not repeat readiness capture or physical output without a new explicit one-run authorization.
 
 A future controlled physical audio render run requires:
 

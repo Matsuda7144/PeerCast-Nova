@@ -83,6 +83,8 @@ The helper console message `Sanitized helper failure record retained: No` report
 
 PR #203 merged as main `e265a2b47731214a2f26a0b4a4227721158490b2`. It prospectively catches unexpected direct managed-command failures, writes exact `Result: Faulted` when no canonical outcome has already been written, emits fixed private phase diagnostics, and emits the existing `ProjectionRejected` category for snapshot／terminal-projection failures. It publishes no raw exception or private process detail and does not change physical-output behavior.
 
+PR #205 merged as main `46a9ff163e8b0fb4582175d4ff1d56cd753fdeb9`. It adds strict child failure record version 6 with exactly one allowlisted `Managed-Failure-Phase` field and a fixed 22-line canonical shape. Unknown, numeric, extended, or duplicate phase markers collapse to `None`. Versions 2 through 5 remain readable with effective managed phase `None`; version 5 remains the compatibility serializer constant and legacy preflight report shape is preserved.
+
 No retained result establishes both canonical completed render evidence and recognizable audible fixture audio in the same run.
 
 ## Completed prospective non-physical boundary
@@ -103,6 +105,7 @@ The repository now contains the prospective evidence and authorization mechanics
 - granular pre-cleanup terminal rejection categories for delivery trace, audio/native trace, trace cardinality, and trace result consistency;
 - two-stage terminal scheduler-trace retention across generation and production owner cleanup;
 - bounded direct managed-command failure output and private phase diagnostics;
+- strict managed failure phase retention in child failure record version 6 with version 2 through version 5 compatibility;
 - a non-physical readiness preflight for exact clean `main`, reviewed inputs, fresh paths, runner build, and accepted video record;
 - a strict canonical readiness-record codec and offline preflight;
 - atomic UTF-8-no-BOM readiness-record capture;
@@ -122,7 +125,7 @@ Issue #129 remains open.
 
 All recorded readiness-capture and physical-run authorizations through the consumed `774342a03c33713b1b7f70e2cb664397c04f8d04` run are permanently consumed. No current commit has a new readiness-capture or physical-run authorization. The associated `-retry1` readiness and outcome paths are consumed and must not be reused.
 
-No additional concrete non-physical evidence gap is currently identified after PR #203. A later readiness-gated physical run is a separate reviewed authorization decision. Merge, documentation, CI success, existing readiness evidence, fresh-looking paths, and the literal invocation guard do not grant authorization.
+No additional concrete non-physical evidence gap is currently identified after PR #205. A later readiness-gated physical run is a separate reviewed authorization decision. Merge, documentation, CI success, existing readiness evidence, fresh-looking paths, and the literal invocation guard do not grant authorization.
 
 A future controlled physical audio render run requires all of the following:
 
