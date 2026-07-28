@@ -235,19 +235,22 @@ The bounded FLV decoder configures the exact parser stream time base through pub
 
 **0.0.10d — Controlled Physical Windows Video／Audio Output Validation — Phase 7 Separate Authorization Decision**
 
-- authoritative state: `docs/reviews/PCN-0166-CONTROLLED-AUDIO-RENDER-AUTHORIZATION-STATE.md` and Issue #129; documentation, CI, and readiness do not grant or select physical authorization;
+- authoritative state: `docs/reviews/PCN-0166-CONTROLLED-AUDIO-RENDER-AUTHORIZATION-STATE.md`, `docs/reviews/PCN-0167-MANAGED-AUDIO-FAILURE-BOUNDARY.md`, and Issue #129; documentation, CI, and readiness do not grant or select physical authorization;
 - corrected decoded physical video: `Completed／Accepted`, `VideoAccepted`, visible `Yes`;
 - known 80 ms tone and decoded fixture slice: accepted and recognizable;
-- ordinary controlled fixture audio: consumed readiness-gated runs at `7fbeb8b0dabd9c6af5b2dc9d065d66fd05faf53d` and `77a947f98e7a9449523b49a39bc8b4e8d7ed430b` both had operator observation `Audio audible: Yes` for a recognizable beep;
-- the `7fbeb8...` run ended `DeliveryRejected / PreCleanupCheckpointRejected`; the later `77a947f...` run ended `DeliveryRejected / PreCleanupTraceCardinalityRejected`;
+- ordinary controlled fixture audio: consumed readiness-gated runs at `7fbeb8b0dabd9c6af5b2dc9d065d66fd05faf53d`, `77a947f98e7a9449523b49a39bc8b4e8d7ed430b`, and `774342a03c33713b1b7f70e2cb664397c04f8d04` each had operator observation `Audio audible: Yes` for a recognizable beep;
+- the `7fbeb8...` run ended `DeliveryRejected / PreCleanupCheckpointRejected`; the `77a947f...` run ended `DeliveryRejected / PreCleanupTraceCardinalityRejected`;
 - static source review identified a two-stage trace loss across production generation cleanup and later lifecycle production-owner cleanup;
 - PR #201 merged as main `7e31627151f5a6dba7fb9e3f0b03cd08be3b14cf` and retains the immutable scheduler trace across both ownership boundaries without changing physical-output behavior;
 - the prior cardinality rejection was an evidence-retention asymmetry, not proof of an extra native audio write;
-- neither recognizable run produced a canonical completed or terminal record or established physical completion or formal audio acceptance;
+- the later `774342a...` run ended child exit `1`, stdout／stderr bytes `0／3122`, final stage `ActivationCleanupCompleted`, controlled result `None`, and terminal rejection `None`; it retained version 5 sanitized failure SHA-256 `F8B8A0553A6DDF0935BFD2C075FFE32E541659E3A13C1275130E655363B5FAF5`;
+- the historical private stderr classification for that run cannot be proven from the retained record and is not inferred;
+- PR #203 merged as main `e265a2b47731214a2f26a0b4a4227721158490b2` and prospectively bounds unexpected direct managed-command failures as exact `Faulted` output with fixed private phase diagnostics and `ProjectionRejected` for snapshot／terminal-projection failures;
+- none of the recognizable runs produced a canonical completed or terminal record or established physical completion or formal audio acceptance;
 - retained contradictory ordinary／diagnostic results remain historical evidence and must not be rerun;
 - prospective completed／terminal／child-failure／helper-failure retention and strict offline review are implemented;
-- PR #192 through PR #201 added bounded run-result and terminal-rejection retention, exact audio stream-format validation, bounded readiness failure disclosure, direct readiness child capture, granular pre-cleanup rejection diagnostics, and terminal trace retention;
-- all recorded readiness and physical authorizations through `77a947f...` are consumed; no current readiness capture or physical audio run is authorized;
+- PR #192 through PR #203 added bounded run-result and terminal-rejection retention, exact audio stream-format validation, bounded readiness failure disclosure, direct readiness child capture, granular pre-cleanup rejection diagnostics, terminal trace retention, and managed command failure bounding;
+- all recorded readiness and physical authorizations through `774342a...` are consumed; its `-retry1` readiness and outcome paths are not reusable; no current readiness capture or physical audio run is authorized;
 - Issue #129 remains open and paired verification remains blocked;
 - no additional concrete non-physical evidence gap is currently identified;
 - approved runtime: `btbn.ffmpeg.20260721.win64.lgpl-shared`;
@@ -263,6 +266,7 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 ## 最新の入口
 
 - `docs/reviews/PCN-0166-CONTROLLED-AUDIO-RENDER-AUTHORIZATION-STATE.md`
+- `docs/reviews/PCN-0167-MANAGED-AUDIO-FAILURE-BOUNDARY.md`
 - [Issue #129](https://github.com/Matsuda7144/PeerCast-Nova/issues/129)
 - `docs/runbooks/0.0.10d-controlled-audio-render-readiness.md`
 - `tools/Test-ControlledWindowsPhysicalAudioRenderEvidenceReadiness.ps1`

@@ -124,16 +124,18 @@ The review selected:
 - known-pattern and texture-copy physical probes were visible;
 - controlled fixture video produced `Completed／Accepted`, passed `VideoAccepted`, and was visibly recognizable;
 - the known 80 ms managed tone and decoded 80 ms fixture slice were recognizably audible;
-- one consumed readiness-gated ordinary controlled fixture-audio run at `7fbeb8b0dabd9c6af5b2dc9d065d66fd05faf53d` had separate operator observation `Audio audible: Yes` for a recognizable beep;
-- that run returned child exit `1`, `DeliveryRejected`, terminal rejection `PreCleanupCheckpointRejected`, and final native stage `ActivationCleanupCompleted`; it retained a sanitized failure record but no canonical completed or terminal record;
-- a later consumed readiness-gated run at `77a947f98e7a9449523b49a39bc8b4e8d7ed430b` again had operator observation `Audio audible: Yes` for a recognizable beep;
-- the latest run returned child exit `1`, `DeliveryRejected`, terminal rejection `PreCleanupTraceCardinalityRejected`, and final native stage `ActivationCleanupCompleted`; it retained a sanitized failure record but no canonical completed or terminal record;
+- consumed readiness-gated ordinary controlled fixture-audio runs at `7fbeb8b0dabd9c6af5b2dc9d065d66fd05faf53d`, `77a947f98e7a9449523b49a39bc8b4e8d7ed430b`, and `774342a03c33713b1b7f70e2cb664397c04f8d04` each had separate operator observation `Audio audible: Yes` for a recognizable beep;
+- the `7fbeb8...` run returned child exit `1`, `DeliveryRejected`, terminal rejection `PreCleanupCheckpointRejected`, and final native stage `ActivationCleanupCompleted`; it retained a sanitized failure record but no canonical completed or terminal record;
+- the `77a947f...` run returned child exit `1`, `DeliveryRejected`, terminal rejection `PreCleanupTraceCardinalityRejected`, and final native stage `ActivationCleanupCompleted`; it retained a sanitized failure record but no canonical completed or terminal record;
 - static source review established a two-stage ownership loss: production terminal cleanup cleared the active decoder generation, then lifecycle cleanup cleared the production owner before the terminal snapshot;
-- the granular rejection is therefore a terminal-evidence retention asymmetry, not proof of an extra native audio write;
+- the granular rejection was therefore a terminal-evidence retention asymmetry, not proof of an extra native audio write;
 - PR #201 merged as main `7e31627151f5a6dba7fb9e3f0b03cd08be3b14cf` and retains the immutable scheduler trace across both ownership boundaries without changing physical-output behavior;
+- the later `774342a...` run returned child exit `1`, stdout／stderr bytes `0／3122`, final native stage `ActivationCleanupCompleted`, controlled result `None`, and terminal rejection `None`; it retained a `755`-byte／`21`-line sanitized failure record with SHA-256 `F8B8A0553A6DDF0935BFD2C075FFE32E541659E3A13C1275130E655363B5FAF5` but no canonical completed or terminal record;
+- the retained version 5 record cannot prove the private stderr classification, so the exact historical managed exception source is not established;
+- PR #203 merged as main `e265a2b47731214a2f26a0b4a4227721158490b2` and prospectively converts unexpected direct managed-command failures into bounded `Faulted` output, fixed private phase diagnostics, and `ProjectionRejected` for snapshot／terminal-projection failures;
 - bounded scheduler delivery, WASAPI write/padding, lifecycle checkpoints, native aggregate, completed record, terminal record, and sanitized failure evidence are implemented;
 - completed, terminal, child-failure, helper-failure, and readiness records have strict offline preflights;
-- bounded controlled-run result and terminal-rejection retention, exact audio stream-format validation, bounded readiness failure disclosure, direct readiness child capture, granular pre-cleanup rejection categories, and terminal trace retention are implemented;
+- bounded controlled-run result and terminal-rejection retention, exact audio stream-format validation, bounded readiness failure disclosure, direct readiness child capture, granular pre-cleanup rejection categories, terminal trace retention, and managed command failure bounding are implemented;
 - non-physical readiness validation, atomic readiness capture, and the readiness-required authorization entrypoint are implemented.
 
 #### Not established
@@ -141,7 +143,7 @@ The review selected:
 - stable deterministic controlled audio delivery across the retained contradictory runs;
 - canonical completed／accepted audio evidence from the same run as recognizable fixture audio;
 - independent completed-record preflight for that same run;
-- physical completion and formal audio acceptance for either recognizable run;
+- physical completion and formal audio acceptance for any recognizable run;
 - paired video／audio admission;
 - completion of 0.0.10d.
 
@@ -151,13 +153,17 @@ The one approved render-evidence helper invocation at main `4abadd280ceeae310b25
 
 The separately authorized run at `7fbeb8b0dabd9c6af5b2dc9d065d66fd05faf53d` established recognizable ordinary fixture audio only as a separate operator observation. Its `DeliveryRejected` result and aggregate `PreCleanupCheckpointRejected` terminal projection mean technical completion and formal acceptance remain unestablished. That authorization is consumed.
 
-The latest separately authorized run at `77a947f98e7a9449523b49a39bc8b4e8d7ed430b` reproduced the recognizable beep while narrowing the terminal rejection to `PreCleanupTraceCardinalityRejected`. Its readiness record SHA-256 was `DC27A6EDDEA5BE31DA7E816DC3B057C4B00FCB11D4F924C40DBEE43C82EE0A3B`; its sanitized failure record was `798` bytes／`21` lines with SHA-256 `E5AA6E01A55E662E18E9E70089CFDE46125153A57064BF38C2166AACB2DE2ECE`. It did not establish physical completion or formal audio acceptance. That authorization is consumed.
+The separately authorized run at `77a947f98e7a9449523b49a39bc8b4e8d7ed430b` reproduced the recognizable beep while narrowing the terminal rejection to `PreCleanupTraceCardinalityRejected`. Its readiness record SHA-256 was `DC27A6EDDEA5BE31DA7E816DC3B057C4B00FCB11D4F924C40DBEE43C82EE0A3B`; its sanitized failure record was `798` bytes／`21` lines with SHA-256 `E5AA6E01A55E662E18E9E70089CFDE46125153A57064BF38C2166AACB2DE2ECE`. It did not establish physical completion or formal audio acceptance. That authorization is consumed.
+
+The later separately authorized run at `774342a03c33713b1b7f70e2cb664397c04f8d04` used readiness record SHA-256 `94EA6E584BD06392EEEC438154D93FC077D13B33DD0D058210BD030BCD8109D2`. It produced a recognizable beep but no canonical completed or terminal record. Its sanitized failure record SHA-256 was `F8B8A0553A6DDF0935BFD2C075FFE32E541659E3A13C1275130E655363B5FAF5`. The exact historical private stderr classification cannot be reconstructed. Its readiness and physical authorizations are consumed.
+
+The helper console line `Sanitized helper failure record retained: No` refers only to the absence of an additional helper-level record after the child-capture failure record already occupied the exclusive failure path. It does not contradict the verified child failure record.
 
 Issue #129 remains open. Historical helpers and diagnostics must not be rerun.
 
 #### Current gate
 
-No additional concrete non-physical evidence gap is currently identified after PR #201. A later controlled physical run is a separate authorization decision; the merge, documentation, CI, readiness evidence, and literal entrypoint guard do not grant it. Do not repeat readiness capture or physical output without a new explicit one-run authorization.
+No additional concrete non-physical evidence gap is currently identified after PR #203. A later controlled physical run is a separate authorization decision; merge, documentation, CI, existing readiness evidence, fresh-looking paths, and the literal entrypoint guard do not grant it. Do not repeat readiness capture or physical output without a new explicit one-run authorization.
 
 A future controlled physical audio render run requires:
 
@@ -170,7 +176,7 @@ A future controlled physical audio render run requires:
 
 The underlying helper must not be invoked directly. Readiness evidence and the literal invocation guard are not authorization.
 
-Current-state review: `docs/reviews/PCN-0166-CONTROLLED-AUDIO-RENDER-AUTHORIZATION-STATE.md`.
+Current-state reviews: `docs/reviews/PCN-0166-CONTROLLED-AUDIO-RENDER-AUTHORIZATION-STATE.md` and `docs/reviews/PCN-0167-MANAGED-AUDIO-FAILURE-BOUNDARY.md`.
 
 ### Later sequence
 

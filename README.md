@@ -19,7 +19,7 @@ License: **Apache License 2.0**
 - corrected D3D11 texture-copy／production upload probes: visible `Yes`
 - corrected controlled fixture video: `Completed／Accepted`、`VideoAccepted`、`Video visible: Yes`
 - known 80 ms managed tone and decoded 80 ms fixture slice: recognizable audio
-- ordinary controlled fixture audio: two consumed readiness-gated runs produced a recognizable beep with `Audio audible: Yes`
+- ordinary controlled fixture audio: three consumed readiness-gated runs produced a recognizable beep with `Audio audible: Yes`
 - stable deterministic delivery、canonical completed audio evidence、formal audio acceptance、and paired video／audio admission remain unestablished
 - Issue #129 remains open
 
@@ -27,15 +27,20 @@ The one authorized direct render-evidence helper invocation at main `4abadd280ce
 
 A later separately authorized run at exact main `7fbeb8b0dabd9c6af5b2dc9d065d66fd05faf53d` ended with child exit `1`, `DeliveryRejected`, and terminal rejection `PreCleanupCheckpointRejected`. It retained no canonical completed or terminal record, but the operator separately reported a recognizable beep and `Audio audible: Yes`.
 
-The latest separately authorized run at exact main `77a947f98e7a9449523b49a39bc8b4e8d7ed430b` also ended with child exit `1` and `DeliveryRejected`, but the merged granular gate identified `PreCleanupTraceCardinalityRejected`. Static source review established a two-stage terminal-evidence retention asymmetry: production terminal cleanup cleared the active decoder generation before returning to the lifecycle, and later lifecycle cleanup cleared the production owner before the terminal snapshot. The independently retained buffer/native audio trace remained available, so the rejection did not prove an extra native write. The run produced no canonical completed or terminal record and again had operator observation `Audio audible: Yes` for a recognizable beep. Both authorizations are consumed; physical completion and formal audio acceptance remain unestablished.
+The separately authorized run at exact main `77a947f98e7a9449523b49a39bc8b4e8d7ed430b` also ended with child exit `1` and `DeliveryRejected`, but the merged granular gate identified `PreCleanupTraceCardinalityRejected`. Static source review established a two-stage terminal-evidence retention asymmetry: production terminal cleanup cleared the active decoder generation before returning to the lifecycle, and later lifecycle cleanup cleared the production owner before the terminal snapshot. The independently retained buffer/native audio trace remained available, so the rejection did not prove an extra native write. The run produced no canonical completed or terminal record and again had operator observation `Audio audible: Yes` for a recognizable beep.
 
 PR #201 merged at main `7e31627151f5a6dba7fb9e3f0b03cd08be3b14cf` and retains the latest immutable scheduler delivery trace across both ownership-cleanup boundaries. Live generation／production traces remain preferred, retained values are used only after the corresponding owner is unavailable, and new owners reset the retained state. The change is non-physical and does not alter delivery、timing、endpoint、buffer、sample、native write、or cleanup behavior.
 
-Prospective non-physical hardening is implemented: bounded scheduler／WASAPI traces, completed／terminal／failure records, offline strict preflights, readiness validation, atomic readiness capture, the readiness-required one-run authorization entrypoint, bounded controlled-run result and terminal-rejection retention, exact stream-format validation, bounded readiness failure disclosure, granular pre-cleanup rejection diagnostics, and terminal scheduler-trace retention. No new physical run is currently authorized.
+The latest separately authorized run at exact main `774342a03c33713b1b7f70e2cb664397c04f8d04` ended with child exit `1`, stdout／stderr byte counts `0／3122`, and final native stage `ActivationCleanupCompleted`. It produced neither canonical completed nor terminal evidence and retained a valid version 5 sanitized child failure record with SHA-256 `F8B8A0553A6DDF0935BFD2C075FFE32E541659E3A13C1275130E655363B5FAF5`. The operator again reported a recognizable beep and `Audio audible: Yes`. The retained record cannot prove the private stderr classification, so the exact historical managed exception source remains unestablished.
+
+PR #203 merged as main `e265a2b47731214a2f26a0b4a4227721158490b2` and prospectively bounds unexpected direct managed-command failures. When no canonical outcome has already been written, it emits one exact `Result: Faulted` line for the existing sanitized child-failure codec, uses the existing `ProjectionRejected` category for snapshot／terminal-projection failures, and publishes no raw exception or private process detail. It changes no physical-output behavior.
+
+Prospective non-physical hardening is implemented: bounded scheduler／WASAPI traces, completed／terminal／failure records, offline strict preflights, readiness validation, atomic readiness capture, the readiness-required one-run authorization entrypoint, bounded controlled-run result and terminal-rejection retention, exact stream-format validation, bounded readiness failure disclosure, granular pre-cleanup rejection diagnostics, terminal scheduler-trace retention, and managed command failure bounding. No new physical run is currently authorized.
 
 Current-state review:
 
 - [PCN-0166 Controlled Audio Render Authorization State](docs/reviews/PCN-0166-CONTROLLED-AUDIO-RENDER-AUTHORIZATION-STATE.md)
+- [PCN-0167 Managed Audio Render Failure Boundary](docs/reviews/PCN-0167-MANAGED-AUDIO-FAILURE-BOUNDARY.md)
 - [Issue #129](https://github.com/Matsuda7144/PeerCast-Nova/issues/129)
 
 ## 実装済みの主な領域
@@ -132,7 +137,7 @@ FFmpeg binary bundling／redistributionは既定方針として禁止です。�
 
 **0.0.10d — Separate decision on any later readiness-gated physical audio run**
 
-Terminal scheduler-trace retention is merged at exact main `7e31627151f5a6dba7fb9e3f0b03cd08be3b14cf`. No additional concrete non-physical evidence gap is currently identified. This does not authorize a readiness capture or physical run. Historical commands must not be repeated.
+Terminal scheduler-trace retention and managed command failure bounding are merged at exact main `e265a2b47731214a2f26a0b4a4227721158490b2`. No additional concrete non-physical evidence gap is currently identified. This does not authorize a readiness capture or physical run. Historical commands and consumed paths must not be reused.
 
 新しい物理実行を検討する場合は、次をすべて満たす必要があります。
 
