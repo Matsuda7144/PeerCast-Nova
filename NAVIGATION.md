@@ -251,7 +251,7 @@ The bounded FLV decoder configures the exact parser stream time base through pub
 - authoritative state: `docs/reviews/PCN-0166-CONTROLLED-AUDIO-RENDER-AUTHORIZATION-STATE.md`, `docs/reviews/PCN-0167-MANAGED-AUDIO-FAILURE-BOUNDARY.md`, and Issue #129; documentation, CI, and readiness do not grant or select physical authorization;
 - corrected decoded physical video: `Completed／Accepted`, `VideoAccepted`, visible `Yes`;
 - known 80 ms tone and decoded fixture slice: accepted and recognizable;
-- ordinary controlled fixture audio: consumed readiness-gated runs at `7fbeb8b0dabd9c6af5b2dc9d065d66fd05faf53d`, `77a947f98e7a9449523b49a39bc8b4e8d7ed430b`, and `774342a03c33713b1b7f70e2cb664397c04f8d04` each had operator observation `Audio audible: Yes` for a recognizable beep;
+- ordinary controlled fixture audio: consumed readiness-gated runs at `7fbeb8b0dabd9c6af5b2dc9d065d66fd05faf53d`, `77a947f98e7a9449523b49a39bc8b4e8d7ed430b`, `774342a03c33713b1b7f70e2cb664397c04f8d04`, and `847b0ea4cff8aca48c103e499c0bf2bca3fbc6b5` each had operator observation `Audio audible: Yes` for a recognizable beep;
 - the `7fbeb8...` run ended `DeliveryRejected / PreCleanupCheckpointRejected`; the `77a947f...` run ended `DeliveryRejected / PreCleanupTraceCardinalityRejected`;
 - static source review identified a two-stage trace loss across production generation cleanup and later lifecycle production-owner cleanup;
 - PR #201 merged as main `7e31627151f5a6dba7fb9e3f0b03cd08be3b14cf` and retains the immutable scheduler trace across both ownership boundaries without changing physical-output behavior;
@@ -260,13 +260,16 @@ The bounded FLV decoder configures the exact parser stream time base through pub
 - the historical private stderr classification for that run cannot be proven from the retained record and is not inferred;
 - PR #203 merged as main `e265a2b47731214a2f26a0b4a4227721158490b2` and prospectively bounds unexpected direct managed-command failures as exact `Faulted` output with fixed private phase diagnostics and `ProjectionRejected` for snapshot／terminal-projection failures;
 - PR #205 merged as main `46a9ff163e8b0fb4582175d4ff1d56cd753fdeb9` and adds strict 22-line child failure record v6 with exactly one allowlisted managed phase, v2-v5 readability, and legacy v5 serializer/preflight compatibility;
+- the `847b0ea...` run ended `DeliveryRejected / PreCleanupTraceCardinalityRejected`, retained an `826`-byte／`22`-line failure record with SHA-256 `BF1E4BD3304142CB53737F63C1D1849BF3B67546464C53188E874E21A01E50C1`, and again had `Audio audible: Yes`;
+- static tracing established that the dispatcher-backed Windows generation path did not forward `CaptureDeliveryObservations`, so the scheduler trace remained empty while the native audio trace was retained;
+- PR #213 merged as main `a6ec858162b1170cc35a5bbc94ae4068f4335090` and forwards that setting without changing physical-output or authorization behavior;
 - none of the recognizable runs produced a canonical completed or terminal record or established physical completion or formal audio acceptance;
 - retained contradictory ordinary／diagnostic results remain historical evidence and must not be rerun;
 - prospective completed／terminal／child-failure／helper-failure retention and strict offline review are implemented;
 - PR #192 through PR #205 added bounded run-result and terminal-rejection retention, exact audio stream-format validation, bounded readiness failure disclosure, direct readiness child capture, granular pre-cleanup rejection diagnostics, terminal trace retention, managed command failure bounding, and managed failure phase retention;
-- all recorded readiness and physical authorizations through `774342a...` are consumed; its `-retry1` readiness and outcome paths are not reusable; no current readiness capture or physical audio run is authorized;
+- all recorded readiness and physical authorizations through `847b0ea...` are consumed; all existing readiness and outcome paths are not reusable; no current readiness capture or physical audio run is authorized;
 - Issue #129 remains open and paired verification remains blocked;
-- no additional concrete non-physical evidence gap is currently identified;
+- no additional concrete non-physical evidence gap is currently identified after PR #213;
 - approved runtime: `btbn.ffmpeg.20260721.win64.lgpl-shared`;
 - fixture: `66,939` bytes, SHA-256 `32872B300286525F4EF97FEE3533E25419AC8E48BFD4BC2C4FD9545F071B1E15`;
 - no runtime path, fixture path, record path, device／endpoint identity, HWND, thread ID, pointer, handle, HRESULT, raw process output, or payload is retained in the repository.
