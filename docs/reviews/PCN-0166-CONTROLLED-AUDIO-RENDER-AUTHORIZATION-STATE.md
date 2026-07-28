@@ -6,7 +6,7 @@ Tracking issue: #129
 
 ## Purpose
 
-Record the exact current boundary after the contradictory controlled physical audio runs, the three later audible but technically incomplete readiness-gated results, the consumed authorizations, and the completed prospective non-physical hardening.
+Record the exact current boundary after the contradictory controlled physical audio runs, the five later audible but technically incomplete readiness-gated results, the consumed authorizations, and the completed prospective non-physical hardening.
 
 This review supersedes older roadmap and navigation text that still presents 0.0.10b or the fixed-kind scheduler review as the active next gate. PCN-0167 contains the focused review of the latest managed command failure boundary.
 
@@ -48,7 +48,7 @@ Controlled Windows video output is established for the retained fixture:
 
 ## Retained physical audio evidence
 
-The retained audio evidence remains contradictory. It establishes four recognizable ordinary fixture-audio observations, but it does not establish canonical completed audio evidence, stable delivery, physical completion, or formal audio acceptance:
+The retained audio evidence remains contradictory. It establishes five recognizable ordinary fixture-audio observations, but it does not establish canonical completed audio evidence, stable delivery, physical completion, or formal audio acceptance:
 
 1. an ordinary controlled run retained `3 / 2` delivery accounting and a noise-like transient;
 2. a delivery-result diagnostic retained four caller-visible `AudioDelivered` results and no recognizable audio;
@@ -58,12 +58,15 @@ The retained audio evidence remains contradictory. It establishes four recogniza
 6. the later readiness-gated run from exact main `77a947f98e7a9449523b49a39bc8b4e8d7ed430b` returned child exit `1`, `DeliveryRejected`, terminal rejection `PreCleanupTraceCardinalityRejected`, and final native stage `ActivationCleanupCompleted`; it produced no canonical completed or terminal record, retained a `798`-byte／`21`-line sanitized failure record with SHA-256 `E5AA6E01A55E662E18E9E70089CFDE46125153A57064BF38C2166AACB2DE2ECE`, and again had separate operator observation `Audio audible: Yes` for a recognizable beep;
 7. the readiness-gated run from exact main `774342a03c33713b1b7f70e2cb664397c04f8d04` returned child exit signed／hex `1／00000001`, stdout／stderr bytes `0／3122`, final native stage `ActivationCleanupCompleted`, controlled run result `None`, and terminal rejection `None`; it produced no canonical completed or terminal record, retained a `755`-byte／`21`-line version 5 sanitized failure record with SHA-256 `F8B8A0553A6DDF0935BFD2C075FFE32E541659E3A13C1275130E655363B5FAF5`, and again had separate operator observation `Audio audible: Yes` for a recognizable beep;
 8. the later readiness-gated run from exact main `847b0ea4cff8aca48c103e499c0bf2bca3fbc6b5` returned child exit `1`, `DeliveryRejected`, terminal rejection `PreCleanupTraceCardinalityRejected`, and final native stage `ActivationCleanupCompleted`; it produced no canonical completed or terminal record, retained an `826`-byte／`22`-line sanitized failure record with SHA-256 `BF1E4BD3304142CB53737F63C1D1849BF3B67546464C53188E874E21A01E50C1`, and again had separate operator observation `Audio audible: Yes`.
+9. the next readiness-gated run from exact main `abb071f5fcb6e78f86ad5f185387adee060e29fb` returned child exit `1`, exact fallback `Result: Faulted`, managed failure phase `OutcomeWrite`, and final native stage `ActivationCleanupCompleted`; it produced no canonical completed or terminal record, retained a `795`-byte, `22`-line sanitized failure record with SHA-256 `2A2D40B9388D8F6E679D31FBBEBFA92448ED6F052C53E08A22441A7067AFA602`, and again had separate operator observation `Audio audible: Yes` for a recognizable beep.
 
 The exact failure trigger for the consumed `4abadd280...` invocation is unknowable. The confirmed defect was evidence loss. Native stderr and Windows PowerShell `ErrorActionPreference` interaction was plausible but not proven.
 
 The `7fbeb8...`, `77a947f...`, and `774342a...` observations establish that recognizable ordinary fixture audio reached the operator in three separately authorized runs. None establishes physical completion or formal audio acceptance because none produced a canonical completed record or a canonical terminal record.
 
 The `847b0ea...` observation establishes the same limited operator-visible result for a fourth separately authorized run. It likewise does not establish physical completion or formal audio acceptance.
+
+The `abb071f...` observation establishes the same limited operator-visible result for a fifth separately authorized run. Its `Faulted / OutcomeWrite` evidence and missing canonical completed or terminal record likewise do not establish physical completion or formal audio acceptance.
 
 ## Static root cause of `PreCleanupTraceCardinalityRejected`
 
@@ -79,6 +82,10 @@ PR #201 merged as main `7e31627151f5a6dba7fb9e3f0b03cd08be3b14cf`. It retains th
 The later `847b0ea...` rejection exposed a separate configuration-propagation defect. The controlled evidence composition selected both native audio-render tracing and scheduler delivery observations, but `PlaybackDispatcherBackedProductionGenerationFactoryOperations` omitted `CaptureDeliveryObservations` when it constructed the actual owner-thread generation delivery boundary. The native audio trace was therefore retained while the scheduler trace remained empty.
 
 PR #213 merged as main `a6ec858162b1170cc35a5bbc94ae4068f4335090`. It forwards the existing capture option through the dispatcher-backed path and adds a focused contract test. It does not change delivery, timing, endpoint selection, buffers, samples, native writes, cleanup ordering, readiness, or authorization behavior.
+
+The later `abb071f...` run exposed the next evidence-selection defect. The generation delivery trace has a fixed capacity of four observations and the controlled completed record requires four audio observations, but the trace writer recorded every reserved media kind. The mixed H.264/AAC fixture could therefore place a video delivery into the bounded trace before the four native audio writes, making the completed audio record invalid during outcome serialization.
+
+PR #215 merged as main `94878943dfbd7df2c059bf5f347bcfbf0f24f272`. It limits the opt-in evidence trace to audio reservations and adds a mixed-media regression test proving that one preceding video delivery does not consume or overflow the four audio slots. It changes only observation selection; delivery, timing, endpoint selection, buffers, samples, native writes, cleanup ordering, readiness, and authorization behavior are unchanged.
 
 ## Static boundary of the `774342a...` run
 
@@ -112,6 +119,7 @@ The repository now contains the prospective evidence and authorization mechanics
 - granular pre-cleanup terminal rejection categories for delivery trace, audio/native trace, trace cardinality, and trace result consistency;
 - two-stage terminal scheduler-trace retention across generation and production owner cleanup;
 - dispatcher-backed scheduler delivery-observation capture propagation;
+- audio-only selection for the fixed controlled-audio delivery trace;
 - bounded direct managed-command failure output and private phase diagnostics;
 - strict managed failure phase retention in child failure record version 6 with version 2 through version 5 compatibility;
 - a non-physical readiness preflight for exact clean `main`, reviewed inputs, fresh paths, runner build, and accepted video record;
@@ -131,9 +139,9 @@ That literal string is not authorization by itself.
 
 Issue #129 remains open.
 
-All recorded readiness-capture and physical-run authorizations through the consumed `774342a03c33713b1b7f70e2cb664397c04f8d04` run are permanently consumed. No current commit has a new readiness-capture or physical-run authorization. The associated `-retry1` readiness and outcome paths are consumed and must not be reused.
+All recorded readiness-capture and physical-run authorizations through the consumed `abb071f5fcb6e78f86ad5f185387adee060e29fb` run are permanently consumed. No current commit has a new readiness-capture or physical-run authorization. All associated readiness and outcome paths are consumed and must not be reused.
 
-No additional concrete non-physical evidence gap is currently identified after PR #205. A later readiness-gated physical run is a separate reviewed authorization decision. Merge, documentation, CI success, existing readiness evidence, fresh-looking paths, and the literal invocation guard do not grant authorization.
+No additional concrete non-physical evidence gap is currently identified after PR #215. A later readiness-gated physical run is a separate reviewed authorization decision. Merge, documentation, CI success, existing readiness evidence, fresh-looking paths, and the literal invocation guard do not grant authorization.
 
 A future controlled physical audio render run requires all of the following:
 

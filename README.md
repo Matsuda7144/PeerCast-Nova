@@ -19,7 +19,7 @@ License: **Apache License 2.0**
 - corrected D3D11 texture-copy／production upload probes: visible `Yes`
 - corrected controlled fixture video: `Completed／Accepted`、`VideoAccepted`、`Video visible: Yes`
 - known 80 ms managed tone and decoded 80 ms fixture slice: recognizable audio
-- ordinary controlled fixture audio: four consumed readiness-gated runs produced a recognizable beep with `Audio audible: Yes`
+- ordinary controlled fixture audio: five consumed readiness-gated runs produced a recognizable beep with `Audio audible: Yes`
 - stable deterministic delivery、canonical completed audio evidence、formal audio acceptance、and paired video／audio admission remain unestablished
 - Issue #129 remains open
 - 0.0.10d is explicitly deferred without claiming physical completion, formal audio acceptance, paired admission, or milestone completion
@@ -43,7 +43,9 @@ PR #205 merged as main `46a9ff163e8b0fb4582175d4ff1d56cd753fdeb9` and adds a str
 
 The later separately authorized run at exact main `847b0ea4cff8aca48c103e499c0bf2bca3fbc6b5` again produced a recognizable beep with `Audio audible: Yes`, but ended `DeliveryRejected / PreCleanupTraceCardinalityRejected` with no canonical completed or terminal record. Static tracing found that the dispatcher-backed Windows generation path omitted the already-selected `CaptureDeliveryObservations` option, so native audio writes were retained while its scheduler delivery trace remained empty. PR #213 merged as main `a6ec858162b1170cc35a5bbc94ae4068f4335090` and forwards that option without changing delivery, timing, native writes, cleanup, readiness, or authorization behavior.
 
-Prospective non-physical hardening is implemented: bounded scheduler／WASAPI traces, completed／terminal／failure records, offline strict preflights, readiness validation, atomic readiness capture, the readiness-required one-run authorization entrypoint, bounded controlled-run result and terminal-rejection retention, exact stream-format validation, bounded readiness failure disclosure, granular pre-cleanup rejection diagnostics, terminal scheduler-trace retention, dispatcher-backed delivery-trace capture, managed command failure bounding, and managed failure phase retention. No new physical run is currently authorized.
+The next separately authorized run at exact main `abb071f5fcb6e78f86ad5f185387adee060e29fb` again produced a recognizable beep with `Audio audible: Yes`. It ended with child exit `1`, exact fallback `Result: Faulted`, final native stage `ActivationCleanupCompleted`, and managed failure phase `OutcomeWrite`; no canonical completed or terminal record was produced. Static review established that the fixed four-slot scheduler trace recorded both video and audio reservations even though the controlled record contract requires four audio observations. With the mixed H.264/AAC fixture, video delivery could consume or overflow the audio evidence slots before the four native audio writes. PR #215 merged as main `94878943dfbd7df2c059bf5f347bcfbf0f24f272` and restricts the opt-in trace to audio observations without changing delivery, timing, native writes, cleanup, readiness, or authorization behavior.
+
+Prospective non-physical hardening is implemented: bounded scheduler／WASAPI traces, completed／terminal／failure records, offline strict preflights, readiness validation, atomic readiness capture, the readiness-required one-run authorization entrypoint, bounded controlled-run result and terminal-rejection retention, exact stream-format validation, bounded readiness failure disclosure, granular pre-cleanup rejection diagnostics, terminal scheduler-trace retention, dispatcher-backed delivery-trace capture, audio-only trace selection, managed command failure bounding, and managed failure phase retention. No new physical run is currently authorized.
 
 Current-state review:
 

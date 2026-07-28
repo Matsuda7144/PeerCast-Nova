@@ -124,7 +124,7 @@ The review selected:
 - known-pattern and texture-copy physical probes were visible;
 - controlled fixture video produced `Completed／Accepted`, passed `VideoAccepted`, and was visibly recognizable;
 - the known 80 ms managed tone and decoded 80 ms fixture slice were recognizably audible;
-- consumed readiness-gated ordinary controlled fixture-audio runs at `7fbeb8b0dabd9c6af5b2dc9d065d66fd05faf53d`, `77a947f98e7a9449523b49a39bc8b4e8d7ed430b`, `774342a03c33713b1b7f70e2cb664397c04f8d04`, and `847b0ea4cff8aca48c103e499c0bf2bca3fbc6b5` each had separate operator observation `Audio audible: Yes` for a recognizable beep;
+- consumed readiness-gated ordinary controlled fixture-audio runs at `7fbeb8b0dabd9c6af5b2dc9d065d66fd05faf53d`, `77a947f98e7a9449523b49a39bc8b4e8d7ed430b`, `774342a03c33713b1b7f70e2cb664397c04f8d04`, `847b0ea4cff8aca48c103e499c0bf2bca3fbc6b5`, and `abb071f5fcb6e78f86ad5f185387adee060e29fb` each had separate operator observation `Audio audible: Yes` for a recognizable beep;
 - the `7fbeb8...` run returned child exit `1`, `DeliveryRejected`, terminal rejection `PreCleanupCheckpointRejected`, and final native stage `ActivationCleanupCompleted`; it retained a sanitized failure record but no canonical completed or terminal record;
 - the `77a947f...` run returned child exit `1`, `DeliveryRejected`, terminal rejection `PreCleanupTraceCardinalityRejected`, and final native stage `ActivationCleanupCompleted`; it retained a sanitized failure record but no canonical completed or terminal record;
 - static source review established a two-stage ownership loss: production terminal cleanup cleared the active decoder generation, then lifecycle cleanup cleared the production owner before the terminal snapshot;
@@ -137,6 +137,9 @@ The review selected:
 - the `847b0ea...` run returned child exit `1`, `DeliveryRejected`, terminal rejection `PreCleanupTraceCardinalityRejected`, and final native stage `ActivationCleanupCompleted`; it retained an `826`-byte／`22`-line sanitized failure record with SHA-256 `BF1E4BD3304142CB53737F63C1D1849BF3B67546464C53188E874E21A01E50C1` but no canonical completed or terminal record;
 - static tracing established that the dispatcher-backed Windows generation path omitted `CaptureDeliveryObservations`, leaving a native audio trace with an empty scheduler trace;
 - PR #213 merged as main `a6ec858162b1170cc35a5bbc94ae4068f4335090` and forwards the selected observation setting without changing physical-output or authorization behavior;
+- the `abb071f...` run returned child exit `1`, exact fallback `Result: Faulted`, managed failure phase `OutcomeWrite`, and final native stage `ActivationCleanupCompleted`; it retained a `795`-byte, `22`-line sanitized failure record with SHA-256 `2A2D40B9388D8F6E679D31FBBEBFA92448ED6F052C53E08A22441A7067AFA602` but no canonical completed or terminal record;
+- static review established that the fixed four-slot scheduler trace admitted video reservations from the mixed H.264/AAC fixture even though the completed audio record requires four audio observations;
+- PR #215 merged as main `94878943dfbd7df2c059bf5f347bcfbf0f24f272` and limits the opt-in evidence trace to audio observations without changing physical-output or authorization behavior;
 - bounded scheduler delivery, WASAPI write/padding, lifecycle checkpoints, native aggregate, completed record, terminal record, and sanitized failure evidence are implemented;
 - completed, terminal, child-failure, helper-failure, and readiness records have strict offline preflights;
 - bounded controlled-run result and terminal-rejection retention, exact audio stream-format validation, bounded readiness failure disclosure, direct readiness child capture, granular pre-cleanup rejection categories, terminal trace retention, managed command failure bounding, and managed failure phase retention are implemented;
@@ -169,7 +172,9 @@ Issue #129 remains open. Historical helpers and diagnostics must not be rerun.
 
 The later separately authorized run at `847b0ea4cff8aca48c103e499c0bf2bca3fbc6b5` used readiness record SHA-256 `00861785FAD839D4DA9A86D032E6CE32CDE9F3F25774B5E364F0816EA03B318D`. It produced a recognizable beep but no canonical completed or terminal record. Its sanitized failure record SHA-256 was `BF1E4BD3304142CB53737F63C1D1849BF3B67546464C53188E874E21A01E50C1`. Its readiness and physical authorizations are consumed.
 
-No additional concrete non-physical evidence gap is currently identified after PR #213. The milestone is explicitly deferred without claiming physical completion, formal audio acceptance, paired admission, or completion. Issue #129 remains open. A later controlled physical run is a separate authorization decision; merge, documentation, CI, existing readiness evidence, fresh-looking paths, and the literal entrypoint guard do not grant it. Do not repeat readiness capture or physical output without a new explicit one-run authorization.
+The next separately authorized run at `abb071f5fcb6e78f86ad5f185387adee060e29fb` used readiness record SHA-256 `B908FC83309F09AD58A296A55F509F868E686264E659DE0B41CDB490840B24B9`. It produced a recognizable beep but no canonical completed or terminal record. Its sanitized failure record SHA-256 was `2A2D40B9388D8F6E679D31FBBEBFA92448ED6F052C53E08A22441A7067AFA602`. Its readiness and physical authorizations are consumed.
+
+No additional concrete non-physical evidence gap is currently identified after PR #215. The milestone is explicitly deferred without claiming physical completion, formal audio acceptance, paired admission, or completion. Issue #129 remains open. A later controlled physical run is a separate authorization decision; merge, documentation, CI, existing readiness evidence, fresh-looking paths, and the literal entrypoint guard do not grant it. Do not repeat readiness capture or physical output without a new explicit one-run authorization.
 
 A future controlled physical audio render run requires:
 
