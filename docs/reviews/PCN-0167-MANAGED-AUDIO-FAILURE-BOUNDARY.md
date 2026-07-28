@@ -21,7 +21,7 @@ The consumed one-run evidence retained:
 - controlled run result `None`;
 - terminal-record rejection `None`;
 - no canonical completed or terminal record;
-- sanitized child failure record SHA-256
+- version 5 sanitized child failure record SHA-256
   `F8B8A0553A6DDF0935BFD2C075FFE32E541659E3A13C1275130E655363B5FAF5`;
 - separate operator observation of a recognizable beep and `Audio audible: Yes`.
 
@@ -48,16 +48,40 @@ outcome writing, or asynchronous disposal to escape to that runner-wide catch.
 
 ## Prospective correction
 
-The direct managed command now catches that bounded set of command-level failures
-and, when no canonical outcome was already written:
+The direct managed command catches that bounded set of command-level failures and,
+when no canonical outcome was already written:
 
-- writes one exact `Result: Faulted` line, which the existing version 5 child
-  failure codec can retain as `Controlled-Run-Result: Faulted`;
+- writes one exact `Result: Faulted` line;
 - writes one exact allowlisted managed failure phase marker only to private stderr;
 - writes the existing `ProjectionRejected` marker for snapshot or terminal-record
   projection failures;
 - publishes no exception type, message, stack, path, endpoint, device identity,
   pointer, handle, HRESULT, packet, payload, or sample.
+
+Child failure record version 6 prospectively retains the fixed managed phase as:
+
+```text
+Managed-Failure-Phase: <allowlisted phase or None>
+```
+
+The accepted phases are the exact direct-command lifecycle values:
+
+- `OperationCreation`;
+- `CompositionRun`;
+- `SnapshotCapture`;
+- `TerminalProjection`;
+- `CompletedProjection`;
+- `OutcomeWrite`;
+- `CompositionDispose`.
+
+The parser accepts exactly one canonical marker. Unknown, numeric, extended, or
+duplicate markers collapse to `None`. Version 2 through version 5 records remain
+strictly readable and have effective managed phase `None`. The existing version 5
+schema remains the compatibility constant; the real child-capture failure path
+selects version 6 when the phase boundary is available.
+
+The offline failure-record preflight surfaces the managed phase only for a valid
+version 6 record with a non-`None` phase. Legacy report shape is unchanged.
 
 If a canonical terminal record was already written and only later disposal fails,
 the existing exit-`1` terminal admission remains available. A completed record is
