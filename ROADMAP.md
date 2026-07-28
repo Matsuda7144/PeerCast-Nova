@@ -128,16 +128,16 @@ The review selected:
 - that run returned child exit `1`, `DeliveryRejected`, terminal rejection `PreCleanupCheckpointRejected`, and final native stage `ActivationCleanupCompleted`; it retained a sanitized failure record but no canonical completed or terminal record;
 - a later consumed readiness-gated run at `77a947f98e7a9449523b49a39bc8b4e8d7ed430b` again had operator observation `Audio audible: Yes` for a recognizable beep;
 - the latest run returned child exit `1`, `DeliveryRejected`, terminal rejection `PreCleanupTraceCardinalityRejected`, and final native stage `ActivationCleanupCompleted`; it retained a sanitized failure record but no canonical completed or terminal record;
-- static source review established that `DeliveryRejected` is mapped to lifecycle `OutputRejected`, which performs cleanup before returning; production is cleared before stop while the buffer/native trace owner remains, so the terminal snapshot loses the scheduler trace but retains the audio trace;
+- static source review established a two-stage ownership loss: production terminal cleanup cleared the active decoder generation, then lifecycle cleanup cleared the production owner before the terminal snapshot;
 - the granular rejection is therefore a terminal-evidence retention asymmetry, not proof of an extra native audio write;
+- PR #201 merged as main `7e31627151f5a6dba7fb9e3f0b03cd08be3b14cf` and retains the immutable scheduler trace across both ownership boundaries without changing physical-output behavior;
 - bounded scheduler delivery, WASAPI write/padding, lifecycle checkpoints, native aggregate, completed record, terminal record, and sanitized failure evidence are implemented;
 - completed, terminal, child-failure, helper-failure, and readiness records have strict offline preflights;
-- bounded controlled-run result and terminal-rejection retention, exact audio stream-format validation, bounded readiness failure disclosure, direct readiness child capture, and granular pre-cleanup rejection categories are implemented;
+- bounded controlled-run result and terminal-rejection retention, exact audio stream-format validation, bounded readiness failure disclosure, direct readiness child capture, granular pre-cleanup rejection categories, and terminal trace retention are implemented;
 - non-physical readiness validation, atomic readiness capture, and the readiness-required authorization entrypoint are implemented.
 
 #### Not established
 
-- non-physical retention of the last immutable production delivery trace across terminal cleanup;
 - stable deterministic controlled audio delivery across the retained contradictory runs;
 - canonical completed／accepted audio evidence from the same run as recognizable fixture audio;
 - independent completed-record preflight for that same run;
@@ -157,7 +157,7 @@ Issue #129 remains open. Historical helpers and diagnostics must not be rerun.
 
 #### Current gate
 
-Retain the last immutable production delivery trace before `StopProductionAsync` clears the production owner, then project that retained trace only when no live production snapshot remains. The correction must not alter delivery, timing, endpoint, audio buffer, samples, cleanup ordering, or output behavior. Add focused tests proving the terminal snapshot retains scheduler and audio traces consistently after a rejected delivery. Merge only after final-head and post-merge CircleCI success. Do not repeat readiness capture or physical output merely to rediscover the same gate.
+No additional concrete non-physical evidence gap is currently identified after PR #201. A later controlled physical run is a separate authorization decision; the merge, documentation, CI, readiness evidence, and literal entrypoint guard do not grant it. Do not repeat readiness capture or physical output without a new explicit one-run authorization.
 
 A future controlled physical audio render run requires:
 
@@ -174,7 +174,7 @@ Current-state review: `docs/reviews/PCN-0166-CONTROLLED-AUDIO-RENDER-AUTHORIZATI
 
 ### Later sequence
 
-1. retain the terminal scheduler delivery trace across production cleanup and then complete or explicitly defer 0.0.10d;
+1. make a separate reviewed decision on any later readiness-gated physical audio run and then complete or explicitly defer 0.0.10d;
 2. add the user-facing application window／message-loop composition without duplicating the controlled runner ownership model;
 3. add the application dispatcher implementation and legal／About surface;
 4. expand packaging only after the preceding gates pass.

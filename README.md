@@ -27,9 +27,11 @@ The one authorized direct render-evidence helper invocation at main `4abadd280ce
 
 A later separately authorized run at exact main `7fbeb8b0dabd9c6af5b2dc9d065d66fd05faf53d` ended with child exit `1`, `DeliveryRejected`, and terminal rejection `PreCleanupCheckpointRejected`. It retained no canonical completed or terminal record, but the operator separately reported a recognizable beep and `Audio audible: Yes`.
 
-The latest separately authorized run at exact main `77a947f98e7a9449523b49a39bc8b4e8d7ed430b` also ended with child exit `1` and `DeliveryRejected`, but the merged granular gate identified `PreCleanupTraceCardinalityRejected`. Static source review established that the lifecycle maps `DeliveryRejected` to `OutputRejected`, clears and stops production before the terminal snapshot, and thereby loses the current-generation scheduler trace while the retained buffer/native audio trace remains available. The rejection is therefore a terminal-evidence retention asymmetry, not proof of an extra native write. The run produced no canonical completed or terminal record and again had operator observation `Audio audible: Yes` for a recognizable beep. Both authorizations are consumed; physical completion and formal audio acceptance remain unestablished.
+The latest separately authorized run at exact main `77a947f98e7a9449523b49a39bc8b4e8d7ed430b` also ended with child exit `1` and `DeliveryRejected`, but the merged granular gate identified `PreCleanupTraceCardinalityRejected`. Static source review established a two-stage terminal-evidence retention asymmetry: production terminal cleanup cleared the active decoder generation before returning to the lifecycle, and later lifecycle cleanup cleared the production owner before the terminal snapshot. The independently retained buffer/native audio trace remained available, so the rejection did not prove an extra native write. The run produced no canonical completed or terminal record and again had operator observation `Audio audible: Yes` for a recognizable beep. Both authorizations are consumed; physical completion and formal audio acceptance remain unestablished.
 
-Prospective non-physical hardening is implemented: bounded scheduler／WASAPI traces, completed／terminal／failure records, offline strict preflights, readiness validation, atomic readiness capture, the readiness-required one-run authorization entrypoint, bounded controlled-run result and terminal-rejection retention, exact stream-format validation, bounded readiness failure disclosure, and granular pre-cleanup rejection diagnostics. No new physical run is currently authorized.
+PR #201 merged at main `7e31627151f5a6dba7fb9e3f0b03cd08be3b14cf` and retains the latest immutable scheduler delivery trace across both ownership-cleanup boundaries. Live generation／production traces remain preferred, retained values are used only after the corresponding owner is unavailable, and new owners reset the retained state. The change is non-physical and does not alter delivery、timing、endpoint、buffer、sample、native write、or cleanup behavior.
+
+Prospective non-physical hardening is implemented: bounded scheduler／WASAPI traces, completed／terminal／failure records, offline strict preflights, readiness validation, atomic readiness capture, the readiness-required one-run authorization entrypoint, bounded controlled-run result and terminal-rejection retention, exact stream-format validation, bounded readiness failure disclosure, granular pre-cleanup rejection diagnostics, and terminal scheduler-trace retention. No new physical run is currently authorized.
 
 Current-state review:
 
@@ -111,7 +113,6 @@ Current-state review:
 
 PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信アプリではありません。
 
-- non-physical retention correction for the scheduler delivery trace before production cleanup
 - stable controlled ordinary audio delivery evidence
 - canonical completed／accepted audio record from the same run as a recognizable audible observation
 - independent completed-record preflight for that run
@@ -129,11 +130,11 @@ FFmpeg binary bundling／redistributionは既定方針として禁止です。�
 
 ## 次のゲート
 
-**0.0.10d — Retain terminal scheduler trace before production cleanup**
+**0.0.10d — Separate decision on any later readiness-gated physical audio run**
 
-`DeliveryRejected`時のlifecycle cleanupは、terminal snapshotより先にproduction ownerを外すため、generation-local scheduler traceだけを失います。次は最後のimmutable delivery traceをproduction cleanup前に保持し、buffer/native traceと同じterminal snapshotへ投影する非物理修正とfocused testsです。delivery、timing、endpoint、buffer、sample、audio output behaviorは変更しません。readiness capture、physical output、probe、diagnosticは自動実行しません。
+Terminal scheduler-trace retention is merged at exact main `7e31627151f5a6dba7fb9e3f0b03cd08be3b14cf`. No additional concrete non-physical evidence gap is currently identified. This does not authorize a readiness capture or physical run. Historical commands must not be repeated.
 
-その後に新しい物理実行を検討する場合は、次をすべて満たす必要があります。
+新しい物理実行を検討する場合は、次をすべて満たす必要があります。
 
 1. separately merged exact `main` commit
 2. final-head／post-merge CircleCI success

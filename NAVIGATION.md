@@ -233,27 +233,28 @@ The bounded FLV decoder configures the exact parser stream time base through pub
 
 ## 現在地
 
-**0.0.10d — Controlled Physical Windows Video／Audio Output Validation — Phase 7 Terminal Trace Retention**
+**0.0.10d — Controlled Physical Windows Video／Audio Output Validation — Phase 7 Separate Authorization Decision**
 
-- authoritative state: `docs/reviews/PCN-0166-CONTROLLED-AUDIO-RENDER-AUTHORIZATION-STATE.md` and Issue #129; later documentation-only merges do not grant or select physical authorization;
+- authoritative state: `docs/reviews/PCN-0166-CONTROLLED-AUDIO-RENDER-AUTHORIZATION-STATE.md` and Issue #129; documentation, CI, and readiness do not grant or select physical authorization;
 - corrected decoded physical video: `Completed／Accepted`, `VideoAccepted`, visible `Yes`;
 - known 80 ms tone and decoded fixture slice: accepted and recognizable;
 - ordinary controlled fixture audio: consumed readiness-gated runs at `7fbeb8b0dabd9c6af5b2dc9d065d66fd05faf53d` and `77a947f98e7a9449523b49a39bc8b4e8d7ed430b` both had operator observation `Audio audible: Yes` for a recognizable beep;
 - the `7fbeb8...` run ended `DeliveryRejected / PreCleanupCheckpointRejected`; the later `77a947f...` run ended `DeliveryRejected / PreCleanupTraceCardinalityRejected`;
-- static source review proved the latest cardinality rejection is caused by cleanup clearing the production owner before terminal snapshot capture, which drops the generation scheduler trace while the retained buffer/native audio trace remains;
-- the rejection is an evidence-retention asymmetry, not proof of an extra native audio write;
+- static source review identified a two-stage trace loss across production generation cleanup and later lifecycle production-owner cleanup;
+- PR #201 merged as main `7e31627151f5a6dba7fb9e3f0b03cd08be3b14cf` and retains the immutable scheduler trace across both ownership boundaries without changing physical-output behavior;
+- the prior cardinality rejection was an evidence-retention asymmetry, not proof of an extra native audio write;
 - neither recognizable run produced a canonical completed or terminal record or established physical completion or formal audio acceptance;
 - retained contradictory ordinary／diagnostic results remain historical evidence and must not be rerun;
 - prospective completed／terminal／child-failure／helper-failure retention and strict offline review are implemented;
-- PR #192 through PR #199 added bounded run-result and terminal-rejection retention, exact audio stream-format validation, bounded readiness failure disclosure, direct readiness child capture, and granular pre-cleanup rejection diagnostics;
+- PR #192 through PR #201 added bounded run-result and terminal-rejection retention, exact audio stream-format validation, bounded readiness failure disclosure, direct readiness child capture, granular pre-cleanup rejection diagnostics, and terminal trace retention;
 - all recorded readiness and physical authorizations through `77a947f...` are consumed; no current readiness capture or physical audio run is authorized;
 - Issue #129 remains open and paired verification remains blocked;
-- the immediate non-physical gate is retaining the last immutable production delivery trace before cleanup clears production;
+- no additional concrete non-physical evidence gap is currently identified;
 - approved runtime: `btbn.ffmpeg.20260721.win64.lgpl-shared`;
 - fixture: `66,939` bytes, SHA-256 `32872B300286525F4EF97FEE3533E25419AC8E48BFD4BC2C4FD9545F071B1E15`;
 - no runtime path, fixture path, record path, device／endpoint identity, HWND, thread ID, pointer, handle, HRESULT, raw process output, or payload is retained in the repository.
 
-Before any later physical decision, implement the non-physical terminal trace retention correction with focused tests. The change must preserve delivery, timing, endpoint, buffer, sample, cleanup, and physical-output behavior. A future controlled physical audio render then requires a separately selected exact `main`, a new canonical readiness record, fresh repository-external paths, a new explicit one-run authorization, and exactly one invocation through the readiness-required entrypoint. Readiness, a documentation-only merge, and the literal invocation guard are not authorization.
+Any later physical audio run requires a separately selected exact `main`, final-head and post-merge CircleCI success, a newly captured and independently revalidated canonical readiness record, fresh repository-external outcome paths, a new explicit one-run authorization, and exactly one invocation through the readiness-required entrypoint. Readiness, a documentation-only merge, and the literal invocation guard are not authorization.
 
 ## CI
 

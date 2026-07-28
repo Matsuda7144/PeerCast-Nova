@@ -63,11 +63,14 @@ The `7fbeb8...` and `77a947f...` observations establish that recognizable ordina
 
 ## Static root cause of `PreCleanupTraceCardinalityRejected`
 
-The latest rejection does not prove an extra native audio write.
+The latest rejection does not prove an extra native audio write. The scheduler trace was lost across two ownership-cleanup boundaries:
 
-Production `DeliveryRejected` maps to lifecycle `OutputRejected`. The lifecycle then performs owned cleanup before returning the delivery result. `StopProductionAsync` clears the `_production` owner before awaiting production stop and disposal. A later lifecycle snapshot therefore has no live production snapshot and projects the scheduler-delivery trace as default. The output-buffer owner remains referenced, and its native audio render trace remains available. The terminal codec consequently sees an audio trace count greater than the delivery trace count and reports `PreCleanupTraceCardinalityRejected`.
+1. production `DeliveryRejected` entered `PlaybackProductionPcpFlvCompositionBoundary` terminal cleanup, which cleared and stopped the active decoder generation before returning to the lifecycle;
+2. the lifecycle then mapped the result to `OutputRejected` and cleared the production owner before the later terminal snapshot.
 
-This is a bounded terminal-evidence retention asymmetry. The correction is to retain the last immutable production delivery trace before clearing the production owner and use it only when no live production snapshot remains. That change must not alter delivery, timing, endpoint selection, buffers, samples, native writes, or cleanup ordering.
+The independently retained output-buffer/native audio trace remained available, so the terminal codec observed audio trace cardinality greater than delivery trace cardinality.
+
+PR #201 merged as main `7e31627151f5a6dba7fb9e3f0b03cd08be3b14cf`. It retains the latest immutable generation trace before production cleanup, retains the resulting production trace before lifecycle cleanup, prefers live owners while available, and resets retained values when new owners are installed. Focused tests cover both cleanup boundaries. The correction does not change delivery, timing, endpoint selection, buffers, samples, native writes, or cleanup ordering.
 
 No retained result establishes both canonical completed render evidence and recognizable audible fixture audio in the same run.
 
@@ -87,6 +90,7 @@ The repository now contains the prospective evidence and authorization mechanics
 - bounded production and cleanup-stage diagnostics;
 - fixed allowlisted readiness failure disclosure and direct readiness child-process capture;
 - granular pre-cleanup terminal rejection categories for delivery trace, audio/native trace, trace cardinality, and trace result consistency;
+- two-stage terminal scheduler-trace retention across generation and production owner cleanup;
 - a non-physical readiness preflight for exact clean `main`, reviewed inputs, fresh paths, runner build, and accepted video record;
 - a strict canonical readiness-record codec and offline preflight;
 - atomic UTF-8-no-BOM readiness-record capture;
@@ -106,7 +110,7 @@ Issue #129 remains open.
 
 All recorded readiness-capture and physical-run authorizations through the consumed `77a947f98e7a9449523b49a39bc8b4e8d7ed430b` run are permanently consumed. No current commit has a new readiness-capture or physical-run authorization.
 
-Before another authorization decision, implement and test non-physical retention of the last immutable production delivery trace across terminal cleanup. The same readiness or physical command must not be repeated merely to rediscover the retained gate.
+No additional concrete non-physical evidence gap is currently identified after PR #201. A later readiness-gated physical run is a separate reviewed authorization decision. The merge, documentation, CI success, readiness evidence, fresh paths, and literal invocation guard do not grant authorization.
 
 A future controlled physical audio render run requires all of the following:
 
@@ -133,8 +137,8 @@ The following are not established:
 
 ## Next project decision
 
-Retain the terminal scheduler delivery trace before production cleanup and add focused non-physical tests proving a rejected delivery can still form a structurally consistent terminal checkpoint. Additional wrappers, codecs, record variants, probes, or physical reruns should not be added unless that implementation exposes a concrete new evidence gap.
+A separately reviewed decision is required before any later readiness capture or physical run. Additional wrappers, codecs, record variants, probes, or physical reruns should not be added unless a concrete new evidence gap is identified.
 
-Until a new explicit physical authorization is granted, project work may include that non-physical correction with tests, documentation reconciliation, or a separately reviewed milestone that does not reinterpret 0.0.10d as complete.
+Until a new explicit physical authorization is granted, project work may include documentation reconciliation or a separately reviewed milestone that does not reinterpret 0.0.10d as complete.
 
 Paired verification remains blocked until one later canonical completed audio record passes its independent preflight and the separate operator observation for that same run confirms recognizable audio.
