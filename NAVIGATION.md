@@ -233,7 +233,7 @@ The bounded FLV decoder configures the exact parser stream time base through pub
 
 ## 現在地
 
-**0.0.10e — Shared Windows Application Ownership Boundary — In Progress**
+**0.0.10e — Shared Windows Application Ownership Boundary — Complete**
 
 - 0.0.10d is explicitly deferred without claiming completion; Issue #129 and every missing audio／paired evidence gate remain open;
 - `Nova.Windows` now owns the single reusable application window, Win32 message loop, owner thread, and bounded dispatcher implementation;
@@ -242,8 +242,9 @@ The bounded FLV decoder configures the exact parser stream time base through pub
 - `Nova.App` now creates exactly one shared host, waits for close or cancellation, then stops and disposes it without any controlled-command startup;
 - `Nova.App` now provides an immutable, size-bounded legal/About model from the exact retained FFmpeg notice, provenance, and runtime-replacement text and projects it only through the shared dispatcher with a finite lifetime;
 - `Nova.App` now has a framework-dependent `win-x64` portable publish contract that copies the project license material and exact FFmpeg legal allowlist without any external runtime payload;
-- current reviews: `docs/reviews/PCN-0170-SHARED-WINDOWS-APPLICATION-OWNERSHIP.md`, `docs/reviews/PCN-0171-USER-FACING-WINDOWS-STARTUP-COMPOSITION.md`, `docs/reviews/PCN-0172-BOUNDED-LEGAL-ABOUT-PROJECTION.md`, and `docs/reviews/PCN-0173-FRAMEWORK-DEPENDENT-WINDOWS-PORTABLE-PACKAGE.md`;
-- next: review installer, signing, and update boundaries separately.
+- the portable output remains the only implemented distribution boundary; installer, signing, and update mechanics require separate future ADRs;
+- current reviews: `docs/reviews/PCN-0170-SHARED-WINDOWS-APPLICATION-OWNERSHIP.md`, `docs/reviews/PCN-0171-USER-FACING-WINDOWS-STARTUP-COMPOSITION.md`, `docs/reviews/PCN-0172-BOUNDED-LEGAL-ABOUT-PROJECTION.md`, `docs/reviews/PCN-0173-FRAMEWORK-DEPENDENT-WINDOWS-PORTABLE-PACKAGE.md`, and `docs/reviews/PCN-0174-INSTALLER-SIGNING-UPDATE-BOUNDARY.md`;
+- next: no release mechanism is selected; deferred 0.0.10d may be revisited only through a separate reviewed authorization decision.
 
 **Deferred 0.0.10d — Controlled Physical Windows Video／Audio Output Validation**
 

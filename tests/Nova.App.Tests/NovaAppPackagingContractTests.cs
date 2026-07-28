@@ -20,6 +20,25 @@ public sealed class NovaAppPackagingContractTests
         "SHA256SUMS",
     ];
 
+    private static readonly string[] InstallerSigningAndUpdateProperties =
+    [
+        "ApplicationVersion",
+        "AssemblyOriginatorKeyFile",
+        "BootstrapperEnabled",
+        "GenerateBootstrapper",
+        "Install",
+        "InstallUrl",
+        "ManifestCertificateThumbprint",
+        "ManifestKeyFile",
+        "PublishProtocol",
+        "PublishUrl",
+        "SignAssembly",
+        "SignManifests",
+        "UpdateEnabled",
+        "UpdateMode",
+        "UpdateUrl",
+    ];
+
     [Fact]
     public void PortableProfileIsFrameworkDependentAndUntransformed()
     {
@@ -117,6 +136,29 @@ public sealed class NovaAppPackagingContractTests
             "$(PublishDir)**\\*.pdb",
             projectText,
             StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PortableProfileDefinesNoInstallerSigningOrUpdateMechanism()
+    {
+        var profile = XDocument.Load(FindRepositoryFile(
+            "src",
+            "Nova.App",
+            "Properties",
+            "PublishProfiles",
+            "WindowsPortable.pubxml"));
+        var project = XDocument.Load(FindRepositoryFile(
+            "src",
+            "Nova.App",
+            "Nova.App.csproj"));
+        var declaredProperties = profile.Descendants()
+            .Concat(project.Descendants())
+            .Select(element => element.Name.LocalName)
+            .ToHashSet(StringComparer.Ordinal);
+
+        Assert.All(
+            InstallerSigningAndUpdateProperties,
+            property => Assert.DoesNotContain(property, declaredProperties));
     }
 
     private static string Property(XDocument document, string name) =>

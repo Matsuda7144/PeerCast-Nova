@@ -179,7 +179,7 @@ The underlying helper must not be invoked directly. Readiness evidence and the l
 
 Current-state reviews: `docs/reviews/PCN-0166-CONTROLLED-AUDIO-RENDER-AUTHORIZATION-STATE.md` and `docs/reviews/PCN-0167-MANAGED-AUDIO-FAILURE-BOUNDARY.md`.
 
-### 0.0.10e Shared Windows Application Ownership Boundary — In Progress
+### 0.0.10e Shared Windows Application Ownership Boundary — Complete
 
 - move the existing application-owned Win32 window, message loop, owner thread, and bounded dispatcher from `Nova.Cli` into `Nova.Windows`;
 - keep one implementation rather than copying the controlled runner ownership model;
@@ -193,15 +193,18 @@ Current-state reviews: `docs/reviews/PCN-0166-CONTROLLED-AUDIO-RENDER-AUTHORIZAT
   downloader, installer, runtime invocation, or application-resource owner.
 - add a framework-dependent `win-x64` portable publish profile with the exact
   project and FFmpeg legal-material allowlist and no external runtime payload.
+- retain that portable output as the only implemented distribution boundary;
+  installer, signing, and update mechanics require separate future ADRs.
 
 Current reviews: `docs/reviews/PCN-0170-SHARED-WINDOWS-APPLICATION-OWNERSHIP.md`,
 `docs/reviews/PCN-0171-USER-FACING-WINDOWS-STARTUP-COMPOSITION.md`, and
-`docs/reviews/PCN-0172-BOUNDED-LEGAL-ABOUT-PROJECTION.md`, and
-`docs/reviews/PCN-0173-FRAMEWORK-DEPENDENT-WINDOWS-PORTABLE-PACKAGE.md`.
+`docs/reviews/PCN-0172-BOUNDED-LEGAL-ABOUT-PROJECTION.md`,
+`docs/reviews/PCN-0173-FRAMEWORK-DEPENDENT-WINDOWS-PORTABLE-PACKAGE.md`, and
+`docs/reviews/PCN-0174-INSTALLER-SIGNING-UPDATE-BOUNDARY.md`.
 
 ### Later sequence
 
-1. review installer, signing, and update boundaries separately;
+1. implement no installer, signing, or update mechanism without a separate ADR;
 2. revisit deferred 0.0.10d only through a separate reviewed authorization decision.
 
 ### Deferred

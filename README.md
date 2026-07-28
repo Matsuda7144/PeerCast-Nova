@@ -9,7 +9,7 @@ License: **Apache License 2.0**
 
 ## 現在地
 
-**Milestone 0.0.10e — Shared Windows Application Ownership Boundary — In Progress**
+**Milestone 0.0.10e — Shared Windows Application Ownership Boundary — Complete**
 
 0.0.10a〜0.0.10cを経て、exact approved external FFmpeg runtime、controlled native decode、Windows output validation architectureは実装・検証済みです。
 
@@ -24,6 +24,8 @@ License: **Apache License 2.0**
 - Issue #129 remains open
 - 0.0.10d is explicitly deferred without claiming physical completion, formal audio acceptance, paired admission, or milestone completion
 - the existing application-owned Win32 host is extracted into `Nova.Windows` so the user-facing application can reuse one window／message-loop／dispatcher ownership model
+- `Nova.App` provides finite startup／shutdown, bounded legal／About projection, and a framework-dependent `win-x64` portable package
+- installer, signing, and update mechanics remain unselected behind a separate reviewed boundary
 
 The one authorized direct render-evidence helper invocation at main `4abadd280ceeae310b2528b6ea62f377211b1273` returned a bounded unexpected helper failure, retained neither requested record, and had operator observation `Audio audible: No`. That authorization is consumed and the exact trigger cannot be reconstructed.
 
@@ -128,7 +130,6 @@ PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信�
 - canonical completed／accepted audio record from the same run as a recognizable audible observation
 - independent completed-record preflight for that run
 - paired video／audio admission and completion of 0.0.10d
-- legal／about surfaceからのFFmpeg notice表示
 - MP4／fragmented MP4 parser
 - decoded-buffer duration cutoff
 - discontinuity-time native reset semantics
@@ -139,9 +140,11 @@ FFmpeg binary bundling／redistributionは既定方針として禁止です。�
 
 ## 次のゲート
 
-**0.0.10e — User-facing Windows application composition**
+**After 0.0.10e — Deferred physical gate and future release mechanics**
 
-0.0.10d is explicitly deferred, not completed. Its evidence gaps and Issue #129 remain open. `Nova.App` provides the normal user-facing start/close/cancel boundary above the single shared `Nova.Windows` host, projects the exact bounded FFmpeg notice/provenance/replacement material, and now has a framework-dependent `win-x64` portable publish contract with the exact reviewed legal-file allowlist. It adds no FFmpeg binary, acquisition, installation, or invocation behavior and does not change controlled physical commands.
+0.0.10e is complete as an application ownership and portable packaging boundary. `Nova.App` provides the normal user-facing start/close/cancel boundary above the single shared `Nova.Windows` host, projects the exact bounded FFmpeg notice/provenance/replacement material, and has a framework-dependent `win-x64` portable publish contract with the exact reviewed legal-file allowlist. Installer, signing, and update mechanisms remain separate future ADR decisions.
+
+0.0.10d is explicitly deferred, not completed. Its evidence gaps and Issue #129 remain open. The completed 0.0.10e work adds no FFmpeg binary, acquisition, installation, update, or invocation behavior and does not change controlled physical commands.
 
 新しい物理実行を検討する場合は、次をすべて満たす必要があります。
 
