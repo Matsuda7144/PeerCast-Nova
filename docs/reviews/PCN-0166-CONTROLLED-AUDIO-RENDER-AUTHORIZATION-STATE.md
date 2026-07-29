@@ -48,7 +48,7 @@ Controlled Windows video output is established for the retained fixture:
 
 ## Retained physical audio evidence
 
-The retained audio evidence remains contradictory. It establishes five recognizable ordinary fixture-audio observations, but it does not establish canonical completed audio evidence, stable delivery, physical completion, or formal audio acceptance:
+The retained audio evidence remains contradictory. It establishes six recognizable ordinary fixture-audio observations, but it does not establish canonical completed audio evidence, stable delivery, physical completion, or formal audio acceptance:
 
 1. an ordinary controlled run retained `3 / 2` delivery accounting and a noise-like transient;
 2. a delivery-result diagnostic retained four caller-visible `AudioDelivered` results and no recognizable audio;
@@ -59,6 +59,7 @@ The retained audio evidence remains contradictory. It establishes five recogniza
 7. the readiness-gated run from exact main `774342a03c33713b1b7f70e2cb664397c04f8d04` returned child exit signed／hex `1／00000001`, stdout／stderr bytes `0／3122`, final native stage `ActivationCleanupCompleted`, controlled run result `None`, and terminal rejection `None`; it produced no canonical completed or terminal record, retained a `755`-byte／`21`-line version 5 sanitized failure record with SHA-256 `F8B8A0553A6DDF0935BFD2C075FFE32E541659E3A13C1275130E655363B5FAF5`, and again had separate operator observation `Audio audible: Yes` for a recognizable beep;
 8. the later readiness-gated run from exact main `847b0ea4cff8aca48c103e499c0bf2bca3fbc6b5` returned child exit `1`, `DeliveryRejected`, terminal rejection `PreCleanupTraceCardinalityRejected`, and final native stage `ActivationCleanupCompleted`; it produced no canonical completed or terminal record, retained an `826`-byte／`22`-line sanitized failure record with SHA-256 `BF1E4BD3304142CB53737F63C1D1849BF3B67546464C53188E874E21A01E50C1`, and again had separate operator observation `Audio audible: Yes`.
 9. the next readiness-gated run from exact main `abb071f5fcb6e78f86ad5f185387adee060e29fb` returned child exit `1`, exact fallback `Result: Faulted`, managed failure phase `OutcomeWrite`, and final native stage `ActivationCleanupCompleted`; it produced no canonical completed or terminal record, retained a `795`-byte, `22`-line sanitized failure record with SHA-256 `2A2D40B9388D8F6E679D31FBBEBFA92448ED6F052C53E08A22441A7067AFA602`, and again had separate operator observation `Audio audible: Yes` for a recognizable beep.
+10. the readiness-gated run from exact main `e0809e9b711d5bb5101130a26ca19944a94a0d31` returned child exit `1` and `DeliveryRejected / None` after `4 / 3 / 2` decode, outer-delivery, and delivered counts; it produced no completed record, retained canonical terminal record SHA-256 `859651D2DED3417F4F55BBAD1E210D1B48AC9E274681D669D6CF1C516E851C78`, and had separate operator observation `Audio audible: Yes` for a recognizable beep.
 
 The exact failure trigger for the consumed `4abadd280...` invocation is unknowable. The confirmed defect was evidence loss. Native stderr and Windows PowerShell `ErrorActionPreference` interaction was plausible but not proven.
 
@@ -67,6 +68,8 @@ The `7fbeb8...`, `77a947f...`, and `774342a...` observations establish that reco
 The `847b0ea...` observation establishes the same limited operator-visible result for a fourth separately authorized run. It likewise does not establish physical completion or formal audio acceptance.
 
 The `abb071f...` observation establishes the same limited operator-visible result for a fifth separately authorized run. Its `Faulted / OutcomeWrite` evidence and missing canonical completed or terminal record likewise do not establish physical completion or formal audio acceptance.
+
+The `e0809e9...` observation establishes the same limited operator-visible result for a sixth separately authorized run. Its canonical terminal record proves that the third audio reservation transitioned from a short retained wait to `AudioLate`; it does not establish physical completion or formal audio acceptance.
 
 ## Static root cause of `PreCleanupTraceCardinalityRejected`
 
@@ -86,6 +89,10 @@ PR #213 merged as main `a6ec858162b1170cc35a5bbc94ae4068f4335090`. It forwards t
 The later `abb071f...` run exposed the next evidence-selection defect. The generation delivery trace has a fixed capacity of four observations and the controlled completed record requires four audio observations, but the trace writer recorded every reserved media kind. The mixed H.264/AAC fixture could therefore place a video delivery into the bounded trace before the four native audio writes, making the completed audio record invalid during outcome serialization.
 
 PR #215 merged as main `94878943dfbd7df2c059bf5f347bcfbf0f24f272`. It limits the opt-in evidence trace to audio reservations and adds a mixed-media regression test proving that one preceding video delivery does not consume or overflow the four audio slots. It changes only observation selection; delivery, timing, endpoint selection, buffers, samples, native writes, cleanup ordering, readiness, and authorization behavior are unchanged.
+
+The later `e0809e9...` terminal record exposed two related controlled-evidence boundaries. The third audio sequence requested an approximately `6 ms` wait, but the controlled wrapper used the fixed `21.3334 ms` cadence before resuming it; Windows scheduling overhead then made the reservation `AudioLate`. The fixed trace also appended the retained wait and its resumed result as separate observations even though completed evidence requires four unique delivered sequences.
+
+ADR-0165 and PCN-0175 select the bounded non-physical correction. The opt-in controlled evidence path uses the latest exact positive retained-wait duration only when it does not exceed the fixed cadence, otherwise falls back to that cadence. Same-sequence trace updates replace the prior state and inconsistent identity fails closed as overflow. Production timing, late tolerance, decode, scheduling, native writes, buffers, and cleanup are unchanged.
 
 ## Static boundary of the `774342a...` run
 

@@ -183,6 +183,100 @@ public sealed class SystemPlaybackControlledWindowsPhysicalRunOperationsTests
     }
 
     [Fact]
+    public async Task ResumeControlledAudioTimingAsync_UsesBoundedObservedWait()
+    {
+        PlaybackApprovedExternalRuntimeWindowsLifecycleResult[] results =
+        [
+            PlaybackApprovedExternalRuntimeWindowsLifecycleResult.RetainedWait,
+            PlaybackApprovedExternalRuntimeWindowsLifecycleResult.AudioDelivered,
+        ];
+        var resultIndex = 0;
+        var delays = new List<TimeSpan>();
+
+        var result = await SystemPlaybackControlledWindowsPhysicalRunOperations
+            .ResumeControlledAudioTimingAsync(
+                _ => ValueTask.FromResult(results[resultIndex++]),
+                (delay, _) =>
+                {
+                    delays.Add(delay);
+                    return Task.CompletedTask;
+                },
+                TimeSpan.FromMilliseconds(21),
+                maximumResumeCount: 2,
+                CancellationToken.None,
+                () => TimeSpan.FromMilliseconds(6));
+
+        Assert.Equal(
+            PlaybackApprovedExternalRuntimeWindowsLifecycleResult.AudioDelivered,
+            result);
+        Assert.Equal([TimeSpan.FromMilliseconds(6)], delays);
+    }
+
+    [Fact]
+    public void SelectControlledAudioTimingResumeDelay_UsesExactBoundedWait()
+    {
+        var wait = TimeSpan.FromMilliseconds(6);
+        var observation = new PlaybackGenerationMatchedSchedulerDeliveryObservation(
+            Sequence: 41,
+            MediaKind: PlaybackPolicyMediaKind.Audio,
+            HasPresentationTimestampOffset: true,
+            PresentationTimestampOffsetTicks: TimeSpan.FromMilliseconds(42).Ticks,
+            HasTimingDecision: true,
+            TimingResult: PlaybackAvTimingDecisionResult.Wait,
+            TimingWaitTicks: wait.Ticks,
+            Result: PlaybackGenerationMatchedSchedulerDeliveryResult.RetainedWait,
+            Completion: PlaybackGenerationMatchedSchedulerReservationCompletion.Retained);
+        var trace = new PlaybackGenerationMatchedSchedulerDeliveryTraceSnapshot(
+            Count: 1,
+            Overflowed: false,
+            First: observation,
+            Second: default,
+            Third: default,
+            Fourth: default);
+
+        Assert.Equal(
+            wait,
+            SystemPlaybackControlledWindowsPhysicalRunOperations
+                .SelectControlledAudioTimingResumeDelay(
+                    trace,
+                    TimeSpan.FromMilliseconds(21)));
+    }
+
+    [Fact]
+    public void SelectControlledAudioTimingResumeDelay_FallsBackForUntrustedTrace()
+    {
+        var fallback = TimeSpan.FromMilliseconds(21);
+        var observation = new PlaybackGenerationMatchedSchedulerDeliveryObservation(
+            Sequence: 41,
+            MediaKind: PlaybackPolicyMediaKind.Audio,
+            HasPresentationTimestampOffset: true,
+            PresentationTimestampOffsetTicks: TimeSpan.FromMilliseconds(42).Ticks,
+            HasTimingDecision: true,
+            TimingResult: PlaybackAvTimingDecisionResult.Wait,
+            TimingWaitTicks: TimeSpan.FromMilliseconds(22).Ticks,
+            Result: PlaybackGenerationMatchedSchedulerDeliveryResult.RetainedWait,
+            Completion: PlaybackGenerationMatchedSchedulerReservationCompletion.Retained);
+        var trace = new PlaybackGenerationMatchedSchedulerDeliveryTraceSnapshot(
+            Count: 1,
+            Overflowed: false,
+            First: observation,
+            Second: default,
+            Third: default,
+            Fourth: default);
+
+        Assert.Equal(
+            fallback,
+            SystemPlaybackControlledWindowsPhysicalRunOperations
+                .SelectControlledAudioTimingResumeDelay(trace, fallback));
+        Assert.Equal(
+            fallback,
+            SystemPlaybackControlledWindowsPhysicalRunOperations
+                .SelectControlledAudioTimingResumeDelay(
+                    trace with { Overflowed = true },
+                    fallback));
+    }
+
+    [Fact]
     public async Task ResumeControlledAudioTimingAsync_DoesNotResumeWouldBlock()
     {
         PlaybackApprovedExternalRuntimeWindowsLifecycleResult[] results =

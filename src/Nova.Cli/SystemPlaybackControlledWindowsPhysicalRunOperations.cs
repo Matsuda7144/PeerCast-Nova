@@ -230,7 +230,10 @@ internal sealed class SystemPlaybackControlledWindowsPhysicalRunOperations :
             static (delay, cancellationToken) => Task.Delay(delay, cancellationToken),
             ControlledAudioFrameCadence,
             MaximumControlledAudioTimingResumeCount,
-            token).ConfigureAwait(false);
+            token,
+            () => SelectControlledAudioTimingResumeDelay(
+                lifecycle.Snapshot.DeliveryTrace,
+                ControlledAudioFrameCadence)).ConfigureAwait(false);
     }
 
     internal static async ValueTask<PlaybackApprovedExternalRuntimeWindowsLifecycleResult>
@@ -240,7 +243,8 @@ internal sealed class SystemPlaybackControlledWindowsPhysicalRunOperations :
             Func<TimeSpan, CancellationToken, Task> delayAsync,
             TimeSpan frameCadence,
             int maximumResumeCount,
-            CancellationToken token)
+            CancellationToken token,
+            Func<TimeSpan>? retainedWaitDelayProvider = null)
     {
         ArgumentNullException.ThrowIfNull(deliverAsync);
         ArgumentNullException.ThrowIfNull(delayAsync);
@@ -253,11 +257,43 @@ internal sealed class SystemPlaybackControlledWindowsPhysicalRunOperations :
             resumeCount < maximumResumeCount;
             resumeCount++)
         {
-            await delayAsync(frameCadence, token).ConfigureAwait(false);
+            var delay = retainedWaitDelayProvider?.Invoke() ?? frameCadence;
+            if (delay <= TimeSpan.Zero || delay > frameCadence)
+            {
+                delay = frameCadence;
+            }
+
+            await delayAsync(delay, token).ConfigureAwait(false);
             result = await deliverAsync(token).ConfigureAwait(false);
         }
 
         return result;
+    }
+
+    internal static TimeSpan SelectControlledAudioTimingResumeDelay(
+        PlaybackGenerationMatchedSchedulerDeliveryTraceSnapshot trace,
+        TimeSpan fallback)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(fallback, TimeSpan.Zero);
+        if (trace.Count is < 1 or >
+                PlaybackGenerationMatchedSchedulerDeliveryTraceSnapshot.MaximumObservationCount ||
+            trace.Overflowed)
+        {
+            return fallback;
+        }
+
+        var observation = trace.GetObservation(trace.Count - 1);
+        return observation.MediaKind == PlaybackPolicyMediaKind.Audio &&
+            observation.HasTimingDecision &&
+            observation.TimingResult == PlaybackAvTimingDecisionResult.Wait &&
+            observation.TimingWaitTicks is > 0 &&
+            observation.TimingWaitTicks <= fallback.Ticks &&
+            observation.Result ==
+                PlaybackGenerationMatchedSchedulerDeliveryResult.RetainedWait &&
+            observation.Completion ==
+                PlaybackGenerationMatchedSchedulerReservationCompletion.Retained
+            ? TimeSpan.FromTicks(observation.TimingWaitTicks)
+            : fallback;
     }
 
     public async ValueTask StopLifecycleAsync()

@@ -1192,12 +1192,6 @@ public sealed class PlaybackGenerationMatchedSchedulerDeliveryBoundary :
             return;
         }
 
-        if (_deliveryObservationCount >= _deliveryObservations.Length)
-        {
-            _deliveryObservationOverflowed = true;
-            return;
-        }
-
         var hasTimestampOffset = timingItem.PresentationTimestamp.IsKnown;
         var timestampOffsetTicks = 0L;
         if (hasTimestampOffset)
@@ -1221,7 +1215,7 @@ public sealed class PlaybackGenerationMatchedSchedulerDeliveryBoundary :
             }
         }
 
-        _deliveryObservations[_deliveryObservationCount++] = new(
+        var observation = new PlaybackGenerationMatchedSchedulerDeliveryObservation(
             timingItem.Sequence,
             timingItem.MediaKind,
             hasTimestampOffset,
@@ -1231,6 +1225,35 @@ public sealed class PlaybackGenerationMatchedSchedulerDeliveryBoundary :
             hasTimingDecision ? timingDecision.WaitDuration.Ticks : 0,
             result,
             completion);
+
+        if (_deliveryObservationCount > 0)
+        {
+            var previousIndex = _deliveryObservationCount - 1;
+            var previous = _deliveryObservations[previousIndex];
+            if (previous.Sequence == observation.Sequence)
+            {
+                if (previous.MediaKind != observation.MediaKind ||
+                    previous.HasPresentationTimestampOffset !=
+                        observation.HasPresentationTimestampOffset ||
+                    previous.PresentationTimestampOffsetTicks !=
+                        observation.PresentationTimestampOffsetTicks)
+                {
+                    _deliveryObservationOverflowed = true;
+                    return;
+                }
+
+                _deliveryObservations[previousIndex] = observation;
+                return;
+            }
+        }
+
+        if (_deliveryObservationCount >= _deliveryObservations.Length)
+        {
+            _deliveryObservationOverflowed = true;
+            return;
+        }
+
+        _deliveryObservations[_deliveryObservationCount++] = observation;
     }
 
     private static PlaybackGenerationMatchedSchedulerReservationCompletion

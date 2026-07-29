@@ -90,7 +90,7 @@ public sealed class PlaybackGenerationMatchedSchedulerDeliveryTraceTests
     }
 
     [Fact]
-    public async Task Retained_wait_and_later_delivery_preserve_same_sequence_in_order()
+    public async Task Retained_wait_and_later_delivery_coalesce_to_final_sequence_result()
     {
         using var harness = new Harness(discontinuityGeneration: 0);
         var operations = new TraceOperations();
@@ -111,19 +111,12 @@ public sealed class PlaybackGenerationMatchedSchedulerDeliveryTraceTests
             await boundary.DeliverOneAsync());
 
         var trace = boundary.Snapshot.DeliveryTrace;
-        Assert.Equal(2, trace.Count);
-        var retained = trace.GetObservation(0);
-        var delivered = trace.GetObservation(1);
-        Assert.Equal(0L, retained.Sequence);
+        Assert.Equal(1, trace.Count);
+        Assert.False(trace.Overflowed);
+        var delivered = trace.GetObservation(0);
         Assert.Equal(0L, delivered.Sequence);
-        Assert.Equal(PlaybackAvTimingDecisionResult.Wait, retained.TimingResult);
-        Assert.Equal(TimeSpan.FromMilliseconds(3).Ticks, retained.TimingWaitTicks);
-        Assert.Equal(
-            PlaybackGenerationMatchedSchedulerDeliveryResult.RetainedWait,
-            retained.Result);
-        Assert.Equal(
-            PlaybackGenerationMatchedSchedulerReservationCompletion.Retained,
-            retained.Completion);
+        Assert.Equal(PlaybackAvTimingDecisionResult.ProcessNow, delivered.TimingResult);
+        Assert.Equal(0L, delivered.TimingWaitTicks);
         Assert.Equal(
             PlaybackGenerationMatchedSchedulerDeliveryResult.AudioDelivered,
             delivered.Result);

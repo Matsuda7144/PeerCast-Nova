@@ -263,13 +263,16 @@ The bounded FLV decoder configures the exact parser stream time base through pub
 - the `847b0ea...` run ended `DeliveryRejected / PreCleanupTraceCardinalityRejected`, retained an `826`-byte／`22`-line failure record with SHA-256 `BF1E4BD3304142CB53737F63C1D1849BF3B67546464C53188E874E21A01E50C1`, and again had `Audio audible: Yes`;
 - static tracing established that the dispatcher-backed Windows generation path did not forward `CaptureDeliveryObservations`, so the scheduler trace remained empty while the native audio trace was retained;
 - PR #213 merged as main `a6ec858162b1170cc35a5bbc94ae4068f4335090` and forwards that setting without changing physical-output or authorization behavior;
-- none of the recognizable runs produced a canonical completed or terminal record or established physical completion or formal audio acceptance;
+- the later `e0809e9...` run retained canonical terminal SHA-256 `859651D2DED3417F4F55BBAD1E210D1B48AC9E274681D669D6CF1C516E851C78`, ended `DeliveryRejected / None` after two acknowledged native writes, and had `Audio audible: Yes` for a recognizable beep;
+- its third audio sequence requested an approximately `6 ms` retained wait, but the fixed `21.3334 ms` controlled delay plus Windows scheduling overhead made the resumed sequence `AudioLate`;
+- `docs/adr/ADR-0165-controlled-audio-observed-timing-resume.md`, `docs/reviews/PCN-0175-CONTROLLED-AUDIO-OBSERVED-TIMING-RESUME.md`, and `docs/runbooks/0.0.10d-controlled-audio-observed-timing-resume.md` define the bounded non-physical correction and same-sequence trace coalescing;
+- none of the recognizable runs produced a canonical completed record or established physical completion or formal audio acceptance; `e0809e9...` did retain a canonical non-completed terminal record;
 - retained contradictory ordinary／diagnostic results remain historical evidence and must not be rerun;
 - prospective completed／terminal／child-failure／helper-failure retention and strict offline review are implemented;
 - PR #192 through PR #205 added bounded run-result and terminal-rejection retention, exact audio stream-format validation, bounded readiness failure disclosure, direct readiness child capture, granular pre-cleanup rejection diagnostics, terminal trace retention, managed command failure bounding, and managed failure phase retention;
-- all recorded readiness and physical authorizations through `847b0ea...` are consumed; all existing readiness and outcome paths are not reusable; no current readiness capture or physical audio run is authorized;
+- all recorded readiness and physical authorizations through `e0809e9...` are consumed; all existing readiness and outcome paths are not reusable; no current readiness capture or physical audio run is authorized;
 - Issue #129 remains open and paired verification remains blocked;
-- no additional concrete non-physical evidence gap is currently identified after PR #213;
+- the concrete non-physical gap identified by `e0809e9...` is addressed prospectively by ADR-0165 and PCN-0175;
 - approved runtime: `btbn.ffmpeg.20260721.win64.lgpl-shared`;
 - fixture: `66,939` bytes, SHA-256 `32872B300286525F4EF97FEE3533E25419AC8E48BFD4BC2C4FD9545F071B1E15`;
 - no runtime path, fixture path, record path, device／endpoint identity, HWND, thread ID, pointer, handle, HRESULT, raw process output, or payload is retained in the repository.
