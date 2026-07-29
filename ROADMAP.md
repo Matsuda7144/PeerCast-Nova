@@ -115,7 +115,7 @@ The review selected:
 - deterministic evidence plus separate operator visible／audible observations;
 - no hidden retry, resident loop, device fallback, or device recreation.
 
-### 0.0.10d Controlled Physical Windows Video／Audio Output Validation — Deferred
+### 0.0.10d Controlled Physical Windows Video／Audio Output Validation — Complete
 
 #### Established
 
@@ -146,18 +146,13 @@ The review selected:
 - the `6eb3558...` run completed four deliveries and retained canonical 26-line `Completed / Accepted` audio render evidence with SHA-256 `C6CD53C053F99FF43A1514E1162D3C90FE307C5FE32285F73013A612C2FBD100`;
 - that same record passed its independent completed-record preflight, and the operator reported `Audio audible: Yes` and a recognizable retained-fixture beep;
 - ADR-0166 and PCN-0176 connect the strict completed render-evidence format directly to the independent paired verifier without synthesizing a legacy audio record;
+- final independent paired admission completed on merged main `4f38de92ce66d988479f5e22b263de9f84b32086`, accepted both immutable retained records, executed no physical run, and preserved both input hashes;
 - bounded scheduler delivery, WASAPI write/padding, lifecycle checkpoints, native aggregate, completed record, terminal record, and sanitized failure evidence are implemented;
 - completed, terminal, child-failure, helper-failure, and readiness records have strict offline preflights;
 - bounded controlled-run result and terminal-rejection retention, exact audio stream-format validation, bounded readiness failure disclosure, direct readiness child capture, granular pre-cleanup rejection categories, terminal trace retention, managed command failure bounding, and managed failure phase retention are implemented;
 - non-physical readiness validation, atomic readiness capture, and the readiness-required authorization entrypoint are implemented.
 
-#### Not established
-
-- stable deterministic controlled audio delivery across the retained contradictory runs;
-- final merged-main paired video／audio admission;
-- completion of 0.0.10d.
-
-#### Retained blocking evidence
+#### Retained historical evidence
 
 The one approved render-evidence helper invocation at main `4abadd280ceeae310b2528b6ea62f377211b1273` returned an unexpected helper failure, retained neither requested record, and had `Audio audible: No`. The exact trigger is unrecoverable; the confirmed defect was evidence loss. That authorization is consumed.
 
@@ -169,26 +164,17 @@ The later separately authorized run at `774342a03c33713b1b7f70e2cb664397c04f8d04
 
 The helper console line `Sanitized helper failure record retained: No` refers only to the absence of an additional helper-level record after the child-capture failure record already occupied the exclusive failure path. It does not contradict the verified child failure record.
 
-Issue #129 remains open. Historical helpers and diagnostics must not be rerun.
+Issue #129 is closed as completed. Historical helpers and diagnostics must not be rerun.
 
-#### Deferral gate
+#### Completion gate
 
 The later separately authorized run at `847b0ea4cff8aca48c103e499c0bf2bca3fbc6b5` used readiness record SHA-256 `00861785FAD839D4DA9A86D032E6CE32CDE9F3F25774B5E364F0816EA03B318D`. It produced a recognizable beep but no canonical completed or terminal record. Its sanitized failure record SHA-256 was `BF1E4BD3304142CB53737F63C1D1849BF3B67546464C53188E874E21A01E50C1`. Its readiness and physical authorizations are consumed.
 
 The next separately authorized run at `abb071f5fcb6e78f86ad5f185387adee060e29fb` used readiness record SHA-256 `B908FC83309F09AD58A296A55F509F868E686264E659DE0B41CDB490840B24B9`. It produced a recognizable beep but no canonical completed or terminal record. Its sanitized failure record SHA-256 was `2A2D40B9388D8F6E679D31FBBEBFA92448ED6F052C53E08A22441A7067AFA602`. Its readiness and physical authorizations are consumed.
 
-No additional concrete non-physical evidence gap is currently identified after PR #215. The milestone is explicitly deferred without claiming physical completion, formal audio acceptance, paired admission, or completion. Issue #129 remains open. A later controlled physical run is a separate authorization decision; merge, documentation, CI, existing readiness evidence, fresh-looking paths, and the literal entrypoint guard do not grant it. Do not repeat readiness capture or physical output without a new explicit one-run authorization.
+The later accepted run at `6eb3558ec0efd434d9ee1e7221ba86d3c115684f` and final independent paired admission on merged main `4f38de92ce66d988479f5e22b263de9f84b32086` satisfy the reviewed completion conditions. Issue #129 is closed as completed. No additional physical run was needed for paired admission.
 
-A future controlled physical audio render run requires:
-
-1. a separately merged exact `main` commit;
-2. final-head and post-merge CircleCI success;
-3. a newly captured and independently revalidated canonical readiness record for that exact commit and operation bounds;
-4. new repository-external completed, terminal, and failure paths;
-5. a new explicit one-run authorization;
-6. execution exactly once through `tools/Run-ControlledWindowsPhysicalAudioRenderEvidenceWithReadiness.ps1`.
-
-The underlying helper must not be invoked directly. Readiness evidence and the literal invocation guard are not authorization.
+All readiness and physical-run authorizations used for the milestone are consumed. Historical commands and paths must not be reused. Any future controlled physical run is a separate reviewed authorization decision; merge, documentation, CI, existing evidence, and the literal entrypoint guard do not grant it.
 
 Current-state reviews: `docs/reviews/PCN-0166-CONTROLLED-AUDIO-RENDER-AUTHORIZATION-STATE.md` and `docs/reviews/PCN-0167-MANAGED-AUDIO-FAILURE-BOUNDARY.md`.
 
@@ -217,8 +203,7 @@ Current reviews: `docs/reviews/PCN-0170-SHARED-WINDOWS-APPLICATION-OWNERSHIP.md`
 
 ### Later sequence
 
-1. implement no installer, signing, or update mechanism without a separate ADR;
-2. revisit deferred 0.0.10d only through a separate reviewed authorization decision.
+1. implement no installer, signing, or update mechanism without a separate ADR.
 
 ### Deferred
 

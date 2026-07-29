@@ -145,49 +145,42 @@ That literal string is not authorization by itself.
 
 ## Current gate
 
-Issue #129 remains open.
+Issue #129 is closed as completed.
 
-All recorded readiness-capture and physical-run authorizations through the consumed `abb071f5fcb6e78f86ad5f185387adee060e29fb` run are permanently consumed. No current commit has a new readiness-capture or physical-run authorization. All associated readiness and outcome paths are consumed and must not be reused.
+All recorded readiness-capture and physical-run authorizations through the consumed `6eb3558ec0efd434d9ee1e7221ba86d3c115684f` run are permanently consumed. No current commit has a new readiness-capture or physical-run authorization. All associated readiness and outcome paths are consumed and must not be reused.
 
-No additional concrete non-physical evidence gap is currently identified after PR #215. A later readiness-gated physical run is a separate reviewed authorization decision. Merge, documentation, CI success, existing readiness evidence, fresh-looking paths, and the literal invocation guard do not grant authorization.
+The accepted `6eb3558...` run and final independent paired admission on merged main `4f38de92ce66d988479f5e22b263de9f84b32086` satisfy the reviewed 0.0.10d completion conditions. The paired verifier accepted both immutable retained records, executed no physical run, and preserved both hashes.
 
-A future controlled physical audio render run requires all of the following:
+## Completion state
 
-1. a separately merged exact `main` commit;
-2. final-head and post-merge CircleCI success;
-3. a newly captured and independently revalidated readiness record for that exact commit, fixture identity, operation bounds, and fresh paths;
-4. new repository-external completed, terminal, and failure paths;
-5. a new explicit one-run authorization;
-6. execution through `tools/Run-ControlledWindowsPhysicalAudioRenderEvidenceWithReadiness.ps1` exactly once.
+The following are established on final merged main:
 
-The underlying helper must not be invoked directly.
-
-## Prohibited interpretation
-
-The following are not yet established on final merged main:
-
-- stable or deterministic ordinary controlled audio delivery;
+- canonical completed audio evidence and independent completed-record acceptance;
+- same-run recognizable fixture audibility;
+- physical completion and formal audio acceptance;
 - paired video/audio admission;
-- completion of 0.0.10d;
+- completion of 0.0.10d.
+
+The completion does not grant:
+
 - permission to rerun any historical helper or diagnostic;
 - permission to reuse any consumed readiness or outcome path;
 - permission to substitute another endpoint, fixture, buffer duration, timing policy, operation bound, probe, or output path.
 
 ## Project decision
 
-0.0.10d is explicitly deferred without claiming canonical audio completion,
-physical completion, formal acceptance, paired admission, or milestone
-completion. Issue #129 remains open and all retained evidence keeps its existing
-meaning.
+0.0.10d is complete. The retained evidence keeps its exact historical meaning;
+the accepted final run and independent paired admission satisfy the milestone
+without reinterpreting any earlier contradictory run. Issue #129 is closed as
+completed.
 
 A separately reviewed decision is still required before any later readiness capture or physical run. Additional wrappers, codecs, record variants, probes, or physical reruns should not be added unless a concrete new evidence gap is identified.
 
-Project work continues in 0.0.10e through the shared non-physical Windows
-application ownership boundary described by ADR-0160 and PCN-0170. This does not
-reinterpret 0.0.10d as complete or grant physical authorization.
+Project work continues after the completed 0.0.10d and 0.0.10e boundaries. This
+does not grant any future physical authorization.
 
-The completed audio prerequisite for paired verification is now satisfied by
-the retained `6eb3558...` run. ADR-0166 and PCN-0176 add the non-physical
-format connection required for the paired verifier. Final admission must be
-repeated with the immutable retained records using a build from the final
-merged main before 0.0.10d is marked complete.
+The completed audio prerequisite for paired verification is satisfied by the
+retained `6eb3558...` run. ADR-0166 and PCN-0176 add the non-physical format
+connection required for the paired verifier. Final admission completed from
+merged main `4f38de92ce66d988479f5e22b263de9f84b32086` with the immutable retained
+records.

@@ -122,8 +122,9 @@ The separately approved physical probe on clean main
 one acknowledged write and Start, stopped/disposed cleanup, preserved borrowed
 owners, and operator observation `Known audio tone audible: Yes`. The 80 ms
 1,000 Hz beep was recognizable. Canonical Float32 production WASAPI output is
-therefore operational; paired verification remains blocked while fixture audio
-assembly is isolated.
+therefore operational; paired verification was still blocked at that historical
+stage while fixture audio assembly was isolated. Final paired admission later
+completed under PCN-0176.
 
 ## Phase 5 controlled decoded-audio slice probe
 
@@ -254,7 +255,7 @@ The bounded FLV decoder configures the exact parser stream time base through pub
 
 **0.0.10e — Shared Windows Application Ownership Boundary — Complete**
 
-- 0.0.10d is explicitly deferred without claiming completion; Issue #129 and every missing audio／paired evidence gate remain open;
+- 0.0.10d is complete; Issue #129 is closed after accepted same-run audio evidence and final independent paired admission;
 - `Nova.Windows` now owns the single reusable application window, Win32 message loop, owner thread, and bounded dispatcher implementation;
 - `Nova.Cli` references that shared host for controlled commands rather than owning or duplicating it;
 - `Nova.Playback` continues to borrow only the dispatcher contract and window token;
@@ -263,9 +264,9 @@ The bounded FLV decoder configures the exact parser stream time base through pub
 - `Nova.App` now has a framework-dependent `win-x64` portable publish contract that copies the project license material and exact FFmpeg legal allowlist without any external runtime payload;
 - the portable output remains the only implemented distribution boundary; installer, signing, and update mechanics require separate future ADRs;
 - current reviews: `docs/reviews/PCN-0170-SHARED-WINDOWS-APPLICATION-OWNERSHIP.md`, `docs/reviews/PCN-0171-USER-FACING-WINDOWS-STARTUP-COMPOSITION.md`, `docs/reviews/PCN-0172-BOUNDED-LEGAL-ABOUT-PROJECTION.md`, `docs/reviews/PCN-0173-FRAMEWORK-DEPENDENT-WINDOWS-PORTABLE-PACKAGE.md`, and `docs/reviews/PCN-0174-INSTALLER-SIGNING-UPDATE-BOUNDARY.md`;
-- next: no release mechanism is selected; deferred 0.0.10d may be revisited only through a separate reviewed authorization decision.
+- next: no release mechanism is selected; installer, signing, and update mechanics remain separate reviewed decisions.
 
-**Deferred 0.0.10d — Controlled Physical Windows Video／Audio Output Validation**
+**0.0.10d — Controlled Physical Windows Video／Audio Output Validation — Complete**
 
 - authoritative state: `docs/reviews/PCN-0166-CONTROLLED-AUDIO-RENDER-AUTHORIZATION-STATE.md`, `docs/reviews/PCN-0167-MANAGED-AUDIO-FAILURE-BOUNDARY.md`, and Issue #129; documentation, CI, and readiness do not grant or select physical authorization;
 - corrected decoded physical video: `Completed／Accepted`, `VideoAccepted`, visible `Yes`;
@@ -285,12 +286,13 @@ The bounded FLV decoder configures the exact parser stream time base through pub
 - the later `e0809e9...` run retained canonical terminal SHA-256 `859651D2DED3417F4F55BBAD1E210D1B48AC9E274681D669D6CF1C516E851C78`, ended `DeliveryRejected / None` after two acknowledged native writes, and had `Audio audible: Yes` for a recognizable beep;
 - its third audio sequence requested an approximately `6 ms` retained wait, but the fixed `21.3334 ms` controlled delay plus Windows scheduling overhead made the resumed sequence `AudioLate`;
 - `docs/adr/ADR-0165-controlled-audio-observed-timing-resume.md`, `docs/reviews/PCN-0175-CONTROLLED-AUDIO-OBSERVED-TIMING-RESUME.md`, and `docs/runbooks/0.0.10d-controlled-audio-observed-timing-resume.md` define the bounded non-physical correction and same-sequence trace coalescing;
-- none of the recognizable runs produced a canonical completed record or established physical completion or formal audio acceptance; `e0809e9...` did retain a canonical non-completed terminal record;
+- the final accepted run at `6eb3558...` produced the canonical completed record, passed independent preflight, and established same-run physical completion, formal audio acceptance, and recognizable fixture audibility;
 - retained contradictory ordinary／diagnostic results remain historical evidence and must not be rerun;
 - prospective completed／terminal／child-failure／helper-failure retention and strict offline review are implemented;
 - PR #192 through PR #205 added bounded run-result and terminal-rejection retention, exact audio stream-format validation, bounded readiness failure disclosure, direct readiness child capture, granular pre-cleanup rejection diagnostics, terminal trace retention, managed command failure bounding, and managed failure phase retention;
-- all recorded readiness and physical authorizations through `e0809e9...` are consumed; all existing readiness and outcome paths are not reusable; no current readiness capture or physical audio run is authorized;
-- Issue #129 remains open and paired verification remains blocked;
+- all recorded readiness and physical authorizations through `6eb3558...` are consumed; all existing readiness and outcome paths are not reusable; no current readiness capture or physical audio run is authorized;
+- final independent paired verification completed on merged main `4f38de92ce66d988479f5e22b263de9f84b32086`, accepted both immutable retained records, executed no physical run, and preserved both hashes;
+- Issue #129 is closed as completed;
 - the concrete non-physical gap identified by `e0809e9...` is addressed prospectively by ADR-0165 and PCN-0175;
 - approved runtime: `btbn.ffmpeg.20260721.win64.lgpl-shared`;
 - fixture: `66,939` bytes, SHA-256 `32872B300286525F4EF97FEE3533E25419AC8E48BFD4BC2C4FD9545F071B1E15`;

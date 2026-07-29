@@ -21,9 +21,9 @@ License: **Apache License 2.0**
 - known 80 ms managed tone and decoded 80 ms fixture slice: recognizable audio
 - ordinary controlled fixture audio: seven consumed readiness-gated runs produced a recognizable beep with `Audio audible: Yes`
 - the latest run at exact main `6eb3558ec0efd434d9ee1e7221ba86d3c115684f` produced canonical `Completed / Accepted` audio render evidence, passed its independent completed-record preflight, and had the same-run operator observations `Audio audible: Yes` and recognizable retained-fixture beep `Yes`
-- final merged-main paired video/audio admission and milestone reconciliation remain pending
-- Issue #129 remains open
-- 0.0.10d is explicitly deferred without claiming physical completion, formal audio acceptance, paired admission, or milestone completion
+- final merged-main paired video/audio admission completed on main `4f38de92ce66d988479f5e22b263de9f84b32086`
+- Issue #129 is closed as completed
+- 0.0.10d is complete with physical completion, formal audio acceptance, and paired admission established
 - the existing application-owned Win32 host is extracted into `Nova.Windows` so the user-facing application can reuse one window／message-loop／dispatcher ownership model
 - `Nova.App` provides finite startup／shutdown, bounded legal／About projection, and a framework-dependent `win-x64` portable package
 - installer, signing, and update mechanics remain unselected behind a separate reviewed boundary
@@ -50,7 +50,7 @@ The later separately authorized run at exact main `e0809e9b711d5bb5101130a26ca19
 
 The next separately authorized run at exact main `6eb3558ec0efd434d9ee1e7221ba86d3c115684f` completed four deliveries and retained a strict 26-line `Completed / Accepted` audio render-evidence record with SHA-256 `C6CD53C053F99FF43A1514E1162D3C90FE307C5FE32285F73013A612C2FBD100`. Its independent completed-record preflight returned `RenderEvidenceRecordValidated`, and the operator separately reported `Audio audible: Yes` and a recognizable retained-fixture beep. The readiness and one-run physical authorizations are consumed.
 
-ADR-0166 and PCN-0176 connect that strict completed record directly to the independent paired run-set verifier while preserving legacy audio-record compatibility. The connector is non-physical and creates no synthetic legacy record. Final paired admission must use the immutable retained records with a build from the final merged main.
+ADR-0166 and PCN-0176 connect that strict completed record directly to the independent paired run-set verifier while preserving legacy audio-record compatibility. The connector is non-physical and creates no synthetic legacy record. Final paired admission completed from merged main `4f38de92ce66d988479f5e22b263de9f84b32086` using the immutable retained records; both records were accepted, no physical run was executed, and both input hashes remained unchanged.
 
 Prospective non-physical hardening is implemented: bounded scheduler／WASAPI traces, completed／terminal／failure records, offline strict preflights, readiness validation, atomic readiness capture, the readiness-required one-run authorization entrypoint, bounded controlled-run result and terminal-rejection retention, exact stream-format validation, bounded readiness failure disclosure, granular pre-cleanup rejection diagnostics, terminal scheduler-trace retention, dispatcher-backed delivery-trace capture, audio-only and same-sequence trace selection, bounded observed timing resume, managed command failure bounding, and managed failure phase retention. No new physical run is currently authorized.
 
@@ -137,7 +137,6 @@ Current-state review:
 
 PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信アプリではありません。
 
-- paired video／audio admission and completion of 0.0.10d
 - MP4／fragmented MP4 parser
 - decoded-buffer duration cutoff
 - discontinuity-time native reset semantics
@@ -148,24 +147,13 @@ FFmpeg binary bundling／redistributionは既定方針として禁止です。�
 
 ## 次のゲート
 
-**After 0.0.10e — Deferred physical gate and future release mechanics**
+**After 0.0.10d／0.0.10e — Future release mechanics**
 
 0.0.10e is complete as an application ownership and portable packaging boundary. `Nova.App` provides the normal user-facing start/close/cancel boundary above the single shared `Nova.Windows` host, projects the exact bounded FFmpeg notice/provenance/replacement material, and has a framework-dependent `win-x64` portable publish contract with the exact reviewed legal-file allowlist. Installer, signing, and update mechanisms remain separate future ADR decisions.
 
-0.0.10d is explicitly deferred, not completed. Its evidence gaps and Issue #129 remain open. The completed 0.0.10e work adds no FFmpeg binary, acquisition, installation, update, or invocation behavior and does not change controlled physical commands.
+0.0.10d is complete. The accepted video record and strict completed audio render evidence passed final independent paired admission on merged main `4f38de92ce66d988479f5e22b263de9f84b32086`; Issue #129 is closed as completed. The completed 0.0.10e work adds no FFmpeg binary, acquisition, installation, update, or invocation behavior and does not change controlled physical commands.
 
-新しい物理実行を検討する場合は、次をすべて満たす必要があります。
-
-1. separately merged exact `main` commit
-2. final-head／post-merge CircleCI success
-3. exact commitとoperation boundsに対する新しいcanonical readiness record
-4. new repository-external completed／terminal／failure paths
-5. new explicit one-run authorization
-6. `tools/Run-ControlledWindowsPhysicalAudioRenderEvidenceWithReadiness.ps1`からexactly once実行
-
-The underlying helper must not be invoked directly. The literal authorization statement required by the entrypoint is an accidental-invocation guard and does not itself grant authorization.
-
-Until a new explicit authorization exists, historical helpers／diagnostics must not be rerun and deferred 0.0.10d must not be marked complete.
+All readiness and physical-run authorizations used to establish 0.0.10d are consumed. Historical helpers／diagnostics and consumed paths must not be reused. Any future physical run remains a separate reviewed authorization decision.
 
 ## 必要環境
 
