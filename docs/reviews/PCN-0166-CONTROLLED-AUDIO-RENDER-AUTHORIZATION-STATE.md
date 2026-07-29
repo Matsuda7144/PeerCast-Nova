@@ -48,7 +48,7 @@ Controlled Windows video output is established for the retained fixture:
 
 ## Retained physical audio evidence
 
-The retained audio evidence remains contradictory. It establishes six recognizable ordinary fixture-audio observations, but it does not establish canonical completed audio evidence, stable delivery, physical completion, or formal audio acceptance:
+The historical audio evidence remains contradictory. The latest retained run now establishes canonical completed audio evidence and recognizable same-run fixture audio:
 
 1. an ordinary controlled run retained `3 / 2` delivery accounting and a noise-like transient;
 2. a delivery-result diagnostic retained four caller-visible `AudioDelivered` results and no recognizable audio;
@@ -60,6 +60,7 @@ The retained audio evidence remains contradictory. It establishes six recognizab
 8. the later readiness-gated run from exact main `847b0ea4cff8aca48c103e499c0bf2bca3fbc6b5` returned child exit `1`, `DeliveryRejected`, terminal rejection `PreCleanupTraceCardinalityRejected`, and final native stage `ActivationCleanupCompleted`; it produced no canonical completed or terminal record, retained an `826`-byte／`22`-line sanitized failure record with SHA-256 `BF1E4BD3304142CB53737F63C1D1849BF3B67546464C53188E874E21A01E50C1`, and again had separate operator observation `Audio audible: Yes`.
 9. the next readiness-gated run from exact main `abb071f5fcb6e78f86ad5f185387adee060e29fb` returned child exit `1`, exact fallback `Result: Faulted`, managed failure phase `OutcomeWrite`, and final native stage `ActivationCleanupCompleted`; it produced no canonical completed or terminal record, retained a `795`-byte, `22`-line sanitized failure record with SHA-256 `2A2D40B9388D8F6E679D31FBBEBFA92448ED6F052C53E08A22441A7067AFA602`, and again had separate operator observation `Audio audible: Yes` for a recognizable beep.
 10. the readiness-gated run from exact main `e0809e9b711d5bb5101130a26ca19944a94a0d31` returned child exit `1` and `DeliveryRejected / None` after `4 / 3 / 2` decode, outer-delivery, and delivered counts; it produced no completed record, retained canonical terminal record SHA-256 `859651D2DED3417F4F55BBAD1E210D1B48AC9E274681D669D6CF1C516E851C78`, and had separate operator observation `Audio audible: Yes` for a recognizable beep.
+11. the readiness-gated run from exact main `6eb3558ec0efd434d9ee1e7221ba86d3c115684f` returned exit `0`, completed all four deliveries, retained canonical 26-line `Completed / Accepted` render evidence with SHA-256 `C6CD53C053F99FF43A1514E1162D3C90FE307C5FE32285F73013A612C2FBD100`, passed its independent completed-record preflight, and had separate same-run observations `Audio audible: Yes` and recognizable retained-fixture beep `Yes`.
 
 The exact failure trigger for the consumed `4abadd280...` invocation is unknowable. The confirmed defect was evidence loss. Native stderr and Windows PowerShell `ErrorActionPreference` interaction was plausible but not proven.
 
@@ -163,10 +164,8 @@ The underlying helper must not be invoked directly.
 
 ## Prohibited interpretation
 
-The following are not established:
+The following are not yet established on final merged main:
 
-- canonical completed／accepted audio evidence for any run with recognizable fixture audio;
-- physical completion or formal audio acceptance for any recognizable run;
 - stable or deterministic ordinary controlled audio delivery;
 - paired video/audio admission;
 - completion of 0.0.10d;
@@ -187,4 +186,8 @@ Project work continues in 0.0.10e through the shared non-physical Windows
 application ownership boundary described by ADR-0160 and PCN-0170. This does not
 reinterpret 0.0.10d as complete or grant physical authorization.
 
-Paired verification remains blocked until one later canonical completed audio record passes its independent preflight and the separate operator observation for that same run confirms recognizable audio.
+The completed audio prerequisite for paired verification is now satisfied by
+the retained `6eb3558...` run. ADR-0166 and PCN-0176 add the non-physical
+format connection required for the paired verifier. Final admission must be
+repeated with the immutable retained records using a build from the final
+merged main before 0.0.10d is marked complete.

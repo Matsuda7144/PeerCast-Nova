@@ -143,6 +143,9 @@ The review selected:
 - the `e0809e9...` run ended `DeliveryRejected / None` after `4 / 3 / 2` decode, outer-delivery, and delivered counts, retained terminal SHA-256 `859651D2DED3417F4F55BBAD1E210D1B48AC9E274681D669D6CF1C516E851C78`, and again had `Audio audible: Yes`;
 - static review established that a roughly `6 ms` retained wait was resumed after the fixed `21.3334 ms` cadence and became `AudioLate`, while repeated observations for one sequence could also consume multiple fixed trace slots;
 - ADR-0165 and PCN-0175 use only a validated bounded observed wait in the opt-in controlled evidence path and coalesce same-sequence trace updates without changing production timing or native output;
+- the `6eb3558...` run completed four deliveries and retained canonical 26-line `Completed / Accepted` audio render evidence with SHA-256 `C6CD53C053F99FF43A1514E1162D3C90FE307C5FE32285F73013A612C2FBD100`;
+- that same record passed its independent completed-record preflight, and the operator reported `Audio audible: Yes` and a recognizable retained-fixture beep;
+- ADR-0166 and PCN-0176 connect the strict completed render-evidence format directly to the independent paired verifier without synthesizing a legacy audio record;
 - bounded scheduler delivery, WASAPI write/padding, lifecycle checkpoints, native aggregate, completed record, terminal record, and sanitized failure evidence are implemented;
 - completed, terminal, child-failure, helper-failure, and readiness records have strict offline preflights;
 - bounded controlled-run result and terminal-rejection retention, exact audio stream-format validation, bounded readiness failure disclosure, direct readiness child capture, granular pre-cleanup rejection categories, terminal trace retention, managed command failure bounding, and managed failure phase retention are implemented;
@@ -151,10 +154,7 @@ The review selected:
 #### Not established
 
 - stable deterministic controlled audio delivery across the retained contradictory runs;
-- canonical completed／accepted audio evidence from the same run as recognizable fixture audio;
-- independent completed-record preflight for that same run;
-- physical completion and formal audio acceptance for any recognizable run;
-- paired video／audio admission;
+- final merged-main paired video／audio admission;
 - completion of 0.0.10d.
 
 #### Retained blocking evidence

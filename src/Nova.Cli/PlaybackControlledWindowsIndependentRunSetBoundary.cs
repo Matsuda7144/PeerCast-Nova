@@ -118,42 +118,78 @@ public sealed class PlaybackControlledWindowsIndependentRunSetBoundary : IDispos
                 return Reject(validation);
             }
 
-            if (record.Kind == PlaybackControlledWindowsOutputValidationKind.Video)
+            return ConsumeValidatedKind(record.Kind);
+        }
+    }
+
+    public PlaybackControlledWindowsIndependentRunSetResult ValidateAndConsume(
+        PlaybackControlledWindowsAudioRenderEvidenceRecord record)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        lock (_sync)
+        {
+            if (_isDisposed)
             {
-                if (_hasVideoRecord)
-                {
-                    return Reject(
-                        PlaybackControlledWindowsIndependentRunSetResult.DuplicateKind);
-                }
-
-                _hasVideoRecord = true;
-                if (_hasAudioRecord)
-                {
-                    _state = PlaybackControlledWindowsIndependentRunSetState.Completed;
-                    return SetResult(
-                        PlaybackControlledWindowsIndependentRunSetResult.Completed);
-                }
-
-                _state = PlaybackControlledWindowsIndependentRunSetState.AwaitingAudio;
-                return SetResult(
-                    PlaybackControlledWindowsIndependentRunSetResult.VideoAccepted);
+                return SetResult(PlaybackControlledWindowsIndependentRunSetResult.Disposed);
             }
 
-            if (_hasAudioRecord)
+            if (_state == PlaybackControlledWindowsIndependentRunSetState.Completed)
+            {
+                return SetResult(PlaybackControlledWindowsIndependentRunSetResult.AlreadyCompleted);
+            }
+
+            if (_state == PlaybackControlledWindowsIndependentRunSetState.Rejected)
+            {
+                return SetResult(PlaybackControlledWindowsIndependentRunSetResult.AlreadyRejected);
+            }
+
+            var validation = ValidateAudioRenderEvidenceRecord(record);
+            if (validation != PlaybackControlledWindowsIndependentRunSetResult.None)
+            {
+                return Reject(validation);
+            }
+
+            return ConsumeValidatedKind(PlaybackControlledWindowsOutputValidationKind.Audio);
+        }
+    }
+
+    private PlaybackControlledWindowsIndependentRunSetResult ConsumeValidatedKind(
+        PlaybackControlledWindowsOutputValidationKind kind)
+    {
+        if (kind == PlaybackControlledWindowsOutputValidationKind.Video)
+        {
+            if (_hasVideoRecord)
             {
                 return Reject(PlaybackControlledWindowsIndependentRunSetResult.DuplicateKind);
             }
 
-            _hasAudioRecord = true;
-            if (_hasVideoRecord)
+            _hasVideoRecord = true;
+            if (_hasAudioRecord)
             {
                 _state = PlaybackControlledWindowsIndependentRunSetState.Completed;
-                return SetResult(PlaybackControlledWindowsIndependentRunSetResult.Completed);
+                return SetResult(
+                    PlaybackControlledWindowsIndependentRunSetResult.Completed);
             }
 
-            _state = PlaybackControlledWindowsIndependentRunSetState.AwaitingVideo;
-            return SetResult(PlaybackControlledWindowsIndependentRunSetResult.AudioAccepted);
+            _state = PlaybackControlledWindowsIndependentRunSetState.AwaitingAudio;
+            return SetResult(
+                PlaybackControlledWindowsIndependentRunSetResult.VideoAccepted);
         }
+
+        if (_hasAudioRecord)
+        {
+            return Reject(PlaybackControlledWindowsIndependentRunSetResult.DuplicateKind);
+        }
+
+        _hasAudioRecord = true;
+        if (_hasVideoRecord)
+        {
+            _state = PlaybackControlledWindowsIndependentRunSetState.Completed;
+            return SetResult(PlaybackControlledWindowsIndependentRunSetResult.Completed);
+        }
+
+        _state = PlaybackControlledWindowsIndependentRunSetState.AwaitingVideo;
+        return SetResult(PlaybackControlledWindowsIndependentRunSetResult.AudioAccepted);
     }
 
     public void Dispose()
@@ -231,6 +267,71 @@ public sealed class PlaybackControlledWindowsIndependentRunSetBoundary : IDispos
         }
 
         return PlaybackControlledWindowsIndependentRunSetResult.None;
+    }
+
+    private PlaybackControlledWindowsIndependentRunSetResult
+        ValidateAudioRenderEvidenceRecord(
+            PlaybackControlledWindowsAudioRenderEvidenceRecord record)
+    {
+        if (_expectedFixtureSha256 is null ||
+            string.IsNullOrWhiteSpace(_expectedRuntimeBuildId) ||
+            record.SchemaVersion !=
+                PlaybackControlledWindowsAudioRenderEvidenceRecordCodec.CurrentSchemaVersion ||
+            !string.Equals(
+                record.Milestone,
+                PlaybackControlledWindowsAudioRenderEvidenceRecordCodec.CurrentMilestone,
+                StringComparison.Ordinal) ||
+            record.Kind != PlaybackControlledWindowsOutputValidationKind.Audio)
+        {
+            return PlaybackControlledWindowsIndependentRunSetResult.InvalidRecord;
+        }
+
+        if (!string.Equals(
+                record.RuntimeBuildId,
+                _expectedRuntimeBuildId,
+                StringComparison.Ordinal))
+        {
+            return PlaybackControlledWindowsIndependentRunSetResult.RuntimeRejected;
+        }
+
+        if (!PlaybackControlledWindowsPhysicalRunRecordCodec.TryNormalizeSha256(
+                record.FixtureSha256,
+                out var normalizedDigest) ||
+            !string.Equals(
+                normalizedDigest,
+                _expectedFixtureSha256,
+                StringComparison.Ordinal))
+        {
+            return PlaybackControlledWindowsIndependentRunSetResult.FixtureRejected;
+        }
+
+        if (record.Result != PlaybackControlledWindowsPhysicalRunResult.Completed ||
+            record.EvidenceResult != PlaybackControlledWindowsOutputEvidenceResult.Accepted ||
+            record.FixtureByteCount <= 0 ||
+            record.FixturePacketCount <= 0 ||
+            record.DecodeOperationCount <= 0 ||
+            record.DeliveryAttemptCount != 4 ||
+            record.DeliveredCount != 4 ||
+            record.RetainedWouldBlockCount != 0 ||
+            !record.PhysicalRunsExecutedByThisCommand ||
+            record.AudioAcceptanceClaimed)
+        {
+            return PlaybackControlledWindowsIndependentRunSetResult.EvidenceRejected;
+        }
+
+        if (record.RunnerState != PlaybackWindowsPhysicalRunnerState.Stopped ||
+            record.LifecycleState !=
+                PlaybackApprovedExternalRuntimeWindowsLifecycleState.Disposed ||
+            !record.BorrowedWindowPreserved ||
+            !record.BorrowedDispatcherPreserved ||
+            record.ExternalBinaryOrPayloadPublished)
+        {
+            return PlaybackControlledWindowsIndependentRunSetResult.CleanupRejected;
+        }
+
+        return PlaybackControlledWindowsAudioRenderEvidenceRecordCodec.IsValid(record)
+            ? PlaybackControlledWindowsIndependentRunSetResult.None
+            : PlaybackControlledWindowsIndependentRunSetResult.EvidenceRejected;
     }
 
     private PlaybackControlledWindowsIndependentRunSetResult Reject(

@@ -128,6 +128,75 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceRecordPreflightC
     }
 
     [Fact]
+    public async Task Independent_pair_accepts_completed_render_evidence_record()
+    {
+        var videoPath = Path.GetTempFileName();
+        var audioPath = Path.GetTempFileName();
+        try
+        {
+            await File.WriteAllTextAsync(
+                videoPath,
+                PlaybackControlledWindowsPhysicalRunRecordCodec.Serialize(
+                    ValidVideoRecord()));
+            await File.WriteAllTextAsync(audioPath, EvidenceRecord());
+            using var output = new StringWriter();
+
+            var result = await PlaybackControlledWindowsIndependentRunSetCommand.RunAsync(
+                IndependentArguments(videoPath, audioPath),
+                output);
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.Equal(
+                PlaybackControlledWindowsIndependentRunSetResult.Completed,
+                result.Result);
+            var report = output.ToString();
+            Assert.Contains("Result: Completed", report);
+            Assert.Contains("Video-Record-Accepted: True", report);
+            Assert.Contains("Audio-Record-Accepted: True", report);
+            Assert.Contains("Physical-Runs-Executed-By-This-Command: False", report);
+            Assert.DoesNotContain(videoPath, report, StringComparison.Ordinal);
+            Assert.DoesNotContain(audioPath, report, StringComparison.Ordinal);
+        }
+        finally
+        {
+            File.Delete(videoPath);
+            File.Delete(audioPath);
+        }
+    }
+
+    [Fact]
+    public async Task Independent_pair_rejects_terminal_render_record()
+    {
+        var videoPath = Path.GetTempFileName();
+        var audioPath = Path.GetTempFileName();
+        try
+        {
+            await File.WriteAllTextAsync(
+                videoPath,
+                PlaybackControlledWindowsPhysicalRunRecordCodec.Serialize(
+                    ValidVideoRecord()));
+            await File.WriteAllTextAsync(audioPath, TerminalRecord());
+            using var output = new StringWriter();
+
+            var result = await PlaybackControlledWindowsIndependentRunSetCommand.RunAsync(
+                IndependentArguments(videoPath, audioPath),
+                output);
+
+            Assert.Equal(2, result.ExitCode);
+            Assert.Equal(
+                PlaybackControlledWindowsIndependentRunSetResult.InvalidRecord,
+                result.Result);
+            Assert.Contains("Video-Record-Accepted: False", output.ToString());
+            Assert.Contains("Audio-Record-Accepted: False", output.ToString());
+        }
+        finally
+        {
+            File.Delete(videoPath);
+            File.Delete(audioPath);
+        }
+    }
+
+    [Fact]
     public async Task Duplicate_option_is_invalid_configuration_before_file_access()
     {
         using var output = new StringWriter();
@@ -182,6 +251,34 @@ public sealed class PlaybackControlledWindowsAudioRenderEvidenceRecordPreflightC
         "--audio-buffer-ms", audioBufferMilliseconds.ToString(
             System.Globalization.CultureInfo.InvariantCulture),
     ];
+
+    private static string[] IndependentArguments(string videoPath, string audioPath) =>
+    [
+        PlaybackControlledWindowsIndependentRunSetCommand.Argument,
+        "--video-record", videoPath,
+        "--audio-record", audioPath,
+        "--fixture-sha256", FixtureSha256,
+    ];
+
+    private static PlaybackControlledWindowsPhysicalRunRecord ValidVideoRecord() => new(
+        PlaybackControlledWindowsPhysicalRunRecordCodec.CurrentSchemaVersion,
+        PlaybackControlledWindowsPhysicalRunRecordCodec.CurrentMilestone,
+        PlaybackControlledWindowsOutputValidationKind.Video,
+        PlaybackFfmpegBackendCandidate.BuildId,
+        FixtureSha256,
+        PlaybackControlledWindowsPhysicalRunResult.Completed,
+        PlaybackControlledWindowsOutputEvidenceResult.Accepted,
+        FixtureByteCount: 66_939,
+        FixturePacketCount: 2,
+        DecodeOperationCount: 2,
+        DeliveryAttemptCount: 1,
+        DeliveredCount: 1,
+        RetainedWouldBlockCount: 0,
+        PlaybackWindowsPhysicalRunnerState.Stopped,
+        PlaybackApprovedExternalRuntimeWindowsLifecycleState.Disposed,
+        BorrowedWindowPreserved: true,
+        BorrowedDispatcherPreserved: true,
+        ExternalBinaryOrPayloadPublished: false);
 
     private static string EvidenceRecord()
     {

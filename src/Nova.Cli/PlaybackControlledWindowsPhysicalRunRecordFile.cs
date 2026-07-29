@@ -4,8 +4,11 @@ namespace PeerCast.Nova.Cli;
 
 internal static class PlaybackControlledWindowsPhysicalRunRecordFile
 {
+    private const int MaximumRecordCharacterCount =
+        PlaybackControlledWindowsAudioRenderEvidenceRecordCodec
+            .MaximumRecordCharacterCount;
     private const int MaximumRecordByteCount =
-        PlaybackControlledWindowsPhysicalRunRecordCodec.MaximumRecordCharacterCount * 4;
+        MaximumRecordCharacterCount * 4;
 
     internal static async ValueTask<string?> ReadBoundedAsync(
         string path,
@@ -30,8 +33,7 @@ internal static class PlaybackControlledWindowsPhysicalRunRecordFile
             var text = new UTF8Encoding(
                 encoderShouldEmitUTF8Identifier: false,
                 throwOnInvalidBytes: true).GetString(bytes);
-            return text.Length <=
-                PlaybackControlledWindowsPhysicalRunRecordCodec.MaximumRecordCharacterCount
+            return text.Length <= MaximumRecordCharacterCount
                 ? text
                 : null;
         }

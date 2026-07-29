@@ -19,8 +19,9 @@ License: **Apache License 2.0**
 - corrected D3D11 texture-copy／production upload probes: visible `Yes`
 - corrected controlled fixture video: `Completed／Accepted`、`VideoAccepted`、`Video visible: Yes`
 - known 80 ms managed tone and decoded 80 ms fixture slice: recognizable audio
-- ordinary controlled fixture audio: six consumed readiness-gated runs produced a recognizable beep with `Audio audible: Yes`
-- stable deterministic delivery、canonical completed audio evidence、formal audio acceptance、and paired video／audio admission remain unestablished
+- ordinary controlled fixture audio: seven consumed readiness-gated runs produced a recognizable beep with `Audio audible: Yes`
+- the latest run at exact main `6eb3558ec0efd434d9ee1e7221ba86d3c115684f` produced canonical `Completed / Accepted` audio render evidence, passed its independent completed-record preflight, and had the same-run operator observations `Audio audible: Yes` and recognizable retained-fixture beep `Yes`
+- final merged-main paired video/audio admission and milestone reconciliation remain pending
 - Issue #129 remains open
 - 0.0.10d is explicitly deferred without claiming physical completion, formal audio acceptance, paired admission, or milestone completion
 - the existing application-owned Win32 host is extracted into `Nova.Windows` so the user-facing application can reuse one window／message-loop／dispatcher ownership model
@@ -46,6 +47,10 @@ The later separately authorized run at exact main `847b0ea4cff8aca48c103e499c0bf
 The next separately authorized run at exact main `abb071f5fcb6e78f86ad5f185387adee060e29fb` again produced a recognizable beep with `Audio audible: Yes`. It ended with child exit `1`, exact fallback `Result: Faulted`, final native stage `ActivationCleanupCompleted`, and managed failure phase `OutcomeWrite`; no canonical completed or terminal record was produced. Static review established that the fixed four-slot scheduler trace recorded both video and audio reservations even though the controlled record contract requires four audio observations. With the mixed H.264/AAC fixture, video delivery could consume or overflow the audio evidence slots before the four native audio writes. PR #215 merged as main `94878943dfbd7df2c059bf5f347bcfbf0f24f272` and restricts the opt-in trace to audio observations without changing delivery, timing, native writes, cleanup, readiness, or authorization behavior.
 
 The later separately authorized run at exact main `e0809e9b711d5bb5101130a26ca19944a94a0d31` produced a recognizable beep with `Audio audible: Yes` and retained a canonical terminal record with SHA-256 `859651D2DED3417F4F55BBAD1E210D1B48AC9E274681D669D6CF1C516E851C78`. It ended `DeliveryRejected / None` after two acknowledged native writes. The third audio sequence first requested an approximately `6 ms` timing wait, but the controlled wrapper delayed by the fixed `21.3334 ms` AAC cadence and the resumed reservation became `AudioLate`. Static review also found that retained-wait and resumed observations for one sequence could consume multiple slots in the four-sequence completed-evidence trace. ADR-0165 and PCN-0175 define the non-physical correction: use only a validated bounded observed wait for the opt-in controlled evidence path and coalesce same-sequence trace updates without changing production timing, native writes, buffers, or cleanup.
+
+The next separately authorized run at exact main `6eb3558ec0efd434d9ee1e7221ba86d3c115684f` completed four deliveries and retained a strict 26-line `Completed / Accepted` audio render-evidence record with SHA-256 `C6CD53C053F99FF43A1514E1162D3C90FE307C5FE32285F73013A612C2FBD100`. Its independent completed-record preflight returned `RenderEvidenceRecordValidated`, and the operator separately reported `Audio audible: Yes` and a recognizable retained-fixture beep. The readiness and one-run physical authorizations are consumed.
+
+ADR-0166 and PCN-0176 connect that strict completed record directly to the independent paired run-set verifier while preserving legacy audio-record compatibility. The connector is non-physical and creates no synthetic legacy record. Final paired admission must use the immutable retained records with a build from the final merged main.
 
 Prospective non-physical hardening is implemented: bounded scheduler／WASAPI traces, completed／terminal／failure records, offline strict preflights, readiness validation, atomic readiness capture, the readiness-required one-run authorization entrypoint, bounded controlled-run result and terminal-rejection retention, exact stream-format validation, bounded readiness failure disclosure, granular pre-cleanup rejection diagnostics, terminal scheduler-trace retention, dispatcher-backed delivery-trace capture, audio-only and same-sequence trace selection, bounded observed timing resume, managed command failure bounding, and managed failure phase retention. No new physical run is currently authorized.
 
@@ -132,9 +137,6 @@ Current-state review:
 
 PeerCast Novaは現在、一般利用向けの完成版プレイヤー／配信アプリではありません。
 
-- stable controlled ordinary audio delivery evidence
-- canonical completed／accepted audio record from the same run as a recognizable audible observation
-- independent completed-record preflight for that run
 - paired video／audio admission and completion of 0.0.10d
 - MP4／fragmented MP4 parser
 - decoded-buffer duration cutoff

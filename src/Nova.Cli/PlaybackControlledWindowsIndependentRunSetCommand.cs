@@ -48,11 +48,11 @@ public static class PlaybackControlledWindowsIndependentRunSetCommand
         if (!PlaybackControlledWindowsPhysicalRunRecordCodec.TryParse(
                 videoText,
                 out var videoRecord) ||
-            !PlaybackControlledWindowsPhysicalRunRecordCodec.TryParse(
-                audioText,
-                out var audioRecord) ||
             videoRecord!.Kind != PlaybackControlledWindowsOutputValidationKind.Video ||
-            audioRecord!.Kind != PlaybackControlledWindowsOutputValidationKind.Audio)
+            !TryParseAudioRecord(
+                audioText,
+                out var legacyAudioRecord,
+                out var renderEvidenceRecord))
         {
             await WriteReportAsync(
                 output,
@@ -77,7 +77,9 @@ public static class PlaybackControlledWindowsIndependentRunSetCommand
             return new(1, video);
         }
 
-        var audio = boundary.ValidateAndConsume(audioRecord);
+        var audio = legacyAudioRecord is not null
+            ? boundary.ValidateAndConsume(legacyAudioRecord)
+            : boundary.ValidateAndConsume(renderEvidenceRecord!);
         var completed = audio == PlaybackControlledWindowsIndependentRunSetResult.Completed;
         await WriteReportAsync(
             output,
@@ -86,6 +88,26 @@ public static class PlaybackControlledWindowsIndependentRunSetCommand
             videoAccepted: true,
             audioAccepted: completed).ConfigureAwait(false);
         return new(completed ? 0 : 1, audio);
+    }
+
+    private static bool TryParseAudioRecord(
+        string? text,
+        out PlaybackControlledWindowsPhysicalRunRecord? legacyRecord,
+        out PlaybackControlledWindowsAudioRenderEvidenceRecord? renderEvidenceRecord)
+    {
+        renderEvidenceRecord = null;
+        if (PlaybackControlledWindowsPhysicalRunRecordCodec.TryParse(
+                text,
+                out legacyRecord))
+        {
+            return legacyRecord!.Kind ==
+                PlaybackControlledWindowsOutputValidationKind.Audio;
+        }
+
+        legacyRecord = null;
+        return PlaybackControlledWindowsAudioRenderEvidenceRecordCodec.TryParse(
+            text,
+            out renderEvidenceRecord);
     }
 
     private static async ValueTask WriteReportAsync(

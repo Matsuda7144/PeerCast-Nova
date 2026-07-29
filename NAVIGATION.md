@@ -1,5 +1,24 @@
 # PeerCast Nova Navigation
 
+## Phase 5 completed audio and paired admission
+
+The separately authorized run from exact main
+`6eb3558ec0efd434d9ee1e7221ba86d3c115684f` produced strict canonical
+`Completed / Accepted` audio render evidence, passed the independent completed
+record preflight, and had same-run operator observations `Audio audible: Yes`
+and recognizable retained-fixture beep `Yes`.
+
+ADR-0166 and PCN-0176 connect that 26-line completed render-evidence format
+directly to the existing independent video/audio run-set verifier. Legacy audio
+records remain supported, terminal records fail closed, no synthetic legacy
+record is created, and the verifier performs no physical run.
+
+- `docs/adr/ADR-0166-completed-render-evidence-paired-admission.md`
+- `docs/reviews/PCN-0176-COMPLETED-RENDER-EVIDENCE-PAIRED-ADMISSION.md`
+- `docs/runbooks/0.0.10d-completed-render-evidence-paired-admission.md`
+- `src/Nova.Cli/PlaybackControlledWindowsIndependentRunSetCommand.cs`
+- `src/Nova.Cli/PlaybackControlledWindowsIndependentRunSetBoundary.cs`
+
 ## Phase 5 corrected physical video validation
 
 The corrected physical video run completed once from clean main `cd7442e18d18acfe2faf43470ef1c97f77ec513f` with the approved external runtime and fixed retained fixture. The canonical record reported `Completed／Accepted`, exactly one delivery, zero retained WouldBlock, stopped runner, disposed lifecycle, preserved borrowed owners, and no external publication. Verify-only single-record preflight returned `VideoAccepted`, and the operator recorded `Video visible: Yes` for recognizable fixture content.

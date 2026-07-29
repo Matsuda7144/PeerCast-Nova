@@ -329,6 +329,13 @@ public static class PlaybackControlledWindowsAudioRenderEvidenceRecordCodec
         return true;
     }
 
+    internal static bool IsValid(
+        PlaybackControlledWindowsAudioRenderEvidenceRecord record)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        return IsSyntacticallyValid(record, out _);
+    }
+
     private static void AppendCheckpoint(
         StringBuilder builder,
         string prefix,
