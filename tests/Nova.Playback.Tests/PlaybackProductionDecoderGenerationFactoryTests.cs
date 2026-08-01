@@ -5,6 +5,22 @@ namespace PeerCast.Nova.Playback.Tests;
 public sealed class PlaybackProductionDecoderGenerationFactoryTests
 {
     [Fact]
+    public void Default_options_select_bounded_audio_duration_without_video_inference()
+    {
+        var scheduler = new PlaybackProductionDecoderGenerationFactoryOptions().Scheduler;
+
+        Assert.Equal(
+            PlaybackProductionDecoderGenerationFactoryOptions
+                .DefaultMaximumOwnedAudioDuration,
+            scheduler.MaximumOwnedDuration);
+        Assert.Equal(
+            PlaybackSchedulerDurationMediaScope.AudioOnly,
+            scheduler.DurationMediaScope);
+        Assert.True(scheduler.DeriveUnknownAudioDurationFromSamples);
+        Assert.Equal(PlaybackSchedulerFullPolicy.DropIncoming, scheduler.FullPolicy);
+    }
+
+    [Fact]
     public async Task Pending_license_review_stops_before_binding_or_runtime_observation()
     {
         using var source = CreateSource();
@@ -303,6 +319,80 @@ public sealed class PlaybackProductionDecoderGenerationFactoryTests
                     Scheduler = new PlaybackSchedulerOptions
                     {
                         InitialOutputKind = (PlaybackSchedulerInitialOutputKind)int.MaxValue,
+                    },
+                },
+                operations));
+
+        Assert.Empty(operations.Calls);
+    }
+
+    [Fact]
+    public void Invalid_scheduler_duration_cutoff_is_rejected_during_construction()
+    {
+        var operations = new FakeOperations();
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new PlaybackProductionDecoderGenerationFactory(
+                new PlaybackDecoderBackendPolicy
+                {
+                    AllowThirdParty = true,
+                    AllowNativeCode = true,
+                },
+                new PlaybackProductionDecoderGenerationFactoryOptions
+                {
+                    Scheduler = new PlaybackSchedulerOptions
+                    {
+                        MaximumOwnedDuration =
+                            PlaybackSchedulerOptions.MaximumOwnedDurationHardLimit +
+                            TimeSpan.FromTicks(1),
+                    },
+                },
+                operations));
+
+        Assert.Empty(operations.Calls);
+    }
+
+    [Fact]
+    public void Audio_duration_derivation_without_cutoff_is_rejected_during_construction()
+    {
+        var operations = new FakeOperations();
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new PlaybackProductionDecoderGenerationFactory(
+                new PlaybackDecoderBackendPolicy
+                {
+                    AllowThirdParty = true,
+                    AllowNativeCode = true,
+                },
+                new PlaybackProductionDecoderGenerationFactoryOptions
+                {
+                    Scheduler = new PlaybackSchedulerOptions
+                    {
+                        DeriveUnknownAudioDurationFromSamples = true,
+                    },
+                },
+                operations));
+
+        Assert.Empty(operations.Calls);
+    }
+
+    [Fact]
+    public void Audio_only_duration_scope_without_cutoff_is_rejected_during_construction()
+    {
+        var operations = new FakeOperations();
+
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new PlaybackProductionDecoderGenerationFactory(
+                new PlaybackDecoderBackendPolicy
+                {
+                    AllowThirdParty = true,
+                    AllowNativeCode = true,
+                },
+                new PlaybackProductionDecoderGenerationFactoryOptions
+                {
+                    Scheduler = new PlaybackSchedulerOptions
+                    {
+                        DurationMediaScope = PlaybackSchedulerDurationMediaScope.AudioOnly,
                     },
                 },
                 operations));

@@ -57,6 +57,7 @@ public sealed class PlaybackDecoderFfmpegAbiSymbolGate
                 "avcodec_parameters_free", "avcodec_parameters_to_context",
                 "avcodec_open2", "av_packet_alloc", "av_packet_free",
                 "av_packet_from_data", "avcodec_send_packet", "avcodec_receive_frame",
+                "avcodec_flush_buffers",
             ]),
         new("avformat-62.dll", "avformat_version", 62,
             [

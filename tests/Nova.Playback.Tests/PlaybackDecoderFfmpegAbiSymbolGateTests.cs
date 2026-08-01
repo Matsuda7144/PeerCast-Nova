@@ -146,6 +146,19 @@ public sealed class PlaybackDecoderFfmpegAbiSymbolGateTests
     }
 
     [Fact]
+    public void Verify_DiscontinuityFlushSymbolIsRequired()
+    {
+        using var runtime = new FakeRuntime();
+        var loader = new FakeLoader { MissingSymbol = "avcodec_flush_buffers" };
+
+        var result = CreateGate(loader).Verify(runtime.Lease);
+
+        Assert.Equal(PlaybackDecoderFfmpegAbiSymbolGateResult.SymbolMissing, result);
+        Assert.Contains("avcodec_flush_buffers", loader.RequestedSymbols);
+        Assert.Equal(loader.LoadedModules.AsEnumerable().Reverse(), loader.FreedModules);
+    }
+
+    [Fact]
     public void Verify_VersionMismatchReleasesCurrentAndPriorModulesInReverseOrder()
     {
         using var runtime = new FakeRuntime();

@@ -31,6 +31,11 @@ public sealed class SystemPlaybackControlledWindowsPhysicalRunOperationsTests
         Assert.Equal(
             PlaybackSchedulerOptions.DefaultMaximumOwnedBytes,
             options.Generation.Scheduler.MaximumOwnedBytes);
+        Assert.Null(options.Generation.Scheduler.MaximumOwnedDuration);
+        Assert.Equal(
+            PlaybackSchedulerDurationMediaScope.All,
+            options.Generation.Scheduler.DurationMediaScope);
+        Assert.False(options.Generation.Scheduler.DeriveUnknownAudioDurationFromSamples);
         Assert.Equal(
             PlaybackSchedulerFullPolicy.DropOldest,
             options.Generation.Scheduler.FullPolicy);

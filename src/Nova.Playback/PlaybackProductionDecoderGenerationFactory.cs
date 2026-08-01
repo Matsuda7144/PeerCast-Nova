@@ -31,7 +31,15 @@ public enum PlaybackProductionDecoderGenerationFactoryResult
 
 public sealed record PlaybackProductionDecoderGenerationFactoryOptions
 {
-    public PlaybackSchedulerOptions Scheduler { get; init; } = new();
+    public static readonly TimeSpan DefaultMaximumOwnedAudioDuration =
+        TimeSpan.FromMilliseconds(250);
+
+    public PlaybackSchedulerOptions Scheduler { get; init; } = new()
+    {
+        MaximumOwnedDuration = DefaultMaximumOwnedAudioDuration,
+        DurationMediaScope = PlaybackSchedulerDurationMediaScope.AudioOnly,
+        DeriveUnknownAudioDurationFromSamples = true,
+    };
 
     public PlaybackPolicyOptions SchedulerPolicy { get; init; } = new();
 
@@ -823,6 +831,15 @@ public sealed class PlaybackProductionDecoderGenerationFactory : IDisposable, IA
         if (options.Scheduler.Capacity is < 1 or > PlaybackSchedulerOptions.MaximumCapacity ||
             options.Scheduler.MaximumOwnedBytes is < 1 or
                 > PlaybackSchedulerOptions.MaximumOwnedBytesHardLimit ||
+            (options.Scheduler.MaximumOwnedDuration is { } maximumOwnedDuration &&
+             !IsPositiveBounded(
+                 maximumOwnedDuration,
+                 PlaybackSchedulerOptions.MaximumOwnedDurationHardLimit)) ||
+            (options.Scheduler.DeriveUnknownAudioDurationFromSamples &&
+             !options.Scheduler.MaximumOwnedDuration.HasValue) ||
+            !Enum.IsDefined(options.Scheduler.DurationMediaScope) ||
+            (options.Scheduler.DurationMediaScope != PlaybackSchedulerDurationMediaScope.All &&
+             !options.Scheduler.MaximumOwnedDuration.HasValue) ||
             !Enum.IsDefined(options.Scheduler.FullPolicy) ||
             !Enum.IsDefined(options.Scheduler.InitialOutputKind) ||
             !Enum.IsDefined(options.SchedulerPolicy.ClockMaster) ||

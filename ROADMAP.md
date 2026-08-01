@@ -205,15 +205,386 @@ Current reviews: `docs/reviews/PCN-0170-SHARED-WINDOWS-APPLICATION-OWNERSHIP.md`
 
 1. implement no installer, signing, or update mechanism without a separate ADR.
 
+### Post-0.0.10e non-physical slice
+
+The strict opt-in decoded-buffer duration cutoff boundary is implemented by
+ADR-0167 and reviewed in
+`docs/reviews/PCN-0177-OPT-IN-DECODED-BUFFER-DURATION-CUTOFF.md`.
+
+The non-native `Nova.App --help` and `Nova.App --about` information entrypoints
+are implemented by ADR-0168 and reviewed in
+`docs/reviews/PCN-0178-NON-NATIVE-APPLICATION-INFORMATION-ENTRYPOINT.md`.
+General playback GUI and application workflows remain incomplete.
+
+ADR-0169 and
+`docs/reviews/PCN-0179-SAMPLE-DERIVED-AUDIO-DURATION-ACCOUNTING.md` add opt-in,
+conservatively rounded sample-derived audio duration accounting. Unknown video
+duration remains unresolved.
+
+ADR-0170 and
+`docs/reviews/PCN-0180-AUDIO-SCOPED-DECODED-DURATION-CUTOFF.md` add an explicit
+audio-only duration scope while retaining count and byte bounds for video. No
+default production value or scope is selected in that slice.
+
+ADR-0171 and
+`docs/reviews/PCN-0181-DEFAULT-PRODUCTION-AUDIO-DURATION-CUTOFF.md` select a
+250 ms audio-only cutoff for default production generations. Complete all-media
+duration handling remains incomplete.
+
+ADR-0172 and
+`docs/reviews/PCN-0182-OPENED-DECODER-DISCONTINUITY-FLUSH-BOUNDARY.md` add an
+opened-context `avcodec_flush_buffers` capability with exact ABI admission and
+fail-closed ownership. Production discontinuity integration and decoder
+generation reuse remain incomplete.
+
+ADR-0173 and
+`docs/reviews/PCN-0183-BOUNDED-ISO-BMFF-BOX-HEADER-PARSER.md` add a bounded,
+payload-free ISO BMFF box-header parser for normal, extended-size,
+extends-to-end, and `uuid` headers. MP4/fMP4 traversal and payload semantics
+remain incomplete.
+
+ADR-0174 and
+`docs/reviews/PCN-0184-CONTAINER-BOUNDED-ISO-BMFF-BOX-TRAVERSAL.md` add
+payload-free sequential traversal inside one complete caller-provided
+container. Streaming accumulation, nested-container policy, and recognized
+payload semantics remain incomplete.
+
+ADR-0175 and
+`docs/reviews/PCN-0185-BOUNDED-ISO-BMFF-FILE-TYPE-BOX-PARSER.md` add bounded
+projection of one complete `ftyp` box, including major/minor brand fields and a
+limited read-only compatible-brand list. Brand policy and all other box payload
+semantics remain incomplete.
+
+ADR-0176 and
+`docs/reviews/PCN-0186-BOUNDED-ISO-BMFF-FULL-BOX-HEADER-PARSER.md` add the
+allocation-free four-byte version/flags prefix shared by ISO BMFF FullBox
+payloads. Individual FullBox type, length, version, flags, and payload policies
+remain incomplete.
+
+ADR-0177 and
+`docs/reviews/PCN-0187-ISO-BMFF-MOVIE-HEADER-TIMING-PROJECTION.md` add exact
+version 0/1 `mvhd` creation, modification, timescale, and duration projection.
+Track and sample timing semantics remain incomplete.
+
+ADR-0178 and
+`docs/reviews/PCN-0188-ISO-BMFF-MEDIA-HEADER-TIMING-LANGUAGE-PROJECTION.md` add
+exact version 0/1 `mdhd` media timing and validated packed ISO-639 language
+projection. Track identity, handler classification, and samples remain
+incomplete.
+
+ADR-0179 and
+`docs/reviews/PCN-0189-ISO-BMFF-HANDLER-REFERENCE-CLASSIFICATION.md` add exact
+version 0 `hdlr` Video/Audio/Other classification and a strictly decoded,
+bounded UTF-8 handler name. Sample descriptions and codec selection remain
+incomplete.
+
+ADR-0180 and
+`docs/reviews/PCN-0190-ISO-BMFF-TRACK-HEADER-IDENTITY-PROJECTION.md` add exact
+version 0/1 `tkhd` track identity, defined flags, movie-timeline duration, and
+raw 16.16 dimensions. Track composition and presentation-transform policy
+remain incomplete.
+
+ADR-0181 and
+`docs/reviews/PCN-0191-BOUNDED-ISO-BMFF-SAMPLE-DESCRIPTION-ENTRY-LIST.md` add
+bounded version 0 `stsd` sample-entry count and exact entry-range projection.
+Visual/audio sample-entry payloads and codec configuration remain incomplete.
+
+ADR-0182 and
+`docs/reviews/PCN-0192-BOUNDED-ISO-BMFF-TIME-TO-SAMPLE-TABLE.md` add bounded
+version 0 `stts` decode-time runs with checked total sample and duration units.
+Timestamp expansion and the remaining sample tables remain incomplete.
+
+ADR-0183 and
+`docs/reviews/PCN-0193-BOUNDED-ISO-BMFF-COMPOSITION-TIME-TABLE.md` add bounded
+version 0/1 `ctts` composition-offset runs with exact unsigned/signed
+projection. Decode/composition reconciliation remains incomplete.
+
+ADR-0184 and
+`docs/reviews/PCN-0194-BOUNDED-ISO-BMFF-SAMPLE-SIZE-TABLE.md` add bounded
+version 0 `stsz` uniform and individual sample-size projection with exact total
+sample bytes. Sample-to-chunk and media-data association remain incomplete.
+
+ADR-0185 and
+`docs/reviews/PCN-0195-BOUNDED-ISO-BMFF-SAMPLE-TO-CHUNK-TABLE.md` add bounded
+version 0 `stsc` sample-to-chunk run projection with exact ordering and nonzero
+field validation. Chunk offsets, lookup, and cross-table reconciliation remain
+incomplete.
+
+ADR-0186 and
+`docs/reviews/PCN-0196-BOUNDED-ISO-BMFF-CHUNK-OFFSET-TABLE.md` add bounded
+version 0 `stco` unsigned 32-bit chunk-offset projection without premature
+range or ordering policy. `co64`, lookup, and media-data validation remain
+incomplete.
+
+ADR-0187 and
+`docs/reviews/PCN-0197-BOUNDED-ISO-BMFF-LARGE-CHUNK-OFFSET-TABLE.md` add
+bounded version 0 `co64` unsigned 64-bit chunk-offset projection without
+truncation or premature range policy. Table selection, lookup, and media-data
+validation remain incomplete.
+
+ADR-0188 and
+`docs/reviews/PCN-0198-BOUNDED-ISO-BMFF-SYNC-SAMPLE-TABLE.md` add bounded
+version 0 `stss` nonzero, strictly increasing sync-sample projection.
+Sample-count reconciliation, keyframe seek, and packet projection remain
+incomplete.
+
+ADR-0189 and
+`docs/reviews/PCN-0199-BOUNDED-ISO-BMFF-COMPACT-SAMPLE-SIZE-TABLE.md` add
+bounded version 0 `stz2` 4／8／16-bit compact sample-size projection with exact
+packed length and total bytes. Table selection and cross-table reconciliation
+remain incomplete.
+
+ADR-0190 and
+`docs/reviews/PCN-0200-BOUNDED-ISO-BMFF-SAMPLE-DEPENDENCY-TYPE-TABLE.md` add
+bounded ISO-form version 0 `sdtp` typed sample-dependency projection with
+payload-derived entry count. Sample-count reconciliation and packet projection
+remain incomplete.
+
+ADR-0191 and
+`docs/reviews/PCN-0201-BOUNDED-ISO-BMFF-PARTIAL-SYNC-SAMPLE-TABLE.md` add
+bounded version 0 `stps` nonzero, strictly increasing partial-sync sample
+projection. Full-sync integration, seek policy, and reconciliation remain
+incomplete.
+
+ADR-0192 and
+`docs/reviews/PCN-0202-ISO-BMFF-SAMPLE-COUNT-SIZE-TABLE-RECONCILIATION.md` add
+exact `stts` timing-to-`stsz`／`stz2` sample-count reconciliation with exclusive
+size-table selection and total-byte projection. Remaining sample and chunk
+tables are not yet reconciled.
+
+ADR-0193 and
+`docs/reviews/PCN-0203-ISO-BMFF-COMPOSITION-SAMPLE-COUNT-RECONCILIATION.md`
+extend that boundary with optional `ctts` count agreement and presence
+projection. Composition timestamp expansion and offset arithmetic remain
+incomplete.
+
+ADR-0194 and
+`docs/reviews/PCN-0204-ISO-BMFF-DEPENDENCY-SAMPLE-COUNT-RECONCILIATION.md`
+extend reconciliation with optional `sdtp` entry-count agreement and presence
+projection. Dependency interpretation and packet flag projection remain
+incomplete.
+
+ADR-0195 and
+`docs/reviews/PCN-0205-ISO-BMFF-SYNC-SAMPLE-RANGE-RECONCILIATION.md` extend
+reconciliation with optional `stss` one-based sample-number range validation
+and table-presence projection. Seek and keyframe behavior remain incomplete.
+
+ADR-0196 and
+`docs/reviews/PCN-0206-ISO-BMFF-PARTIAL-SYNC-SAMPLE-RANGE-RECONCILIATION.md`
+extend reconciliation with optional `stps` one-based sample-number range
+validation and table-presence projection. Full-sync integration and seek
+behavior remain incomplete.
+
+ADR-0197 and
+`docs/reviews/PCN-0207-ISO-BMFF-CHUNK-TABLE-RECONCILIATION.md` add exclusive
+`stco`／`co64` selection and `stsc` run coverage validation against the chunk
+count. Sample descriptions and media-data bounds remain incomplete.
+
+ADR-0198 and
+`docs/reviews/PCN-0208-ISO-BMFF-CHUNK-SAMPLE-COUNT-RECONCILIATION.md` add
+bounded run-length sample-count projection from `stsc` and optional exact
+agreement with the reconciled sample count. Per-chunk expansion remains
+incomplete.
+
+ADR-0199 and
+`docs/reviews/PCN-0209-ISO-BMFF-SAMPLE-DESCRIPTION-INDEX-RECONCILIATION.md`
+add optional explicit `stsd` agreement for every one-based
+`sample_description_index` in `stsc`. Sample-entry payload semantics and
+decoder selection remain incomplete.
+
+ADR-0200 and
+`docs/reviews/PCN-0210-ISO-BMFF-BOUNDED-CHUNK-RUN-LOOKUP.md` add fail-closed
+binary lookup from a one-based chunk number to its reconciled `stsc` run.
+Media-data association remains incomplete.
+
+ADR-0201 and
+`docs/reviews/PCN-0211-ISO-BMFF-BOUNDED-CHUNK-OFFSET-LOOKUP.md` add
+fail-closed one-based chunk-offset lookup with reconciled `stco`／`co64` kind
+and count validation. Media-data bounds and reads remain incomplete.
+
+ADR-0202 and
+`docs/reviews/PCN-0212-ISO-BMFF-BOUNDED-SAMPLE-CHUNK-LOOKUP.md` add bounded
+run-length lookup from a one-based sample number to its chunk, chunk-local
+index, and sample-description index. Media-data association remains incomplete.
+
+ADR-0203 and
+`docs/reviews/PCN-0213-ISO-BMFF-BOUNDED-SAMPLE-SIZE-LOOKUP.md` add fail-closed
+one-based sample-size lookup with reconciled `stsz`／`stz2` kind, count, and
+total-byte validation. Media-data bounds remain incomplete.
+
+ADR-0204 and
+`docs/reviews/PCN-0214-ISO-BMFF-BOUNDED-SAMPLE-BYTE-RANGE-LOOKUP.md` compose
+the reconciled chunk, offset, and size lookups into overflow-checked absolute
+sample byte ranges. File and media-data bounds remain incomplete.
+
+ADR-0205 and
+`docs/reviews/PCN-0215-ISO-BMFF-BOUNDED-SAMPLE-FILE-BOUNDS-VALIDATION.md` add
+exact sample-range consistency and unsigned 64-bit file-length containment,
+including zero-size end-of-file behavior. Media-data bounds remain incomplete.
+
+ADR-0206 and
+`docs/reviews/PCN-0216-ISO-BMFF-BOUNDED-SAMPLE-MEDIA-DATA-CONTAINMENT.md` add
+overflow-checked containment of a sample range within one caller-selected
+`mdat` payload. Automatic multi-`mdat` association remains incomplete.
+
+ADR-0207 and
+`docs/reviews/PCN-0217-ISO-BMFF-BOUNDED-SAMPLE-MEDIA-DATA-LOOKUP.md` add
+bounded top-level structural traversal that locates the `mdat` payload
+containing one sample range. Payload reads and packet projection remain
+incomplete.
+
+ADR-0208 and
+`docs/reviews/PCN-0218-ISO-BMFF-BOUNDED-SAMPLE-DECODE-TIME-LOOKUP.md` add
+run-relative lookup of one sample's decode start, duration, and exclusive end
+in media time units without per-sample expansion. Timescale conversion and
+composition offsets remain incomplete.
+
+ADR-0209 and
+`docs/reviews/PCN-0219-ISO-BMFF-BOUNDED-SAMPLE-COMPOSITION-OFFSET-LOOKUP.md`
+add optional-table-aware lookup of one sample's version-correct composition
+offset without per-sample expansion. Decode-time addition and timescale
+conversion remain incomplete.
+
+ADR-0210 and
+`docs/reviews/PCN-0220-ISO-BMFF-EXACT-SAMPLE-PRESENTATION-TIME-LOOKUP.md` compose
+decode start and optional composition offset into signed `Int128` presentation
+start and exclusive end units. Timescale conversion and edit-list policy
+remain incomplete.
+
+ADR-0211 and
+`docs/reviews/PCN-0221-ISO-BMFF-BOUNDED-MEDIA-TIME-CONVERSION.md` add
+overflow-free `Int128` media-unit conversion through the `mdhd` timescale with
+explicit toward-zero tick rounding and bounded output magnitude. Interval and
+edit-list policy remain incomplete.
+
+ADR-0212 and
+`docs/reviews/PCN-0222-ISO-BMFF-BOUNDED-SAMPLE-PRESENTATION-INTERVAL-CONVERSION.md`
+compose exact sample presentation units and bounded media-time conversion into
+managed start, exclusive end, and endpoint-derived duration. Edit-list policy
+remains incomplete.
+
+ADR-0213 and
+`docs/reviews/PCN-0223-BOUNDED-ISO-BMFF-EDIT-LIST-PARSER.md` add bounded
+version 0/1 `elst` projection with exact signed media times, raw 16.16 rate
+components, empty-edit identification, and checked segment-duration aggregate.
+Edit application policy remains incomplete.
+
+ADR-0214 and
+`docs/reviews/PCN-0224-BOUNDED-ISO-BMFF-EDIT-SEGMENT-LOOKUP.md` add bounded
+movie-time lookup of one edit entry with exclusive segment bounds, exact
+relative offset, zero-duration skipping, and empty-edit reporting. Movie/media
+timescale and rate-aware application remain incomplete.
+
+ADR-0215 and
+`docs/reviews/PCN-0225-EXACT-NORMAL-RATE-ISO-BMFF-EDIT-TIME-MAPPING.md` compose
+edit-segment lookup with parsed movie/media timescales for exact normal-rate
+point mapping. Empty edits, non-normal rates, and non-integral media-unit
+results fail explicitly. Interval overlap and sample selection remain
+incomplete.
+
+ADR-0216 and
+`docs/reviews/PCN-0226-ISO-BMFF-EDIT-TRACK-DURATION-RECONCILIATION.md` require
+the checked `elst` segment-duration aggregate to equal a known `tkhd` duration
+in their shared movie timescale. Unknown duration is not inferred. Movie-header
+comparison and sample selection remain incomplete.
+
+ADR-0217 and
+`docs/reviews/PCN-0227-EXACT-NORMAL-RATE-ISO-BMFF-EDIT-INTERVAL-PROJECTION.md`
+project one indexed, non-empty, normal-rate edit into exact half-open movie and
+media intervals. Non-integral duration conversion fails explicitly. Sample
+overlap and admission remain incomplete.
+
+ADR-0218 and
+`docs/reviews/PCN-0228-BOUNDED-ISO-BMFF-SAMPLE-EDIT-OVERLAP-LOOKUP.md` compare
+one exact sample presentation interval with all supported edit intervals,
+preserving bounded full or partial media intersections across repeated edits.
+Movie-time overlap projection and partial-sample admission remain incomplete.
+
+ADR-0219 and
+`docs/reviews/PCN-0229-EXACT-RATIONAL-ISO-BMFF-SAMPLE-EDIT-MOVIE-OVERLAP.md`
+project bounded media overlaps onto exact rational movie-timeline bounds without
+rounding, while preserving repeated appearances and integral-boundary metadata.
+Partial-sample admission remains incomplete.
+
+ADR-0220 and
+`docs/reviews/PCN-0230-COMPLETE-SAMPLE-ISO-BMFF-EDIT-ADMISSION.md` add a
+conservative policy that retains all complete sample appearances and explicitly
+rejects partial-only samples without rounding rational movie bounds. Packet
+selection and production demux composition remain incomplete.
+
+ADR-0221 and
+`docs/reviews/PCN-0231-BOUNDED-ISO-BMFF-EDITED-SAMPLE-ADMISSION-LOOKUP.md`
+compose numbered-sample presentation lookup, bounded edit overlap, exact
+rational movie projection, and complete-sample admission behind one fail-closed
+metadata API. Byte-range association and production demux remain incomplete.
+
+ADR-0222 and
+`docs/reviews/PCN-0232-BOUNDED-ISO-BMFF-EDITED-SAMPLE-BYTE-RANGE.md` bind the
+admitted sample number to the existing reconciled chunk/size byte-range lookup,
+preventing cross-sample association. Top-level `mdat` containment and production
+packet composition remain incomplete.
+
+ADR-0223 and
+`docs/reviews/PCN-0233-BOUNDED-ISO-BMFF-EDITED-SAMPLE-MEDIA-DATA.md` compose the
+typed edited-sample byte range with bounded top-level `mdat` containment while
+preserving admission and sample identity. Payload ownership and production
+packet composition remain incomplete.
+
+ADR-0224 and
+`docs/reviews/PCN-0234-BOUNDED-ISO-BMFF-EDITED-SAMPLE-PAYLOAD-VIEW.md` revalidate
+the recorded `mdat` location against current file bytes and expose the exact
+sample as a non-owning span without allocation.
+
+ADR-0225 and
+`docs/reviews/PCN-0235-BOUNDED-OWNED-ISO-BMFF-EDITED-SAMPLE-PAYLOAD.md` promote
+that validated view to private owned memory under the existing 4 MiB demux
+packet hard limit. Demux-event and codec-specific composition remain incomplete.
+
+ADR-0226 and
+`docs/reviews/PCN-0236-ISO-BMFF-EDITED-SAMPLE-PACKET-CANDIDATE.md` bind owned
+sample bytes, exact media presentation units, media timescale, and complete edit
+appearances without inferring codec or stream identity. Sample-description and
+codec-specific demux-event projection remain incomplete.
+
+ADR-0227 and
+`docs/reviews/PCN-0237-ISO-BMFF-EDITED-SAMPLE-DESCRIPTION-SELECTION.md` retain
+the resolved `stsc` description index with the edited range, select that exact
+`stsd` entry, classify `avc1`／`avc3`／`mp4a`, and require a matching video/audio
+handler. Codec-specific sample-entry payload parsing remains incomplete.
+
+ADR-0228 and
+`docs/reviews/PCN-0238-BOUNDED-ISO-BMFF-VISUAL-SAMPLE-ENTRY.md` parse the common
+`avc1`／`avc3` VisualSampleEntry prefix, validate fixed fields, and project a
+bounded exact child-box sequence. AVC configuration parsing remains incomplete.
+
+ADR-0229 and
+`docs/reviews/PCN-0239-BOUNDED-ISO-BMFF-AUDIO-SAMPLE-ENTRY.md` parse the common
+version-zero `mp4a` AudioSampleEntry prefix, preserve its raw 16.16 sample rate,
+and project a bounded exact child-box sequence. `esds` parsing remains
+incomplete.
+
+ADR-0230 and
+`docs/reviews/PCN-0240-BOUNDED-ISO-BMFF-AVC-DECODER-CONFIGURATION.md` require a
+unique current `avcC`, bound owned configuration bytes and parameter-set counts,
+and parse base plus high-profile decoder-configuration fields exactly. AVC
+packet framing remains incomplete.
+
+ADR-0231 and
+`docs/reviews/PCN-0241-BOUNDED-ISO-BMFF-MPEG4-DESCRIPTOR-HEADER.md` parse the
+shared one-to-four-byte MPEG-4 descriptor tag/length prefix with the existing
+codec-extradata hard limit and exact or container-prefix consumption modes.
+`esds` hierarchy semantics remain incomplete.
+
 ### Deferred
 
 - FFmpeg binary bundling or Nova-hosted runtime pack
 - playback-owned output dispatcher or message pump
 - automatic device-loss recovery／source reconnect
-- MP4／fragmented MP4 parser
+- MP4／fragmented MP4 streaming, nested-box policy, remaining payload
+  semantics, brand policy, and decoder composition
 - avformat integration beyond the reviewed runtime inventory
-- discontinuity reset and `avcodec_flush_buffers`
-- duration cutoff
+- production discontinuity integration and decoder-context reuse after flush
+- complete all-media decoded-buffer duration policy
 - independent audio recovery generation changes
 - complete synchronization／resampling／drift correction
 - GUI、installer、recorder until the native/output gates are complete

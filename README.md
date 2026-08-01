@@ -43,6 +43,7 @@ Current-state reviews:
 - `Nova.Playback` borrows only the dispatcher contract and window token
 - `Nova.Cli` continues to use the same shared host for explicitly selected controlled commands
 - framework-dependent `win-x64` portable packaging is the only implemented application distribution boundary
+- `Nova.App --help` and `Nova.App --about` expose bounded application and legal information without starting the Windows host
 - FFmpeg remains external; no binary、archive、runtime pack、acquisition、installation、update、or invocation path is bundled
 - installer、code signing、and updater mechanics remain separate future ADR decisions
 
@@ -67,8 +68,67 @@ Current-state reviews:
 - verified FFmpeg runtime locator／leaseとABI gate
 - native decoder context、parameter transfer、codec open、packet／frame境界
 - pure managed bounded FLV v1 parserとexact session decoder-parameter binding
+- bounded payload-free ISO BMFF box-header and container traversal
+- bounded ISO BMFF `ftyp` metadata projection
+- bounded ISO BMFF FullBox version／flags prefix parser
+- exact ISO BMFF `mvhd` version 0／1 timing projection
+- exact ISO BMFF `mdhd` version 0／1 timing／language projection
+- bounded ISO BMFF `hdlr` Video／Audio／Other classification
+- exact ISO BMFF `tkhd` track identity／flags／raw dimensions
+- bounded ISO BMFF `stsd` sample-entry list／range projection
+- bounded ISO BMFF `stts` decode-time runs／checked aggregates
+- bounded ISO BMFF `ctts` unsigned／signed composition-offset runs
+- bounded ISO BMFF `stsz` uniform／individual sample-size projection
+- bounded ISO BMFF `stsc` sample-to-chunk run projection
+- bounded ISO BMFF `stco` 32-bit chunk-offset projection
+- bounded ISO BMFF `co64` 64-bit chunk-offset projection
+- bounded ISO BMFF `stss` ordered sync-sample projection
+- bounded ISO BMFF `stz2` compact 4／8／16-bit sample-size projection
+- bounded ISO BMFF `sdtp` typed sample-dependency projection
+- bounded ISO BMFF `stps` ordered partial-sync sample projection
+- optional ISO BMFF `ctts` composition-count reconciliation
+- optional ISO BMFF `sdtp` dependency-count reconciliation
+- optional ISO BMFF `stss` sample-number range reconciliation
+- optional ISO BMFF `stps` partial-sync sample-number range reconciliation
+- exact ISO BMFF `stsc`／`stco`／`co64` chunk-table reconciliation
+- run-length ISO BMFF chunk sample-count projection and reconciliation
+- ISO BMFF `stsc` sample-description index reconciliation
+- bounded ISO BMFF chunk-to-`stsc` run lookup
+- bounded ISO BMFF chunk-offset lookup across `stco`／`co64`
+- bounded ISO BMFF sample-to-chunk location lookup
+- bounded ISO BMFF per-sample size lookup across `stsz`／`stz2`
+- bounded ISO BMFF absolute sample byte-range lookup
+- bounded ISO BMFF sample file-bounds validation
+- bounded ISO BMFF selected-`mdat` sample containment
+- bounded ISO BMFF top-level sample-to-`mdat` lookup
+- bounded ISO BMFF per-sample decode-time lookup
+- bounded ISO BMFF per-sample composition-offset lookup
+- exact ISO BMFF per-sample presentation-time lookup
+- bounded ISO BMFF `Int128` media-time conversion
+- bounded ISO BMFF per-sample presentation-interval conversion
+- bounded ISO BMFF `elst` edit-list projection
+- bounded ISO BMFF movie-time-to-edit-segment lookup
+- exact normal-rate ISO BMFF movie-time-to-media-time edit mapping
+- exact ISO BMFF edit-list／track-duration reconciliation
+- exact normal-rate ISO BMFF edit movie／media interval projection
+- bounded ISO BMFF sample／edit media-overlap lookup
+- exact rational ISO BMFF sample／edit movie-overlap projection
+- conservative complete-sample ISO BMFF edit admission
+- bounded ISO BMFF sample-number-to-edited-admission composition
+- bounded ISO BMFF edited-admission-to-sample-byte-range association
+- bounded ISO BMFF edited-sample-to-`mdat` metadata association
+- validated non-owning and bounded owned ISO BMFF edited-sample payloads
+- codec-neutral ISO BMFF edited-sample packet candidate metadata
+- bound ISO BMFF edited-sample `stsd` codec-candidate selection
+- bounded ISO BMFF `avc1`／`avc3` VisualSampleEntry projection
+- bounded ISO BMFF `mp4a` AudioSampleEntry projection
+- bounded owned ISO BMFF `avcC` decoder-configuration projection
+- bounded ISO BMFF MPEG-4 descriptor tag／variable-length header parser
+- exact ISO BMFF `stts`／`stsz`／`stz2` sample-count reconciliation
 - managed frame copy、conversion、awaited delivery
+- opened-decoder `avcodec_flush_buffers` ownership boundary
 - count／byte bounded decoded-frame scheduler
+- default production `250 ms` audio-only decoded-duration cutoff with sample-derived fallback
 - finite late-aware scheduler dispatchとgeneration-matched output lifecycle
 - Windows D3D11／WASAPI activation、binding、stream、buffer、device-loss境界
 - controlled real external-runtime H.264／AAC decode validation
@@ -89,9 +149,9 @@ Current-state reviews:
 PeerCast Nova は現在、一般利用向けの完成版プレイヤー／配信アプリではありません。
 
 - user-facing GUI and application features
-- MP4／fragmented MP4 parser
-- decoded-buffer duration cutoff
-- discontinuity-time native reset semantics
+- MP4／fragmented MP4 streaming, nested-box policy, and remaining payload semantics
+- complete all-media decoded-buffer duration policy
+- production discontinuity-time native reset integration
 - complete A/V synchronization、resampling、and drift correction
 - recorder
 - installer
@@ -107,9 +167,9 @@ FFmpeg binary bundling／redistributionは既定方針として禁止です。�
 候補:
 
 - user-facing application機能
-- MP4／fragmented MP4 parser
-- decoded-buffer duration cutoff
-- discontinuity-time native reset semantics
+- MP4／fragmented MP4 streaming, nested-box policy, and remaining payload semantics
+- complete all-media decoded-buffer duration policy
+- production discontinuity-time native reset integration
 - A/V synchronization／resampling／drift correction
 - installer境界の別ADR／設計
 - code-signing境界の別ADR／設計

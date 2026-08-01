@@ -13,6 +13,12 @@ public enum PlaybackSchedulerInitialOutputKind
     Audio,
 }
 
+public enum PlaybackSchedulerDurationMediaScope
+{
+    All,
+    AudioOnly,
+}
+
 public enum PlaybackSchedulerEnqueueResult
 {
     Enqueued,
@@ -23,6 +29,8 @@ public enum PlaybackSchedulerEnqueueResult
     FrameTooLarge,
     SequenceRejected,
     Disposed,
+    DurationUnavailable,
+    FrameDurationTooLarge,
 }
 
 public enum PlaybackSchedulerRunResult
@@ -43,7 +51,10 @@ public readonly record struct PlaybackSchedulerSnapshot(
     int QueueLength,
     long DropCount,
     long DeliveryCount,
-    long OwnedByteCount = 0);
+    long OwnedByteCount = 0)
+{
+    public TimeSpan OwnedDuration { get; init; }
+}
 
 public sealed record PlaybackSchedulerOptions
 {
@@ -51,10 +62,18 @@ public sealed record PlaybackSchedulerOptions
     public const int MaximumCapacity = 1_024;
     public const long DefaultMaximumOwnedBytes = 64L * 1024 * 1024;
     public const long MaximumOwnedBytesHardLimit = 1024L * 1024 * 1024;
+    public static readonly TimeSpan MaximumOwnedDurationHardLimit = TimeSpan.FromMinutes(10);
 
     public int Capacity { get; init; } = DefaultCapacity;
 
     public long MaximumOwnedBytes { get; init; } = DefaultMaximumOwnedBytes;
+
+    public TimeSpan? MaximumOwnedDuration { get; init; }
+
+    public PlaybackSchedulerDurationMediaScope DurationMediaScope { get; init; } =
+        PlaybackSchedulerDurationMediaScope.All;
+
+    public bool DeriveUnknownAudioDurationFromSamples { get; init; }
 
     public PlaybackSchedulerFullPolicy FullPolicy { get; init; } =
         PlaybackSchedulerFullPolicy.DropIncoming;
@@ -79,7 +98,8 @@ internal sealed class PlaybackSchedulerDelay : IPlaybackSchedulerDelay
 /// <summary>
 /// Explicitly driven bounded scheduler. Accepted frames become scheduler-owned
 /// and are disposed after delivery, policy handling, cancellation, dropping, or
-/// scheduler disposal. Count and aggregate owned-byte limits are independent.
+/// scheduler disposal. Count, aggregate owned-byte, and optional aggregate
+/// owned-duration limits are independent.
 /// </summary>
 public sealed class BoundedPlaybackScheduler : IDisposable
 {
@@ -91,6 +111,9 @@ public sealed class BoundedPlaybackScheduler : IDisposable
     private readonly PlaybackSchedulerOutputKind _initialOutputKind;
     private readonly bool _restrictOutputToInitialKind;
     private readonly long _maximumOwnedBytes;
+    private readonly long? _maximumOwnedDurationTicks;
+    private readonly PlaybackSchedulerDurationMediaScope _durationMediaScope;
+    private readonly bool _deriveUnknownAudioDurationFromSamples;
     private readonly PlaybackPolicyClockBoundary _policy;
     private readonly PlaybackDecoderFfmpegAwaitedSinkDeliveryBoundary _delivery;
     private readonly IPlaybackSchedulerDelay _delay;
@@ -99,6 +122,7 @@ public sealed class BoundedPlaybackScheduler : IDisposable
     private bool _hasEnqueuedSequence;
     private long _lastEnqueuedSequence;
     private long _ownedBytes;
+    private long _ownedDurationTicks;
     private long _dropCount;
     private long _deliveryCount;
     private int _isDisposed;
@@ -136,6 +160,26 @@ public sealed class BoundedPlaybackScheduler : IDisposable
             throw new ArgumentOutOfRangeException(nameof(options));
         }
 
+        if (options.MaximumOwnedDuration is { } maximumOwnedDuration &&
+            (maximumOwnedDuration <= TimeSpan.Zero ||
+             maximumOwnedDuration > PlaybackSchedulerOptions.MaximumOwnedDurationHardLimit))
+        {
+            throw new ArgumentOutOfRangeException(nameof(options));
+        }
+
+        if (options.DeriveUnknownAudioDurationFromSamples &&
+            !options.MaximumOwnedDuration.HasValue)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options));
+        }
+
+        if (!Enum.IsDefined(options.DurationMediaScope) ||
+            (options.DurationMediaScope != PlaybackSchedulerDurationMediaScope.All &&
+             !options.MaximumOwnedDuration.HasValue))
+        {
+            throw new ArgumentOutOfRangeException(nameof(options));
+        }
+
         if (!Enum.IsDefined(options.FullPolicy))
         {
             throw new ArgumentOutOfRangeException(nameof(options));
@@ -153,6 +197,10 @@ public sealed class BoundedPlaybackScheduler : IDisposable
             : PlaybackSchedulerOutputKind.Audio;
         _restrictOutputToInitialKind = options.RestrictOutputToInitialKind;
         _maximumOwnedBytes = options.MaximumOwnedBytes;
+        _maximumOwnedDurationTicks = options.MaximumOwnedDuration?.Ticks;
+        _durationMediaScope = options.DurationMediaScope;
+        _deriveUnknownAudioDurationFromSamples =
+            options.DeriveUnknownAudioDurationFromSamples;
         _policy = policy;
         _delivery = delivery;
         _delay = delay;
@@ -183,10 +231,25 @@ public sealed class BoundedPlaybackScheduler : IDisposable
                 return PlaybackSchedulerEnqueueResult.InvalidFrame;
             }
 
+            if (!TryGetFrameDurationTicks(frame, out var frameDurationTicks))
+            {
+                frame.Dispose();
+                return _maximumOwnedDurationTicks.HasValue
+                    ? PlaybackSchedulerEnqueueResult.DurationUnavailable
+                    : PlaybackSchedulerEnqueueResult.InvalidFrame;
+            }
+
             if (frameByteCount > _maximumOwnedBytes)
             {
                 frame.Dispose();
                 return PlaybackSchedulerEnqueueResult.FrameTooLarge;
+            }
+
+            if (_maximumOwnedDurationTicks is { } maximumOwnedDurationTicks &&
+                frameDurationTicks > maximumOwnedDurationTicks)
+            {
+                frame.Dispose();
+                return PlaybackSchedulerEnqueueResult.FrameDurationTooLarge;
             }
 
             if (discontinuity != PlaybackDecodedFrameDiscontinuityKind.DecoderReset &&
@@ -197,7 +260,7 @@ public sealed class BoundedPlaybackScheduler : IDisposable
             }
 
             var result = PlaybackSchedulerEnqueueResult.Enqueued;
-            while (WouldExceedLimit(frameByteCount))
+            while (WouldExceedLimit(frameByteCount, frameDurationTicks))
             {
                 switch (_fullPolicy)
                 {
@@ -225,9 +288,15 @@ public sealed class BoundedPlaybackScheduler : IDisposable
             }
 
             var tail = (_head + _count) % _queue.Length;
-            _queue[tail] = new(frame, sequence, discontinuity, frameByteCount);
+            _queue[tail] = new(
+                frame,
+                sequence,
+                discontinuity,
+                frameByteCount,
+                frameDurationTicks);
             _count++;
             _ownedBytes += frameByteCount;
+            _ownedDurationTicks += frameDurationTicks;
             _hasEnqueuedSequence = true;
             _lastEnqueuedSequence = sequence;
             return result;
@@ -335,7 +404,7 @@ public sealed class BoundedPlaybackScheduler : IDisposable
             }
             finally
             {
-                ReleaseOwnedBytes(scheduled);
+                ReleaseOwnershipAccounting(scheduled);
             }
         }
         finally
@@ -348,7 +417,10 @@ public sealed class BoundedPlaybackScheduler : IDisposable
     {
         lock (_sync)
         {
-            return new(_count, _dropCount, _deliveryCount, _ownedBytes);
+            return new(_count, _dropCount, _deliveryCount, _ownedBytes)
+            {
+                OwnedDuration = TimeSpan.FromTicks(_ownedDurationTicks),
+            };
         }
     }
 
@@ -478,8 +550,11 @@ public sealed class BoundedPlaybackScheduler : IDisposable
             scheduled.Discontinuity);
     }
 
-    private bool WouldExceedLimit(long incomingByteCount) =>
-        _count >= _queue.Length || incomingByteCount > _maximumOwnedBytes - _ownedBytes;
+    private bool WouldExceedLimit(long incomingByteCount, long incomingDurationTicks) =>
+        _count >= _queue.Length ||
+        incomingByteCount > _maximumOwnedBytes - _ownedBytes ||
+        (_maximumOwnedDurationTicks is { } maximumOwnedDurationTicks &&
+         incomingDurationTicks > maximumOwnedDurationTicks - _ownedDurationTicks);
 
     private static bool TryGetFrameByteCount(
         PlaybackDecoderFfmpegManagedFrame frame,
@@ -512,6 +587,54 @@ public sealed class BoundedPlaybackScheduler : IDisposable
         }
 
         return byteCount > 0;
+    }
+
+    private bool TryGetFrameDurationTicks(
+        PlaybackDecoderFfmpegManagedFrame frame,
+        out long durationTicks)
+    {
+        if (!_maximumOwnedDurationTicks.HasValue)
+        {
+            durationTicks = 0;
+            return true;
+        }
+
+        var metadata = frame.Metadata;
+        if (_durationMediaScope == PlaybackSchedulerDurationMediaScope.AudioOnly)
+        {
+            if (metadata.MediaKind == PlaybackDecoderFfmpegFrameMediaKind.Video)
+            {
+                durationTicks = 0;
+                return true;
+            }
+
+            if (metadata.MediaKind != PlaybackDecoderFfmpegFrameMediaKind.Audio)
+            {
+                durationTicks = 0;
+                return false;
+            }
+        }
+
+        var duration = metadata.Duration;
+        if (duration.IsKnown)
+        {
+            durationTicks = duration.Value.Ticks;
+            return durationTicks > 0;
+        }
+
+        if (!_deriveUnknownAudioDurationFromSamples ||
+            metadata.MediaKind != PlaybackDecoderFfmpegFrameMediaKind.Audio ||
+            metadata.SampleRate <= 0 ||
+            metadata.SampleCount <= 0)
+        {
+            durationTicks = 0;
+            return false;
+        }
+
+        var sampleTicks = checked((long)metadata.SampleCount * TimeSpan.TicksPerSecond);
+        durationTicks = checked(
+            (sampleTicks + metadata.SampleRate - 1) / metadata.SampleRate);
+        return durationTicks > 0;
     }
 
     private ScheduledFrame? Dequeue()
@@ -625,23 +748,26 @@ public sealed class BoundedPlaybackScheduler : IDisposable
         }
         _queue[(_head + _count - 1) % _queue.Length] = null;
         _count--;
-        ReleaseOwnedBytesNoLock(scheduled);
+        ReleaseOwnershipAccountingNoLock(scheduled);
         if (dispose) scheduled.Frame.Dispose();
         if (countDrop) IncrementSaturated(ref _dropCount);
     }
 
-    private void ReleaseOwnedBytes(ScheduledFrame scheduled)
+    private void ReleaseOwnershipAccounting(ScheduledFrame scheduled)
     {
         lock (_sync)
         {
-            ReleaseOwnedBytesNoLock(scheduled);
+            ReleaseOwnershipAccountingNoLock(scheduled);
         }
     }
 
-    private void ReleaseOwnedBytesNoLock(ScheduledFrame scheduled)
+    private void ReleaseOwnershipAccountingNoLock(ScheduledFrame scheduled)
     {
         _ownedBytes = scheduled.ByteCount <= _ownedBytes
             ? _ownedBytes - scheduled.ByteCount
+            : 0;
+        _ownedDurationTicks = scheduled.DurationTicks <= _ownedDurationTicks
+            ? _ownedDurationTicks - scheduled.DurationTicks
             : 0;
     }
 
@@ -673,7 +799,8 @@ public sealed class BoundedPlaybackScheduler : IDisposable
         PlaybackDecoderFfmpegManagedFrame Frame,
         long Sequence,
         PlaybackDecodedFrameDiscontinuityKind Discontinuity,
-        long ByteCount);
+        long ByteCount,
+        long DurationTicks);
 }
 
 internal enum PlaybackSchedulerOutputKind

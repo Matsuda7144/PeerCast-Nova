@@ -172,6 +172,187 @@ public sealed class BoundedPlaybackSchedulerTests
     }
 
     [Fact]
+    public void Enqueue_DurationCutoffRequiresKnownDuration()
+    {
+        using var scheduler = Scheduler(
+            [TimeSpan.Zero],
+            maximumOwnedDuration: Ms(40));
+        var incoming = AudioFrame(0, durationMs: null);
+
+        var result = scheduler.Enqueue(incoming, 1, None);
+
+        Assert.Equal(PlaybackSchedulerEnqueueResult.DurationUnavailable, result);
+        Assert.True(incoming.IsDisposed);
+        Assert.Equal(new PlaybackSchedulerSnapshot(0, 0, 0, 0), scheduler.GetSnapshot());
+    }
+
+    [Fact]
+    public void Enqueue_DurationCutoffCanDeriveUnknownAudioDurationFromSamples()
+    {
+        var derivedDuration = TimeSpan.FromTicks(213_334);
+        using var scheduler = Scheduler(
+            [TimeSpan.Zero],
+            maximumOwnedDuration: derivedDuration,
+            deriveUnknownAudioDurationFromSamples: true);
+        var incoming = AudioFrame(0, byteCount: 4_096, durationMs: null);
+
+        var result = scheduler.Enqueue(incoming, 1, None);
+
+        Assert.Equal(PlaybackSchedulerEnqueueResult.Enqueued, result);
+        Assert.False(incoming.IsDisposed);
+        Assert.Equal(
+            new PlaybackSchedulerSnapshot(1, 0, 0, 4_096)
+            {
+                OwnedDuration = derivedDuration,
+            },
+            scheduler.GetSnapshot());
+    }
+
+    [Fact]
+    public void Enqueue_DerivedAudioDurationRoundsUpForCutoffSafety()
+    {
+        using var scheduler = Scheduler(
+            [TimeSpan.Zero],
+            maximumOwnedDuration: TimeSpan.FromTicks(213_333),
+            deriveUnknownAudioDurationFromSamples: true);
+        var incoming = AudioFrame(0, byteCount: 4_096, durationMs: null);
+
+        var result = scheduler.Enqueue(incoming, 1, None);
+
+        Assert.Equal(PlaybackSchedulerEnqueueResult.FrameDurationTooLarge, result);
+        Assert.True(incoming.IsDisposed);
+    }
+
+    [Fact]
+    public void Enqueue_AudioDerivationDoesNotInventUnknownVideoDuration()
+    {
+        using var scheduler = Scheduler(
+            [TimeSpan.Zero],
+            maximumOwnedDuration: Ms(40),
+            deriveUnknownAudioDurationFromSamples: true);
+        var incoming = VideoFrame(0, durationMs: null);
+
+        var result = scheduler.Enqueue(incoming, 1, None);
+
+        Assert.Equal(PlaybackSchedulerEnqueueResult.DurationUnavailable, result);
+        Assert.True(incoming.IsDisposed);
+    }
+
+    [Fact]
+    public void Enqueue_AudioOnlyDurationScopeAcceptsUnknownVideoWithoutAccountingIt()
+    {
+        using var scheduler = Scheduler(
+            [TimeSpan.Zero],
+            maximumOwnedDuration: Ms(20),
+            durationMediaScope: PlaybackSchedulerDurationMediaScope.AudioOnly);
+        var video = VideoFrame(0, durationMs: null);
+        var audio = AudioFrame(0);
+
+        Assert.Equal(
+            PlaybackSchedulerEnqueueResult.Enqueued,
+            scheduler.Enqueue(video, 1, None));
+        Assert.Equal(
+            PlaybackSchedulerEnqueueResult.Enqueued,
+            scheduler.Enqueue(audio, 2, None));
+
+        Assert.Equal(
+            new PlaybackSchedulerSnapshot(2, 0, 0, 12)
+            {
+                OwnedDuration = Ms(20),
+            },
+            scheduler.GetSnapshot());
+    }
+
+    [Fact]
+    public void Enqueue_AudioOnlyDurationScopeAppliesFullPolicyOnlyToAudioDuration()
+    {
+        using var scheduler = Scheduler(
+            [TimeSpan.Zero],
+            capacity: 4,
+            maximumOwnedDuration: Ms(20),
+            durationMediaScope: PlaybackSchedulerDurationMediaScope.AudioOnly);
+        var video = VideoFrame(0, durationMs: 40);
+        var queuedAudio = AudioFrame(0);
+        var incomingAudio = AudioFrame(20);
+        scheduler.Enqueue(video, 1, None);
+        scheduler.Enqueue(queuedAudio, 2, None);
+
+        var result = scheduler.Enqueue(incomingAudio, 3, None);
+
+        Assert.Equal(PlaybackSchedulerEnqueueResult.DroppedIncoming, result);
+        Assert.False(video.IsDisposed);
+        Assert.False(queuedAudio.IsDisposed);
+        Assert.True(incomingAudio.IsDisposed);
+        Assert.Equal(
+            new PlaybackSchedulerSnapshot(2, 1, 0, 12)
+            {
+                OwnedDuration = Ms(20),
+            },
+            scheduler.GetSnapshot());
+    }
+
+    [Fact]
+    public void Enqueue_RejectsSingleFrameLargerThanDurationCutoff()
+    {
+        using var scheduler = Scheduler(
+            [TimeSpan.Zero],
+            maximumOwnedDuration: Ms(20));
+        var incoming = AudioFrame(0, durationMs: 40);
+
+        var result = scheduler.Enqueue(incoming, 1, None);
+
+        Assert.Equal(PlaybackSchedulerEnqueueResult.FrameDurationTooLarge, result);
+        Assert.True(incoming.IsDisposed);
+        Assert.Equal(new PlaybackSchedulerSnapshot(0, 0, 0, 0), scheduler.GetSnapshot());
+    }
+
+    [Fact]
+    public void Enqueue_DropIncomingUsesAggregateDurationCutoff()
+    {
+        using var scheduler = Scheduler(
+            [TimeSpan.Zero],
+            capacity: 4,
+            maximumOwnedDuration: Ms(30));
+        var queued = AudioFrame(0, durationMs: 20);
+        var incoming = VideoFrame(20);
+        scheduler.Enqueue(queued, 1, None);
+
+        var result = scheduler.Enqueue(incoming, 2, None);
+
+        Assert.Equal(PlaybackSchedulerEnqueueResult.DroppedIncoming, result);
+        Assert.True(incoming.IsDisposed);
+        Assert.False(queued.IsDisposed);
+        Assert.Equal(
+            new PlaybackSchedulerSnapshot(1, 1, 0, 8) { OwnedDuration = Ms(20) },
+            scheduler.GetSnapshot());
+    }
+
+    [Fact]
+    public void Enqueue_DropOldestMayDropMultipleFramesForDurationCutoff()
+    {
+        using var scheduler = Scheduler(
+            [TimeSpan.Zero],
+            capacity: 4,
+            fullPolicy: PlaybackSchedulerFullPolicy.DropOldest,
+            maximumOwnedDuration: Ms(30));
+        var oldest = AudioFrame(0, byteCount: 4, durationMs: 10);
+        var second = AudioFrame(10, byteCount: 4, durationMs: 20);
+        var incoming = AudioFrame(30, durationMs: 30);
+        scheduler.Enqueue(oldest, 1, None);
+        scheduler.Enqueue(second, 2, None);
+
+        var result = scheduler.Enqueue(incoming, 3, None);
+
+        Assert.Equal(PlaybackSchedulerEnqueueResult.EnqueuedAfterDroppingOldest, result);
+        Assert.True(oldest.IsDisposed);
+        Assert.True(second.IsDisposed);
+        Assert.False(incoming.IsDisposed);
+        Assert.Equal(
+            new PlaybackSchedulerSnapshot(1, 2, 0, 8) { OwnedDuration = Ms(30) },
+            scheduler.GetSnapshot());
+    }
+
+    [Fact]
     public async Task Enqueue_DropOldestNeverDropsReservedFrameForByteBudget()
     {
         using var scheduler = Scheduler(
@@ -307,6 +488,36 @@ public sealed class BoundedPlaybackSchedulerTests
         Assert.Equal(new PlaybackSchedulerSnapshot(0, 0, 0, 8), scheduler.GetSnapshot());
 
         var incoming = AudioFrame(1, 8);
+        Assert.Equal(
+            PlaybackSchedulerEnqueueResult.DroppedIncoming,
+            scheduler.Enqueue(incoming, 2, None));
+        Assert.True(incoming.IsDisposed);
+
+        sink.ReleaseFirst();
+        Assert.Equal(PlaybackSchedulerRunResult.Delivered, await run);
+        Assert.True(active.IsDisposed);
+        Assert.Equal(new PlaybackSchedulerSnapshot(0, 1, 1, 0), scheduler.GetSnapshot());
+    }
+
+    [Fact]
+    public async Task RunOneAsync_KeepsInFlightDurationAccountedUntilSinkCompletes()
+    {
+        using var owners = new TestOwners();
+        using var scheduler = Scheduler(
+            [Ms(0)],
+            capacity: 2,
+            maximumOwnedDuration: Ms(20));
+        var active = AudioFrame(0);
+        scheduler.Enqueue(active, 1, None);
+        var sink = new BlockingSink();
+
+        var run = Run(scheduler, owners, sink).AsTask();
+        await sink.FirstEntered;
+        Assert.Equal(
+            new PlaybackSchedulerSnapshot(0, 0, 0, 8) { OwnedDuration = Ms(20) },
+            scheduler.GetSnapshot());
+
+        var incoming = AudioFrame(20);
         Assert.Equal(
             PlaybackSchedulerEnqueueResult.DroppedIncoming,
             scheduler.Enqueue(incoming, 2, None));
@@ -483,7 +694,7 @@ public sealed class BoundedPlaybackSchedulerTests
     }
 
     [Fact]
-    public void Options_EnforceCapacityAndByteHardLimits()
+    public void Options_EnforceCapacityByteAndDurationHardLimits()
     {
         var policy = new PlaybackPolicyClockBoundary(
             new FakeClock(TimeSpan.Zero),
@@ -508,6 +719,35 @@ public sealed class BoundedPlaybackSchedulerTests
             },
             policy));
         Assert.Throws<ArgumentOutOfRangeException>(() => new BoundedPlaybackScheduler(
+            new PlaybackSchedulerOptions { MaximumOwnedDuration = TimeSpan.Zero },
+            policy));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new BoundedPlaybackScheduler(
+            new PlaybackSchedulerOptions
+            {
+                MaximumOwnedDuration =
+                    PlaybackSchedulerOptions.MaximumOwnedDurationHardLimit + TimeSpan.FromTicks(1),
+            },
+            policy));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new BoundedPlaybackScheduler(
+            new PlaybackSchedulerOptions
+            {
+                DeriveUnknownAudioDurationFromSamples = true,
+            },
+            policy));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new BoundedPlaybackScheduler(
+            new PlaybackSchedulerOptions
+            {
+                DurationMediaScope = PlaybackSchedulerDurationMediaScope.AudioOnly,
+            },
+            policy));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new BoundedPlaybackScheduler(
+            new PlaybackSchedulerOptions
+            {
+                MaximumOwnedDuration = Ms(20),
+                DurationMediaScope = (PlaybackSchedulerDurationMediaScope)int.MaxValue,
+            },
+            policy));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new BoundedPlaybackScheduler(
             new PlaybackSchedulerOptions
             {
                 InitialOutputKind = (PlaybackSchedulerInitialOutputKind)int.MaxValue,
@@ -526,6 +766,10 @@ public sealed class BoundedPlaybackSchedulerTests
         PlaybackSchedulerFullPolicy fullPolicy = PlaybackSchedulerFullPolicy.DropIncoming,
         IPlaybackSchedulerDelay? delay = null,
         long maximumOwnedBytes = PlaybackSchedulerOptions.DefaultMaximumOwnedBytes,
+        TimeSpan? maximumOwnedDuration = null,
+        bool deriveUnknownAudioDurationFromSamples = false,
+        PlaybackSchedulerDurationMediaScope durationMediaScope =
+            PlaybackSchedulerDurationMediaScope.All,
         PlaybackSchedulerInitialOutputKind initialOutputKind =
             PlaybackSchedulerInitialOutputKind.Video) => new(
             new PlaybackSchedulerOptions
@@ -533,6 +777,10 @@ public sealed class BoundedPlaybackSchedulerTests
                 Capacity = capacity,
                 FullPolicy = fullPolicy,
                 MaximumOwnedBytes = maximumOwnedBytes,
+                MaximumOwnedDuration = maximumOwnedDuration,
+                DurationMediaScope = durationMediaScope,
+                DeriveUnknownAudioDurationFromSamples =
+                    deriveUnknownAudioDurationFromSamples,
                 InitialOutputKind = initialOutputKind,
             },
             new PlaybackPolicyClockBoundary(
@@ -550,7 +798,8 @@ public sealed class BoundedPlaybackSchedulerTests
 
     private static PlaybackDecoderFfmpegManagedFrame AudioFrame(
         int timestampMs,
-        int byteCount = 8)
+        int byteCount = 8,
+        int? durationMs = 20)
     {
         if (byteCount < 4 || byteCount % 4 != 0)
         {
@@ -568,11 +817,15 @@ public sealed class BoundedPlaybackSchedulerTests
                 byteCount / 4,
                 PlaybackDecoderFfmpegFrameTime.Known(Ms(timestampMs)),
                 PlaybackDecoderFfmpegFrameTime.Known(Ms(timestampMs)),
-                PlaybackDecoderFfmpegFrameTime.Known(Ms(20))),
+                durationMs.HasValue
+                    ? PlaybackDecoderFfmpegFrameTime.Known(Ms(durationMs.Value))
+                    : PlaybackDecoderFfmpegFrameTime.Unknown),
             [new(0, byteCount, 1, byteCount, new byte[byteCount])]);
     }
 
-    private static PlaybackDecoderFfmpegManagedFrame VideoFrame(int timestampMs) => new(
+    private static PlaybackDecoderFfmpegManagedFrame VideoFrame(
+        int timestampMs,
+        int? durationMs = 20) => new(
         new PlaybackDecoderFfmpegFrameMetadata(
             PlaybackDecoderFfmpegFrameMediaKind.Video,
             PlaybackDecoderFfmpegFrameFormat.VideoBgra32,
@@ -583,7 +836,9 @@ public sealed class BoundedPlaybackSchedulerTests
             0,
             PlaybackDecoderFfmpegFrameTime.Known(Ms(timestampMs)),
             PlaybackDecoderFfmpegFrameTime.Known(Ms(timestampMs)),
-            PlaybackDecoderFfmpegFrameTime.Known(Ms(20))),
+            durationMs.HasValue
+                ? PlaybackDecoderFfmpegFrameTime.Known(Ms(durationMs.Value))
+                : PlaybackDecoderFfmpegFrameTime.Unknown),
         [new(0, 4, 1, 4, new byte[4])]);
 
     private static TimeSpan Ms(int value) => TimeSpan.FromMilliseconds(value);

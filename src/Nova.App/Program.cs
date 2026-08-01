@@ -10,15 +10,13 @@ Console.CancelKeyPress += cancelHandler;
 
 try
 {
-    var composition = new NovaWindowsStartupComposition();
-    var result = await composition.RunAsync(cancellationSource.Token);
-    Environment.ExitCode = result switch
-    {
-        NovaWindowsStartupResult.Completed => 0,
-        NovaWindowsStartupResult.Cancelled => 0,
-        NovaWindowsStartupResult.PlatformUnsupported => 2,
-        _ => 1,
-    };
+    Environment.ExitCode = await NovaApplicationEntrypoint.RunAsync(
+        args,
+        Console.Out,
+        Console.Error,
+        static cancellationToken =>
+            new NovaWindowsStartupComposition().RunAsync(cancellationToken),
+        cancellationSource.Token);
 }
 finally
 {
