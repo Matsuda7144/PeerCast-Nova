@@ -5,6 +5,16 @@
 Detailed history through 0.0.8g remains preserved in Git history at commit
 `f078dab5372a45a8c577c1c802a697ab72b45c02` and in milestone ADR/PCN records.
 
+### Post-0.0.10e - Bounded ISO BMFF / MP4 Parser Foundation
+
+- Added the bounded non-physical playback and application slices in ADR-0167 through ADR-0172: opt-in decoded-buffer duration cutoff, non-native `Nova.App --help` / `--about`, sample-derived audio duration accounting, audio-only and default 250 ms production duration scope, and the exact opened-decoder `avcodec_flush_buffers` boundary.
+- Added the bounded ISO BMFF / MP4 parser foundation in ADR-0173 through ADR-0231, covering box headers and traversal, `ftyp`, FullBox, movie/track/media metadata, sample tables and reconciliation, chunk/sample/byte-range/`mdat` lookup, timing and edit mapping, edited-sample admission/payload/packet-candidate boundaries, `avc1`/`avc3`, `mp4a`, bounded owned `avcC`, and MPEG-4 descriptor variable-length headers.
+- Established ISO BMFF / MP4 as the second supported container-parser family alongside the existing bounded FLV v1 parser.
+- Added the corresponding reviews through PCN-0241 and synchronized README and ROADMAP in PR #221.
+- Kept AVC packet framing, `esds` hierarchy semantics, production MP4 demux composition, nested-box and streaming policy, fragmented MP4, and general application playback incomplete.
+- Audited ADR numbering and confirmed ADR-0158 was skipped by assignment error; recorded it as a permanent numbering-error gap, following ADR-0082 and ADR-0096, with no retroactive reuse.
+- Changed documentation only; no source or test code was modified.
+
 ### 0.0.10d Phase 6 - Granular pre-cleanup checkpoint diagnostics
 
 - Split the aggregate pre-cleanup terminal-record rejection into fixed delivery-trace, audio/native-trace, trace-cardinality, and trace-result-consistency categories.

@@ -1,5 +1,39 @@
 # PeerCast Nova Navigation
 
+## Post-0.0.10e bounded ISO BMFF / MP4 parser foundation
+
+PeerCast Nova now has two bounded container-parser families: the existing pure
+managed bounded FLV v1 parser and the new bounded ISO BMFF / MP4 parser
+foundation. MP4 is therefore the second container format implemented alongside
+FLV, not a replacement for the FLV production path.
+
+ADR-0167 through ADR-0172 add the bounded non-physical playback and application
+slices that precede the container work: decoded-duration limits, non-native
+application information, sample-derived audio duration, the default audio-only
+250 ms production cutoff, and the opened-decoder `avcodec_flush_buffers`
+boundary.
+
+ADR-0173 through ADR-0231 add the ISO BMFF / MP4 foundation from bounded box
+headers and traversal through sample tables, reconciliation and lookup, timing
+and edit mapping, edited-sample payload and packet-candidate boundaries,
+`avc1` / `avc3`, `mp4a`, bounded owned `avcC`, and the MPEG-4 descriptor
+variable-length header parser.
+
+AVC packet framing, `esds` hierarchy semantics, production MP4 demux
+composition, nested-box and streaming policy, and fragmented MP4 remain future
+work.
+
+- `docs/adr/ADR-0167-opt-in-decoded-buffer-duration-cutoff.md`
+- `docs/adr/ADR-0173-bounded-iso-bmff-box-header-parser.md`
+- `docs/adr/ADR-0231-bounded-iso-bmff-mpeg4-descriptor-header.md`
+- `docs/reviews/PCN-0177-OPT-IN-DECODED-BUFFER-DURATION-CUTOFF.md`
+- `docs/reviews/PCN-0183-BOUNDED-ISO-BMFF-BOX-HEADER-PARSER.md`
+- `docs/reviews/PCN-0241-BOUNDED-ISO-BMFF-MPEG4-DESCRIPTOR-HEADER.md`
+
+ADR-0158 was skipped by assignment error. It is a permanent numbering-error gap
+and must not be retroactively reused, following the recorded ADR-0082 and
+ADR-0096 precedent.
+
 ## Phase 5 completed audio and paired admission
 
 The separately authorized run from exact main
@@ -253,6 +287,17 @@ The bounded FLV decoder configures the exact parser stream time base through pub
 
 ## 現在地
 
+**Post-0.0.10e — Bounded ISO BMFF / MP4 Parser Foundation — Complete through ADR-0231**
+
+- ADR-0167 through ADR-0172 complete the bounded non-physical playback and application prerequisites;
+- ADR-0173 through ADR-0231 complete the current managed ISO BMFF / MP4 parser foundation through bounded `avcC` and MPEG-4 descriptor headers;
+- ISO BMFF / MP4 is the second bounded container-parser family alongside the existing FLV v1 parser;
+- current implementation includes box traversal, movie／track／media metadata, sample tables and reconciliation, chunk／sample／byte-range／`mdat` lookup, timing and edit mapping, edited-sample payload and packet-candidate boundaries, and `avc1`／`avc3`／`mp4a` sample-entry projection;
+- AVC packet framing, `esds` hierarchy semantics, production MP4 demux composition, nested-box and streaming policy, and fragmented MP4 remain incomplete;
+- current reviews span `docs/reviews/PCN-0177-OPT-IN-DECODED-BUFFER-DURATION-CUTOFF.md` through `docs/reviews/PCN-0241-BOUNDED-ISO-BMFF-MPEG4-DESCRIPTOR-HEADER.md`;
+- ADR-0158 is a permanent numbering-error gap caused by assignment error, following ADR-0082 and ADR-0096, and must not be retroactively reused;
+- next: continue with AVC packet framing and `esds` hierarchy semantics before selecting production MP4 demux composition.
+
 **0.0.10e — Shared Windows Application Ownership Boundary — Complete**
 
 - 0.0.10d is complete; Issue #129 is closed after accepted same-run audio evidence and final independent paired admission;
@@ -305,6 +350,18 @@ Any later physical audio run requires a separately selected exact `main`, final-
 GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして使用します。最終headでrestore、Release build with analyzers、full solution tests、format verificationを通してからmergeします。Physical Windows execution remains a separate explicit authorization boundary and is never implied by routine CI.
 
 ## 最新の入口
+
+- `README.md`
+- `ROADMAP.md`
+- `CHANGELOG.md`
+- `docs/adr/ADR-0167-opt-in-decoded-buffer-duration-cutoff.md`
+- `docs/adr/ADR-0173-bounded-iso-bmff-box-header-parser.md`
+- `docs/adr/ADR-0231-bounded-iso-bmff-mpeg4-descriptor-header.md`
+- `docs/reviews/PCN-0177-OPT-IN-DECODED-BUFFER-DURATION-CUTOFF.md`
+- `docs/reviews/PCN-0183-BOUNDED-ISO-BMFF-BOX-HEADER-PARSER.md`
+- `docs/reviews/PCN-0241-BOUNDED-ISO-BMFF-MPEG4-DESCRIPTOR-HEADER.md`
+
+### Completed physical validation archive
 
 - `docs/reviews/PCN-0166-CONTROLLED-AUDIO-RENDER-AUTHORIZATION-STATE.md`
 - `docs/reviews/PCN-0167-MANAGED-AUDIO-FAILURE-BOUNDARY.md`
