@@ -5,6 +5,79 @@
 Detailed history through 0.0.8g remains preserved in Git history at commit
 `f078dab5372a45a8c577c1c802a697ab72b45c02` and in milestone ADR/PCN records.
 
+### Post-0.0.10e - Bounded AVC and MPEG-4 audio metadata
+
+- Added ADR-0232 bounded ISO BMFF AVC sample framing over the already owned edited-sample payload.
+- Reconciled the selected `avcC` NAL length width and sample-description index, bounded NAL-unit count, and rejected empty, zero-length, truncated, or partial framing.
+- Projected non-owning NAL-unit ranges without Annex-B conversion, parameter-set injection, decoder submission, native execution, or physical output.
+- Added the corresponding focused managed tests and PCN-0242 review.
+- Added ADR-0233 bounded `esds` outer ES descriptor parsing with exact FullBox, optional-field, direct-child, ownership, and descriptor-count boundaries.
+- Required unique ordered decoder-config and SL-config children without inferring decoder-config, AAC AudioSpecificConfig, or SL-config body semantics; added PCN-0243 and focused managed tests.
+- Added ADR-0234 audio DecoderConfigDescriptor fixed-body and bounded nested-descriptor parsing with one owned nonempty DecoderSpecificInfo payload; added PCN-0244 and focused managed tests.
+- Added ADR-0235 bit-precise leading AudioSpecificConfig projection for normal and extended object types, indexed and explicit sampling rates, and channel configuration; added PCN-0245 and focused managed tests.
+- Added ADR-0236 conditional GASpecificConfig projection for supported General Audio object types, including core-coder, scalable, ER BSAC, and resilience fields; added PCN-0246 and focused managed tests.
+- Added ADR-0237 exact predefined-MP4 SLConfigDescriptor projection with owned-hierarchy and strict payload boundaries; added PCN-0247 and focused managed tests.
+- Added ADR-0238 explicit SBR/PS extension parsing for leading Audio Object Type `5`／`29`, including bounded extension frequency, core type, and ER BSAC channel fields; added PCN-0248 and focused managed tests.
+- Added ADR-0239 explicit-extension-to-GASpecificConfig composition with exact bit-position and source provenance; added PCN-0249 and focused managed tests.
+- Added ADR-0240 immediate implicit-SBR sync-extension parsing for supported direct non-ER General Audio configurations with optional bounded extension frequency; added PCN-0250 and focused managed tests.
+- Added ADR-0241 optional secondary implicit-PS marker and presence-bit projection; added PCN-0251 and focused managed tests.
+- Added ADR-0242 non-copying AVC NAL-header classification with VCL, IDR, parameter-set, and aggregate presence projection; added PCN-0252 and focused managed tests.
+- Added ADR-0243 bounded non-materialized `avcC` parameter-set prefix planning with kind, length-prefix, count, and packet-byte validation; added PCN-0253 and focused managed tests.
+- Added ADR-0244 exact owned one-to-four-byte big-endian AVC length-prefixed materialization from the bounded prefix plan; added PCN-0254 and focused managed tests.
+- Added ADR-0245 exact owned four-byte-start-code AVC Annex-B materialization from the same bounded plan; added PCN-0255 and focused managed tests.
+- Added ADR-0246 exact owned sample-only Annex-B conversion without configuration parameter sets; added PCN-0256 and focused managed tests.
+- Added ADR-0247 explicit source-bound selection across original／prefixed length and sample-only／prefixed Annex-B payload forms; added PCN-0257 and focused managed tests.
+- Added ADR-0248 exact mapping of caller-stated Annex-B and in-band parameter-set requirements to one explicit AVC payload format; added PCN-0258 and focused managed tests.
+- Added ADR-0249 bounded end-to-end managed AVC payload composition that constructs only artifacts required by the resolved format; added PCN-0259 and focused managed tests.
+- Added ADR-0250 exact direct／explicit-core GA Specific Config prefix projection through the optional Program Config Element start; added PCN-0260 and focused managed tests.
+- Added ADR-0251 bounded Program Config Element fixed-header and element-count projection without parsing its variable body; added PCN-0261 and focused managed tests.
+- Added ADR-0252 bounded Program Config Element mixdown, element-list, alignment, and owned-comment parsing; added PCN-0262 and focused managed tests.
+- Added ADR-0253 bounded PCE channel-count topology and duplicate element-identity rejection without inferring speaker positions; added PCN-0263 and focused managed tests.
+- Added ADR-0254 exact PCE-aware GA Specific Config continuation with source-bound conditional field projection; added PCN-0264 and focused managed tests.
+- Added ADR-0255 bounded ER Audio `epConfig` projection, distinguishing non-ER input, truncation, and unsupported Error Protection Specific Config; added PCN-0265 and focused managed tests.
+- Added ADR-0256 ER post-config entry into the bounded implicit SBR／PS sync-extension path; added PCN-0266 and focused managed tests.
+- Added ADR-0257 source-bound AAC declared sampling-frequency and core channel-count facts for indexed and PCE configurations; added PCN-0267 and focused managed tests.
+- Added ADR-0258 conflict-free explicit／implicit AAC SBR／PS signalling facts and effective signalled sampling-frequency resolution; added PCN-0268 and focused managed tests.
+- Added ADR-0259 managed AAC decoder-format intent with mono-only PS-to-stereo projection and no native decoder interaction; added PCN-0269 and focused managed tests.
+- Added ADR-0260 exact size-bounded owned AAC AudioSpecificConfig extradata tied to decoder-format intent; added PCN-0270 and focused managed tests.
+- Added ADR-0261 validated managed adaptation from owned ISO BMFF AAC facts to the existing FFmpeg codec-parameter input boundary; added PCN-0271 and focused managed tests.
+- Added ADR-0262 source-bound managed AAC codec-parameter creation with exact 64-byte zero padding and disposable lease ownership; added PCN-0272 and focused managed tests.
+- Added ADR-0263 managed-only AAC parameter-transfer planning with exact symbol requirements, retained source ownership, and no native invocation; added PCN-0273 and focused managed tests.
+- Added ADR-0264 source-bound PCE channel-slot mapping across front, side, back, and LFE regions without inferring physical speaker positions; added PCN-0274 and focused managed tests.
+- Added ADR-0265 bounded managed AAC transfer-symbol declaration coverage without runtime loading, ABI verification, address resolution, or native invocation; added PCN-0275 and focused managed tests.
+- Added ADR-0266 bounded binding of AAC plan facts to caller-declared codec, sample-rate, and channel capabilities without treating them as verified runtime evidence; added PCN-0276 and focused managed tests.
+- Added ADR-0267 exact ER Audio `epConfig` requirement facts for values zero through three without parsing or skipping Error Protection Specific Config; added PCN-0277 and focused managed tests.
+- Added ADR-0268 fail-closed end-to-end AAC managed decoder preparation with single-owner success and deterministic partial-failure cleanup; added PCN-0278 and focused managed tests.
+- Added ADR-0269 source-bound `mp4a` versus effective AAC sample-rate and channel-count consistency facts without choosing mismatch admission policy; added PCN-0279 and focused managed tests.
+- Added ADR-0270 explicit AAC sample-entry consistency policy with strict agreement or caller-approved effective-facts admission and no implicit override; added PCN-0280 and focused managed tests.
+- Added ADR-0271 sample-entry-aware managed AAC decoder preparation with policy-first admission, retained source identity, and single-owner cleanup; added PCN-0281 and focused managed tests.
+- Added ADR-0272 explicit PCE speaker-position assignment with exact slot coverage, uniqueness, LFE agreement, and no inferred layout; added PCN-0282 and focused managed tests.
+- Added ADR-0273 bounded ER Error Protection Specific Config fixed-prefix parsing with exact fields and a limited predefined-set count; added PCN-0283 and focused managed tests.
+- Added ADR-0274 bounded ER Error Protection first-set header parsing that stops before class bodies and does not infer later set counts; added PCN-0284 and focused managed tests.
+- Added ADR-0275 bounded ER Error Protection first-class parsing across conditional escape, concatenation, FEC, interleave, length, rate, and CRC fields; added PCN-0285 and focused managed tests.
+- Added ADR-0276 bounded ER Error Protection first-set traversal with indexed classes and exact reordered-output permutation validation; added PCN-0286 and focused managed tests.
+- Added ADR-0277 bounded ER Error Protection second-set header parsing from the exact first-set end without inferring a contiguous count vector; added PCN-0287 and focused managed tests.
+- Added ADR-0278 bounded ER Error Protection second-set first-class parsing from the exact post-count position with second-set ownership; added PCN-0288 and focused managed tests.
+- Added ADR-0279 bounded ER Error Protection second-set traversal with indexed classes and exact reordered-output permutation validation; added PCN-0289 and focused managed tests.
+- Added ADR-0280 bounded ER Error Protection third-set header parsing from the exact second-set end; added PCN-0290 and focused managed tests.
+- Added ADR-0281 bounded ER Error Protection third-set first-class parsing with retained third-set ownership; added PCN-0291 and focused managed tests.
+- Added ADR-0282 bounded ER Error Protection third-set traversal with exact reordered-output permutation validation; added PCN-0292 and focused managed tests.
+- Added ADR-0283 general bounded ER Error Protection predefined-set traversal with aggregate class limits and per-set permutation validation; added PCN-0293 and focused managed tests.
+- Added ADR-0284 bounded ER Error Protection header-protection parsing with conditional 5-bit rate and CRC-length fields; added PCN-0294 and focused managed tests.
+- Added ADR-0285 complete bounded Error Protection Specific Config ownership and ADR-0286 fact-only `directMapping` parsing; added PCN-0295/0296 and focused managed tests.
+- Added ADR-0287 enabled-only direct-mapping admission and ADR-0288 source-bound ER configuration admission across `epConfig` zero through three; added PCN-0297/0298 and focused managed tests.
+- Added ADR-0289 source-bound composition of admitted ER configuration with managed AAC decoder preparation; added PCN-0299 and focused managed tests.
+- Added ADR-0290 bounded PCE speaker-assignment projection to a WaveFormat channel mask and explicit source-to-platform order; added PCN-0300 and focused managed tests.
+- Added ADR-0291 bounded managed-only PCE channel-reorder planning with an exact source permutation; added PCN-0301 and focused managed tests.
+- Added ADR-0292 exact PCE-topology binding between the reorder plan and managed AAC decoder preparation; added PCN-0302 and focused managed tests.
+- Added ADR-0293 size-bounded managed PCE channel reordering for canonical interleaved PCM frames; added PCN-0303 and focused arbitrary-byte tests.
+- Added ADR-0294 managed PCE explicit-channel-layout transfer requirements with exact mask population and source ownership; added PCN-0304 and focused managed tests.
+- Added ADR-0295 bounded declared-symbol coverage for the exact PCE channel-layout initializer; added PCN-0305 and focused managed tests.
+- Added ADR-0296 end-to-end managed PCE explicit-layout preparation with one required-symbol set and deterministic lease cleanup; added PCN-0306 and focused managed tests.
+- Added ADR-0297 immediate implicit SBR/PS continuation from the exact admitted ER configuration end, including `epConfig` two and three; added PCN-0307 and focused managed tests.
+- Added ADR-0298 source-bound composition from admitted ER configuration and immediate SBR/PS to effective AAC decoder-format intent; added PCN-0308 and focused managed tests.
+- Added ADR-0299 final source-bound managed composition from admitted ER AAC format intent through owned decoder preparation and deterministic cleanup; added PCN-0309 and focused managed tests.
+
 ### Post-0.0.10e - Bounded ISO BMFF / MP4 Parser Foundation
 
 - Added the bounded non-physical playback and application slices in ADR-0167 through ADR-0172: opt-in decoded-buffer duration cutoff, non-native `Nova.App --help` / `--about`, sample-derived audio duration accounting, audio-only and default 250 ms production duration scope, and the exact opened-decoder `avcodec_flush_buffers` boundary.

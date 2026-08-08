@@ -575,6 +575,396 @@ shared one-to-four-byte MPEG-4 descriptor tag/length prefix with the existing
 codec-extradata hard limit and exact or container-prefix consumption modes.
 `esds` hierarchy semantics remain incomplete.
 
+ADR-0232 and
+`docs/reviews/PCN-0242-BOUNDED-ISO-BMFF-AVC-SAMPLE-FRAMING.md` bind the selected
+`avcC` NAL length width to the exact owned edited-sample payload, require the
+same sample-description index, and project a bounded exact sequence of
+non-owning NAL-unit ranges. Annex-B conversion, parameter-set injection,
+demux-event projection, and production MP4 demux composition remain incomplete.
+
+ADR-0233 and
+`docs/reviews/PCN-0243-BOUNDED-ISO-BMFF-ELEMENTARY-STREAM-DESCRIPTOR.md` require
+a unique current version-zero `esds`, own its bounded outer ES descriptor, and
+project exact optional ES fields plus a bounded direct-child hierarchy with
+unique ordered decoder-config and SL-config descriptors. Decoder-config body,
+decoder-specific AAC configuration, and SL-config semantics remain incomplete.
+
+ADR-0234 and
+`docs/reviews/PCN-0244-BOUNDED-ISO-BMFF-DECODER-CONFIG-DESCRIPTOR.md` parse the
+audio decoder-config fixed body, preserve buffer and bitrate metadata, traverse
+bounded nested descriptors, and require one nonempty decoder-specific-info
+payload. AudioSpecificConfig and SL-config body semantics remain incomplete.
+
+ADR-0235 and
+`docs/reviews/PCN-0245-BOUNDED-ISO-BMFF-AUDIO-SPECIFIC-CONFIG-HEADER.md` parse
+the leading MPEG-4 AudioSpecificConfig bit fields, including extended Audio
+Object Type and indexed or explicit sampling frequency, while preserving
+channel configuration zero for later semantics. AAC extension,
+GASpecificConfig, Program Config Element, and channel-layout semantics remain
+incomplete.
+
+ADR-0236 and
+`docs/reviews/PCN-0246-BOUNDED-ISO-BMFF-GA-SPECIFIC-CONFIG.md` continue from the
+exact AudioSpecificConfig header bit position and project conditional General
+Audio frame, core-coder, scalable, ER BSAC, and resilience fields. Program
+Config Element, SBR/PS extension, and channel-layout semantics remain
+incomplete.
+
+ADR-0237 and
+`docs/reviews/PCN-0247-BOUNDED-ISO-BMFF-SL-CONFIG-DESCRIPTOR.md` bind the owned
+SLConfigDescriptor to the exact one-byte predefined MP4 configuration `2` and
+reject malformed, foreign, custom, or other predefined forms. Custom SL
+configuration and timestamp scheduling remain incomplete.
+
+ADR-0238 and
+`docs/reviews/PCN-0248-BOUNDED-ISO-BMFF-EXPLICIT-SBR-PS-EXTENSION.md` parse
+leading Audio Object Type `5`／`29` explicit SBR／PS signalling, including the
+extension frequency, core object type, and ER BSAC extension channel
+configuration. Implicit sync-extension search remains incomplete.
+
+ADR-0239 and
+`docs/reviews/PCN-0249-BOUNDED-ISO-BMFF-EXPLICIT-EXTENSION-GA-COMPOSITION.md`
+continue from the exact explicit-extension ending bit into the existing bounded
+GASpecificConfig projection while retaining both source objects and the
+effective core type. Program Config Element and implicit sync-extension
+semantics remain incomplete.
+
+ADR-0240 and
+`docs/reviews/PCN-0250-BOUNDED-ISO-BMFF-IMPLICIT-SBR-SYNC-EXTENSION.md` consume
+the immediate optional `0x2B7` marker after supported direct non-ER
+GASpecificConfig, distinguish absence from truncation, and project SBR presence
+plus bounded extension frequency. ER post-configuration and arbitrary-position
+sync handling remain incomplete.
+
+ADR-0241 and
+`docs/reviews/PCN-0251-BOUNDED-ISO-BMFF-IMPLICIT-PS-SYNC-EXTENSION.md` consume
+the optional immediate `0x548` marker after present implicit SBR and project its
+PS presence bit with exact source and bit-position provenance. Decoder and
+channel-layout semantics remain incomplete.
+
+ADR-0242 and
+`docs/reviews/PCN-0252-BOUNDED-ISO-BMFF-AVC-NAL-UNIT-CLASSIFICATION.md` classify
+the exact framed sample NAL headers without payload copies, project reference
+class and type, and expose VCL, IDR, and parameter-set presence. RBSP and slice
+semantics remain incomplete.
+
+ADR-0243 and
+`docs/reviews/PCN-0253-BOUNDED-ISO-BMFF-AVC-PARAMETER-SET-PREFIX-PLAN.md`
+validate `avcC` SPS／PPS／SPS-extension NAL types and length representability,
+then project a count- and byte-bounded non-owning sequence before the classified
+sample units. Byte materialization and production injection policy remain
+incomplete.
+
+ADR-0244 and
+`docs/reviews/PCN-0254-BOUNDED-ISO-BMFF-AVC-LENGTH-PREFIXED-PAYLOAD-MATERIALIZATION.md`
+revalidate the prefix plan and materialize privately owned configuration-plus-
+sample bytes using the exact selected one-to-four-byte big-endian NAL length
+width under the 4 MiB packet hard limit. Automatic injection policy remains
+incomplete.
+
+ADR-0245 and
+`docs/reviews/PCN-0255-BOUNDED-ISO-BMFF-AVC-ANNEX-B-PAYLOAD-MATERIALIZATION.md`
+materialize the same ordered plan with an exact four-byte Annex-B start code
+before every NAL unit under the same packet limit. Decoder-format selection and
+automatic injection policy remain incomplete.
+
+ADR-0246 and
+`docs/reviews/PCN-0256-BOUNDED-ISO-BMFF-AVC-SAMPLE-ONLY-ANNEX-B-MATERIALIZATION.md`
+materialize only the classified sample NAL units with exact four-byte Annex-B
+start codes, preserving a separate path for decoders configured out of band.
+Automatic format and injection decisions remain incomplete.
+
+ADR-0247 and
+`docs/reviews/PCN-0257-EXPLICIT-ISO-BMFF-AVC-PAYLOAD-SELECTION.md` require the
+caller to select original or parameter-set-prefixed length form, or sample-only
+or parameter-set-prefixed Annex-B form, while enforcing exact classification
+identity and projecting format facts. Automatic decoder-state policy remains
+incomplete.
+
+ADR-0248 and
+`docs/reviews/PCN-0258-EXPLICIT-ISO-BMFF-AVC-DECODER-PAYLOAD-REQUIREMENTS.md`
+map caller-stated Annex-B and in-band-parameter-set requirements exactly onto
+the four explicit payload forms without runtime or sample-entry inference.
+Runtime capability discovery remains incomplete.
+
+ADR-0249 and
+`docs/reviews/PCN-0259-BOUNDED-ISO-BMFF-AVC-PAYLOAD-COMPOSITION.md` compose one
+classification and resolved requirement through only the necessary prefix-plan,
+materialization, and source-bound selection steps under shared count and packet
+limits. Production decoder and demux integration remain incomplete.
+
+ADR-0250 and
+`docs/reviews/PCN-0260-BOUNDED-ISO-BMFF-GA-SPECIFIC-CONFIG-PREFIX.md` project the
+exact General Audio prefix for direct and explicit-SBR/PS core configurations,
+including the optional core-coder delay and Program Config Element start.
+Program Config Element body and later GA semantics remain incomplete.
+
+ADR-0251 and
+`docs/reviews/PCN-0261-BOUNDED-ISO-BMFF-PROGRAM-CONFIG-ELEMENT-HEADER.md` project
+the fixed Program Config Element identity, frequency, and bounded element counts
+from that exact start. Mixdown flags, channel-element lists, byte alignment,
+comments, channel-layout derivation, and GA continuation remain incomplete.
+
+ADR-0252 and
+`docs/reviews/PCN-0262-BOUNDED-ISO-BMFF-PROGRAM-CONFIG-ELEMENT.md` traverse the
+conditional mixdown fields, bounded channel／data／CC element records, zero
+alignment, and privately owned length-prefixed comment. Channel-layout
+derivation, cross-record semantic validation, and GA continuation remain
+incomplete.
+
+ADR-0253 and
+`docs/reviews/PCN-0263-BOUNDED-ISO-BMFF-PROGRAM-CONFIG-CHANNEL-TOPOLOGY.md`
+project SCE／CPE／LFE channel counts and reject duplicate element identities
+without selecting speaker positions. Speaker mapping, mixdown application, and
+decoder composition remain incomplete.
+
+ADR-0260 and
+`docs/reviews/PCN-0270-BOUNDED-ISO-BMFF-AAC-DECODER-EXTRADATA.md` copy the exact
+AudioSpecificConfig bytes into size-bounded owned storage attached to the
+decoder-format intent. FFmpeg padding, capability validation, native allocation,
+and decoder binding remain incomplete.
+
+ADR-0261 and
+`docs/reviews/PCN-0271-BOUNDED-ISO-BMFF-AAC-FFMPEG-CODEC-PARAMETERS-INPUT.md`
+adapt the owned AAC format and extradata to the existing managed FFmpeg
+codec-parameter input after enforcing its sample-rate and channel-count limits.
+Factory execution, native transfer, and decoder binding remain incomplete.
+
+ADR-0262 and
+`docs/reviews/PCN-0272-BOUNDED-ISO-BMFF-AAC-MANAGED-CODEC-PARAMETERS.md`
+invoke the existing managed factory and own its exact 64-byte-zero-padded AAC
+lease with ISO BMFF provenance. Native parameter transfer, decoder context
+mutation, and decoder open remain incomplete.
+
+ADR-0263 and
+`docs/reviews/PCN-0273-BOUNDED-ISO-BMFF-AAC-PARAMETER-TRANSFER-PLAN.md`
+retain that managed owner in an exact AAC transfer plan and project the five
+symbols required by the established FFmpeg parameter-transfer boundary without
+resolving or invoking them. Capability binding, native transfer, decoder context
+mutation, and decoder open remain incomplete.
+
+ADR-0264 and
+`docs/reviews/PCN-0274-BOUNDED-ISO-BMFF-PROGRAM-CONFIG-CHANNEL-SLOT-MAP.md`
+expand validated PCE elements into contiguous source-bound front, side, back,
+and LFE channel slots while preserving element identity and pair order. Physical
+speaker positions, platform masks, and decoder layout binding remain incomplete.
+
+ADR-0265 and
+`docs/reviews/PCN-0275-BOUNDED-ISO-BMFF-AAC-TRANSFER-SYMBOL-COVERAGE.md`
+validate a finite caller-declared symbol-name set against the exact five-symbol
+ADR-0263 requirement while retaining plan ownership. Verified runtime capability,
+ABI/version checks, address resolution, and native invocation remain incomplete.
+
+ADR-0266 and
+`docs/reviews/PCN-0276-BOUNDED-ISO-BMFF-AAC-DECLARED-DECODER-CAPABILITY-BINDING.md`
+bind that coverage and plan to bounded caller-declared AAC codec, sample-rate,
+and channel limits. Verified runtime evidence, decoder discovery, native transfer,
+context mutation, and decoder open remain incomplete.
+
+ADR-0267 and
+`docs/reviews/PCN-0277-BOUNDED-ISO-BMFF-ER-AUDIO-PROTECTION-REQUIREMENT.md`
+project every ER `epConfig` value and identify values two and three as requiring
+Error Protection Specific Config without parsing or skipping that structure.
+Its bounded body parser and subsequent continuation remain incomplete.
+
+ADR-0268 and
+`docs/reviews/PCN-0278-BOUNDED-ISO-BMFF-AAC-MANAGED-DECODER-PREPARATION.md`
+compose the existing AAC intent, owned extradata, padded parameters, transfer
+plan, declared-symbol coverage, and declared capability binding behind one
+fail-closed disposable owner. Verified runtime binding and all native decoder
+execution remain incomplete.
+
+ADR-0269 and
+`docs/reviews/PCN-0279-BOUNDED-ISO-BMFF-AAC-SAMPLE-ENTRY-CONSISTENCY-FACTS.md`
+retain both `mp4a` declared sample-rate/channel facts and effective AAC decoder
+facts while reporting their agreement dimensions separately. Mismatch admission,
+normalization, and decoder-layout policy remain incomplete.
+
+ADR-0270 and
+`docs/reviews/PCN-0280-EXPLICIT-ISO-BMFF-AAC-SAMPLE-ENTRY-CONSISTENCY-POLICY.md`
+require callers to choose exact agreement or explicitly admit effective AAC
+decoder facts on mismatch, retaining whether an override was used. Automatic
+profile policy selection and decoder-layout binding remain incomplete.
+
+ADR-0271 and
+`docs/reviews/PCN-0281-BOUNDED-ISO-BMFF-AAC-SAMPLE-ENTRY-MANAGED-DECODER-PREPARATION.md`
+apply that explicit consistency decision before composing the existing managed
+AAC decoder preparation, retaining exact source identities behind one disposable
+owner. Verified runtime binding, native parameter transfer, decoder integration,
+and physical execution remain incomplete.
+
+ADR-0272 and
+`docs/reviews/PCN-0282-EXPLICIT-ISO-BMFF-PROGRAM-CONFIG-SPEAKER-POSITION-ASSIGNMENT.md`
+bind one caller-stated speaker position to every exact PCE channel slot, reject
+duplicates and LFE disagreement, and never infer a layout from PCE syntax.
+Platform layout projection, decoder binding, and native transfer remain
+incomplete.
+
+ADR-0290 and PCN-0300 project the exact speaker assignment to the finite
+WaveFormat speaker mask and retain an explicit source-to-platform channel-order
+permutation. Sample reordering, decoder binding, and native transfer remain
+incomplete.
+
+ADR-0291 and PCN-0301 validate that source-to-platform order as a nonempty exact
+permutation and retain a managed-only reorder plan. Sample-buffer application,
+decoder binding, and native transfer remain incomplete.
+
+ADR-0292 and PCN-0302 bind the reorder plan to managed AAC decoder preparation
+only when both retain the exact same PCE topology. Reorder application, native
+decoder binding, and parameter transfer remain incomplete.
+
+ADR-0293 and PCN-0303 apply the exact plan to a complete canonical interleaved
+PCM frame using a size-bounded owned managed copy while preserving all frame
+metadata. Decoder integration, native transfer, rendering, and physical
+execution remain incomplete.
+
+ADR-0294 and PCN-0304 retain the exact PCE mask and channel count as an explicit
+`av_channel_layout_from_mask` transfer requirement after validating preparation
+availability and mask population. Symbol coverage, native transfer, and decoder
+integration remain incomplete.
+
+ADR-0295 and PCN-0305 verify the exact explicit-layout initializer against the
+bounded caller-declared symbol set while retaining source ownership. Runtime
+loading, address and ABI checks, native transfer, and decoder integration remain
+incomplete.
+
+ADR-0296 and PCN-0306 compose PCE managed decoder preparation, explicit mask
+requirement, and declared-symbol coverage into one disposable owner with
+deterministic partial-failure cleanup. Runtime loading, ABI validation, native
+transfer, and decoder execution remain incomplete.
+
+ADR-0273 and
+`docs/reviews/PCN-0283-BOUNDED-ISO-BMFF-ER-ERROR-PROTECTION-SPECIFIC-CONFIG-PREFIX.md`
+parse only the fixed Error Protection Specific Config fields for `epConfig` two
+or three and stop before the nested set/class sequence. Set traversal, the
+complete config end, `directMapping`, and subsequent continuation remain
+incomplete.
+
+ADR-0274 and
+`docs/reviews/PCN-0284-BOUNDED-ISO-BMFF-ER-ERROR-PROTECTION-FIRST-SET-HEADER.md`
+read only the first set's 6-bit class count from that exact prefix end and stop
+before the first class control field. Per-class traversal, later set counts, and
+complete configuration continuation remain incomplete.
+
+ADR-0275 and
+`docs/reviews/PCN-0285-BOUNDED-ISO-BMFF-ER-ERROR-PROTECTION-FIRST-CLASS.md`
+parse the first class through every conditional escape, concatenation, FEC,
+interleave, length, rate, and CRC field while retaining its exact set source and
+end position. Remaining classes, set reordering, later sets, and header
+protection remain incomplete.
+
+ADR-0276 and
+`docs/reviews/PCN-0286-BOUNDED-ISO-BMFF-ER-ERROR-PROTECTION-FIRST-SET.md`
+traverse every class in the first set and require any reordered-output vector to
+be an exact class-index permutation. Later sets, header protection, complete
+configuration continuation, and decoder integration remain incomplete.
+
+ADR-0277 and
+`docs/reviews/PCN-0287-BOUNDED-ISO-BMFF-ER-ERROR-PROTECTION-SECOND-SET-HEADER.md`
+read the second set's 6-bit class count from the exact first-set end only when the
+prefix declares at least two sets. Second-set class bodies, general later-set
+traversal, and header protection remain incomplete.
+
+ADR-0278 and
+`docs/reviews/PCN-0288-BOUNDED-ISO-BMFF-ER-ERROR-PROTECTION-SECOND-SET-FIRST-CLASS.md`
+parse the second set's first class from the exact post-count position across the
+bounded conditional class syntax while retaining second-set ownership. Remaining
+classes, reordered output, later sets, and header protection remain incomplete.
+
+ADR-0279 and
+`docs/reviews/PCN-0289-BOUNDED-ISO-BMFF-ER-ERROR-PROTECTION-SECOND-SET.md`
+traverse every class in the second set and require any reordered-output vector
+to be an exact class-index permutation. Third and later sets, header protection,
+complete configuration continuation, and decoder integration remain incomplete.
+
+ADR-0280 and
+`docs/reviews/PCN-0290-BOUNDED-ISO-BMFF-ER-ERROR-PROTECTION-THIRD-SET-HEADER.md`
+read the third set's 6-bit class count from the exact second-set end only when
+the prefix declares at least three sets. Third-set bodies, general later-set
+traversal, and header protection remain incomplete.
+
+ADR-0281 and PCN-0291 parse the third set's first class from the exact post-count
+position while retaining third-set ownership. ADR-0282 and PCN-0292 traverse the
+complete third set and validate reordered output as an exact permutation. Fourth
+and later sets, general aggregation, and header protection remain incomplete.
+
+ADR-0283 and PCN-0293 generalize traversal across every prefix-declared set,
+retain exact indexed ownership, validate each reordered-output permutation, and
+enforce an aggregate class limit. Header protection and complete configuration
+continuation remain incomplete.
+
+ADR-0284 and PCN-0294 parse the header-protection flag after the exact set
+aggregate and conditionally retain its 5-bit rate and CRC-length parameters.
+`directMapping` and complete AudioSpecificConfig continuation remain incomplete.
+
+ADR-0285 and PCN-0295 compose the complete owned Error Protection Specific
+Config boundary. ADR-0286 and PCN-0296 project `epConfig` three's direct-mapping
+bit without admitting its false value as implemented. False-value policy and
+decoder integration remain incomplete.
+
+ADR-0287 and PCN-0297 explicitly admit enabled direct mapping only. ADR-0288 and
+PCN-0298 require the exact source-bound Specific Config for `epConfig` two and an
+additional admitted mapping decision for value three, while values zero and one
+remain config-free. Decoder integration remains incomplete.
+
+ADR-0289 and PCN-0299 bind that admitted ER configuration to an AAC managed
+decoder preparation only when both retain the exact same GA Specific Config.
+Native parameter transfer and decoder integration remain incomplete.
+
+ADR-0297 and PCN-0307 continue immediate implicit SBR and PS parsing from the
+exact admitted ER configuration end across `epConfig` zero through three,
+including complete protection syntax and direct mapping where required.
+Non-immediate search and decoder integration remain incomplete.
+
+ADR-0298 and PCN-0308 compose that admission and optional immediate SBR/PS into
+source-bound AAC core, extension-signalling, and effective decoder-format intent
+while rejecting pre-admission or mismatched extension facts. Decoder preparation
+and native integration remain incomplete.
+
+ADR-0299 and PCN-0309 bind that exact admitted ER AAC composition to the
+existing managed decoder preparation, retaining the admission, immediate SBR/PS
+facts, effective format, owned padded parameters, transfer plan, declared-symbol
+coverage, and declared capability binding behind one disposable owner. This
+completes the current non-physical managed-only AAC metadata-to-preparation
+chain. Runtime verification, native transfer, decoder integration, and physical
+execution remain incomplete.
+
+ADR-0254 and
+`docs/reviews/PCN-0264-BOUNDED-ISO-BMFF-PCE-AWARE-GA-SPECIFIC-CONFIG-COMPOSITION.md`
+resume object-type-specific GA fields after the exact PCE for channel
+configuration zero, or after the shared prefix otherwise. ER
+post-configuration sync-extension and decoder composition remain incomplete.
+
+ADR-0255 and
+`docs/reviews/PCN-0265-BOUNDED-ISO-BMFF-ER-AUDIO-POST-CONFIG.md` project
+supported ER Audio `epConfig` values zero and one after the exact GA boundary.
+Error Protection Specific Config for values two／three and subsequent sync
+extensions remain incomplete.
+
+ADR-0256 and
+`docs/reviews/PCN-0266-BOUNDED-ISO-BMFF-ER-IMPLICIT-SBR-PS-SYNC-EXTENSION.md`
+reuse the immediate bounded implicit SBR／PS rules from the exact supported ER
+post-config position. Error Protection Specific Config, non-immediate marker
+search, and decoder composition remain incomplete.
+
+ADR-0257 and
+`docs/reviews/PCN-0267-BOUNDED-ISO-BMFF-AAC-CORE-FORMAT-FACTS.md` resolve the
+declared AAC sampling frequency and channel count from indexed configuration or
+exact PCE topology. Effective SBR／PS output format, speaker mapping, extradata,
+and decoder composition remain incomplete.
+
+ADR-0258 and
+`docs/reviews/PCN-0268-BOUNDED-ISO-BMFF-AAC-EXTENSION-SIGNALLING-FACTS.md`
+resolve absent, explicit, or source-bound implicit SBR／PS without mixing forms,
+and select the signalled extension frequency only for present SBR. PS output
+channel policy, extradata, and decoder composition remain incomplete.
+
+ADR-0259 and
+`docs/reviews/PCN-0269-BOUNDED-ISO-BMFF-AAC-DECODER-FORMAT-INTENT.md` project
+effective AAC sampling and channel-count intent, allowing PS only to promote a
+mono core to stereo. Speaker masks, capability validation, extradata, and
+decoder composition remain incomplete.
+
 ### Deferred
 
 - FFmpeg binary bundling or Nova-hosted runtime pack

@@ -124,6 +124,74 @@ Current-state reviews:
 - bounded ISO BMFF `mp4a` AudioSampleEntry projection
 - bounded owned ISO BMFF `avcC` decoder-configuration projection
 - bounded ISO BMFF MPEG-4 descriptor tag／variable-length header parser
+- bounded ISO BMFF AVC length-prefixed sample framing
+- bounded ISO BMFF `esds` outer elementary-stream descriptor projection
+- bounded ISO BMFF audio decoder-config descriptor projection
+- bounded ISO BMFF AudioSpecificConfig leading header projection
+- bounded ISO BMFF GASpecificConfig projection for supported General Audio types
+- bounded ISO BMFF predefined-MP4 SLConfigDescriptor projection
+- bounded ISO BMFF explicit SBR/PS extension projection
+- bounded explicit SBR/PS-to-GASpecificConfig composition
+- bounded immediate implicit SBR sync-extension projection
+- bounded optional implicit PS sync-extension projection
+- bounded ISO BMFF AVC NAL-header classification
+- bounded non-materialized AVC parameter-set prefix planning
+- bounded owned AVC length-prefixed payload materialization
+- bounded owned AVC Annex-B payload materialization
+- bounded sample-only AVC Annex-B materialization
+- explicit source-bound AVC payload-format selection
+- explicit AVC decoder-payload requirements resolution
+- bounded end-to-end managed AVC payload composition
+- bounded ISO BMFF GA Specific Config prefix projection
+- bounded ISO BMFF Program Config Element fixed-header projection
+- bounded ISO BMFF Program Config Element body projection
+- bounded ISO BMFF Program Config Element channel-topology projection
+- bounded ISO BMFF Program Config Element ordered channel-slot mapping
+- explicit ISO BMFF Program Config Element speaker-position assignment
+- bounded ISO BMFF Program Config Element WaveFormat channel-layout projection
+- bounded managed-only ISO BMFF Program Config Element channel-reorder planning
+- bounded PCE-aware ISO BMFF AAC managed decoder preparation
+- bounded managed ISO BMFF Program Config Element interleaved-PCM reordering
+- bounded ISO BMFF PCE AAC explicit channel-layout transfer requirement
+- bounded ISO BMFF PCE AAC channel-layout declared-symbol coverage
+- bounded end-to-end ISO BMFF PCE AAC explicit-layout preparation
+- bounded PCE-aware ISO BMFF GA Specific Config composition
+- bounded ISO BMFF ER Audio `epConfig` projection
+- bounded ISO BMFF ER Audio protection-requirement projection
+- bounded ISO BMFF ER Error Protection Specific Config prefix projection
+- bounded ISO BMFF ER Error Protection first-set header projection
+- bounded ISO BMFF ER Error Protection first-class projection
+- bounded ISO BMFF ER Error Protection first-set traversal
+- bounded ISO BMFF ER Error Protection second-set header projection
+- bounded ISO BMFF ER Error Protection second-set first-class projection
+- bounded ISO BMFF ER Error Protection second-set traversal
+- bounded ISO BMFF ER Error Protection third-set header projection
+- bounded ISO BMFF ER Error Protection third-set first-class projection
+- bounded ISO BMFF ER Error Protection third-set traversal
+- bounded ISO BMFF ER Error Protection general predefined-set traversal
+- bounded ISO BMFF ER Error Protection header-protection projection
+- bounded complete ISO BMFF ER Error Protection Specific Config ownership
+- bounded ISO BMFF ER direct-mapping projection
+- explicit ISO BMFF ER direct-mapping admission
+- bounded ISO BMFF ER configuration admission
+- bounded admitted ISO BMFF ER implicit SBR／PS sync-extension projection
+- bounded admitted ISO BMFF ER AAC decoder-format intent composition
+- bounded admitted ISO BMFF ER AAC managed decoder preparation
+- bounded ISO BMFF ER AAC managed decoder preparation
+- bounded ISO BMFF ER implicit SBR／PS sync-extension projection
+- bounded ISO BMFF AAC core format-facts resolution
+- bounded ISO BMFF AAC extension-signalling facts resolution
+- bounded ISO BMFF AAC decoder-format intent resolution
+- bounded owned ISO BMFF AAC decoder extradata
+- bounded ISO BMFF AAC FFmpeg codec-parameter input adaptation
+- bounded ISO BMFF AAC managed codec-parameter ownership
+- bounded managed-only ISO BMFF AAC parameter-transfer planning
+- bounded managed-only ISO BMFF AAC transfer-symbol coverage
+- bounded managed-only ISO BMFF AAC declared decoder-capability binding
+- bounded end-to-end ISO BMFF AAC managed decoder preparation
+- bounded ISO BMFF AAC `mp4a`／decoder-format consistency facts
+- explicit ISO BMFF AAC sample-entry consistency admission policy
+- bounded sample-entry-aware ISO BMFF AAC managed decoder preparation
 - exact ISO BMFF `stts`／`stsz`／`stz2` sample-count reconciliation
 - managed frame copy、conversion、awaited delivery
 - opened-decoder `avcodec_flush_buffers` ownership boundary

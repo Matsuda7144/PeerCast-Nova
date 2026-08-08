@@ -13,22 +13,167 @@ application information, sample-derived audio duration, the default audio-only
 250 ms production cutoff, and the opened-decoder `avcodec_flush_buffers`
 boundary.
 
-ADR-0173 through ADR-0231 add the ISO BMFF / MP4 foundation from bounded box
+ADR-0173 through ADR-0299 add the ISO BMFF / MP4 foundation from bounded box
 headers and traversal through sample tables, reconciliation and lookup, timing
 and edit mapping, edited-sample payload and packet-candidate boundaries,
 `avc1` / `avc3`, `mp4a`, bounded owned `avcC`, and the MPEG-4 descriptor
-variable-length header parser.
+variable-length header parser, followed by bounded AVC sample framing and the
+`esds` elementary-stream and decoder-config hierarchy, AudioSpecificConfig and
+GASpecificConfig fields, predefined-MP4 SL configuration, and explicit SBR/PS
+extension-to-core configuration composition plus immediate implicit SBR/PS
+sync extensions for supported direct non-ER core types.
+The AVC path additionally classifies framed NAL headers, projects a bounded
+`avcC` parameter-set prefix plan, materializes owned length-prefixed or
+four-byte-start-code Annex-B payloads with or without parameter sets, and
+selects those forms explicitly with source identity, and composes only the form
+required by caller-stated decoder payload requirements.
+The AAC path additionally exposes the exact GA prefix and the fixed Program
+Config Element header and element counts when channel configuration is zero.
 
-AVC packet framing, `esds` hierarchy semantics, production MP4 demux
-composition, nested-box and streaming policy, and fragmented MP4 remain future
-work.
+Non-immediate AAC sync-extension search, verified runtime capability discovery,
+native decoder integration, production MP4 demux composition, nested-box and
+streaming policy, and fragmented MP4 remain future work.
 
 - `docs/adr/ADR-0167-opt-in-decoded-buffer-duration-cutoff.md`
 - `docs/adr/ADR-0173-bounded-iso-bmff-box-header-parser.md`
 - `docs/adr/ADR-0231-bounded-iso-bmff-mpeg4-descriptor-header.md`
+- `docs/adr/ADR-0232-bounded-iso-bmff-avc-sample-framing.md`
+- `docs/adr/ADR-0233-bounded-iso-bmff-elementary-stream-descriptor.md`
+- `docs/adr/ADR-0235-bounded-iso-bmff-audio-specific-config-header.md`
+- `docs/adr/ADR-0236-bounded-iso-bmff-ga-specific-config.md`
+- `docs/adr/ADR-0237-bounded-iso-bmff-sl-config-descriptor.md`
+- `docs/adr/ADR-0238-bounded-iso-bmff-explicit-sbr-ps-extension.md`
+- `docs/adr/ADR-0239-bounded-iso-bmff-explicit-extension-ga-composition.md`
+- `docs/adr/ADR-0240-bounded-iso-bmff-implicit-sbr-sync-extension.md`
+- `docs/adr/ADR-0241-bounded-iso-bmff-implicit-ps-sync-extension.md`
+- `docs/adr/ADR-0242-bounded-iso-bmff-avc-nal-unit-classification.md`
+- `docs/adr/ADR-0243-bounded-iso-bmff-avc-parameter-set-prefix-plan.md`
+- `docs/adr/ADR-0244-bounded-iso-bmff-avc-length-prefixed-payload-materialization.md`
+- `docs/adr/ADR-0245-bounded-iso-bmff-avc-annex-b-payload-materialization.md`
+- `docs/adr/ADR-0246-bounded-iso-bmff-avc-sample-only-annex-b-materialization.md`
+- `docs/adr/ADR-0247-explicit-iso-bmff-avc-payload-selection.md`
+- `docs/adr/ADR-0248-explicit-iso-bmff-avc-decoder-payload-requirements.md`
+- `docs/adr/ADR-0249-bounded-iso-bmff-avc-payload-composition.md`
+- `docs/adr/ADR-0250-bounded-iso-bmff-ga-specific-config-prefix.md`
+- `docs/adr/ADR-0251-bounded-iso-bmff-program-config-element-header.md`
+- `docs/adr/ADR-0252-bounded-iso-bmff-program-config-element.md`
+- `docs/adr/ADR-0253-bounded-iso-bmff-program-config-channel-topology.md`
+- `docs/adr/ADR-0254-bounded-iso-bmff-pce-aware-ga-specific-config-composition.md`
+- `docs/adr/ADR-0255-bounded-iso-bmff-er-audio-post-config.md`
+- `docs/adr/ADR-0256-bounded-iso-bmff-er-implicit-sbr-ps-sync-extension.md`
+- `docs/adr/ADR-0257-bounded-iso-bmff-aac-core-format-facts.md`
+- `docs/adr/ADR-0258-bounded-iso-bmff-aac-extension-signalling-facts.md`
+- `docs/adr/ADR-0259-bounded-iso-bmff-aac-decoder-format-intent.md`
+- `docs/adr/ADR-0260-bounded-iso-bmff-aac-decoder-extradata.md`
+- `docs/adr/ADR-0261-bounded-iso-bmff-aac-ffmpeg-codec-parameters-input.md`
+- `docs/adr/ADR-0262-bounded-iso-bmff-aac-managed-codec-parameters.md`
+- `docs/adr/ADR-0263-bounded-iso-bmff-aac-parameter-transfer-plan.md`
+- `docs/adr/ADR-0264-bounded-iso-bmff-program-config-channel-slot-map.md`
+- `docs/adr/ADR-0265-bounded-iso-bmff-aac-transfer-symbol-coverage.md`
+- `docs/adr/ADR-0266-bounded-iso-bmff-aac-declared-decoder-capability-binding.md`
+- `docs/adr/ADR-0267-bounded-iso-bmff-er-audio-protection-requirement.md`
+- `docs/adr/ADR-0268-bounded-iso-bmff-aac-managed-decoder-preparation.md`
+- `docs/adr/ADR-0269-bounded-iso-bmff-aac-sample-entry-consistency-facts.md`
+- `docs/adr/ADR-0270-explicit-iso-bmff-aac-sample-entry-consistency-policy.md`
+- `docs/adr/ADR-0271-bounded-iso-bmff-aac-sample-entry-managed-decoder-preparation.md`
+- `docs/adr/ADR-0272-explicit-iso-bmff-program-config-speaker-position-assignment.md`
+- `docs/adr/ADR-0273-bounded-iso-bmff-er-error-protection-specific-config-prefix.md`
+- `docs/adr/ADR-0274-bounded-iso-bmff-er-error-protection-first-set-header.md`
+- `docs/adr/ADR-0275-bounded-iso-bmff-er-error-protection-first-class.md`
+- `docs/adr/ADR-0276-bounded-iso-bmff-er-error-protection-first-set.md`
+- `docs/adr/ADR-0277-bounded-iso-bmff-er-error-protection-second-set-header.md`
+- `docs/adr/ADR-0278-bounded-iso-bmff-er-error-protection-second-set-first-class.md`
+- `docs/adr/ADR-0279-bounded-iso-bmff-er-error-protection-second-set.md`
+- `docs/adr/ADR-0280-bounded-iso-bmff-er-error-protection-third-set-header.md`
+- `docs/adr/ADR-0281-bounded-iso-bmff-er-error-protection-third-set-first-class.md`
+- `docs/adr/ADR-0282-bounded-iso-bmff-er-error-protection-third-set.md`
+- `docs/adr/ADR-0283-bounded-iso-bmff-er-error-protection-predefined-sets.md`
+- `docs/adr/ADR-0284-bounded-iso-bmff-er-error-protection-header-protection.md`
+- `docs/adr/ADR-0285-bounded-iso-bmff-er-error-protection-specific-config.md`
+- `docs/adr/ADR-0286-bounded-iso-bmff-er-direct-mapping.md`
+- `docs/adr/ADR-0287-explicit-iso-bmff-er-direct-mapping-admission.md`
+- `docs/adr/ADR-0288-bounded-iso-bmff-er-configuration-admission.md`
+- `docs/adr/ADR-0289-bounded-iso-bmff-er-aac-managed-decoder-preparation.md`
+- `docs/adr/ADR-0290-bounded-iso-bmff-program-config-waveformat-channel-layout.md`
+- `docs/adr/ADR-0291-bounded-iso-bmff-program-config-channel-reorder-plan.md`
+- `docs/adr/ADR-0292-bounded-iso-bmff-program-config-aac-managed-decoder-preparation.md`
+- `docs/adr/ADR-0293-bounded-iso-bmff-program-config-interleaved-pcm-reorder.md`
+- `docs/adr/ADR-0294-bounded-iso-bmff-program-config-aac-channel-layout-requirement.md`
+- `docs/adr/ADR-0295-bounded-iso-bmff-program-config-aac-channel-layout-symbol-coverage.md`
+- `docs/adr/ADR-0296-bounded-iso-bmff-program-config-aac-explicit-layout-preparation.md`
+- `docs/adr/ADR-0297-bounded-iso-bmff-admitted-er-implicit-sbr-ps-sync-extension.md`
+- `docs/adr/ADR-0298-bounded-iso-bmff-admitted-er-aac-decoder-format-intent.md`
+- `docs/adr/ADR-0299-bounded-iso-bmff-admitted-er-aac-managed-decoder-preparation.md`
 - `docs/reviews/PCN-0177-OPT-IN-DECODED-BUFFER-DURATION-CUTOFF.md`
 - `docs/reviews/PCN-0183-BOUNDED-ISO-BMFF-BOX-HEADER-PARSER.md`
 - `docs/reviews/PCN-0241-BOUNDED-ISO-BMFF-MPEG4-DESCRIPTOR-HEADER.md`
+- `docs/reviews/PCN-0242-BOUNDED-ISO-BMFF-AVC-SAMPLE-FRAMING.md`
+- `docs/reviews/PCN-0243-BOUNDED-ISO-BMFF-ELEMENTARY-STREAM-DESCRIPTOR.md`
+- `docs/reviews/PCN-0245-BOUNDED-ISO-BMFF-AUDIO-SPECIFIC-CONFIG-HEADER.md`
+- `docs/reviews/PCN-0246-BOUNDED-ISO-BMFF-GA-SPECIFIC-CONFIG.md`
+- `docs/reviews/PCN-0247-BOUNDED-ISO-BMFF-SL-CONFIG-DESCRIPTOR.md`
+- `docs/reviews/PCN-0248-BOUNDED-ISO-BMFF-EXPLICIT-SBR-PS-EXTENSION.md`
+- `docs/reviews/PCN-0249-BOUNDED-ISO-BMFF-EXPLICIT-EXTENSION-GA-COMPOSITION.md`
+- `docs/reviews/PCN-0250-BOUNDED-ISO-BMFF-IMPLICIT-SBR-SYNC-EXTENSION.md`
+- `docs/reviews/PCN-0251-BOUNDED-ISO-BMFF-IMPLICIT-PS-SYNC-EXTENSION.md`
+- `docs/reviews/PCN-0252-BOUNDED-ISO-BMFF-AVC-NAL-UNIT-CLASSIFICATION.md`
+- `docs/reviews/PCN-0253-BOUNDED-ISO-BMFF-AVC-PARAMETER-SET-PREFIX-PLAN.md`
+- `docs/reviews/PCN-0254-BOUNDED-ISO-BMFF-AVC-LENGTH-PREFIXED-PAYLOAD-MATERIALIZATION.md`
+- `docs/reviews/PCN-0255-BOUNDED-ISO-BMFF-AVC-ANNEX-B-PAYLOAD-MATERIALIZATION.md`
+- `docs/reviews/PCN-0256-BOUNDED-ISO-BMFF-AVC-SAMPLE-ONLY-ANNEX-B-MATERIALIZATION.md`
+- `docs/reviews/PCN-0257-EXPLICIT-ISO-BMFF-AVC-PAYLOAD-SELECTION.md`
+- `docs/reviews/PCN-0258-EXPLICIT-ISO-BMFF-AVC-DECODER-PAYLOAD-REQUIREMENTS.md`
+- `docs/reviews/PCN-0259-BOUNDED-ISO-BMFF-AVC-PAYLOAD-COMPOSITION.md`
+- `docs/reviews/PCN-0260-BOUNDED-ISO-BMFF-GA-SPECIFIC-CONFIG-PREFIX.md`
+- `docs/reviews/PCN-0261-BOUNDED-ISO-BMFF-PROGRAM-CONFIG-ELEMENT-HEADER.md`
+- `docs/reviews/PCN-0262-BOUNDED-ISO-BMFF-PROGRAM-CONFIG-ELEMENT.md`
+- `docs/reviews/PCN-0263-BOUNDED-ISO-BMFF-PROGRAM-CONFIG-CHANNEL-TOPOLOGY.md`
+- `docs/reviews/PCN-0264-BOUNDED-ISO-BMFF-PCE-AWARE-GA-SPECIFIC-CONFIG-COMPOSITION.md`
+- `docs/reviews/PCN-0265-BOUNDED-ISO-BMFF-ER-AUDIO-POST-CONFIG.md`
+- `docs/reviews/PCN-0266-BOUNDED-ISO-BMFF-ER-IMPLICIT-SBR-PS-SYNC-EXTENSION.md`
+- `docs/reviews/PCN-0267-BOUNDED-ISO-BMFF-AAC-CORE-FORMAT-FACTS.md`
+- `docs/reviews/PCN-0268-BOUNDED-ISO-BMFF-AAC-EXTENSION-SIGNALLING-FACTS.md`
+- `docs/reviews/PCN-0269-BOUNDED-ISO-BMFF-AAC-DECODER-FORMAT-INTENT.md`
+- `docs/reviews/PCN-0270-BOUNDED-ISO-BMFF-AAC-DECODER-EXTRADATA.md`
+- `docs/reviews/PCN-0271-BOUNDED-ISO-BMFF-AAC-FFMPEG-CODEC-PARAMETERS-INPUT.md`
+- `docs/reviews/PCN-0272-BOUNDED-ISO-BMFF-AAC-MANAGED-CODEC-PARAMETERS.md`
+- `docs/reviews/PCN-0273-BOUNDED-ISO-BMFF-AAC-PARAMETER-TRANSFER-PLAN.md`
+- `docs/reviews/PCN-0274-BOUNDED-ISO-BMFF-PROGRAM-CONFIG-CHANNEL-SLOT-MAP.md`
+- `docs/reviews/PCN-0275-BOUNDED-ISO-BMFF-AAC-TRANSFER-SYMBOL-COVERAGE.md`
+- `docs/reviews/PCN-0276-BOUNDED-ISO-BMFF-AAC-DECLARED-DECODER-CAPABILITY-BINDING.md`
+- `docs/reviews/PCN-0277-BOUNDED-ISO-BMFF-ER-AUDIO-PROTECTION-REQUIREMENT.md`
+- `docs/reviews/PCN-0278-BOUNDED-ISO-BMFF-AAC-MANAGED-DECODER-PREPARATION.md`
+- `docs/reviews/PCN-0279-BOUNDED-ISO-BMFF-AAC-SAMPLE-ENTRY-CONSISTENCY-FACTS.md`
+- `docs/reviews/PCN-0280-EXPLICIT-ISO-BMFF-AAC-SAMPLE-ENTRY-CONSISTENCY-POLICY.md`
+- `docs/reviews/PCN-0281-BOUNDED-ISO-BMFF-AAC-SAMPLE-ENTRY-MANAGED-DECODER-PREPARATION.md`
+- `docs/reviews/PCN-0282-EXPLICIT-ISO-BMFF-PROGRAM-CONFIG-SPEAKER-POSITION-ASSIGNMENT.md`
+- `docs/reviews/PCN-0283-BOUNDED-ISO-BMFF-ER-ERROR-PROTECTION-SPECIFIC-CONFIG-PREFIX.md`
+- `docs/reviews/PCN-0284-BOUNDED-ISO-BMFF-ER-ERROR-PROTECTION-FIRST-SET-HEADER.md`
+- `docs/reviews/PCN-0285-BOUNDED-ISO-BMFF-ER-ERROR-PROTECTION-FIRST-CLASS.md`
+- `docs/reviews/PCN-0286-BOUNDED-ISO-BMFF-ER-ERROR-PROTECTION-FIRST-SET.md`
+- `docs/reviews/PCN-0287-BOUNDED-ISO-BMFF-ER-ERROR-PROTECTION-SECOND-SET-HEADER.md`
+- `docs/reviews/PCN-0288-BOUNDED-ISO-BMFF-ER-ERROR-PROTECTION-SECOND-SET-FIRST-CLASS.md`
+- `docs/reviews/PCN-0289-BOUNDED-ISO-BMFF-ER-ERROR-PROTECTION-SECOND-SET.md`
+- `docs/reviews/PCN-0290-BOUNDED-ISO-BMFF-ER-ERROR-PROTECTION-THIRD-SET-HEADER.md`
+- `docs/reviews/PCN-0291-BOUNDED-ISO-BMFF-ER-ERROR-PROTECTION-THIRD-SET-FIRST-CLASS.md`
+- `docs/reviews/PCN-0292-BOUNDED-ISO-BMFF-ER-ERROR-PROTECTION-THIRD-SET.md`
+- `docs/reviews/PCN-0293-BOUNDED-ISO-BMFF-ER-ERROR-PROTECTION-PREDEFINED-SETS.md`
+- `docs/reviews/PCN-0294-BOUNDED-ISO-BMFF-ER-ERROR-PROTECTION-HEADER-PROTECTION.md`
+- `docs/reviews/PCN-0295-BOUNDED-ISO-BMFF-ER-ERROR-PROTECTION-SPECIFIC-CONFIG.md`
+- `docs/reviews/PCN-0296-BOUNDED-ISO-BMFF-ER-DIRECT-MAPPING.md`
+- `docs/reviews/PCN-0297-EXPLICIT-ISO-BMFF-ER-DIRECT-MAPPING-ADMISSION.md`
+- `docs/reviews/PCN-0298-BOUNDED-ISO-BMFF-ER-CONFIGURATION-ADMISSION.md`
+- `docs/reviews/PCN-0299-BOUNDED-ISO-BMFF-ER-AAC-MANAGED-DECODER-PREPARATION.md`
+- `docs/reviews/PCN-0300-BOUNDED-ISO-BMFF-PROGRAM-CONFIG-WAVEFORMAT-CHANNEL-LAYOUT.md`
+- `docs/reviews/PCN-0301-BOUNDED-ISO-BMFF-PROGRAM-CONFIG-CHANNEL-REORDER-PLAN.md`
+- `docs/reviews/PCN-0302-BOUNDED-ISO-BMFF-PROGRAM-CONFIG-AAC-MANAGED-DECODER-PREPARATION.md`
+- `docs/reviews/PCN-0303-BOUNDED-ISO-BMFF-PROGRAM-CONFIG-INTERLEAVED-PCM-REORDER.md`
+- `docs/reviews/PCN-0304-BOUNDED-ISO-BMFF-PROGRAM-CONFIG-AAC-CHANNEL-LAYOUT-REQUIREMENT.md`
+- `docs/reviews/PCN-0305-BOUNDED-ISO-BMFF-PROGRAM-CONFIG-AAC-CHANNEL-LAYOUT-SYMBOL-COVERAGE.md`
+- `docs/reviews/PCN-0306-BOUNDED-ISO-BMFF-PROGRAM-CONFIG-AAC-EXPLICIT-LAYOUT-PREPARATION.md`
+- `docs/reviews/PCN-0307-BOUNDED-ISO-BMFF-ADMITTED-ER-IMPLICIT-SBR-PS-SYNC-EXTENSION.md`
+- `docs/reviews/PCN-0308-BOUNDED-ISO-BMFF-ADMITTED-ER-AAC-DECODER-FORMAT-INTENT.md`
+- `docs/reviews/PCN-0309-BOUNDED-ISO-BMFF-ADMITTED-ER-AAC-MANAGED-DECODER-PREPARATION.md`
 
 ADR-0158 was skipped by assignment error. It is a permanent numbering-error gap
 and must not be retroactively reused, following the recorded ADR-0082 and
@@ -287,16 +432,16 @@ The bounded FLV decoder configures the exact parser stream time base through pub
 
 ## 現在地
 
-**Post-0.0.10e — Bounded ISO BMFF / MP4 Parser Foundation — Complete through ADR-0231**
+**Post-0.0.10e — Bounded ISO BMFF / MP4 Parser Foundation — Complete through ADR-0299**
 
 - ADR-0167 through ADR-0172 complete the bounded non-physical playback and application prerequisites;
-- ADR-0173 through ADR-0231 complete the current managed ISO BMFF / MP4 parser foundation through bounded `avcC` and MPEG-4 descriptor headers;
+- ADR-0173 through ADR-0299 complete the current managed ISO BMFF / MP4 parser foundation through bounded `avcC`, AVC sample framing and NAL classification, parameter-set planning, owned length-prefixed／Annex-B materialization, explicit requirement resolution and bounded composition, the `esds` hierarchy, General Audio and predefined-MP4 SL configuration, explicit plus supported immediate implicit SBR/PS signalling, syntactic Program Config Element parsing, channel-count topology, ordered channel-slot mapping, explicit speaker-position assignment, WaveFormat layout projection, managed-only channel-reorder planning, PCE-aware managed decoder preparation, bounded interleaved-PCM reorder materialization, explicit FFmpeg channel-layout requirements, declared-symbol coverage and end-to-end managed preparation, PCE-aware GA continuation, supported ER `epConfig`, complete bounded Error Protection Specific Config ownership, direct-mapping facts and enabled-only admission, source-bound ER configuration admission and managed AAC preparation, admitted ER immediate implicit SBR/PS, exact decoder-format intent and final managed decoder preparation, AAC core and extension-signalling facts, decoder-format intent, owned extradata, FFmpeg codec-parameter input adaptation, managed padded parameter ownership, managed-only native-transfer requirement planning, bounded declared-symbol coverage, declared decoder-capability binding, end-to-end managed AAC decoder preparation, `mp4a`/effective-format consistency facts, explicit mismatch admission policy, and sample-entry-aware managed decoder preparation;
 - ISO BMFF / MP4 is the second bounded container-parser family alongside the existing FLV v1 parser;
-- current implementation includes box traversal, movie／track／media metadata, sample tables and reconciliation, chunk／sample／byte-range／`mdat` lookup, timing and edit mapping, edited-sample payload and packet-candidate boundaries, and `avc1`／`avc3`／`mp4a` sample-entry projection;
-- AVC packet framing, `esds` hierarchy semantics, production MP4 demux composition, nested-box and streaming policy, and fragmented MP4 remain incomplete;
-- current reviews span `docs/reviews/PCN-0177-OPT-IN-DECODED-BUFFER-DURATION-CUTOFF.md` through `docs/reviews/PCN-0241-BOUNDED-ISO-BMFF-MPEG4-DESCRIPTOR-HEADER.md`;
+- current implementation includes box traversal, movie／track／media metadata, sample tables and reconciliation, chunk／sample／byte-range／`mdat` lookup, timing and edit mapping, edited-sample payload and packet-candidate boundaries, `avc1`／`avc3`／`mp4a` sample-entry projection, bounded AVC sample framing, and bounded MPEG-4 audio descriptor metadata through explicit SBR/PS-to-GASpecificConfig composition and predefined-MP4 SL configuration;
+- AAC ER non-immediate sync-extension search, Program Config Element runtime decoder-layout binding, AVC runtime capability discovery and decoder integration, production MP4 demux composition, nested-box and streaming policy, and fragmented MP4 remain incomplete;
+- current reviews span `docs/reviews/PCN-0177-OPT-IN-DECODED-BUFFER-DURATION-CUTOFF.md` through `docs/reviews/PCN-0309-BOUNDED-ISO-BMFF-ADMITTED-ER-AAC-MANAGED-DECODER-PREPARATION.md`;
 - ADR-0158 is a permanent numbering-error gap caused by assignment error, following ADR-0082 and ADR-0096, and must not be retroactively reused;
-- next: continue with AVC packet framing and `esds` hierarchy semantics before selecting production MP4 demux composition.
+- next: bind the admitted ER decoder-format intent to managed decoder preparation without native execution.
 
 **0.0.10e — Shared Windows Application Ownership Boundary — Complete**
 
@@ -357,9 +502,143 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 - `docs/adr/ADR-0167-opt-in-decoded-buffer-duration-cutoff.md`
 - `docs/adr/ADR-0173-bounded-iso-bmff-box-header-parser.md`
 - `docs/adr/ADR-0231-bounded-iso-bmff-mpeg4-descriptor-header.md`
+- `docs/adr/ADR-0232-bounded-iso-bmff-avc-sample-framing.md`
+- `docs/adr/ADR-0233-bounded-iso-bmff-elementary-stream-descriptor.md`
+- `docs/adr/ADR-0235-bounded-iso-bmff-audio-specific-config-header.md`
+- `docs/adr/ADR-0236-bounded-iso-bmff-ga-specific-config.md`
+- `docs/adr/ADR-0237-bounded-iso-bmff-sl-config-descriptor.md`
+- `docs/adr/ADR-0238-bounded-iso-bmff-explicit-sbr-ps-extension.md`
+- `docs/adr/ADR-0239-bounded-iso-bmff-explicit-extension-ga-composition.md`
+- `docs/adr/ADR-0240-bounded-iso-bmff-implicit-sbr-sync-extension.md`
+- `docs/adr/ADR-0241-bounded-iso-bmff-implicit-ps-sync-extension.md`
+- `docs/adr/ADR-0242-bounded-iso-bmff-avc-nal-unit-classification.md`
+- `docs/adr/ADR-0243-bounded-iso-bmff-avc-parameter-set-prefix-plan.md`
+- `docs/adr/ADR-0244-bounded-iso-bmff-avc-length-prefixed-payload-materialization.md`
+- `docs/adr/ADR-0245-bounded-iso-bmff-avc-annex-b-payload-materialization.md`
+- `docs/adr/ADR-0246-bounded-iso-bmff-avc-sample-only-annex-b-materialization.md`
+- `docs/adr/ADR-0247-explicit-iso-bmff-avc-payload-selection.md`
+- `docs/adr/ADR-0248-explicit-iso-bmff-avc-decoder-payload-requirements.md`
+- `docs/adr/ADR-0249-bounded-iso-bmff-avc-payload-composition.md`
+- `docs/adr/ADR-0250-bounded-iso-bmff-ga-specific-config-prefix.md`
+- `docs/adr/ADR-0251-bounded-iso-bmff-program-config-element-header.md`
+- `docs/adr/ADR-0252-bounded-iso-bmff-program-config-element.md`
+- `docs/adr/ADR-0253-bounded-iso-bmff-program-config-channel-topology.md`
+- `docs/adr/ADR-0254-bounded-iso-bmff-pce-aware-ga-specific-config-composition.md`
+- `docs/adr/ADR-0255-bounded-iso-bmff-er-audio-post-config.md`
+- `docs/adr/ADR-0256-bounded-iso-bmff-er-implicit-sbr-ps-sync-extension.md`
+- `docs/adr/ADR-0257-bounded-iso-bmff-aac-core-format-facts.md`
+- `docs/adr/ADR-0258-bounded-iso-bmff-aac-extension-signalling-facts.md`
+- `docs/adr/ADR-0259-bounded-iso-bmff-aac-decoder-format-intent.md`
+- `docs/adr/ADR-0260-bounded-iso-bmff-aac-decoder-extradata.md`
+- `docs/adr/ADR-0261-bounded-iso-bmff-aac-ffmpeg-codec-parameters-input.md`
+- `docs/adr/ADR-0262-bounded-iso-bmff-aac-managed-codec-parameters.md`
+- `docs/adr/ADR-0263-bounded-iso-bmff-aac-parameter-transfer-plan.md`
+- `docs/adr/ADR-0264-bounded-iso-bmff-program-config-channel-slot-map.md`
+- `docs/adr/ADR-0265-bounded-iso-bmff-aac-transfer-symbol-coverage.md`
+- `docs/adr/ADR-0266-bounded-iso-bmff-aac-declared-decoder-capability-binding.md`
+- `docs/adr/ADR-0267-bounded-iso-bmff-er-audio-protection-requirement.md`
+- `docs/adr/ADR-0268-bounded-iso-bmff-aac-managed-decoder-preparation.md`
+- `docs/adr/ADR-0269-bounded-iso-bmff-aac-sample-entry-consistency-facts.md`
+- `docs/adr/ADR-0270-explicit-iso-bmff-aac-sample-entry-consistency-policy.md`
+- `docs/adr/ADR-0271-bounded-iso-bmff-aac-sample-entry-managed-decoder-preparation.md`
+- `docs/adr/ADR-0272-explicit-iso-bmff-program-config-speaker-position-assignment.md`
+- `docs/adr/ADR-0273-bounded-iso-bmff-er-error-protection-specific-config-prefix.md`
+- `docs/adr/ADR-0274-bounded-iso-bmff-er-error-protection-first-set-header.md`
+- `docs/adr/ADR-0275-bounded-iso-bmff-er-error-protection-first-class.md`
+- `docs/adr/ADR-0276-bounded-iso-bmff-er-error-protection-first-set.md`
+- `docs/adr/ADR-0277-bounded-iso-bmff-er-error-protection-second-set-header.md`
+- `docs/adr/ADR-0278-bounded-iso-bmff-er-error-protection-second-set-first-class.md`
+- `docs/adr/ADR-0279-bounded-iso-bmff-er-error-protection-second-set.md`
+- `docs/adr/ADR-0280-bounded-iso-bmff-er-error-protection-third-set-header.md`
+- `docs/adr/ADR-0281-bounded-iso-bmff-er-error-protection-third-set-first-class.md`
+- `docs/adr/ADR-0282-bounded-iso-bmff-er-error-protection-third-set.md`
+- `docs/adr/ADR-0283-bounded-iso-bmff-er-error-protection-predefined-sets.md`
+- `docs/adr/ADR-0284-bounded-iso-bmff-er-error-protection-header-protection.md`
+- `docs/adr/ADR-0285-bounded-iso-bmff-er-error-protection-specific-config.md`
+- `docs/adr/ADR-0286-bounded-iso-bmff-er-direct-mapping.md`
+- `docs/adr/ADR-0287-explicit-iso-bmff-er-direct-mapping-admission.md`
+- `docs/adr/ADR-0288-bounded-iso-bmff-er-configuration-admission.md`
+- `docs/adr/ADR-0289-bounded-iso-bmff-er-aac-managed-decoder-preparation.md`
+- `docs/adr/ADR-0290-bounded-iso-bmff-program-config-waveformat-channel-layout.md`
+- `docs/adr/ADR-0291-bounded-iso-bmff-program-config-channel-reorder-plan.md`
+- `docs/adr/ADR-0292-bounded-iso-bmff-program-config-aac-managed-decoder-preparation.md`
+- `docs/adr/ADR-0293-bounded-iso-bmff-program-config-interleaved-pcm-reorder.md`
+- `docs/adr/ADR-0294-bounded-iso-bmff-program-config-aac-channel-layout-requirement.md`
+- `docs/adr/ADR-0295-bounded-iso-bmff-program-config-aac-channel-layout-symbol-coverage.md`
+- `docs/adr/ADR-0296-bounded-iso-bmff-program-config-aac-explicit-layout-preparation.md`
+- `docs/adr/ADR-0297-bounded-iso-bmff-admitted-er-implicit-sbr-ps-sync-extension.md`
+- `docs/adr/ADR-0298-bounded-iso-bmff-admitted-er-aac-decoder-format-intent.md`
+- `docs/adr/ADR-0299-bounded-iso-bmff-admitted-er-aac-managed-decoder-preparation.md`
 - `docs/reviews/PCN-0177-OPT-IN-DECODED-BUFFER-DURATION-CUTOFF.md`
 - `docs/reviews/PCN-0183-BOUNDED-ISO-BMFF-BOX-HEADER-PARSER.md`
 - `docs/reviews/PCN-0241-BOUNDED-ISO-BMFF-MPEG4-DESCRIPTOR-HEADER.md`
+- `docs/reviews/PCN-0242-BOUNDED-ISO-BMFF-AVC-SAMPLE-FRAMING.md`
+- `docs/reviews/PCN-0243-BOUNDED-ISO-BMFF-ELEMENTARY-STREAM-DESCRIPTOR.md`
+- `docs/reviews/PCN-0245-BOUNDED-ISO-BMFF-AUDIO-SPECIFIC-CONFIG-HEADER.md`
+- `docs/reviews/PCN-0246-BOUNDED-ISO-BMFF-GA-SPECIFIC-CONFIG.md`
+- `docs/reviews/PCN-0247-BOUNDED-ISO-BMFF-SL-CONFIG-DESCRIPTOR.md`
+- `docs/reviews/PCN-0248-BOUNDED-ISO-BMFF-EXPLICIT-SBR-PS-EXTENSION.md`
+- `docs/reviews/PCN-0249-BOUNDED-ISO-BMFF-EXPLICIT-EXTENSION-GA-COMPOSITION.md`
+- `docs/reviews/PCN-0250-BOUNDED-ISO-BMFF-IMPLICIT-SBR-SYNC-EXTENSION.md`
+- `docs/reviews/PCN-0251-BOUNDED-ISO-BMFF-IMPLICIT-PS-SYNC-EXTENSION.md`
+- `docs/reviews/PCN-0252-BOUNDED-ISO-BMFF-AVC-NAL-UNIT-CLASSIFICATION.md`
+- `docs/reviews/PCN-0253-BOUNDED-ISO-BMFF-AVC-PARAMETER-SET-PREFIX-PLAN.md`
+- `docs/reviews/PCN-0254-BOUNDED-ISO-BMFF-AVC-LENGTH-PREFIXED-PAYLOAD-MATERIALIZATION.md`
+- `docs/reviews/PCN-0255-BOUNDED-ISO-BMFF-AVC-ANNEX-B-PAYLOAD-MATERIALIZATION.md`
+- `docs/reviews/PCN-0256-BOUNDED-ISO-BMFF-AVC-SAMPLE-ONLY-ANNEX-B-MATERIALIZATION.md`
+- `docs/reviews/PCN-0257-EXPLICIT-ISO-BMFF-AVC-PAYLOAD-SELECTION.md`
+- `docs/reviews/PCN-0258-EXPLICIT-ISO-BMFF-AVC-DECODER-PAYLOAD-REQUIREMENTS.md`
+- `docs/reviews/PCN-0259-BOUNDED-ISO-BMFF-AVC-PAYLOAD-COMPOSITION.md`
+- `docs/reviews/PCN-0260-BOUNDED-ISO-BMFF-GA-SPECIFIC-CONFIG-PREFIX.md`
+- `docs/reviews/PCN-0261-BOUNDED-ISO-BMFF-PROGRAM-CONFIG-ELEMENT-HEADER.md`
+- `docs/reviews/PCN-0262-BOUNDED-ISO-BMFF-PROGRAM-CONFIG-ELEMENT.md`
+- `docs/reviews/PCN-0263-BOUNDED-ISO-BMFF-PROGRAM-CONFIG-CHANNEL-TOPOLOGY.md`
+- `docs/reviews/PCN-0264-BOUNDED-ISO-BMFF-PCE-AWARE-GA-SPECIFIC-CONFIG-COMPOSITION.md`
+- `docs/reviews/PCN-0265-BOUNDED-ISO-BMFF-ER-AUDIO-POST-CONFIG.md`
+- `docs/reviews/PCN-0266-BOUNDED-ISO-BMFF-ER-IMPLICIT-SBR-PS-SYNC-EXTENSION.md`
+- `docs/reviews/PCN-0267-BOUNDED-ISO-BMFF-AAC-CORE-FORMAT-FACTS.md`
+- `docs/reviews/PCN-0268-BOUNDED-ISO-BMFF-AAC-EXTENSION-SIGNALLING-FACTS.md`
+- `docs/reviews/PCN-0269-BOUNDED-ISO-BMFF-AAC-DECODER-FORMAT-INTENT.md`
+- `docs/reviews/PCN-0270-BOUNDED-ISO-BMFF-AAC-DECODER-EXTRADATA.md`
+- `docs/reviews/PCN-0271-BOUNDED-ISO-BMFF-AAC-FFMPEG-CODEC-PARAMETERS-INPUT.md`
+- `docs/reviews/PCN-0272-BOUNDED-ISO-BMFF-AAC-MANAGED-CODEC-PARAMETERS.md`
+- `docs/reviews/PCN-0273-BOUNDED-ISO-BMFF-AAC-PARAMETER-TRANSFER-PLAN.md`
+- `docs/reviews/PCN-0274-BOUNDED-ISO-BMFF-PROGRAM-CONFIG-CHANNEL-SLOT-MAP.md`
+- `docs/reviews/PCN-0275-BOUNDED-ISO-BMFF-AAC-TRANSFER-SYMBOL-COVERAGE.md`
+- `docs/reviews/PCN-0276-BOUNDED-ISO-BMFF-AAC-DECLARED-DECODER-CAPABILITY-BINDING.md`
+- `docs/reviews/PCN-0277-BOUNDED-ISO-BMFF-ER-AUDIO-PROTECTION-REQUIREMENT.md`
+- `docs/reviews/PCN-0278-BOUNDED-ISO-BMFF-AAC-MANAGED-DECODER-PREPARATION.md`
+- `docs/reviews/PCN-0279-BOUNDED-ISO-BMFF-AAC-SAMPLE-ENTRY-CONSISTENCY-FACTS.md`
+- `docs/reviews/PCN-0280-EXPLICIT-ISO-BMFF-AAC-SAMPLE-ENTRY-CONSISTENCY-POLICY.md`
+- `docs/reviews/PCN-0281-BOUNDED-ISO-BMFF-AAC-SAMPLE-ENTRY-MANAGED-DECODER-PREPARATION.md`
+- `docs/reviews/PCN-0282-EXPLICIT-ISO-BMFF-PROGRAM-CONFIG-SPEAKER-POSITION-ASSIGNMENT.md`
+- `docs/reviews/PCN-0283-BOUNDED-ISO-BMFF-ER-ERROR-PROTECTION-SPECIFIC-CONFIG-PREFIX.md`
+- `docs/reviews/PCN-0284-BOUNDED-ISO-BMFF-ER-ERROR-PROTECTION-FIRST-SET-HEADER.md`
+- `docs/reviews/PCN-0285-BOUNDED-ISO-BMFF-ER-ERROR-PROTECTION-FIRST-CLASS.md`
+- `docs/reviews/PCN-0286-BOUNDED-ISO-BMFF-ER-ERROR-PROTECTION-FIRST-SET.md`
+- `docs/reviews/PCN-0287-BOUNDED-ISO-BMFF-ER-ERROR-PROTECTION-SECOND-SET-HEADER.md`
+- `docs/reviews/PCN-0288-BOUNDED-ISO-BMFF-ER-ERROR-PROTECTION-SECOND-SET-FIRST-CLASS.md`
+- `docs/reviews/PCN-0289-BOUNDED-ISO-BMFF-ER-ERROR-PROTECTION-SECOND-SET.md`
+- `docs/reviews/PCN-0290-BOUNDED-ISO-BMFF-ER-ERROR-PROTECTION-THIRD-SET-HEADER.md`
+- `docs/reviews/PCN-0291-BOUNDED-ISO-BMFF-ER-ERROR-PROTECTION-THIRD-SET-FIRST-CLASS.md`
+- `docs/reviews/PCN-0292-BOUNDED-ISO-BMFF-ER-ERROR-PROTECTION-THIRD-SET.md`
+- `docs/reviews/PCN-0293-BOUNDED-ISO-BMFF-ER-ERROR-PROTECTION-PREDEFINED-SETS.md`
+- `docs/reviews/PCN-0294-BOUNDED-ISO-BMFF-ER-ERROR-PROTECTION-HEADER-PROTECTION.md`
+- `docs/reviews/PCN-0295-BOUNDED-ISO-BMFF-ER-ERROR-PROTECTION-SPECIFIC-CONFIG.md`
+- `docs/reviews/PCN-0296-BOUNDED-ISO-BMFF-ER-DIRECT-MAPPING.md`
+- `docs/reviews/PCN-0297-EXPLICIT-ISO-BMFF-ER-DIRECT-MAPPING-ADMISSION.md`
+- `docs/reviews/PCN-0298-BOUNDED-ISO-BMFF-ER-CONFIGURATION-ADMISSION.md`
+- `docs/reviews/PCN-0299-BOUNDED-ISO-BMFF-ER-AAC-MANAGED-DECODER-PREPARATION.md`
+- `docs/reviews/PCN-0300-BOUNDED-ISO-BMFF-PROGRAM-CONFIG-WAVEFORMAT-CHANNEL-LAYOUT.md`
+- `docs/reviews/PCN-0301-BOUNDED-ISO-BMFF-PROGRAM-CONFIG-CHANNEL-REORDER-PLAN.md`
+- `docs/reviews/PCN-0302-BOUNDED-ISO-BMFF-PROGRAM-CONFIG-AAC-MANAGED-DECODER-PREPARATION.md`
+- `docs/reviews/PCN-0303-BOUNDED-ISO-BMFF-PROGRAM-CONFIG-INTERLEAVED-PCM-REORDER.md`
+- `docs/reviews/PCN-0304-BOUNDED-ISO-BMFF-PROGRAM-CONFIG-AAC-CHANNEL-LAYOUT-REQUIREMENT.md`
+- `docs/reviews/PCN-0305-BOUNDED-ISO-BMFF-PROGRAM-CONFIG-AAC-CHANNEL-LAYOUT-SYMBOL-COVERAGE.md`
+- `docs/reviews/PCN-0306-BOUNDED-ISO-BMFF-PROGRAM-CONFIG-AAC-EXPLICIT-LAYOUT-PREPARATION.md`
+- `docs/reviews/PCN-0307-BOUNDED-ISO-BMFF-ADMITTED-ER-IMPLICIT-SBR-PS-SYNC-EXTENSION.md`
+- `docs/reviews/PCN-0308-BOUNDED-ISO-BMFF-ADMITTED-ER-AAC-DECODER-FORMAT-INTENT.md`
+- `docs/reviews/PCN-0309-BOUNDED-ISO-BMFF-ADMITTED-ER-AAC-MANAGED-DECODER-PREPARATION.md`
 
 ### Completed physical validation archive
 
