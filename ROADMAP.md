@@ -929,6 +929,13 @@ completes the current non-physical managed-only AAC metadata-to-preparation
 chain. Runtime verification, native transfer, decoder integration, and physical
 execution remain incomplete.
 
+ADR-0300 and PCN-0310 project the exact AVC-selected or AAC-original compressed
+sample payload together with its edited-sample timing, supported codec/media
+classification, and matching sample-description identity behind one managed
+codec-neutral packet result. Stream identity, decoder preparation ownership,
+demux-event scheduling, multi-sample traversal, production MP4 demux composition,
+native submission, fragmented MP4, and streaming remain incomplete.
+
 ADR-0254 and
 `docs/reviews/PCN-0264-BOUNDED-ISO-BMFF-PCE-AWARE-GA-SPECIFIC-CONFIG-COMPOSITION.md`
 resume object-type-specific GA fields after the exact PCE for channel

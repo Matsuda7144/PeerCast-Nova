@@ -13,7 +13,7 @@ application information, sample-derived audio duration, the default audio-only
 250 ms production cutoff, and the opened-decoder `avcodec_flush_buffers`
 boundary.
 
-ADR-0173 through ADR-0299 add the ISO BMFF / MP4 foundation from bounded box
+ADR-0173 through ADR-0300 add the ISO BMFF / MP4 foundation from bounded box
 headers and traversal through sample tables, reconciliation and lookup, timing
 and edit mapping, edited-sample payload and packet-candidate boundaries,
 `avc1` / `avc3`, `mp4a`, bounded owned `avcC`, and the MPEG-4 descriptor
@@ -104,6 +104,7 @@ streaming policy, and fragmented MP4 remain future work.
 - `docs/adr/ADR-0297-bounded-iso-bmff-admitted-er-implicit-sbr-ps-sync-extension.md`
 - `docs/adr/ADR-0298-bounded-iso-bmff-admitted-er-aac-decoder-format-intent.md`
 - `docs/adr/ADR-0299-bounded-iso-bmff-admitted-er-aac-managed-decoder-preparation.md`
+- `docs/adr/ADR-0300-bounded-iso-bmff-codec-packet-projection.md`
 - `docs/reviews/PCN-0177-OPT-IN-DECODED-BUFFER-DURATION-CUTOFF.md`
 - `docs/reviews/PCN-0183-BOUNDED-ISO-BMFF-BOX-HEADER-PARSER.md`
 - `docs/reviews/PCN-0241-BOUNDED-ISO-BMFF-MPEG4-DESCRIPTOR-HEADER.md`
@@ -174,6 +175,7 @@ streaming policy, and fragmented MP4 remain future work.
 - `docs/reviews/PCN-0307-BOUNDED-ISO-BMFF-ADMITTED-ER-IMPLICIT-SBR-PS-SYNC-EXTENSION.md`
 - `docs/reviews/PCN-0308-BOUNDED-ISO-BMFF-ADMITTED-ER-AAC-DECODER-FORMAT-INTENT.md`
 - `docs/reviews/PCN-0309-BOUNDED-ISO-BMFF-ADMITTED-ER-AAC-MANAGED-DECODER-PREPARATION.md`
+- `docs/reviews/PCN-0310-BOUNDED-ISO-BMFF-CODEC-PACKET-PROJECTION.md`
 
 ADR-0158 was skipped by assignment error. It is a permanent numbering-error gap
 and must not be retroactively reused, following the recorded ADR-0082 and
@@ -432,14 +434,14 @@ The bounded FLV decoder configures the exact parser stream time base through pub
 
 ## 現在地
 
-**Post-0.0.10e — Bounded ISO BMFF / MP4 Parser Foundation — Complete through ADR-0299**
+**Post-0.0.10e — Bounded ISO BMFF / MP4 Parser Foundation — Complete through ADR-0300**
 
 - ADR-0167 through ADR-0172 complete the bounded non-physical playback and application prerequisites;
-- ADR-0173 through ADR-0299 complete the current managed ISO BMFF / MP4 parser foundation through bounded `avcC`, AVC sample framing and NAL classification, parameter-set planning, owned length-prefixed／Annex-B materialization, explicit requirement resolution and bounded composition, the `esds` hierarchy, General Audio and predefined-MP4 SL configuration, explicit plus supported immediate implicit SBR/PS signalling, syntactic Program Config Element parsing, channel-count topology, ordered channel-slot mapping, explicit speaker-position assignment, WaveFormat layout projection, managed-only channel-reorder planning, PCE-aware managed decoder preparation, bounded interleaved-PCM reorder materialization, explicit FFmpeg channel-layout requirements, declared-symbol coverage and end-to-end managed preparation, PCE-aware GA continuation, supported ER `epConfig`, complete bounded Error Protection Specific Config ownership, direct-mapping facts and enabled-only admission, source-bound ER configuration admission and managed AAC preparation, admitted ER immediate implicit SBR/PS, exact decoder-format intent and final managed decoder preparation, AAC core and extension-signalling facts, decoder-format intent, owned extradata, FFmpeg codec-parameter input adaptation, managed padded parameter ownership, managed-only native-transfer requirement planning, bounded declared-symbol coverage, declared decoder-capability binding, end-to-end managed AAC decoder preparation, `mp4a`/effective-format consistency facts, explicit mismatch admission policy, and sample-entry-aware managed decoder preparation;
+- ADR-0173 through ADR-0300 complete the current managed ISO BMFF / MP4 parser foundation through bounded `avcC`, AVC sample framing and NAL classification, parameter-set planning, owned length-prefixed／Annex-B materialization, explicit requirement resolution and bounded composition, the `esds` hierarchy, General Audio and predefined-MP4 SL configuration, explicit plus supported immediate implicit SBR/PS signalling, syntactic Program Config Element parsing, channel-count topology, ordered channel-slot mapping, explicit speaker-position assignment, WaveFormat layout projection, managed-only channel-reorder planning, PCE-aware managed decoder preparation, bounded interleaved-PCM reorder materialization, explicit FFmpeg channel-layout requirements, declared-symbol coverage and end-to-end managed preparation, PCE-aware GA continuation, supported ER `epConfig`, complete bounded Error Protection Specific Config ownership, direct-mapping facts and enabled-only admission, source-bound ER configuration admission and managed AAC preparation, admitted ER immediate implicit SBR/PS, exact decoder-format intent and final managed decoder preparation, AAC core and extension-signalling facts, decoder-format intent, owned extradata, FFmpeg codec-parameter input adaptation, managed padded parameter ownership, managed-only native-transfer requirement planning, bounded declared-symbol coverage, declared decoder-capability binding, end-to-end managed AAC decoder preparation, `mp4a`/effective-format consistency facts, explicit mismatch admission policy, sample-entry-aware managed decoder preparation, and codec-neutral AVC/AAC packet projection;
 - ISO BMFF / MP4 is the second bounded container-parser family alongside the existing FLV v1 parser;
 - current implementation includes box traversal, movie／track／media metadata, sample tables and reconciliation, chunk／sample／byte-range／`mdat` lookup, timing and edit mapping, edited-sample payload and packet-candidate boundaries, `avc1`／`avc3`／`mp4a` sample-entry projection, bounded AVC sample framing, and bounded MPEG-4 audio descriptor metadata through explicit SBR/PS-to-GASpecificConfig composition and predefined-MP4 SL configuration;
 - AAC ER non-immediate sync-extension search, Program Config Element runtime decoder-layout binding, AVC runtime capability discovery and decoder integration, production MP4 demux composition, nested-box and streaming policy, and fragmented MP4 remain incomplete;
-- current reviews span `docs/reviews/PCN-0177-OPT-IN-DECODED-BUFFER-DURATION-CUTOFF.md` through `docs/reviews/PCN-0309-BOUNDED-ISO-BMFF-ADMITTED-ER-AAC-MANAGED-DECODER-PREPARATION.md`;
+- current reviews span `docs/reviews/PCN-0177-OPT-IN-DECODED-BUFFER-DURATION-CUTOFF.md` through `docs/reviews/PCN-0310-BOUNDED-ISO-BMFF-CODEC-PACKET-PROJECTION.md`;
 - ADR-0158 is a permanent numbering-error gap caused by assignment error, following ADR-0082 and ADR-0096, and must not be retroactively reused;
 - next: bind the admitted ER decoder-format intent to managed decoder preparation without native execution.
 
@@ -569,6 +571,7 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 - `docs/adr/ADR-0297-bounded-iso-bmff-admitted-er-implicit-sbr-ps-sync-extension.md`
 - `docs/adr/ADR-0298-bounded-iso-bmff-admitted-er-aac-decoder-format-intent.md`
 - `docs/adr/ADR-0299-bounded-iso-bmff-admitted-er-aac-managed-decoder-preparation.md`
+- `docs/adr/ADR-0300-bounded-iso-bmff-codec-packet-projection.md`
 - `docs/reviews/PCN-0177-OPT-IN-DECODED-BUFFER-DURATION-CUTOFF.md`
 - `docs/reviews/PCN-0183-BOUNDED-ISO-BMFF-BOX-HEADER-PARSER.md`
 - `docs/reviews/PCN-0241-BOUNDED-ISO-BMFF-MPEG4-DESCRIPTOR-HEADER.md`
@@ -639,6 +642,7 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 - `docs/reviews/PCN-0307-BOUNDED-ISO-BMFF-ADMITTED-ER-IMPLICIT-SBR-PS-SYNC-EXTENSION.md`
 - `docs/reviews/PCN-0308-BOUNDED-ISO-BMFF-ADMITTED-ER-AAC-DECODER-FORMAT-INTENT.md`
 - `docs/reviews/PCN-0309-BOUNDED-ISO-BMFF-ADMITTED-ER-AAC-MANAGED-DECODER-PREPARATION.md`
+- `docs/reviews/PCN-0310-BOUNDED-ISO-BMFF-CODEC-PACKET-PROJECTION.md`
 
 ### Completed physical validation archive
 

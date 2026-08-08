@@ -77,6 +77,7 @@ Detailed history through 0.0.8g remains preserved in Git history at commit
 - Added ADR-0297 immediate implicit SBR/PS continuation from the exact admitted ER configuration end, including `epConfig` two and three; added PCN-0307 and focused managed tests.
 - Added ADR-0298 source-bound composition from admitted ER configuration and immediate SBR/PS to effective AAC decoder-format intent; added PCN-0308 and focused managed tests.
 - Added ADR-0299 final source-bound managed composition from admitted ER AAC format intent through owned decoder preparation and deterministic cleanup; added PCN-0309 and focused managed tests.
+- Added ADR-0300 codec-neutral managed packet projection for exact AVC-selected or AAC-original payload bytes with retained edited timing and sample-description identity; added PCN-0310 and focused managed tests.
 
 ### Post-0.0.10e - Bounded ISO BMFF / MP4 Parser Foundation
 

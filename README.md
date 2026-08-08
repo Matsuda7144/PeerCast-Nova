@@ -192,6 +192,7 @@ Current-state reviews:
 - bounded ISO BMFF AAC `mp4a`／decoder-format consistency facts
 - explicit ISO BMFF AAC sample-entry consistency admission policy
 - bounded sample-entry-aware ISO BMFF AAC managed decoder preparation
+- bounded codec-neutral ISO BMFF AVC／AAC packet projection
 - exact ISO BMFF `stts`／`stsz`／`stz2` sample-count reconciliation
 - managed frame copy、conversion、awaited delivery
 - opened-decoder `avcodec_flush_buffers` ownership boundary

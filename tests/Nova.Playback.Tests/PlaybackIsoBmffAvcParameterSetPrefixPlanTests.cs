@@ -749,6 +749,95 @@ public sealed class PlaybackIsoBmffAvcParameterSetPrefixPlanTests
         Assert.Null(composition);
     }
 
+    [Fact]
+    public void ProjectCodecPacket_AvcRetainsExactSelectedPayloadAndSources()
+    {
+        var classification = Classify(Frame(
+            [2, 0x65, 0xAA],
+            1,
+            BaselineParameterSets()));
+        Assert.Equal(
+            PlaybackIsoBmffAvcPayloadComposeResult.Composed,
+            PlaybackIsoBmffAvcPayloadComposer.Compose(
+                classification,
+                Resolve(requireAnnexB: true, includeParameterSets: false),
+                out var composition));
+        var composed = Assert.IsType<PlaybackIsoBmffAvcPayloadComposition>(
+            composition);
+
+        Assert.Equal(
+            PlaybackIsoBmffCodecPacketProjectionResult.Projected,
+            PlaybackIsoBmffCodecPacketProjector.ProjectAvc(
+                composed, out var projection));
+        var projected = Assert.IsType<PlaybackIsoBmffCodecPacketProjection>(
+            projection);
+        Assert.Same(composed, projected.AvcPayloadComposition);
+        Assert.Null(projected.AudioEntry);
+        Assert.Same(classification.Frame.Candidate, projected.Candidate);
+        Assert.Same(
+            classification.Frame.DecoderConfiguration.VisualEntry.Selection,
+            projected.DescriptionSelection);
+        Assert.Equal(
+            PlaybackIsoBmffSampleEntryCodecCandidate.Avc1,
+            projected.CodecCandidate);
+        Assert.Equal(PlaybackIsoBmffHandlerKind.Video, projected.MediaKind);
+        Assert.Equal(new byte[] { 0, 0, 0, 1, 0x65, 0xAA },
+            projected.Payload.ToArray());
+    }
+
+    [Fact]
+    public void ProjectCodecPacket_AacRetainsOriginalPayloadAndEntry()
+    {
+        var candidate = Candidate([0x11, 0x22]);
+        var audioEntry = AudioEntry(sampleDescriptionIndex: 1);
+
+        Assert.Equal(
+            PlaybackIsoBmffCodecPacketProjectionResult.Projected,
+            PlaybackIsoBmffCodecPacketProjector.ProjectAac(
+                candidate, audioEntry, out var projection));
+        var projected = Assert.IsType<PlaybackIsoBmffCodecPacketProjection>(
+            projection);
+        Assert.Same(candidate, projected.Candidate);
+        Assert.Same(audioEntry, projected.AudioEntry);
+        Assert.Null(projected.AvcPayloadComposition);
+        Assert.Same(audioEntry.Selection, projected.DescriptionSelection);
+        Assert.Equal(
+            PlaybackIsoBmffSampleEntryCodecCandidate.Mp4a,
+            projected.CodecCandidate);
+        Assert.Equal(PlaybackIsoBmffHandlerKind.Audio, projected.MediaKind);
+        Assert.Equal(new byte[] { 0x11, 0x22 }, projected.Payload.ToArray());
+    }
+
+    [Fact]
+    public void ProjectCodecPacket_RejectsMissingAndMismatchedSources()
+    {
+        Assert.Equal(
+            PlaybackIsoBmffCodecPacketProjectionResult.MissingAvcComposition,
+            PlaybackIsoBmffCodecPacketProjector.ProjectAvc(
+                null, out var missingAvc));
+        Assert.Null(missingAvc);
+
+        var audioEntry = AudioEntry(sampleDescriptionIndex: 1);
+        Assert.Equal(
+            PlaybackIsoBmffCodecPacketProjectionResult.MissingCandidate,
+            PlaybackIsoBmffCodecPacketProjector.ProjectAac(
+                null, audioEntry, out var missingCandidate));
+        Assert.Null(missingCandidate);
+        Assert.Equal(
+            PlaybackIsoBmffCodecPacketProjectionResult.MissingAudioEntry,
+            PlaybackIsoBmffCodecPacketProjector.ProjectAac(
+                Candidate([1]), null, out var missingEntry));
+        Assert.Null(missingEntry);
+        Assert.Equal(
+            PlaybackIsoBmffCodecPacketProjectionResult
+                .SampleDescriptionMismatch,
+            PlaybackIsoBmffCodecPacketProjector.ProjectAac(
+                Candidate([1]),
+                AudioEntry(sampleDescriptionIndex: 2),
+                out var mismatch));
+        Assert.Null(mismatch);
+    }
+
     private static PlaybackIsoBmffAvcPayloadRequirementsResolution Resolve(
         bool requireAnnexB,
         bool includeParameterSets)
@@ -917,6 +1006,23 @@ public sealed class PlaybackIsoBmffAvcParameterSetPrefixPlanTests
             null,
             Array.AsReadOnly(parameterSets.ToArray()),
             [1]);
+    }
+
+    private static PlaybackIsoBmffAudioSampleEntry AudioEntry(
+        uint sampleDescriptionIndex)
+    {
+        var selection = new PlaybackIsoBmffEditedSampleDescriptionSelection(
+            sampleDescriptionIndex,
+            Location(0x6D703461),
+            PlaybackIsoBmffSampleEntryCodecCandidate.Mp4a,
+            PlaybackIsoBmffHandlerKind.Audio);
+        return new(
+            selection,
+            1,
+            2,
+            16,
+            48_000u << 16,
+            Array.AsReadOnly(Array.Empty<PlaybackIsoBmffBoxLocation>()));
     }
 
     private static PlaybackIsoBmffBoxLocation Location(uint type) =>
