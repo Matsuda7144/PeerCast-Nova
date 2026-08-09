@@ -75,7 +75,7 @@ public static class PlaybackIsoBmffImplicitSbrSyncExtensionParser
                 .MissingGaSpecificConfig;
         }
 
-        return ParseCore(
+        return ParseAtBitPosition(
             gaSpecificConfig,
             gaSpecificConfig.ConsumedBitLength,
             requireNonErCore: true,
@@ -94,7 +94,7 @@ public static class PlaybackIsoBmffImplicitSbrSyncExtensionParser
                 .MissingErAudioPostConfig;
         }
 
-        return ParseCore(
+        return ParseAtBitPosition(
             erAudioPostConfig.GaSpecificConfig,
             erAudioPostConfig.ConsumedBitLength,
             requireNonErCore: false,
@@ -113,14 +113,15 @@ public static class PlaybackIsoBmffImplicitSbrSyncExtensionParser
                 .MissingErConfigurationAdmission;
         }
 
-        return ParseCore(
+        return ParseAtBitPosition(
             admission.Requirement.GaSpecificConfig,
             admission.ConsumedBitLength,
             requireNonErCore: false,
             out extension);
     }
 
-    private static PlaybackIsoBmffImplicitSbrSyncExtensionParseResult ParseCore(
+    internal static PlaybackIsoBmffImplicitSbrSyncExtensionParseResult
+        ParseAtBitPosition(
         PlaybackIsoBmffGaSpecificConfig gaSpecificConfig,
         int startBitLength,
         bool requireNonErCore,

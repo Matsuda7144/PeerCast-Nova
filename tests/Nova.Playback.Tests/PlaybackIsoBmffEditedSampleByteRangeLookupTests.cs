@@ -113,7 +113,7 @@ public sealed class PlaybackIsoBmffEditedSampleByteRangeLookupTests
             new PlaybackIsoBmffCompleteSampleEditAdmission(sample, appearances));
     }
 
-    private static PlaybackIsoBmffSampleToChunkBox ParseSampleToChunk(
+    internal static PlaybackIsoBmffSampleToChunkBox ParseSampleToChunk(
         params (uint FirstChunk, uint SamplesPerChunk,
             uint SampleDescriptionIndex)[] entries)
     {
@@ -138,7 +138,7 @@ public sealed class PlaybackIsoBmffEditedSampleByteRangeLookupTests
         return Assert.IsType<PlaybackIsoBmffSampleToChunkBox>(parsed);
     }
 
-    private static PlaybackIsoBmffChunkOffsetBox ParseChunkOffset(
+    internal static PlaybackIsoBmffChunkOffsetBox ParseChunkOffset(
         params uint[] offsets)
     {
         var box = new byte[16 + (offsets.Length * 4)];
@@ -158,7 +158,7 @@ public sealed class PlaybackIsoBmffEditedSampleByteRangeLookupTests
         return Assert.IsType<PlaybackIsoBmffChunkOffsetBox>(parsed);
     }
 
-    private static PlaybackIsoBmffSampleSizeBox ParseUniformSampleSize(
+    internal static PlaybackIsoBmffSampleSizeBox ParseUniformSampleSize(
         uint size,
         uint sampleCount)
     {

@@ -134,6 +134,132 @@ Current-state reviews:
 - bounded explicit SBR/PS-to-GASpecificConfig composition
 - bounded immediate implicit SBR sync-extension projection
 - bounded optional implicit PS sync-extension projection
+- caller-bounded non-immediate implicit SBR sync-extension search (ADR-0328)
+- caller-explicit implicit SBR resolution policy (ADR-0329)
+- bounded same-track codec packet sequence (ADR-0330)
+- bounded immutable track codec packet sequence cursor (ADR-0331)
+- exact track codec packet sequence acknowledgement (ADR-0332)
+- bounded caller-ordered movie track sequence set (ADR-0333)
+- explicit movie track codec packet sequence selection (ADR-0334)
+- bounded selected track codec packet sequence cursor set (ADR-0335)
+- exact selected sequence packet head snapshot (ADR-0336)
+- exact selected sequence head movie-time comparison (ADR-0337)
+- caller-explicit sequence advance-role selection (ADR-0338)
+- exact selected sequence cursor-set advance (ADR-0339)
+- exact cross-track sequence merge step (ADR-0340)
+- bounded cross-track merge-step sequence (ADR-0341)
+- caller-bounded cross-track merge traversal (ADR-0342)
+- exact merge traversal continuation (ADR-0343)
+- exact packet merge completion certificate (ADR-0344)
+- exact completed merge-step global view (ADR-0345)
+- bounded completed merge-event projection (ADR-0346)
+- bounded completed merge-event cursor (ADR-0347)
+- exact completed merge-event acknowledgement (ADR-0348)
+- caller-bounded completed merge-event traversal (ADR-0349)
+- exact completed merge-event traversal continuation (ADR-0350)
+- exact completed merge-event traversal completion (ADR-0351)
+- exact completed merge-event traversal acknowledgement view (ADR-0352)
+- exact completed merge-event traversal seconds metadata (ADR-0353)
+- caller-explicit completed merge-event traversal clock time (ADR-0354)
+- caller-explicit completed merge-event traversal integral clock time (ADR-0355)
+- caller-explicit completed merge-event traversal clock origin (ADR-0356)
+- bounded completed merge-event traversal deadlines (ADR-0357)
+- caller-explicit completed merge-event traversal deadline observation (ADR-0358)
+- caller-explicit completed merge-event traversal dispatch eligibility (ADR-0359)
+- bounded completed merge-event traversal dispatch candidates (ADR-0360)
+- explicit completed merge-event traversal dispatch target set (ADR-0361)
+- exact completed merge-event traversal dispatch target binding (ADR-0362)
+- bounded completed merge-event traversal dispatch request (ADR-0363)
+- explicit completed merge-event traversal dispatch target capabilities (ADR-0364)
+- exact completed merge-event traversal dispatch target resolution (ADR-0365)
+- explicit completed merge-event traversal runtime target registry (ADR-0366)
+- exact completed merge-event traversal runtime target lookup (ADR-0367)
+- caller-identified completed merge-event traversal invocation intent (ADR-0368)
+- caller-explicit completed merge-event traversal invocation admission (ADR-0369)
+- bounded completed merge-event traversal admitted invocation selection (ADR-0370)
+- caller-bounded track sample sequence plan (ADR-0371)
+- exact track sample edit-admission projection (ADR-0372)
+- bounded track admitted sample selection (ADR-0373)
+- exact track admitted sample byte-range projection (ADR-0374)
+- exact track admitted sample `mdat` projection (ADR-0375)
+- bounded track owned sample-payload projection (ADR-0376)
+- exact track edited-sample packet-candidate projection (ADR-0377)
+- exact track sample-description selection projection (ADR-0378)
+- exact track sample-entry parse projection (ADR-0379)
+- exact track codec-configuration projection (ADR-0380)
+- bounded track codec-packet composition projection (ADR-0381)
+- exact track codec-packet binding projection (ADR-0382)
+- exact movie-track codec-packet binding projection (ADR-0383)
+- exact movie-track codec-packet sequence projection (ADR-0384)
+- exact movie-track codec-packet sequence-set projection (ADR-0385)
+- caller-explicit movie-track sequence selection projection (ADR-0386)
+- exact selected-sequence initial cursor-set projection (ADR-0387)
+- caller-bounded projected-sequence merge traversal (ADR-0388)
+- exact projected-sequence merge continuation (ADR-0389)
+- exact projected-sequence merge completion (ADR-0390)
+- exact projected completed merge-step view (ADR-0391)
+- bounded projected completed merge events (ADR-0392)
+- exact projected completed-event initial cursor (ADR-0393)
+- caller-bounded projected completed-event traversal (ADR-0394)
+- exact projected completed-event traversal continuation (ADR-0395)
+- exact projected completed-event traversal completion (ADR-0396)
+- exact projected completed-event acknowledgement view (ADR-0397)
+- exact projected completed-event traversal time (ADR-0398)
+- caller-explicit projected traversal clock time (ADR-0399)
+- caller-explicit projected integral clock time (ADR-0400)
+- caller-explicit projected traversal clock origin (ADR-0401)
+- bounded projected traversal deadlines (ADR-0402)
+- caller-explicit projected deadline observation (ADR-0403)
+- caller-explicit projected dispatch eligibility (ADR-0404)
+- caller-bounded projected dispatch candidate selection (ADR-0405)
+- explicit projected dispatch target set (ADR-0406)
+- exact projected dispatch target binding (ADR-0407)
+- bounded projected dispatch requests (ADR-0408)
+- explicit projected target capability set (ADR-0409)
+- exact projected target capability resolution (ADR-0410)
+- explicit projected opaque runtime-target registry (ADR-0411)
+- exact projected opaque runtime-target lookup (ADR-0412)
+- caller-identified projected invocation intent (ADR-0413)
+- caller-explicit projected invocation admission (ADR-0414)
+- caller-bounded projected admitted-invocation selection (ADR-0415)
+- bounded fragmented-MP4 `trex` track defaults (ADR-0416)
+- bounded fragmented-MP4 `mfhd` sequence header (ADR-0417)
+- bounded fragmented-MP4 `tfhd` track-fragment header (ADR-0418)
+- bounded fragmented-MP4 `tfdt` decode time (ADR-0419)
+- bounded fragmented-MP4 `trun` sample run (ADR-0420)
+- bounded fragmented-MP4 sample-default resolution (ADR-0421)
+- bounded fragmented-MP4 sample-timing projection (ADR-0422)
+- bounded fragmented-MP4 run data-origin resolution (ADR-0423)
+- bounded fragmented-MP4 sample byte-range projection (ADR-0424)
+- bounded fragmented-MP4 sample metadata projection (ADR-0425)
+- bounded fragmented-MP4 rational-time projection (ADR-0426)
+- bounded fragmented-MP4 presentation ordering (ADR-0427)
+- bounded fragmented-MP4 sequence/decode continuity (ADR-0428, ADR-0429)
+- bounded fragmented-MP4 continuity binding and exact chain (ADR-0430, ADR-0431)
+- bounded fragmented-MP4 continuity summary (ADR-0432)
+- bounded fragmented-MP4 sample batch binding (ADR-0433)
+- bounded fragmented-MP4 sample batch chain (ADR-0434)
+- bounded fragmented-MP4 presentation merge (ADR-0435)
+- bounded fragmented-MP4 merge cursor, exact step, traversal, and completion (ADR-0436 through ADR-0439)
+- bounded non-delivery fragmented-MP4 traversal acknowledgement view and source binding (ADR-0440 and ADR-0441)
+- exact rational fragmented-MP4 acknowledgement timing and source binding (ADR-0442 and ADR-0443)
+- caller-explicit integral fragmented-MP4 timing and source binding (ADR-0444 and ADR-0445)
+- caller-explicit signed fragmented-MP4 clock origin and source binding (ADR-0446 and ADR-0447)
+- bounded fragmented-MP4 decode/presentation deadline metadata and source binding (ADR-0448 and ADR-0449)
+- caller-explicit fragmented-MP4 decode/presentation deadline observation and source binding (ADR-0450 and ADR-0451)
+- caller-explicit fragmented-MP4 decode/presentation eligibility and source binding (ADR-0452 and ADR-0453)
+- caller-bounded fragmented-MP4 eligible subset selection and source binding (ADR-0454 and ADR-0455)
+- exact target-free fragmented-MP4 request metadata and source binding (ADR-0456 and ADR-0457)
+- caller-explicit opaque fragmented-MP4 consumer identity and exact request binding (ADR-0458 and ADR-0459)
+- caller-explicit opaque fragmented-MP4 batch identity and bounded consumer batch projection (ADR-0460 and ADR-0461)
+- bounded fragmented-MP4 submission intents and caller-explicit descriptive classification (ADR-0462 and ADR-0463)
+- caller-bounded fragmented-MP4 included-intent source-order selection (ADR-0464)
+- exact fragmented-MP4 selected-intent manifest metadata (ADR-0465)
+- exact fragmented-MP4 submission-manifest source binding (ADR-0466)
+- declarative fragmented-MP4 manifest summary and bounded contiguous segments (ADR-0467 and ADR-0468)
+- bounded fragmented-MP4 manifest-segment cursor and exact immutable step (ADR-0469 and ADR-0470)
+- bounded fragmented-MP4 manifest-segment traversal and exact metadata completion (ADR-0471 and ADR-0472)
+- exact non-acknowledging fragmented-MP4 completed-segment view (ADR-0473)
 - bounded ISO BMFF AVC NAL-header classification
 - bounded non-materialized AVC parameter-set prefix planning
 - bounded owned AVC length-prefixed payload materialization
@@ -193,6 +319,33 @@ Current-state reviews:
 - explicit ISO BMFF AAC sample-entry consistency admission policy
 - bounded sample-entry-aware ISO BMFF AAC managed decoder preparation
 - bounded codec-neutral ISO BMFF AVC／AAC packet projection
+- bounded ISO BMFF track-bound codec packet metadata
+- bounded ISO BMFF movie-timescale-bound track codec packet metadata
+- bounded ISO BMFF movie codec packet stream indexing
+- explicit ISO BMFF movie codec video/audio stream selection
+- bounded ISO BMFF movie codec packet event projection
+- exact ISO BMFF movie codec packet cross-stream event ordering
+- exact ISO BMFF movie codec packet event-time seconds metadata
+- bounded ISO BMFF movie codec packet event queue snapshot
+- bounded ISO BMFF movie codec packet event queue cursor
+- exact ISO BMFF movie codec packet event queue acknowledgement
+- exact ISO BMFF movie codec packet event queue clock-time metadata
+- caller-explicit ISO BMFF movie codec packet event queue integral clock time
+- caller-explicit ISO BMFF movie codec packet event queue clock origin
+- bounded ISO BMFF movie codec packet event queue deadline metadata
+- caller-explicit ISO BMFF movie codec packet deadline observation
+- caller-explicit ISO BMFF movie codec packet dispatch eligibility
+- bounded ISO BMFF movie codec packet dispatch candidate selection
+- explicit ISO BMFF movie codec packet dispatch target identity set
+- exact ISO BMFF movie codec packet dispatch target binding
+- bounded ISO BMFF movie codec packet dispatch request projection
+- explicit ISO BMFF movie codec packet target capability set
+- bounded ISO BMFF movie codec packet target resolution metadata
+- explicit ISO BMFF movie codec packet runtime target registry
+- bounded ISO BMFF movie codec packet runtime target lookup metadata
+- bounded ISO BMFF movie codec packet dispatch invocation intent metadata
+- caller-explicit ISO BMFF movie codec packet dispatch invocation admission
+- bounded ISO BMFF movie codec packet admitted invocation selection
 - exact ISO BMFF `stts`／`stsz`／`stz2` sample-count reconciliation
 - managed frame copy、conversion、awaited delivery
 - opened-decoder `avcodec_flush_buffers` ownership boundary
@@ -204,6 +357,200 @@ Current-state reviews:
 - accepted visible controlled fixture video
 - completed／terminal／failure audio evidence、strict offline preflight、readiness-required one-run authorization boundary
 - completed audio evidenceとindependent paired video／audio admission
+
+### Current managed ISO BMFF packet/event boundary
+
+ADR-0300 through ADR-0327 form a managed metadata chain from one exact
+AVC-selected or AAC-original current sample through track/movie binding,
+caller-ordered indexing, explicit video/audio selection, bounded event
+projection, exact rational cross-stream ordering, and exact rational seconds
+metadata, ending in a bounded immutable queue snapshot, cursor, and exact
+one-step acknowledgement, with caller-explicit exact rational clock-time
+metadata and caller-explicit integral-tick rounding.
+The resulting integral intervals can be placed on a caller-explicit signed
+timeline, projected as ready/exclusive-expiration deadlines, and classified at
+one caller-explicit tick without reading a clock. Caller-explicit late-event
+eligibility then produces a bounded source-ordered candidate snapshot.
+Candidates bind by media kind to opaque caller-explicit video/audio target
+identities and expose bounded request metadata without storing an invocable
+target. Requests resolve against explicit media/payload capabilities without a
+runtime object. Opaque runtime instance IDs and generations then bind by exact
+target and media identity without exposing an instance reference. One
+caller-explicit nonempty invocation ID and exact source-order indexes then form
+an immutable invocation-intent batch without accessing or invoking a runtime
+instance. Each exact intent can finally be classified by a caller-explicit
+admitted or denied disposition without granting runtime access, then reduced
+to a caller-bounded source-ordered admitted subset with explicit truncation.
+
+This chain currently represents one current packet per selected track. It does
+not implement multi-sample traversal, default rounding or origin policies,
+clock acquisition, repeated observation, actual dispatch, delivery outcome,
+runtime instance access or invocation, cursor mutation, scheduling, native packet submission, or
+production MP4 playback composition.
+
+ADR-0330 separately owns a bounded immutable same-track sequence of already
+composed packets with strictly increasing sample numbers. Automatic sample-table
+iteration and packet construction remain outside that slice. ADR-0331 adds pure
+immutable one-entry traversal with explicit exhaustion and no delivery claim.
+ADR-0332 retains one exact cursor/entry/successor triple as acknowledgement
+metadata without claiming delivery or consumption.
+ADR-0333 separately owns up to 256 exact same-movie track sequences with unique
+track IDs and caller-ordered stream indexes, without selecting or merging heads.
+ADR-0334 retains caller-explicit video and/or audio sequence selection from that
+exact set without default inference, fallback, cursor creation, or merging.
+ADR-0335 creates immutable initial cursors for exactly those selected roles,
+without advancing a cursor, inspecting packet heads, or merging streams.
+ADR-0336 projects their exact current entries without advancing or comparing
+the cursors and retains explicit per-role and whole-set exhaustion.
+ADR-0337 compares the leading video/audio movie intervals as exact rationals,
+without applying a stream-index tie-break or selecting a cursor to advance.
+ADR-0338 applies caller-explicit video/audio preference only to equal intervals
+and retains the exact selected role and source without advancing its cursor.
+ADR-0339 advances exactly that selected cursor by one immutable transition and
+retains the non-selected cursor by reference in the successor cursor set.
+ADR-0340 projects one caller-indexed cross-track step with exact stream, entry,
+leading appearance, transition, and successor-state provenance.
+ADR-0341 validates bounded caller step lists for contiguous indexes, one exact
+tie policy, and reference-exact cursor-state chaining. ADR-0342 composes the
+managed head/comparison/selection/advance chain into caller-bounded automatic
+packet traversal with explicit exhaustion versus truncation.
+ADR-0343 continues truncated traversal from the exact final cursor state without
+re-emitting prior steps. ADR-0344 certifies packet-level completion only when
+root remaining counts equal cumulative steps and all selected cursors exhaust.
+ADR-0345 reconstructs one contiguous global step view across the exact initial
+and continuation segments while retaining every original step by reference.
+ADR-0346 expands every complete edit appearance from those completed packets
+under a caller event bound and orders the immutable events by overflow-safe
+exact rational movie time, global merge index, and appearance index.
+ADR-0347 traverses that exact bounded event order with an immutable cursor and
+explicit remaining and exhaustion state. ADR-0348 retains one exact
+source/event/successor transition without claiming consumption or delivery.
+ADR-0349 composes those transitions into a caller-bounded acknowledgement chain
+with explicit exhaustion versus truncation. ADR-0350 continues from the exact
+final cursor without re-emitting earlier transitions. ADR-0351 certifies whole
+root-remaining traversal coverage by exact count and final exhaustion.
+ADR-0352 reconstructs one contiguous global acknowledgement view across the
+initial and continuation segments while retaining every original transition.
+ADR-0353 adds exact rational seconds while retaining each acknowledgement.
+ADR-0354 converts those values to overflow-safe exact rational clock ticks at a
+nonzero caller-explicit rate without rounding or reading a clock.
+ADR-0355 applies caller-explicit integral rounding, ADR-0356 adds a signed
+caller origin, ADR-0357 retains exact ready/expiration deadlines, and ADR-0358
+classifies them at one caller-supplied tick without reading a clock.
+ADR-0359 applies explicit ready-only or ready-or-expired eligibility, and
+ADR-0360 retains a caller-bounded source-ordered eligible subset without target
+or runtime access.
+ADR-0361 owns opaque caller media-target IDs, ADR-0362 binds exact candidates by
+media kind, and ADR-0363 projects bounded packet/payload/deadline request
+metadata without runtime object access or invocation. ADR-0364 owns bounded
+caller-declared media and payload capabilities, and ADR-0365 resolves every
+request exactly by target ID, media kind, and payload limit without runtime
+lookup. ADR-0366 owns opaque runtime target registrations, and ADR-0367 retains
+exact identity-only lookup results without accessing or invoking runtime
+objects. ADR-0368 projects caller-identified source-ordered invocation intent
+metadata without performing invocation. ADR-0369 classifies every exact intent
+with a caller-explicit admitted or denied disposition, and ADR-0370 retains a
+caller-bounded source-ordered admitted subset with explicit truncation without
+granting runtime access.
+
+ADR-0371 begins the production-composition foundation with a caller-bounded
+contiguous sample-number plan over exact reconciled sample-count metadata. It
+does not inspect file bytes or construct payloads or codec packets. ADR-0372
+classifies every planned sample as admitted, not presented, or partial-sample
+rejected through the existing edit chain, and ADR-0373 retains a caller-bounded
+source-ordered admitted subset with explicit truncation. ADR-0374 resolves each
+selected admission to its exact absolute byte range and sample-description
+index through reconciled chunk and size metadata without reading payload bytes.
+ADR-0375 locates each range inside a bounded `mdat` traversal, ADR-0376 copies
+each payload into independently owned bytes under the existing hard limit, and
+ADR-0377 binds the exact owned bytes to their original media timing,
+presentation interval, and complete edit appearances.
+ADR-0378 selects the exact `stsd` entry for every packet candidate while
+retaining the complete source chain and shared handler provenance. ADR-0379
+revalidates those selections against the original `stsd` bytes and parses each
+`mp4a`, `avc1`, or `avc3` audio/visual sample entry under one bounded child-box
+limit. Codec-specific child composition and packet construction remain
+incomplete.
+ADR-0380 then parses the unique `avcC` or `esds` configuration child for every
+exact parsed entry under caller-bounded parameter-set, descriptor, and byte
+limits. Connecting those configurations and owned sample bytes to the existing
+managed AVC/AAC composers remains incomplete.
+ADR-0381 applies those existing managed composition boundaries to every exact
+track sample under caller-explicit AVC payload requirements, while AAC retains
+its original owned bytes. ADR-0382 binds every packet to exact `tkhd`, `mdhd`,
+and `hdlr` sources, and ADR-0383 validates and binds the exact `mvhd` timing and
+complete edit appearances. Multi-track collection and selection remain
+incomplete for this production-oriented chain.
+ADR-0384 converts each exact movie-track binding into the existing bounded
+same-track sequence. ADR-0385 collects caller-ordered unique-track sequences
+under one exact movie timing, ADR-0386 applies explicit video/audio stream
+indexes without inference, and ADR-0387 creates immutable index-zero cursors for
+exactly those selections. Connecting the projected cursor set to the existing
+bounded merge traversal remains incomplete.
+ADR-0388 connects those exact initial cursors to the existing caller-policy,
+caller-bounded cross-track merge traversal. ADR-0389 continues exact truncated
+state without replay, and ADR-0390 certifies exhaustion and cumulative step
+counts against the initial remaining packets. Completed step/event projection
+from this production-oriented chain remains incomplete.
+ADR-0391 reconstructs one exact global completed-step view across the projected
+initial and continuation segments. ADR-0392 orders every complete edit
+appearance under a caller event bound, and ADR-0393 creates an immutable
+index-zero event cursor. ADR-0394 traverses its exact acknowledgement chain
+under a caller event bound, ADR-0395 continues truncated state without replay,
+and ADR-0396 certifies root-remaining count equality and final exhaustion.
+ADR-0397 reconstructs one exact contiguous global acknowledgement view across
+all projected traversal segments. ADR-0398 binds exact rational seconds to that
+view, ADR-0399 applies a caller-explicit tick rate, and ADR-0400 applies
+caller-explicit integral rounding policies. ADR-0401 applies one signed caller
+origin without reading a clock, and ADR-0402 projects exact immutable deadline
+intervals. ADR-0403 classifies them against one caller tick, ADR-0404 applies
+caller-explicit late policy, and ADR-0405 selects eligible candidates under a
+caller bound. ADR-0406 through ADR-0408 attach opaque media target identities,
+bind exact candidates, and project immutable packet/deadline request metadata.
+ADR-0409 and ADR-0410 attach caller-declared target capabilities and resolve
+same-target, same-media payload limits. ADR-0411 and ADR-0412 attach opaque
+runtime identity registrations and perform identity-only lookup. ADR-0413
+projects caller-identified immutable intent metadata, ADR-0414 applies exact
+caller admission dispositions, and ADR-0415 selects admitted entries under a
+caller bound. Actual invocation remains intentionally incomplete.
+ADR-0416 starts a separate fragmented-MP4 foundation with strict bounded `trex`
+track-default parsing. Fragment traversal, run resolution, streaming, and
+production fragmented demux remain incomplete.
+ADR-0417 adds strict bounded `mfhd` parsing and retains its sequence number
+without inferring cross-fragment continuity.
+ADR-0418 through ADR-0420 add strict bounded `tfhd`, `tfdt`, and `trun` leaf-box
+parsing with exact conditional layouts and bounded immutable run entries.
+ADR-0421 resolves one parsed run's sample-description, duration, size, and flags
+through explicit `trun`, `tfhd`, and `trex` precedence.
+ADR-0422 projects exact decode and presentation time from `tfdt` and that
+resolved run without narrowing cumulative values.
+ADR-0423 through ADR-0425 resolve caller-explicit run data origins, project
+arbitrary-precision sample byte ranges, and join them with exact timing under
+track, description, count, index, and size checks.
+ADR-0426 binds a nonzero media timescale to those samples as exact
+arbitrary-precision rational timing without rounding.
+ADR-0427 orders one fragment by exact presentation time, decode time, and source
+index without mutating its source projection.
+ADR-0428 through ADR-0432 classify exact sequence/decode continuity, bind both
+dimensions, validate bounded adjacent transition chains, and project a
+declarative discontinuity summary without selecting a reset action.
+ADR-0433 through ADR-0473 bind exact fragment sample batches to continuity
+transitions, produce one bounded cross-fragment presentation merge, and traverse
+its remaining immutable cursor chain with exact source/index provenance and
+completion proof, followed by a reconstructed non-delivery acknowledgement view
+and exact arbitrary-precision rational, caller-policy integral, and
+caller-origin timeline timing plus immutable and caller-observed
+decode/presentation deadlines, independently caller-policy eligibility facts,
+caller-bounded source-order selection, target-free request metadata, and exact
+caller-explicit opaque consumer binding, bounded opaque batch metadata, and
+non-invoking submission-intent classification and caller-bounded included-intent
+selection, exact non-payload manifest metadata, and full-chain manifest source
+binding, declarative aggregate facts, contiguous fragment manifest segments,
+an immutable segment cursor-step boundary, bounded exhaustive segment traversal,
+exact metadata-only completion certification, and non-acknowledging completed
+segment reconstruction.
+Delivery attempt/outcome, clock conversion, cross-track merge, `mdat` admission,
+payload access, streaming, and production fragmented demux remain incomplete.
 
 ### Windows application boundary
 

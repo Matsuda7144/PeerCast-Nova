@@ -194,7 +194,7 @@ public sealed class PlaybackIsoBmffAvcDecoderConfigurationParserTests
         Assert.Null(configuration);
     }
 
-    private static (byte[] Box, PlaybackIsoBmffVisualSampleEntry Entry)
+    internal static (byte[] Box, PlaybackIsoBmffVisualSampleEntry Entry)
         CreateVisualEntry(params byte[][] configurationRecords)
     {
         var children = configurationRecords.Select(record =>
@@ -244,7 +244,7 @@ public sealed class PlaybackIsoBmffAvcDecoderConfigurationParserTests
         return (box, Assert.IsType<PlaybackIsoBmffVisualSampleEntry>(visualEntry));
     }
 
-    private static byte[] BaselineRecord() =>
+    internal static byte[] BaselineRecord() =>
     [
         1, 66, 0, 30, 0xFF, 0xE1,
         0, 2, 0x67, 0x42,

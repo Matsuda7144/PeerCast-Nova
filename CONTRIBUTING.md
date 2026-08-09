@@ -25,6 +25,13 @@ dotnet test
 - `fix/*`: 修正
 - `docs/*`: 文書
 
+## Documentation synchronization
+
+When adding the latest ADR and PCN pair, update `README.md`, `ROADMAP.md`,
+`CHANGELOG.md`, and `NAVIGATION.md` in the same change. The repository contract
+tests verify filename/header numbering, the latest ADR/PCN title pair, current
+document markers, Navigation links, and ROADMAP document paths.
+
 ## Definition of Done
 
 - 設計意図が説明されている

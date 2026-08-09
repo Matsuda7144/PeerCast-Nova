@@ -6,7 +6,7 @@
 
 - [ ] `dotnet build`
 - [ ] `dotnet test`
-- [ ] Documentation updated
+- [ ] Latest ADR/PCN and `README.md`/`ROADMAP.md`/`CHANGELOG.md`/`NAVIGATION.md` synchronized, or not applicable
 
 ## Compatibility impact
 

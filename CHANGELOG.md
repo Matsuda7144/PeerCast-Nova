@@ -5,7 +5,12 @@
 Detailed history through 0.0.8g remains preserved in Git history at commit
 `f078dab5372a45a8c577c1c802a697ab72b45c02` and in milestone ADR/PCN records.
 
-### Post-0.0.10e - Bounded AVC and MPEG-4 audio metadata
+### Documentation maintenance
+
+- Added repository contract tests for ADR/PCN filename and heading consistency, latest-pair synchronization across current documents, Navigation Markdown links, and ROADMAP document paths.
+- Added contributor and pull-request checklist guidance for synchronized ADR/PCN documentation updates.
+
+### Post-0.0.10e - Bounded ISO BMFF AVC, AAC, and packet-to-event metadata
 
 - Added ADR-0232 bounded ISO BMFF AVC sample framing over the already owned edited-sample payload.
 - Reconciled the selected `avcC` NAL length width and sample-description index, bounded NAL-unit count, and rejected empty, zero-length, truncated, or partial framing.
@@ -77,7 +82,119 @@ Detailed history through 0.0.8g remains preserved in Git history at commit
 - Added ADR-0297 immediate implicit SBR/PS continuation from the exact admitted ER configuration end, including `epConfig` two and three; added PCN-0307 and focused managed tests.
 - Added ADR-0298 source-bound composition from admitted ER configuration and immediate SBR/PS to effective AAC decoder-format intent; added PCN-0308 and focused managed tests.
 - Added ADR-0299 final source-bound managed composition from admitted ER AAC format intent through owned decoder preparation and deterministic cleanup; added PCN-0309 and focused managed tests.
+
+#### Managed ISO BMFF packet-to-event chain
+
 - Added ADR-0300 codec-neutral managed packet projection for exact AVC-selected or AAC-original payload bytes with retained edited timing and sample-description identity; added PCN-0310 and focused managed tests.
+- Added ADR-0301 exact track binding for codec packets with retained `tkhd`, `mdhd`, and `hdlr` sources plus fail-closed track ID, timescale, and media-kind validation; added PCN-0311 and focused managed tests.
+- Added ADR-0302 exact movie-timing binding for track codec packets with unchanged rational edit appearances plus fail-closed media-timescale and known-duration validation; added PCN-0312 and focused managed tests.
+- Added ADR-0303 bounded caller-ordered movie codec packet indexing with exact shared `mvhd` identity, unique track IDs, a 256-packet limit, and a read-only snapshot; added PCN-0313 and focused managed tests.
+- Added ADR-0304 caller-explicit video and/or audio stream selection with exact indexed-source retention and fail-closed bounds, duplicate-role, and media-kind checks; added PCN-0314 and focused managed tests.
+- Added ADR-0305 bounded selected-packet event projection with separate source-ordered video/audio appearance lists, exact rational movie timing, and a 65,536-appearance per-stream limit; added PCN-0315 and focused managed tests.
+- Added ADR-0306 exact rational cross-stream packet-event ordering with deterministic ties and overflow-safe `BigInteger` comparison; added PCN-0316 and focused managed tests.
+- Added ADR-0307 exact rational seconds metadata for ordered packet events with retained source identity and overflow-free `uint` denominator multiplication in `ulong`; added PCN-0317 and focused managed tests.
+- Added ADR-0308 bounded immutable packet-event queue snapshots with deterministic sequence indexes and fail-closed order/time revalidation; added PCN-0318 and focused managed tests.
+- Added ADR-0309 bounded immutable packet-event queue cursors with pure one-entry advance and explicit exhaustion; added PCN-0319 and focused managed tests.
+- Added ADR-0310 exact immutable acknowledgement metadata for a source cursor, its exact queue entry, and one-step successor without claiming delivery; added PCN-0320 and focused managed tests.
+- Added ADR-0311 caller-rate exact rational queue clock-time metadata with overflow-safe `BigInteger` numerators and no rounding or deadline semantics; added PCN-0321 and focused managed tests.
+- Added ADR-0312 caller-explicit integral clock-time projection with independent `Floor`, `Ceiling`, or `RequireExact` start/end modes and empty-interval rejection; added PCN-0322 and focused managed tests.
+- Added ADR-0313 caller-explicit signed `BigInteger` clock-origin projection with exact source identity and duration preservation and no clock acquisition; added PCN-0323 and focused managed tests.
+- Added ADR-0314 bounded immutable ready/exclusive-expiration deadline metadata with exact source identity and no clock observation; added PCN-0324 and focused managed tests.
+- Added ADR-0315 caller-explicit signed-tick deadline observation with exact `Pending`, `Ready`, and `Expired` boundaries and no clock acquisition; added PCN-0325 and focused managed tests.
+- Added ADR-0316 caller-explicit ready-only or ready-plus-expired dispatch eligibility metadata without candidate selection or dispatch; added PCN-0326 and focused managed tests.
+- Added ADR-0317 caller-bounded source-ordered dispatch candidate snapshots with eligible counts and truncation metadata but no side effects; added PCN-0327 and focused managed tests.
+- Added ADR-0318 explicit immutable video/audio opaque `Guid` dispatch target identity sets without invocable resources; added PCN-0328 and focused managed tests.
+- Added ADR-0319 exact candidate-to-media-target identity binding with fail-closed source and media-kind validation but no target resolution; added PCN-0329 and focused managed tests.
+- Added ADR-0320 bounded immutable dispatch request metadata retaining exact target binding, media kind, codec packet payload, and deadline without invocation; added PCN-0330 and focused managed tests.
+- Added ADR-0321 explicit bounded target capability declarations for opaque ID, video/audio media kind, and maximum payload size without invocable resources; added PCN-0331 and focused managed tests.
+- Added ADR-0322 bounded exact request-to-capability resolution by target ID, media kind, and payload limit without runtime target lookup; added PCN-0332 and focused managed tests.
+- Added ADR-0323 explicit bounded opaque runtime-target registrations with instance IDs, media kind, and nonzero generation but no instance references; added PCN-0333 and focused managed tests.
+- Added ADR-0324 bounded exact resolution-to-runtime-registration lookup with source, media, and generation validation but no runtime access; added PCN-0334 and focused managed tests.
+- Added ADR-0325 bounded immutable invocation-intent projection with a caller-explicit batch ID, exact source indexes, and opaque runtime identity without runtime access or invocation; added PCN-0335 and focused managed tests.
+- Added ADR-0326 caller-explicit admitted/denied classification for exact source-ordered invocation intents without granting runtime access or invocation; added PCN-0336 and focused managed tests.
+- Added ADR-0327 caller-bounded source-ordered admitted-invocation selection with total count and truncation metadata but no runtime access or invocation; added PCN-0337 and focused managed tests.
+- Added ADR-0328 caller-bounded one-bit-step implicit SBR sync-extension search after exact direct-GA or admitted-ER configuration with exact marker provenance and distinct exhaustion outcomes; added PCN-0338 and focused managed tests.
+- Added ADR-0329 factory-validated caller-explicit selection between immediate-only implicit SBR parsing and caller-bounded search, retaining exact direct-GA or admitted-ER source and optional search provenance; added PCN-0339 and focused managed tests.
+- Added ADR-0330 bounded immutable same-track codec-packet sequences with exact shared source identity, strictly increasing nonzero sample numbers, and deterministic indexes; added PCN-0340 and focused managed tests.
+- Added ADR-0331 immutable same-track packet-sequence cursors with exact one-entry advance, remaining count, and explicit exhaustion without mutation or delivery claims; added PCN-0341 and focused managed tests.
+- Added ADR-0332 exact one-step same-track sequence acknowledgement metadata retaining source cursor, entry, and successor without delivery or consumption claims; added PCN-0342 and focused managed tests.
+- Added ADR-0333 bounded caller-ordered same-movie track-sequence sets with unique track IDs and deterministic stream indexes but no selection or merge policy; added PCN-0343 and focused managed tests.
+- Added ADR-0334 caller-explicit video and/or audio sequence selection from one exact same-movie sequence set with fail-closed role validation and no default inference or merge; added PCN-0344 and focused managed tests.
+- Added ADR-0335 immutable initial cursor sets for exactly the caller-selected video and/or audio sequence roles with atomic failure and no advance or merge; added PCN-0345 and focused managed tests.
+- Added ADR-0336 non-destructive exact current-entry snapshots for selected sequence cursors with role and whole-set exhaustion but no head comparison or merge; added PCN-0346 and focused managed tests.
+- Added ADR-0337 overflow-safe exact rational movie-interval comparison for selected sequence heads with single-role and exhausted classifications but no tie-break, winner selection, or merge; added PCN-0347 and focused managed tests.
+- Added ADR-0338 caller-explicit equal-interval preference and exact advance-role/source selection without cursor mutation, acknowledgement, or merge; added PCN-0348 and focused managed tests.
+- Added ADR-0339 pure one-entry advance of exactly the selected sequence cursor with exact transition provenance and an immutable successor cursor set preserving the other role; added PCN-0349 and focused managed tests.
+- Added ADR-0340 one caller-indexed exact cross-track merge-step projection retaining stream, entry, leading appearance, transition, and successor-state provenance without repeated traversal; added PCN-0350 and focused managed tests.
+- Added ADR-0341 bounded immutable caller merge-step sequences with contiguous indexes, one exact tie policy, and reference-exact cursor-state chains; added PCN-0351 and focused managed tests.
+- Added ADR-0342 caller-bounded pure managed cross-track packet traversal with automatic step indexes and explicit exhausted versus truncated state; added PCN-0352 and focused managed tests.
+- Added ADR-0343 exact truncated-traversal continuation segments with cumulative starting indexes, retained tie policy, and no prior-step re-emission; added PCN-0353 and focused managed tests.
+- Added ADR-0344 packet-level merge completion certificates requiring exact exhausted role cursors and equality between root remaining packets and cumulative steps; added PCN-0354 and focused managed tests.
+- Added ADR-0345 exact global completed-step views over initial and continuation merge segments with reference-exact cursor chains and original-step provenance; added PCN-0355 and focused managed tests.
+- Added ADR-0346 caller-bounded expansion of every completed packet edit appearance into an immutable overflow-safe exact rational event order; added PCN-0356 and focused managed tests.
+- Added ADR-0347 immutable one-event cursors over exact bounded completed-merge event projections with explicit remaining count and exhaustion; added PCN-0357 and focused managed tests.
+- Added ADR-0348 reference-exact completed-merge event cursor transition acknowledgements without consumption or delivery claims; added PCN-0358 and focused managed tests.
+- Added ADR-0349 caller-bounded completed-merge event traversal retaining exact acknowledgement chains and exhaustion versus truncation; added PCN-0359 and focused managed tests.
+- Added ADR-0350 exact continuation from truncated completed-merge event traversal final cursors without prior acknowledgement re-emission; added PCN-0360 and focused managed tests.
+- Added ADR-0351 completed-merge event traversal completion certificates requiring exact root remaining count and exhausted final cursor equality; added PCN-0361 and focused managed tests.
+- Added ADR-0352 exact contiguous global acknowledgement views across initial and continuation event traversal segments; added PCN-0362 and focused managed tests.
+- Added ADR-0353 exact rational seconds metadata for completed event traversal acknowledgements using one exact shared movie timescale; added PCN-0363 and focused managed tests.
+- Added ADR-0354 caller-explicit exact rational clock-tick metadata with overflow-safe `BigInteger` numerators and no rounding or clock access; added PCN-0364 and focused managed tests.
+- Added ADR-0355 through ADR-0358 caller-explicit integral rounding and signed origin, bounded completed-traversal deadlines, and pure caller-tick deadline observation; added PCN-0365 through PCN-0368 and focused managed tests.
+- Added ADR-0359 caller-explicit completed-traversal late-event eligibility and ADR-0360 caller-bounded source-ordered eligible candidate selection; added PCN-0369, PCN-0370, and focused managed tests.
+- Added ADR-0361 through ADR-0363 opaque completed-traversal media target identities, exact candidate binding, and bounded packet/payload/deadline request metadata; added PCN-0371 through PCN-0373 and focused managed tests.
+- Added ADR-0364 and ADR-0365 bounded caller-declared completed-traversal target capabilities and exact source-ordered request resolution; added PCN-0374, PCN-0375, and focused managed tests.
+- Added ADR-0366 and ADR-0367 bounded opaque completed-traversal runtime target registrations and exact identity-only lookup; added PCN-0376, PCN-0377, and focused managed tests.
+- Added ADR-0368 caller-identified source-ordered completed-traversal invocation intent metadata without runtime access or invocation; added PCN-0378 and focused managed tests.
+- Added ADR-0369 and ADR-0370 caller-explicit completed-traversal invocation admission and bounded admitted selection without runtime access or authorization; added PCN-0379, PCN-0380, and focused managed tests.
+- Added ADR-0371 caller-bounded contiguous ISO BMFF track sample-number planning over exact reconciled counts; added PCN-0381 and focused managed tests.
+- Added ADR-0372 and ADR-0373 exact bounded track sample edit-admission classification and caller-bounded admitted selection; added PCN-0382, PCN-0383, and focused managed tests.
+- Added ADR-0374 exact source-ordered admitted-sample absolute byte-range projection through reconciled chunk and size metadata; added PCN-0384 and focused managed tests.
+- Added ADR-0375 through ADR-0377 exact bounded admitted-sample `mdat` containment, independently owned payload projection, and timing-bound packet-candidate projection; added PCN-0385 through PCN-0387 and focused managed tests.
+- Added ADR-0378 and ADR-0379 exact source-ordered sample-description selection and bounded audio/visual sample-entry parse projections; added PCN-0388, PCN-0389, and focused managed tests.
+- Added ADR-0380 exact source-ordered bounded `avcC` / `esds` codec-configuration projection; added PCN-0390 and focused managed tests.
+- Added ADR-0381 through ADR-0383 bounded source-ordered managed AVC/AAC codec-packet composition plus exact track and movie binding projections; added PCN-0391 through PCN-0393 and focused managed tests.
+- Added ADR-0384 through ADR-0387 exact sequence, bounded multi-track set, caller-explicit selection, and initial immutable cursor-set projections over the managed movie-track packet chain; added PCN-0394 through PCN-0397 and focused managed tests.
+- Added ADR-0388 through ADR-0390 caller-bounded projected merge traversal, exact continuation, and exact exhaustion/count completion certification; added PCN-0398 through PCN-0400 and focused managed tests.
+- Added ADR-0391 through ADR-0393 exact projected completed-step reconstruction, bounded rational event ordering, and immutable initial event cursor; added PCN-0401 through PCN-0403 and focused managed tests.
+- Added ADR-0394 through ADR-0396 caller-bounded projected completed-event traversal, exact continuation without replay, and exact completion certification; added PCN-0404 through PCN-0406 and focused managed tests.
+- Added ADR-0397 exact projected completed-event global acknowledgement-view reconstruction; added PCN-0407 and focused managed tests.
+- Added ADR-0398 through ADR-0400 exact projected traversal rational seconds, caller-rate rational ticks, and caller-explicit integral rounding; added PCN-0408 through PCN-0410 and focused managed tests.
+- Added ADR-0401 and ADR-0402 caller-explicit projected traversal clock origin and bounded immutable deadlines; added PCN-0411, PCN-0412, and focused managed tests.
+- Added ADR-0403 through ADR-0408 caller-tick deadline observation, explicit eligibility, bounded candidate selection, opaque target sets, exact target binding, and immutable request metadata; added PCN-0413 through PCN-0418 and focused managed tests.
+- Added ADR-0409 through ADR-0412 caller-declared target capabilities, exact resolution, opaque runtime-target identity registries, and identity-only lookup; added PCN-0419 through PCN-0422 and focused managed tests.
+- Added ADR-0413 through ADR-0415 caller-identified immutable invocation intent, caller-explicit admission, and caller-bounded admitted selection metadata without invocation; added PCN-0423 through PCN-0425 and focused managed tests.
+- Added ADR-0416 strict bounded fragmented-MP4 `trex` track-default parsing; added PCN-0426 and focused managed tests without fragment traversal or physical execution.
+- Added ADR-0417 strict bounded fragmented-MP4 `mfhd` sequence-header parsing without continuity inference; added PCN-0427 and focused managed tests.
+- Added ADR-0418 through ADR-0420 strict bounded fragmented-MP4 `tfhd`, `tfdt`, and `trun` leaf-box parsing; added PCN-0428 through PCN-0430 and focused managed tests without fragment traversal, inherited-default resolution, or physical execution.
+- Added ADR-0421 pure managed fragmented sample-default resolution across `trex`, `tfhd`, and `trun`; added PCN-0431 and focused tests without traversal, timeline or data-offset calculation, media-data access, or physical execution.
+- Added ADR-0422 exact arbitrary-precision fragmented sample decode/presentation timing projection from `tfdt` and one resolved run; added PCN-0432 and focused tests without timescale conversion, traversal, media-data access, or physical execution.
+- Added ADR-0423 through ADR-0425 explicit fragment run data-origin resolution, arbitrary-precision sample byte ranges, and checked timing/range metadata joining; added PCN-0433 through PCN-0435 and focused tests without file, `mdat`, payload, decoder, traversal, or physical execution.
+- Added ADR-0426 caller-timescale-bound exact rational fragment sample timing; added PCN-0436 and focused tests without rounding, clock, ordering, `mdat`, payload, decoder, traversal, or physical execution.
+- Added ADR-0427 exact same-fragment presentation/decode/index ordering; added PCN-0437 and focused tests without cross-stream merge, clock, scheduler, `mdat`, payload, decoder, traversal, or physical execution.
+- Added ADR-0428 through ADR-0432 exact movie-sequence and same-track decode continuity classification, two-dimensional binding, bounded endpoint-chain validation, and declarative summary; added PCN-0438 through PCN-0442 and focused tests without discovery, traversal, reset, clock, scheduler, payload, runtime, or physical execution.
+- Added ADR-0433 through ADR-0435 exact fragment sample batch binding, continuity-chain binding, and bounded cross-fragment presentation merge; added PCN-0443 through PCN-0445 and focused tests without discovery, traversal, cursor, delivery, clock, scheduler, payload, runtime, or physical execution.
+- Added ADR-0436 through ADR-0438 immutable fragment presentation-merge cursors, exact one-sample steps, and preflight-bounded exhaustive traversal; added PCN-0446 through PCN-0448 and focused tests without acknowledgement, delivery, clock, scheduler, payload, runtime, or physical execution.
+- Added ADR-0439 exact fragment presentation-merge traversal completion proof with source/sample/cursor/index/count revalidation; added PCN-0449 and focused tests without acknowledgement, delivery, clock, scheduler, payload, runtime, or physical execution.
+- Added ADR-0440 and ADR-0441 bounded non-delivery acknowledgement metadata reconstructed from exact completed fragment traversal steps and bound back to the completion source; added PCN-0450 and PCN-0451 with focused tests and no clock, scheduler, payload, runtime, or physical execution.
+- Added ADR-0442 and ADR-0443 exact arbitrary-precision rational decode/presentation/duration timing for fragment traversal acknowledgements and exact source binding; added PCN-0452 and PCN-0453 with focused tests and no rounding, clock, deadline, scheduler, delivery, payload, runtime, or physical execution.
+- Added ADR-0444 and ADR-0445 caller-tick-rate integral decode/presentation interval projection with explicit floor, ceiling, or exact rounding, correct negative timestamp rounding, and exact source binding; added PCN-0454 and PCN-0455 with focused tests and no clock, origin, deadline, scheduler, delivery, payload, runtime, or physical execution.
+- Added ADR-0446 and ADR-0447 caller-signed arbitrary-precision clock-origin addition across exact integral decode/presentation intervals and exact source binding; added PCN-0456 and PCN-0457 with focused tests and no clock acquisition, deadline, scheduler, delivery, payload, runtime, or physical execution.
+- Added ADR-0448 and ADR-0449 immutable signed decode/presentation ready and exclusive-expiration deadline metadata with exact clock-origin source binding; added PCN-0458 and PCN-0459 with focused tests and no current-time observation, state classification, scheduler, delivery, payload, runtime, or physical execution.
+- Added ADR-0450 and ADR-0451 independent decode/presentation pending-ready-expired classification at one caller-signed observation tick with exact deadline-source binding; added PCN-0460 and PCN-0461 with focused tests and no clock acquisition, repeated observation, scheduler, delivery, payload, runtime, or physical execution.
+- Added ADR-0452 and ADR-0453 independently caller-policy decode/presentation ready-only or ready-or-expired eligibility facts with exact observation-source binding; added PCN-0462 and PCN-0463 with focused tests and no candidate selection, scheduler, dispatch, delivery, payload, runtime, or physical execution.
+- Added ADR-0454 and ADR-0455 caller-bounded source-order eligible selection under explicit require-both or require-either decode/presentation combination policy, with total/truncation facts and exact source binding; added PCN-0464 and PCN-0465 with focused tests and no scheduling, dispatch, delivery, payload, runtime, or physical execution.
+- Added ADR-0456 and ADR-0457 target-free selected-candidate request metadata with exact track/fragment/sample/deadline identity, strictly increasing source indexes, size-matched byte ranges, and exact source binding; added PCN-0466 and PCN-0467 with focused tests and no payload access, target binding, scheduler, dispatch, delivery, runtime, or physical execution.
+- Added ADR-0458 and ADR-0459 caller-explicit nonempty opaque fragment consumer identity and exact source-ordered request binding with candidate and track validation; added PCN-0468 and PCN-0469 with focused tests and no runtime lookup, capability access, payload access, dispatch, delivery, or physical execution.
+- Added ADR-0460 and ADR-0461 caller-explicit nonempty opaque fragment consumer-batch identity and bounded immutable source-ordered batch projection with exact request and consumer checks; added PCN-0470 and PCN-0471 with focused tests and no scheduling, runtime lookup, payload access, dispatch, delivery, or physical execution.
+- Added ADR-0462 and ADR-0463 bounded immutable fragment submission-intent metadata plus caller-explicit descriptive include/exclude classification with exact source, count, and enum validation; added PCN-0472 and PCN-0473 with focused tests and no authorization, selection, payload access, runtime lookup, invocation, dispatch, delivery, or physical execution.
+- Added ADR-0464 caller-bounded source-order selection of exact included fragment submission intents with total and truncation facts; added PCN-0474 with focused tests and no authorization, payload access, runtime lookup, invocation, dispatch, delivery, or physical execution.
+- Added ADR-0465 exact immutable selected-intent manifest metadata with opaque consumer/batch, track/fragment/sample/deadline, strictly ordered source, and size-matched byte-range validation; added PCN-0475 with focused tests and no payload access, authorization, runtime lookup, invocation, dispatch, delivery, or physical execution.
+- Added ADR-0466 exact full-chain source binding from selected-intent manifest through selection, classification, and intent to its original consumer batch; added PCN-0476 with focused tests and no payload access, authorization, runtime lookup, invocation, dispatch, delivery, or physical execution.
+- Added ADR-0467 and ADR-0468 declarative exact manifest identity/byte/deadline summary facts and bounded contiguous fragment batch/sequence segments with exact order, entry references, and byte totals; added PCN-0477 and PCN-0478 with focused tests and no packet composition, payload access, authorization, runtime lookup, invocation, dispatch, delivery, or physical execution.
+- Added ADR-0469 and ADR-0470 bounded immutable manifest-segment cursor metadata and exact one-segment advancement with source immutability and terminal rejection; added PCN-0479 and PCN-0480 with focused tests and no acknowledgement, completion claim, payload access, authorization, runtime lookup, invocation, dispatch, delivery, or physical execution.
+- Added ADR-0471 and ADR-0472 caller-bounded exhaustive manifest-segment cursor traversal and exact metadata-only completion certification with resumed/terminal support and full cursor-step identity validation; added PCN-0481 and PCN-0482 with focused tests and no acknowledgement, payload access, authorization, runtime lookup, invocation, dispatch, delivery, or physical execution.
+- Added ADR-0473 exact non-acknowledging completed-segment reconstruction with completed/source indexes and exact cursor-step/segment references, including resumed traversal; added PCN-0483 with focused tests and no submission or delivery completion claim, payload access, authorization, runtime lookup, invocation, dispatch, delivery, or physical execution.
 
 ### Post-0.0.10e - Bounded ISO BMFF / MP4 Parser Foundation
 

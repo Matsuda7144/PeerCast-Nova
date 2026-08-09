@@ -280,7 +280,7 @@ public sealed class PlaybackIsoBmffElementaryStreamDescriptorParserTests
             },
         };
 
-    private static byte[] BaselineElementaryStream() =>
+    internal static byte[] BaselineElementaryStream() =>
         ElementaryStream(
             0x1234,
             0,
@@ -352,7 +352,7 @@ public sealed class PlaybackIsoBmffElementaryStreamDescriptorParserTests
         return [tag, (byte)payload.Length, .. payload];
     }
 
-    private static byte[] ElementaryStreamBox(byte[] descriptor)
+    internal static byte[] ElementaryStreamBox(byte[] descriptor)
     {
         var child = new byte[12 + descriptor.Length];
         WriteHeader(child, 0x65736473);
@@ -360,7 +360,7 @@ public sealed class PlaybackIsoBmffElementaryStreamDescriptorParserTests
         return child;
     }
 
-    private static (byte[] Box, PlaybackIsoBmffAudioSampleEntry Entry)
+    internal static (byte[] Box, PlaybackIsoBmffAudioSampleEntry Entry)
         CreateAudioEntry(params byte[][] children)
     {
         var payload = new byte[28 + children.Sum(child => child.Length)];

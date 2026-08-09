@@ -124,7 +124,7 @@ public sealed class PlaybackIsoBmffEditedSampleMediaDataLookupTests
             new(0, 1, 1, 0, 1, 1));
     }
 
-    private static byte[] CreateFile(params (uint Type, int Size)[] boxes)
+    internal static byte[] CreateFile(params (uint Type, int Size)[] boxes)
     {
         var file = new byte[boxes.Sum(static box => box.Size)];
         var offset = 0;

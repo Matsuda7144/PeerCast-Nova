@@ -191,7 +191,7 @@ public sealed class PlaybackIsoBmffAudioSampleEntryParserTests
         return Assert.IsType<PlaybackIsoBmffSampleDescriptionBox>(description);
     }
 
-    private static byte[] CreateSampleDescription(
+    internal static byte[] CreateSampleDescription(
         byte[] payload,
         uint type = 0x6D703461)
     {
@@ -205,7 +205,7 @@ public sealed class PlaybackIsoBmffAudioSampleEntryParserTests
         return box;
     }
 
-    private static byte[] CreateAudioPayload(params byte[][] children)
+    internal static byte[] CreateAudioPayload(params byte[][] children)
     {
         var payload = new byte[28 + children.Sum(static child => child.Length)];
         BinaryPrimitives.WriteUInt16BigEndian(payload.AsSpan(6, 2), 1);

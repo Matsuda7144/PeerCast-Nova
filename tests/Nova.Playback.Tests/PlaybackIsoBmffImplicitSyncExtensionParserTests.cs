@@ -312,7 +312,7 @@ public sealed class PlaybackIsoBmffImplicitSyncExtensionParserTests
         return Assert.IsType<PlaybackIsoBmffImplicitSbrSyncExtension>(extension);
     }
 
-    private static PlaybackIsoBmffGaSpecificConfig Ga(byte[] configuration)
+    internal static PlaybackIsoBmffGaSpecificConfig Ga(byte[] configuration)
     {
         Assert.Equal(
             PlaybackIsoBmffGaSpecificConfigParseResult.Parsed,
@@ -397,7 +397,7 @@ public sealed class PlaybackIsoBmffImplicitSyncExtensionParserTests
             Array.AsReadOnly(Array.Empty<PlaybackIsoBmffBoxLocation>()));
     }
 
-    private static byte[] Bits(params (uint Value, int Count)[] fields)
+    internal static byte[] Bits(params (uint Value, int Count)[] fields)
     {
         var bitCount = fields.Sum(field => field.Count);
         var output = new byte[(bitCount + 7) / 8];

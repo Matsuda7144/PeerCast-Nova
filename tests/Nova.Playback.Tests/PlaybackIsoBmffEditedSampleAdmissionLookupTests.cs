@@ -195,7 +195,7 @@ public sealed class PlaybackIsoBmffEditedSampleAdmissionLookupTests
             0,
             PlaybackIsoBmffSampleSizeTableKind.Standard);
 
-    private static PlaybackIsoBmffTimeToSampleBox ParseTimeToSample(
+    internal static PlaybackIsoBmffTimeToSampleBox ParseTimeToSample(
         params (uint Count, uint Delta)[] entries)
     {
         var box = new byte[16 + (entries.Length * 8)];
@@ -217,7 +217,7 @@ public sealed class PlaybackIsoBmffEditedSampleAdmissionLookupTests
         return Assert.IsType<PlaybackIsoBmffTimeToSampleBox>(parsed);
     }
 
-    private static PlaybackIsoBmffEditListBox ParseEditList(
+    internal static PlaybackIsoBmffEditListBox ParseEditList(
         params (ulong Duration, long MediaTime, short RateInteger,
             short RateFraction)[] entries)
     {
@@ -246,7 +246,7 @@ public sealed class PlaybackIsoBmffEditedSampleAdmissionLookupTests
         return Assert.IsType<PlaybackIsoBmffEditListBox>(editList);
     }
 
-    private static PlaybackIsoBmffMovieHeaderTimingBox ParseMovieTiming(
+    internal static PlaybackIsoBmffMovieHeaderTimingBox ParseMovieTiming(
         uint timescale)
     {
         var box = new byte[108];
@@ -258,7 +258,7 @@ public sealed class PlaybackIsoBmffEditedSampleAdmissionLookupTests
         return Assert.IsType<PlaybackIsoBmffMovieHeaderTimingBox>(timing);
     }
 
-    private static PlaybackIsoBmffMediaHeaderTimingBox ParseMediaTiming(
+    internal static PlaybackIsoBmffMediaHeaderTimingBox ParseMediaTiming(
         uint timescale)
     {
         var box = new byte[32];

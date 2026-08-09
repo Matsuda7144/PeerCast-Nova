@@ -718,6 +718,42 @@ project SCE／CPE／LFE channel counts and reject duplicate element identities
 without selecting speaker positions. Speaker mapping, mixdown application, and
 decoder composition remain incomplete.
 
+ADR-0254 and
+`docs/reviews/PCN-0264-BOUNDED-ISO-BMFF-PCE-AWARE-GA-SPECIFIC-CONFIG-COMPOSITION.md`
+resume object-type-specific GA fields after the exact PCE for channel
+configuration zero, or after the shared prefix otherwise. ER
+post-configuration sync-extension and decoder composition remain incomplete.
+
+ADR-0255 and
+`docs/reviews/PCN-0265-BOUNDED-ISO-BMFF-ER-AUDIO-POST-CONFIG.md` project
+supported ER Audio `epConfig` values zero and one after the exact GA boundary.
+Error Protection Specific Config for values two／three and subsequent sync
+extensions remain incomplete.
+
+ADR-0256 and
+`docs/reviews/PCN-0266-BOUNDED-ISO-BMFF-ER-IMPLICIT-SBR-PS-SYNC-EXTENSION.md`
+reuse the immediate bounded implicit SBR／PS rules from the exact supported ER
+post-config position. Error Protection Specific Config, non-immediate marker
+search, and decoder composition remain incomplete.
+
+ADR-0257 and
+`docs/reviews/PCN-0267-BOUNDED-ISO-BMFF-AAC-CORE-FORMAT-FACTS.md` resolve the
+declared AAC sampling frequency and channel count from indexed configuration or
+exact PCE topology. Effective SBR／PS output format, speaker mapping, extradata,
+and decoder composition remain incomplete.
+
+ADR-0258 and
+`docs/reviews/PCN-0268-BOUNDED-ISO-BMFF-AAC-EXTENSION-SIGNALLING-FACTS.md`
+resolve absent, explicit, or source-bound implicit SBR／PS without mixing forms,
+and select the signalled extension frequency only for present SBR. PS output
+channel policy, extradata, and decoder composition remain incomplete.
+
+ADR-0259 and
+`docs/reviews/PCN-0269-BOUNDED-ISO-BMFF-AAC-DECODER-FORMAT-INTENT.md` project
+effective AAC sampling and channel-count intent, allowing PS only to promote a
+mono core to stereo. Speaker masks, capability validation, extradata, and
+decoder composition remain incomplete.
+
 ADR-0260 and
 `docs/reviews/PCN-0270-BOUNDED-ISO-BMFF-AAC-DECODER-EXTRADATA.md` copy the exact
 AudioSpecificConfig bytes into size-bounded owned storage attached to the
@@ -752,7 +788,7 @@ speaker positions, platform masks, and decoder layout binding remain incomplete.
 ADR-0265 and
 `docs/reviews/PCN-0275-BOUNDED-ISO-BMFF-AAC-TRANSFER-SYMBOL-COVERAGE.md`
 validate a finite caller-declared symbol-name set against the exact five-symbol
-ADR-0263 requirement while retaining plan ownership. Verified runtime capability,
+requirement from ADR-0263 while retaining plan ownership. Verified runtime capability,
 ABI/version checks, address resolution, and native invocation remain incomplete.
 
 ADR-0266 and
@@ -799,39 +835,6 @@ bind one caller-stated speaker position to every exact PCE channel slot, reject
 duplicates and LFE disagreement, and never infer a layout from PCE syntax.
 Platform layout projection, decoder binding, and native transfer remain
 incomplete.
-
-ADR-0290 and PCN-0300 project the exact speaker assignment to the finite
-WaveFormat speaker mask and retain an explicit source-to-platform channel-order
-permutation. Sample reordering, decoder binding, and native transfer remain
-incomplete.
-
-ADR-0291 and PCN-0301 validate that source-to-platform order as a nonempty exact
-permutation and retain a managed-only reorder plan. Sample-buffer application,
-decoder binding, and native transfer remain incomplete.
-
-ADR-0292 and PCN-0302 bind the reorder plan to managed AAC decoder preparation
-only when both retain the exact same PCE topology. Reorder application, native
-decoder binding, and parameter transfer remain incomplete.
-
-ADR-0293 and PCN-0303 apply the exact plan to a complete canonical interleaved
-PCM frame using a size-bounded owned managed copy while preserving all frame
-metadata. Decoder integration, native transfer, rendering, and physical
-execution remain incomplete.
-
-ADR-0294 and PCN-0304 retain the exact PCE mask and channel count as an explicit
-`av_channel_layout_from_mask` transfer requirement after validating preparation
-availability and mask population. Symbol coverage, native transfer, and decoder
-integration remain incomplete.
-
-ADR-0295 and PCN-0305 verify the exact explicit-layout initializer against the
-bounded caller-declared symbol set while retaining source ownership. Runtime
-loading, address and ABI checks, native transfer, and decoder integration remain
-incomplete.
-
-ADR-0296 and PCN-0306 compose PCE managed decoder preparation, explicit mask
-requirement, and declared-symbol coverage into one disposable owner with
-deterministic partial-failure cleanup. Runtime loading, ABI validation, native
-transfer, and decoder execution remain incomplete.
 
 ADR-0273 and
 `docs/reviews/PCN-0283-BOUNDED-ISO-BMFF-ER-ERROR-PROTECTION-SPECIFIC-CONFIG-PREFIX.md`
@@ -911,6 +914,39 @@ ADR-0289 and PCN-0299 bind that admitted ER configuration to an AAC managed
 decoder preparation only when both retain the exact same GA Specific Config.
 Native parameter transfer and decoder integration remain incomplete.
 
+ADR-0290 and PCN-0300 project the exact speaker assignment to the finite
+WaveFormat speaker mask and retain an explicit source-to-platform channel-order
+permutation. Sample reordering, decoder binding, and native transfer remain
+incomplete.
+
+ADR-0291 and PCN-0301 validate that source-to-platform order as a nonempty exact
+permutation and retain a managed-only reorder plan. Sample-buffer application,
+decoder binding, and native transfer remain incomplete.
+
+ADR-0292 and PCN-0302 bind the reorder plan to managed AAC decoder preparation
+only when both retain the exact same PCE topology. Reorder application, native
+decoder binding, and parameter transfer remain incomplete.
+
+ADR-0293 and PCN-0303 apply the exact plan to a complete canonical interleaved
+PCM frame using a size-bounded owned managed copy while preserving all frame
+metadata. Decoder integration, native transfer, rendering, and physical
+execution remain incomplete.
+
+ADR-0294 and PCN-0304 retain the exact PCE mask and channel count as an explicit
+`av_channel_layout_from_mask` transfer requirement after validating preparation
+availability and mask population. Symbol coverage, native transfer, and decoder
+integration remain incomplete.
+
+ADR-0295 and PCN-0305 verify the exact explicit-layout initializer against the
+bounded caller-declared symbol set while retaining source ownership. Runtime
+loading, address and ABI checks, native transfer, and decoder integration remain
+incomplete.
+
+ADR-0296 and PCN-0306 compose PCE managed decoder preparation, explicit mask
+requirement, and declared-symbol coverage into one disposable owner with
+deterministic partial-failure cleanup. Runtime loading, ABI validation, native
+transfer, and decoder execution remain incomplete.
+
 ADR-0297 and PCN-0307 continue immediate implicit SBR and PS parsing from the
 exact admitted ER configuration end across `epConfig` zero through three,
 including complete protection syntax and direct mapping where required.
@@ -929,48 +965,508 @@ completes the current non-physical managed-only AAC metadata-to-preparation
 chain. Runtime verification, native transfer, decoder integration, and physical
 execution remain incomplete.
 
-ADR-0300 and PCN-0310 project the exact AVC-selected or AAC-original compressed
-sample payload together with its edited-sample timing, supported codec/media
-classification, and matching sample-description identity behind one managed
-codec-neutral packet result. Stream identity, decoder preparation ownership,
-demux-event scheduling, multi-sample traversal, production MP4 demux composition,
-native submission, fragmented MP4, and streaming remain incomplete.
+ADR-0328 and
+`docs/reviews/PCN-0338-CALLER-BOUNDED-ISO-BMFF-IMPLICIT-SBR-SYNC-EXTENSION-SEARCH.md`
+add caller-bounded one-bit-step `0x2B7` search after exact direct-GA or admitted
+ER configuration, retain exact marker provenance, distinguish exhaustion from
+limit exhaustion, and continue into the existing bounded SBR and immediate PS
+parsers. Automatic default selection remains intentionally absent; decoder
+integration and physical execution remain incomplete.
 
-ADR-0254 and
-`docs/reviews/PCN-0264-BOUNDED-ISO-BMFF-PCE-AWARE-GA-SPECIFIC-CONFIG-COMPOSITION.md`
-resume object-type-specific GA fields after the exact PCE for channel
-configuration zero, or after the shared prefix otherwise. ER
-post-configuration sync-extension and decoder composition remain incomplete.
+ADR-0329 and
+`docs/reviews/PCN-0339-CALLER-EXPLICIT-ISO-BMFF-IMPLICIT-SBR-SYNC-EXTENSION-RESOLUTION-POLICY.md`
+require a factory-validated caller choice between exact immediate-only parsing
+and ADR-0328 caller-bounded search for direct GA or admitted ER configuration.
+The unified result retains exact policy and optional search provenance without
+introducing an automatic default. Decoder integration and physical execution
+remain incomplete.
 
-ADR-0255 and
-`docs/reviews/PCN-0265-BOUNDED-ISO-BMFF-ER-AUDIO-POST-CONFIG.md` project
-supported ER Audio `epConfig` values zero and one after the exact GA boundary.
-Error Protection Specific Config for values two／three and subsequent sync
-extensions remain incomplete.
+ADR-0330 and
+`docs/reviews/PCN-0340-BOUNDED-ISO-BMFF-TRACK-CODEC-PACKET-SEQUENCE.md`
+own at most 131,072 already composed packets from one exact movie/track/media/
+handler source with strictly increasing nonzero sample numbers and deterministic
+sequence indexes. Sample-table iteration, automatic packet construction, and
+cross-track merging remain incomplete.
 
-ADR-0256 and
-`docs/reviews/PCN-0266-BOUNDED-ISO-BMFF-ER-IMPLICIT-SBR-PS-SYNC-EXTENSION.md`
-reuse the immediate bounded implicit SBR／PS rules from the exact supported ER
-post-config position. Error Protection Specific Config, non-immediate marker
-search, and decoder composition remain incomplete.
+ADR-0331 and
+`docs/reviews/PCN-0341-BOUNDED-ISO-BMFF-TRACK-CODEC-PACKET-SEQUENCE-CURSOR.md`
+add a pure immutable cursor over ADR-0330 with exact one-entry advance,
+remaining-count metadata, and explicit exhaustion. Acknowledgement, automatic
+packet construction, cross-track merging, and delivery remain incomplete.
 
-ADR-0257 and
-`docs/reviews/PCN-0267-BOUNDED-ISO-BMFF-AAC-CORE-FORMAT-FACTS.md` resolve the
-declared AAC sampling frequency and channel count from indexed configuration or
-exact PCE topology. Effective SBR／PS output format, speaker mapping, extradata,
-and decoder composition remain incomplete.
+ADR-0332 and
+`docs/reviews/PCN-0342-EXACT-ISO-BMFF-TRACK-CODEC-PACKET-SEQUENCE-ACKNOWLEDGEMENT.md`
+retain one exact ADR-0331 source cursor, entry, and one-step successor as
+immutable transition metadata. Delivery, consumption, automatic packet
+construction, and cross-track merging remain incomplete.
 
-ADR-0258 and
-`docs/reviews/PCN-0268-BOUNDED-ISO-BMFF-AAC-EXTENSION-SIGNALLING-FACTS.md`
-resolve absent, explicit, or source-bound implicit SBR／PS without mixing forms,
-and select the signalled extension frequency only for present SBR. PS output
-channel policy, extradata, and decoder composition remain incomplete.
+ADR-0333 and
+`docs/reviews/PCN-0343-BOUNDED-ISO-BMFF-MOVIE-TRACK-CODEC-PACKET-SEQUENCE-SET.md`
+own at most 256 exact same-movie ADR-0330 sequences in caller order with unique
+track IDs and deterministic stream indexes. Explicit sequence selection,
+packet-head comparison, and cross-track merging remain incomplete.
 
-ADR-0259 and
-`docs/reviews/PCN-0269-BOUNDED-ISO-BMFF-AAC-DECODER-FORMAT-INTENT.md` project
-effective AAC sampling and channel-count intent, allowing PS only to promote a
-mono core to stereo. Speaker masks, capability validation, extradata, and
-decoder composition remain incomplete.
+ADR-0334 and
+`docs/reviews/PCN-0344-EXPLICIT-ISO-BMFF-MOVIE-TRACK-CODEC-PACKET-SEQUENCE-SELECTION.md`
+retain caller-explicit video and/or audio stream indexes from one exact ADR-0333
+set, reject invalid roles without scanning or fallback, and permit explicit
+single-media selection. Cursor creation, packet-head comparison, and
+cross-track merging remain incomplete.
+
+ADR-0335 and
+`docs/reviews/PCN-0345-BOUNDED-ISO-BMFF-SELECTED-TRACK-CODEC-PACKET-SEQUENCE-CURSOR-SET.md`
+create immutable initial ADR-0331 cursors for exactly the ADR-0334 selected
+video and/or audio roles. Any selected cursor failure rejects the whole result
+without partial cursor ownership. Cursor advance, packet-head comparison, and
+cross-track merging remain incomplete.
+
+ADR-0336 and
+`docs/reviews/PCN-0346-EXACT-ISO-BMFF-SELECTED-SEQUENCE-PACKET-HEAD-SNAPSHOT.md`
+project the exact current entry from each selected ADR-0335 cursor without
+advancing it, preserve absent or exhausted roles explicitly, and reject source,
+position, or entry-index mismatches without a partial snapshot. Packet-head
+time comparison, winner selection, and cross-track merging remain incomplete.
+
+ADR-0337 and
+`docs/reviews/PCN-0347-EXACT-ISO-BMFF-SELECTED-SEQUENCE-HEAD-MOVIE-TIME-COMPARISON.md`
+compare the first complete movie appearance of current video/audio heads by
+exact rational start and then end using overflow-safe cross multiplication.
+Single-role and exhausted states remain explicit. Stream-index tie-breaking,
+advance-role selection, and cross-track merging remain incomplete.
+
+ADR-0338 and
+`docs/reviews/PCN-0348-CALLER-EXPLICIT-ISO-BMFF-SEQUENCE-ADVANCE-ROLE-SELECTION.md`
+select the earlier or only current role and require caller-explicit video/audio
+preference for equal intervals. The exact comparison, preference, cursor, head,
+and leading appearance remain immutable metadata. Cursor advance, successor
+cursor-set construction, and cross-track merging remain incomplete.
+
+ADR-0339 and
+`docs/reviews/PCN-0349-EXACT-ISO-BMFF-SELECTED-SEQUENCE-CURSOR-SET-ADVANCE.md`
+advance exactly the ADR-0338 selected cursor by one ADR-0331 entry, retain the
+exact ADR-0332 transition, and construct an immutable successor cursor set while
+preserving the non-selected role cursor by reference. Repeated merge traversal,
+bounded merged output ownership, consumption, and delivery remain incomplete.
+
+ADR-0340 and
+`docs/reviews/PCN-0350-EXACT-ISO-BMFF-CROSS-TRACK-SEQUENCE-MERGE-STEP.md`
+project one caller-indexed cross-track step from the exact ADR-0339 transition,
+retaining stream, entry, packet, leading appearance, and successor cursor-set
+provenance under the combined 262,144-step limit. Repeated traversal, contiguous
+index and cursor-chain validation, and merged-list ownership remain incomplete.
+
+ADR-0341 and
+`docs/reviews/PCN-0351-BOUNDED-ISO-BMFF-CROSS-TRACK-MERGE-STEP-SEQUENCE.md`
+own up to 262,144 caller-provided ADR-0340 steps with contiguous indexes, one
+exact equal-interval policy, and reference-exact successor-to-source cursor
+chaining. Automatic traversal and exhaustive-completion proof remain incomplete.
+
+ADR-0342 and
+`docs/reviews/PCN-0352-CALLER-BOUNDED-ISO-BMFF-CROSS-TRACK-MERGE-TRAVERSAL.md`
+compose ADR-0336 through ADR-0341 into a pure managed packet merge under one
+caller tie policy and finite step bound. Exact exhaustion and caller truncation
+remain distinct, including already-exhausted zero-step input. Repeated edit
+appearance expansion, delivery, scheduling, and production composition remain
+incomplete.
+
+ADR-0343 and
+`docs/reviews/PCN-0353-EXACT-ISO-BMFF-MERGE-TRAVERSAL-CONTINUATION.md`
+continue from one exact truncated final cursor state under the same tie policy
+and remaining global bound. Each new segment uses local indexes, retains the
+cumulative starting index, and does not re-emit prior steps.
+
+ADR-0344 and
+`docs/reviews/PCN-0354-EXACT-ISO-BMFF-PACKET-MERGE-COMPLETION.md`
+certify packet-level completion only when the source is exhausted, initial and
+final role sequences match exactly, final role cursors are exhausted, and the
+root initial remaining total equals cumulative steps. Repeated edit-appearance
+and presentation-event completeness remain incomplete.
+
+ADR-0345 and
+`docs/reviews/PCN-0355-EXACT-ISO-BMFF-COMPLETED-MERGE-STEP-VIEW.md`
+walk the exact initial and continuation traversal chain into one contiguous
+global-index view while retaining every original merge step and exact cursor
+provenance. Edit-appearance expansion and presentation-event order remain
+incomplete.
+
+ADR-0346 and
+`docs/reviews/PCN-0356-BOUNDED-ISO-BMFF-COMPLETED-MERGE-EVENT-PROJECTION.md`
+expand every complete edit appearance from every ADR-0345 packet under a caller
+event bound and own one immutable overflow-safe exact rational movie-time order.
+Event cursor traversal, acknowledgement, delivery, and scheduling remain
+incomplete.
+
+ADR-0347 and
+`docs/reviews/PCN-0357-BOUNDED-ISO-BMFF-COMPLETED-MERGE-EVENT-CURSOR.md`
+traverse one exact ADR-0346 projection through an immutable one-event cursor
+with explicit remaining and exhaustion state. The source projection and cursor
+are never mutated.
+
+ADR-0348 and
+`docs/reviews/PCN-0358-EXACT-ISO-BMFF-COMPLETED-MERGE-EVENT-ACKNOWLEDGEMENT.md`
+retain one exact source cursor, event, and one-index successor triple over the
+same projection. This is managed transition provenance, not consumption or
+delivery evidence.
+
+ADR-0349 and
+`docs/reviews/PCN-0359-CALLER-BOUNDED-ISO-BMFF-COMPLETED-MERGE-EVENT-TRAVERSAL.md`
+compose exact one-event cursor transitions into a caller-bounded immutable
+acknowledgement chain with explicit exhaustion versus truncation.
+
+ADR-0350 and
+`docs/reviews/PCN-0360-EXACT-ISO-BMFF-COMPLETED-MERGE-EVENT-TRAVERSAL-CONTINUATION.md`
+continue from one exact truncated final cursor under the remaining global event
+bound without re-emitting prior acknowledgements.
+
+ADR-0351 and
+`docs/reviews/PCN-0361-EXACT-ISO-BMFF-COMPLETED-MERGE-EVENT-TRAVERSAL-COMPLETION.md`
+certify whole root-remaining event traversal only when cumulative count and the
+exact exhausted final cursor agree.
+
+ADR-0352 and
+`docs/reviews/PCN-0362-EXACT-ISO-BMFF-COMPLETED-MERGE-EVENT-TRAVERSAL-ACKNOWLEDGEMENT-VIEW.md`
+reconstruct one contiguous global-index acknowledgement view across the exact
+initial and continuation segments without copying events or transitions.
+Consumption, delivery, and scheduling remain incomplete.
+
+ADR-0353 and
+`docs/reviews/PCN-0363-EXACT-ISO-BMFF-COMPLETED-MERGE-EVENT-TRAVERSAL-TIME.md`
+project every exact ADR-0352 event into rational seconds using the shared exact
+movie timescale while retaining acknowledgement provenance.
+
+ADR-0354 and
+`docs/reviews/PCN-0364-CALLER-EXPLICIT-ISO-BMFF-COMPLETED-MERGE-EVENT-TRAVERSAL-CLOCK-TIME.md`
+apply one nonzero caller-explicit clock rate with `BigInteger` numerators and no
+rounding or clock acquisition. Integral clock policy, origin, deadlines,
+consumption, delivery, and scheduling remain incomplete.
+
+ADR-0355 through ADR-0358 and PCN-0365 through PCN-0368 add caller-explicit
+integral rounding, signed origin, bounded deadline metadata, and pure
+caller-tick pending/ready/expired observation to the completed traversal chain.
+Clock acquisition, repeated observation, eligibility, dispatch, consumption,
+delivery, and scheduling remain incomplete.
+
+ADR-0359 and ADR-0360 with PCN-0369 and PCN-0370 add caller-explicit late-event
+eligibility and caller-bounded source-ordered candidate selection to the
+completed traversal chain. Target identity, requests, runtime access, dispatch,
+consumption, and delivery remain incomplete.
+
+ADR-0361 through ADR-0363 and PCN-0371 through PCN-0373 add opaque caller media
+target identities, exact media-kind candidate binding, and bounded immutable
+packet/payload/deadline request metadata. Capability resolution, runtime lookup,
+invocation, consumption, and delivery remain incomplete.
+
+ADR-0364 and ADR-0365 with PCN-0374 and PCN-0375 add bounded caller-declared
+target media/payload capabilities and exact source-ordered request resolution.
+Runtime registration and lookup, invocation, consumption, and delivery remain
+incomplete.
+
+ADR-0366 and ADR-0367 with PCN-0376 and PCN-0377 add bounded opaque runtime
+target registrations and exact identity-only lookup. Runtime object access,
+invocation, consumption, and delivery remain incomplete.
+
+ADR-0368 with PCN-0378 adds one caller-identified source-ordered immutable
+invocation intent projection. Runtime object access, invocation, admission,
+consumption, and delivery remain incomplete.
+
+ADR-0369 and ADR-0370 with PCN-0379 and PCN-0380 add caller-explicit exact
+admission classification and a caller-bounded source-ordered admitted subset.
+Runtime object access, invocation, consumption, and delivery remain incomplete.
+
+ADR-0371 with PCN-0381 begins the production-composition foundation with a
+caller-bounded contiguous sample-number plan over exact reconciled sample-count
+metadata. Edit admission, payload lookup/copy, and packet construction remain
+incomplete.
+
+ADR-0372 and ADR-0373 with PCN-0382 and PCN-0383 project exact source-ordered
+edit-admission classifications for every planned sample and retain a bounded
+admitted subset. Byte-range/`mdat` lookup, payload copy, and packet construction
+remain incomplete.
+
+ADR-0374 with PCN-0384 resolves every selected admission to an exact absolute
+byte range and sample-description index through reconciled chunk and size
+metadata. File/`mdat` containment, payload copy, and packet construction remain
+incomplete.
+
+ADR-0375 through ADR-0377 with PCN-0385 through PCN-0387 add bounded exact
+`mdat` containment, independently owned source-ordered payload copies, and
+exact packet candidates bound to the original timing and edit appearances.
+Codec composition and packet construction remain incomplete.
+
+ADR-0378 and ADR-0379 with PCN-0388 and PCN-0389 select the exact `stsd` entry
+for every packet candidate and revalidate and parse its `mp4a`, `avc1`, or
+`avc3` audio/visual sample entry under one bounded child-box limit. Codec-
+specific child selection, payload composition, and packet construction remain
+incomplete.
+
+ADR-0380 with PCN-0390 parses every exact selected entry's unique `avcC` or
+`esds` codec configuration under caller-bounded parameter-set, descriptor, and
+configuration-byte limits. Managed AVC/AAC composition and packet construction
+remain incomplete.
+
+ADR-0381 through ADR-0383 with PCN-0391 through PCN-0393 apply the existing
+bounded managed AVC/AAC packet boundaries to every exact source sample and bind
+the resulting packets to exact track identity, media timing, handler, and movie
+timing. Multi-track collection, selection, merge, and production delivery remain
+incomplete for this chain.
+
+ADR-0384 through ADR-0387 with PCN-0394 through PCN-0397 convert exact
+movie-track bindings into existing immutable per-track sequences, collect a
+bounded caller-ordered same-movie unique-track set, apply caller-explicit
+video/audio stream indexes, and create exact index-zero cursors. Connecting this
+projection chain to bounded merge traversal and production delivery remains
+incomplete.
+
+ADR-0388 through ADR-0390 with PCN-0398 through PCN-0400 connect the projected
+initial cursor set to caller-policy bounded merge traversal, exact truncated
+continuation, and exact exhaustion/cumulative-count certification. Completed
+step reconstruction, event projection, and production delivery remain
+incomplete for this chain.
+
+ADR-0391 through ADR-0393 with PCN-0401 through PCN-0403 reconstruct one exact
+global completed-step view, project caller-bounded overflow-safe rational event
+order, and create an immutable index-zero event cursor. Event traversal,
+acknowledgement, clock projection, and production delivery remain incomplete for
+this chain.
+
+ADR-0394 through ADR-0396 with PCN-0404 through PCN-0406 connect that exact
+projected event cursor to caller-bounded acknowledgement traversal, exact
+truncated continuation without replay, and exact root-count/final-exhaustion
+certification. Flattened acknowledgement views, clock projection, and
+production delivery remain incomplete for this chain.
+
+ADR-0397 with PCN-0407 reconstructs one exact contiguous global
+acknowledgement view across the projected initial and continuation traversal
+segments. Clock projection and production delivery remain incomplete for this
+chain.
+
+ADR-0398 through ADR-0400 with PCN-0408 through PCN-0410 bind exact rational
+seconds to that projected acknowledgement view, apply a caller-explicit clock
+rate with unbounded integer numerators, and apply caller-explicit integral
+rounding policies. Clock-origin projection and production delivery remain
+incomplete for this chain.
+
+ADR-0401 and ADR-0402 with PCN-0411 and PCN-0412 apply one caller-explicit
+signed clock origin without reading a clock and project exact immutable ready
+and exclusive-expiration deadlines. Current-tick observation and production
+delivery remain incomplete for this chain.
+
+ADR-0403 through ADR-0408 with PCN-0413 through PCN-0418 classify those
+deadlines against one caller tick, apply caller-explicit late eligibility,
+select caller-bounded source-order candidates, attach distinct opaque media
+target IDs, bind candidates exactly, and project bounded immutable packet and
+deadline request metadata. Capability resolution, runtime access, invocation,
+and production delivery remain incomplete for this chain.
+
+ADR-0409 through ADR-0412 with PCN-0419 through PCN-0422 attach caller-declared
+target/media/payload capabilities, resolve exact requests, attach opaque
+runtime-target identity and generation records, and perform identity-only
+same-target/same-media lookup. Runtime object access, invocation intent, and
+production delivery remain incomplete for this chain.
+
+ADR-0413 through ADR-0415 with PCN-0423 through PCN-0425 add caller-identified
+immutable invocation-intent metadata, caller-explicit admitted/denied
+classification, and caller-bounded admitted source-order selection. Runtime
+object access, target calls, actual invocation, and production delivery remain
+intentionally incomplete for this chain.
+
+ADR-0416 with PCN-0426 starts a separate managed fragmented-MP4 foundation by
+parsing strict FullBox-v0 `trex` track defaults with exact length and nonzero
+track/sample-description identities. `mvex` traversal, movie fragments, track
+fragments, fragment runs, sample-default and data-offset resolution, streaming,
+and production fragmented demux remain incomplete.
+
+ADR-0417 with PCN-0427 parses strict FullBox-v0 `mfhd` sequence headers while
+leaving cross-fragment continuity policy explicit and unimplemented. `moof`
+traversal and remaining fragmented sample/run composition remain incomplete.
+
+ADR-0418 through ADR-0420 with PCN-0428 through PCN-0430 parse strict bounded
+`tfhd`, `tfdt`, and `trun` leaf boxes. Optional track-fragment defaults remain
+presence-aware, decode time remains lossless across versions zero and one, and
+run entries are limited to 4,096 by default and 65,536 at the hard boundary.
+At this leaf-parser stage, fragment traversal, inherited-default and absolute
+data-offset resolution, media-data lookup, streaming, and production fragmented
+demux remained incomplete.
+
+ADR-0421 with PCN-0431 resolves one parsed run's sample defaults through exact
+`trun`, `tfhd`, and `trex` precedence with track/count validation and immutable
+output. Fragment traversal, decode/presentation timestamp accumulation, absolute
+data-offset and byte-range resolution, media-data lookup, streaming, and
+production fragmented demux remain incomplete.
+
+ADR-0422 with PCN-0432 projects one resolved run's exact decode and presentation
+times from `tfdt`, using arbitrary-precision accumulation and preserving signed
+composition offsets. Timescale conversion, cross-fragment continuity, absolute
+data-offset and byte-range resolution, media-data lookup, traversal, streaming,
+and production fragmented demux remain incomplete.
+
+ADR-0423 through ADR-0425 with PCN-0433 through PCN-0435 resolve explicit
+fragment data origins, project arbitrary-precision contiguous sample ranges,
+and join them with exact fragment timing under track/description/count/index/
+size validation. Timescale conversion, cross-fragment continuity, `mdat`
+admission, payload access, traversal, streaming, and production fragmented demux
+remain incomplete.
+
+ADR-0426 with PCN-0436 binds one nonzero media timescale to the checked fragment
+metadata and preserves arbitrary-precision decode, presentation, and duration
+numerators without rounding. Clock conversion, cross-track or cross-fragment
+ordering, `mdat` admission, payload access, traversal, streaming, and production
+fragmented demux remain incomplete.
+
+ADR-0427 with PCN-0437 adds exact same-fragment presentation ordering with
+decode-time and source-index tie breaks plus source-index/timescale validation.
+Cross-track or cross-fragment merge, clock conversion, `mdat` admission, payload
+access, traversal, streaming, and production fragmented demux remain incomplete.
+
+ADR-0428 through ADR-0432 with PCN-0438 through PCN-0442 classify exact `mfhd`
+sequence and same-track decode continuity, bind both dimensions, validate
+bounded exact-endpoint transition chains, and summarize discontinuities without
+selecting reset policy. Fragment discovery/traversal, reset, clock, scheduling,
+cross-track sample merge, `mdat` admission, payload access, streaming, and
+production fragmented demux remain incomplete.
+
+ADR-0433 through ADR-0435 with PCN-0443 through PCN-0445 bind exact
+`mfhd`/timed-run/rational-order batches, validate their one-to-one continuity
+transition chain, and produce a bounded exact cross-fragment presentation merge.
+ADR-0436 through ADR-0438 with PCN-0446 through PCN-0448 add an immutable
+initial/resumed cursor, exact one-sample cursor step, and preflight-bounded
+exhaustive traversal with contiguous same-source index validation.
+ADR-0439 with PCN-0449 revalidates the exhaustive traversal's exact source,
+sample, cursor-identity, index, and count chain as immutable completion metadata.
+ADR-0440 and ADR-0441 with PCN-0450 and PCN-0451 reconstruct bounded immutable
+acknowledgement metadata from that completion and bind it to the exact source;
+this records metadata observation only and does not claim delivery.
+ADR-0442 and ADR-0443 with PCN-0452 and PCN-0453 project exact
+arbitrary-precision decode, presentation, and duration timing over the retained
+media-timescale denominator and bind it back to that acknowledgement source.
+ADR-0444 and ADR-0445 with PCN-0454 and PCN-0455 convert both decode and
+presentation intervals to a caller-explicit tick rate with caller-explicit
+floor, ceiling, or exact rounding and bind the policy back to the rational source.
+ADR-0446 and ADR-0447 with PCN-0456 and PCN-0457 add one caller-explicit signed
+arbitrary-precision origin to both integral timelines and bind the rebuilt
+timeline projection back to the exact integral source without reading a clock.
+ADR-0448 and ADR-0449 with PCN-0458 and PCN-0459 expose immutable signed ready
+and exclusive-expiration deadline metadata for both decode and presentation
+intervals and bind it back to the exact clock-origin source without observation.
+ADR-0450 and ADR-0451 with PCN-0460 and PCN-0461 independently classify both
+deadline dimensions as pending, ready, or expired at one caller-explicit signed
+tick and bind the snapshot back to its exact deadline source without clock reads.
+ADR-0452 and ADR-0453 with PCN-0462 and PCN-0463 apply independently explicit
+ready-only or ready-or-expired policies to decode and presentation states and
+bind the resulting facts back to the exact observation source without selection.
+ADR-0454 and ADR-0455 with PCN-0464 and PCN-0465 combine those facts under a
+caller-explicit require-both or require-either rule, retain a caller-bounded
+source-order prefix, and bind total/truncation facts back to the exact source.
+ADR-0456 and ADR-0457 with PCN-0466 and PCN-0467 project selected candidates as
+target-free track/fragment/sample/deadline and exact byte-range request metadata
+and bind it back to the exact source without reading payload bytes.
+ADR-0458 and ADR-0459 with PCN-0468 and PCN-0469 create one caller-explicit
+nonempty opaque consumer identity and bind every target-free request to that
+exact identity under source, order, candidate, and track validation without
+runtime lookup or dispatch.
+ADR-0460 and ADR-0461 with PCN-0470 and PCN-0471 create one caller-explicit
+nonempty opaque batch identity and project exact consumer bindings as a bounded
+immutable source-ordered batch without scheduler, runtime, or delivery meaning.
+ADR-0462 and ADR-0463 with PCN-0472 and PCN-0473 project exact batch entries as
+bounded immutable submission-intent metadata and attach caller-explicit
+descriptive include/exclude facts without authorization, selection, runtime
+lookup, invocation, or dispatch.
+ADR-0464 with PCN-0474 retains a caller-bounded source-order prefix of exact
+included intents with total and truncation facts without authorization,
+payload access, invocation, or dispatch.
+ADR-0465 with PCN-0475 flattens selected intents into exact immutable
+consumer/batch/track/fragment/sample/deadline and byte-range manifest metadata
+without payload access, authorization, runtime lookup, invocation, or dispatch.
+ADR-0466 with PCN-0476 binds that manifest through its selection,
+classification, and intent chain to the exact original consumer batch without
+payload access, authorization, runtime lookup, invocation, or dispatch.
+ADR-0467 and ADR-0468 with PCN-0477 and PCN-0478 derive declarative common
+identity, byte-envelope, and deadline summary facts and partition exact manifest
+entries into bounded contiguous fragment batch/sequence segments without packet
+composition, payload access, runtime lookup, invocation, or dispatch.
+ADR-0469 and ADR-0470 with PCN-0479 and PCN-0480 add a bounded immutable cursor
+over those segments and exact one-segment advancement without source mutation,
+acknowledgement, completion claims, payload access, invocation, or dispatch.
+ADR-0471 and ADR-0472 with PCN-0481 and PCN-0482 add caller-bounded exhaustive
+segment cursor traversal and exact metadata-only completion certification with
+resumed and terminal support and no acknowledgement, payload access,
+authorization, invocation, dispatch, or delivery completion claim.
+ADR-0473 with PCN-0483 reconstructs exact traversed segment references and
+resumed source indexes as a non-acknowledging completed view without payload
+access, authorization, invocation, dispatch, or delivery completion claims.
+Fragment discovery, cross-track merge, delivery attempt/outcome, discontinuity
+handling, clock, scheduling, `mdat` admission, payload access, streaming, and
+production fragmented demux remain incomplete.
+
+### Current managed ISO BMFF packet-to-event chain
+
+ADR-0300 through ADR-0327 and PCN-0310 through PCN-0337 form one cumulative
+managed-only chain:
+
+- ADR-0300 projects exact AVC-selected or AAC-original compressed bytes with
+  edited-sample timing and sample-description identity.
+- ADR-0301 binds the packet to exact `tkhd`, `mdhd`, and `hdlr` track metadata.
+- ADR-0302 binds the track packet to exact `mvhd` timing and validates its
+  rational complete-sample edit appearances.
+- ADR-0303 snapshots at most 256 distinct-track current packets under one exact
+  `mvhd` source and assigns caller-ordered zero-based stream indexes.
+- ADR-0304 retains caller-explicit video and/or audio stream selection without
+  default-track inference or fallback.
+- ADR-0305 projects bounded source-ordered event lists from each selected
+  current packet's complete edit appearances.
+- ADR-0306 merges those events into an exact rational movie-time order with
+  overflow-safe comparison and deterministic ties.
+- ADR-0307 projects that order into exact rational seconds by retaining each
+  numerator and multiplying its denominator by the exact `mvhd` timescale.
+- ADR-0308 owns those exact event times in a bounded immutable queue snapshot
+  with deterministic zero-based sequence indexes.
+- ADR-0309 traverses that snapshot with an immutable bounded cursor and pure
+  one-entry advance that reports exhaustion explicitly.
+- ADR-0310 binds the exact source cursor, queue entry, and one-step successor
+  into immutable acknowledgement metadata without claiming delivery.
+- ADR-0311 projects the bounded queue into caller-rate exact rational clock
+  ticks with overflow-safe `BigInteger` numerators and no rounding.
+- ADR-0312 converts those rationals to integral intervals only under
+  caller-explicit start/end rounding modes and rejects empty results.
+- ADR-0313 adds a caller-explicit signed `BigInteger` clock origin without
+  reading a clock or creating deadlines.
+- ADR-0314 projects those timeline intervals into immutable ready and exclusive
+  expiration deadline metadata without observing a clock.
+- ADR-0315 classifies all deadlines as pending, ready, or expired at one
+  caller-explicit signed tick with exact boundary behavior.
+- ADR-0316 applies caller-explicit ready-only or ready-plus-expired eligibility
+  without selecting or dispatching an event.
+- ADR-0317 selects a caller-bounded source-ordered eligible prefix with total
+  eligible count and truncation metadata.
+- ADR-0318 owns at most one opaque caller-explicit video and audio target
+  identity without storing an invocable object.
+- ADR-0319 binds exact candidates to matching media target identities without
+  target resolution or invocation.
+- ADR-0320 exposes each exact binding as bounded immutable request metadata with
+  target ID, media kind, packet payload, and deadline.
+- ADR-0321 owns explicit bounded target media and maximum-payload capability
+  declarations without an invocable target.
+- ADR-0322 resolves requests to matching exact capabilities by target ID, media
+  kind, and payload limit without runtime lookup or invocation.
+- ADR-0323 owns opaque runtime-instance IDs and nonzero generations without
+  retaining runtime object references.
+- ADR-0324 binds capability resolutions to exact runtime registrations by
+  target ID and media kind without instance access or invocation.
+- ADR-0325 projects those lookups into one caller-identified, source-indexed
+  immutable invocation-intent batch without instance access or invocation.
+- ADR-0326 classifies every exact intent with a caller-explicit admitted or
+  denied disposition without granting runtime access or invoking a target.
+- ADR-0327 selects a caller-bounded source-ordered admitted subset while
+  retaining total-admitted count and explicit truncation metadata.
+
+The current result is metadata for one current packet per selected track. It is
+not a production demux loop. Default rounding and origin policies, clock
+acquisition, repeated observation, actual dispatch, cursor mutation, delivery
+outcome, runtime instance access and invocation, scheduling, multi-sample cursor
+traversal and automatic packet composition, decoder-preparation ownership across
+streams, native packet submission,
+production MP4 demux composition, fragmented MP4, and streaming remain
+incomplete.
 
 ### Deferred
 

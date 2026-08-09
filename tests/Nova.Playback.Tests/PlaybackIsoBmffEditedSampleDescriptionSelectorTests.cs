@@ -160,7 +160,7 @@ public sealed class PlaybackIsoBmffEditedSampleDescriptionSelectorTests
             new(0, 1, 1, 0, 1, sampleDescriptionIndex));
     }
 
-    private static PlaybackIsoBmffSampleDescriptionBox ParseSampleDescription(
+    internal static PlaybackIsoBmffSampleDescriptionBox ParseSampleDescription(
         params uint[] entryTypes)
     {
         var box = new byte[16 + (entryTypes.Length * 8)];
@@ -183,7 +183,7 @@ public sealed class PlaybackIsoBmffEditedSampleDescriptionSelectorTests
         return Assert.IsType<PlaybackIsoBmffSampleDescriptionBox>(description);
     }
 
-    private static PlaybackIsoBmffHandlerReferenceBox ParseHandler(uint type)
+    internal static PlaybackIsoBmffHandlerReferenceBox ParseHandler(uint type)
     {
         var box = new byte[33];
         WriteHeader(box, 0x68646C72);
