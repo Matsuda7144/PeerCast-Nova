@@ -1510,6 +1510,132 @@ close its current exact chain may be completed, but indefinite metadata-only
 extension, fragmented production demux, streaming, and payload delivery are not
 the primary 0.1.0 path.
 
+ADR-0474 with PCN-0484 implements the first production-oriented regular MP4
+composition slice. One finite caller-bounded operation now reuses the existing
+sample plan through owned payload, AVC／AAC packet composition, exact track/movie
+binding, and same-track sequence projection. It produces owned compressed
+packets from exact parsed sources and caller-provided file bytes without native
+decoder preparation, runtime access, packet submission, scheduling, delivery,
+or physical output. Multi-track movie composition and selected-stream merge are
+supplied by the next bounded slice below.
+
+ADR-0475 with PCN-0485 composes a bounded caller-ordered track set over one
+common file span, requires exact same-movie identity, applies caller-explicit
+video/audio selection, and produces a bounded deterministic cross-track merge
+traversal with explicit exhaustion or truncation. The first selected AVC/AAC
+decoder-preparation ownership bridge is supplied by ADR-0476 below; runtime
+access, native invocation, scheduling, delivery, and physical output remain
+unimplemented.
+
+ADR-0476 with PCN-0486 binds the caller-selected regular movie streams to the
+first managed decoder-preparation ownership boundary. The selected AVC track
+owns one consistent `avcC` input and payload policy, while ordinary selected
+AAC-LC reaches the existing owned managed parameter lease through exact
+sample-entry consistency and caller-declared symbol/capability checks. AVC
+managed codec-parameter and transfer-plan parity is next, followed by verified
+installed-runtime capability binding; native invocation and output remain
+unimplemented.
+
+ADR-0477 with PCN-0487 supplies AVC managed codec-parameter and transfer-plan
+parity. Selected AVC and ordinary AAC now both retain owned managed leases,
+exact transfer requirements, caller-declared symbol coverage, and bounded
+declared decoder capabilities. The exact verified-gate handoff is supplied by
+ADR-0478 below; native parameter transfer, decoder open, packet submission,
+scheduling, delivery, and physical output remain unimplemented.
+
+ADR-0478 with PCN-0488 binds those selected managed AVC/AAC preparations to
+caller-supplied, already verified ABI gate leases. Exact role, codec, parameter
+lease, declared symbol coverage, gate symbol addresses, and disposed-state
+availability are retained without locating or loading a runtime. Native
+parameter transfer and decoder context allocation/open are supplied by
+ADR-0479 below.
+
+ADR-0479 with PCN-0489 consumes that exact binding in one bounded,
+video-then-audio decoder-session transaction. It creates each selected context,
+transfers the exact managed parameters, configures the packet time base from
+the selected track as `1 / mdhd.timescale`, and opens the decoder with complete
+partial-failure cleanup and sole session ownership. Verification injects fake
+operations and performs no native invocation. Compressed-packet submission is
+supplied by ADR-0480 below.
+
+ADR-0480 with PCN-0490 consumes the opened session and advances the exact
+precomputed video/audio merge only after its current owned packet is accepted.
+It supplies exact media-unit PTS, reconstructed DTS, duration, stream index,
+track time base, and IDR-derived key flag to the reviewed metadata-aware packet
+owner, retaining the same packet across backpressure and disposing the complete
+session on any other rejection. Verification uses injected operations only.
+End-of-stream flush and managed-frame receive are supplied by ADR-0481 below.
+
+ADR-0481 with PCN-0491 consumes that submission session in a finite one-action
+progress machine. Packet or flush backpressure receives and copies one managed
+frame before exact retry; one exclusive completion blocks further progress
+until release. Exhausted selected roles flush in video-then-audio order and
+drain to individual EOS under a fixed frame bound, while a truncated source is
+never falsely flushed. Verification uses injected operations only.
+
+ADR-0482 with PCN-0492 consumes that progress owner together with the existing
+bounded scheduler. It validates the exact active completion, role/media kind,
+and monotonic frame sequence, detaches the managed frame once, and transfers it
+with the next scheduler sequence only. Cancellation before detach retains the
+completion for exact retry; invalid state or enqueue rejection closes the
+scheduler-then-progress aggregate. Verification injects scheduler enqueue and
+does not run output.
+
+ADR-0483 with PCN-0493 reserves one frame at a time from that scheduler and
+selects the matching H.264 or AAC context from the same decoder session for the
+existing awaited canonical sink adaptation/conversion boundary. Only accepted
+delivery consumes the reservation; cancellation retains the exact frame and
+sequence for retry, while other delivery rejection closes the aggregate.
+Verification injects canonical-delivery results only.
+
+ADR-0484 with PCN-0494 adapts that canonical sink contract to the existing
+Windows output buffer lifecycle. Packed BGRA32 and interleaved PCM retain exact
+layout and callback-scoped payload memory while acquiring caller-explicit video
+or audio generations. Only `Processed` commits a sink callback; cancellation
+propagates and every other result fails closed. Verification composes the
+complete output prerequisite chain from inert fakes.
+
+ADR-0485 with PCN-0495 inserts caller-supplied timing admission while the exact
+scheduler reservation is still retained. It binds presentation metadata to the
+matching explicit role generation, sends only `ProcessNow` to canonical
+delivery, retains wait and late-audio recovery, consumes late video as a
+scheduler drop, and enters reset-required state for discontinuity or generation
+mismatch. Verification uses injected decisions only. Delay execution, timing
+and output reset/recovery orchestration, application integration, and physical
+output remain unimplemented.
+
+ADR-0486 with PCN-0496 owns that timing-enabled delivery behind a finite
+caller-side wait driver. Positive single-delay, cumulative-wait, and decision
+limits bound repeated admission of the exact retained reservation;
+cancellation preserves it for a later drive, while a limit breach faults and
+closes the aggregate. Verification uses injected delay operations only.
+Coordinated timing/output reset, audio recovery, application pumping, and
+physical output remain unimplemented.
+
+ADR-0487 with PCN-0497 supplies the output reconfiguration half under
+caller-exclusive playback quiescence. It resets buffer and stream layers,
+resets and rebinds resources with exact video/audio generations, then
+reinitializes the retained formats and dimensions. Any rejection restores the
+complete prior configuration; rollback failure is terminal. Verification uses
+only inert Windows-resource fakes. Timing reset and atomic sink/delivery
+generation commit remain unimplemented.
+
+ADR-0488 with PCN-0498 consumes that output transaction together with the
+exact Windows sink under the timed-delivery driver's exclusive gate. Output,
+sink, timing, and delivery generations commit in that order while the scheduler
+reservation stays retained. Timing rejection restores prior output/sink
+generations; partial rollback closes the entire aggregate. Verification uses
+injected reset operations only. Decoder reset, audio recovery, finite pumping,
+application integration, and physical output remain unimplemented.
+
+ADR-0489 with PCN-0499 borrows the selected opened regular-movie decoder
+session under caller-owned decode quiescence and flushes audio then video via
+the existing verified discontinuity-reset capability. Complete success retains
+the session; any rejection or partial reset disposes ambiguous context state.
+Verification injects reset results only. Integration under the ADR-0488 gate,
+late-audio recovery, finite pumping, application integration, and physical
+output remain unimplemented.
+
 ### Deferred
 
 - FFmpeg binary bundling or Nova-hosted runtime pack

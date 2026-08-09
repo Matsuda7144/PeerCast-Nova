@@ -469,11 +469,15 @@ internal sealed class PlaybackMetadataAwareNativePacketOperations :
     public PlaybackMetadataAwareNativePacketCreation CreatePacket(
         PlaybackBoundedFlvNativeDecoderSession session,
         PlaybackBoundedDemuxMediaKind mediaKind,
+        PlaybackMetadataAwareNativePacketInput input) =>
+        CreatePacket(GetContext(session, mediaKind), input);
+
+    internal static PlaybackMetadataAwareNativePacketCreation CreatePacket(
+        PlaybackDecoderFfmpegContextLease context,
         PlaybackMetadataAwareNativePacketInput input)
     {
         try
         {
-            var context = GetContext(session, mediaKind);
             return context.UseContextAndSymbols((_, symbols) =>
             {
                 if (!context.IsOpened ||
@@ -507,11 +511,14 @@ internal sealed class PlaybackMetadataAwareNativePacketOperations :
 
     public PlaybackMetadataAwareNativeSendResult SendFlush(
         PlaybackBoundedFlvNativeDecoderSession session,
-        PlaybackBoundedDemuxMediaKind mediaKind)
+        PlaybackBoundedDemuxMediaKind mediaKind) =>
+        SendFlush(GetContext(session, mediaKind));
+
+    internal static PlaybackMetadataAwareNativeSendResult SendFlush(
+        PlaybackDecoderFfmpegContextLease context)
     {
         try
         {
-            var context = GetContext(session, mediaKind);
             return context.UseContextAndSymbols((nativeContext, symbols) =>
             {
                 if (!context.IsOpened ||
@@ -646,7 +653,13 @@ internal sealed class WindowsPlaybackMetadataAwareNativePacketOwner :
 
     public PlaybackMetadataAwareNativeSendResult SendOnce(
         PlaybackBoundedFlvNativeDecoderSession session,
-        PlaybackBoundedDemuxMediaKind mediaKind)
+        PlaybackBoundedDemuxMediaKind mediaKind) =>
+        SendOnce(PlaybackMetadataAwareNativePacketOperations.GetContext(
+            session,
+            mediaKind));
+
+    internal PlaybackMetadataAwareNativeSendResult SendOnce(
+        PlaybackDecoderFfmpegContextLease context)
     {
         lock (_sync)
         {
@@ -655,7 +668,6 @@ internal sealed class WindowsPlaybackMetadataAwareNativePacketOwner :
                 return PlaybackMetadataAwareNativeSendResult.Rejected;
             }
 
-            var context = PlaybackMetadataAwareNativePacketOperations.GetContext(session, mediaKind);
             return context.UseContextAndSymbols(
                 (nativeContext, _) => Send(_send, nativeContext, _packet));
         }

@@ -260,6 +260,22 @@ Current-state reviews:
 - bounded fragmented-MP4 manifest-segment cursor and exact immutable step (ADR-0469 and ADR-0470)
 - bounded fragmented-MP4 manifest-segment traversal and exact metadata completion (ADR-0471 and ADR-0472)
 - exact non-acknowledging fragmented-MP4 completed-segment view (ADR-0473)
+- bounded regular-track demux composition from exact parsed sources and file bytes to owned AVC／AAC movie-track packet sequences (ADR-0474)
+- bounded same-movie regular-track composition, explicit AVC/AAC selection, and cross-track traversal (ADR-0475)
+- selected regular-movie owned AVC configuration input and ordinary AAC managed decoder preparation (ADR-0476)
+- bounded AVC managed codec parameters, transfer plan, symbol coverage, and declared capability binding (ADR-0477)
+- exact selected AVC/AAC managed-preparation binding to caller-supplied verified ABI gate leases (ADR-0478)
+- bounded selected regular-movie native decoder-session transaction with exact track time bases (ADR-0479)
+- bounded exact-merge regular-movie metadata-aware native packet submission (ADR-0480)
+- bounded regular-movie packet/backpressure/flush/drain progress with managed frame ownership (ADR-0481)
+- exact regular-movie managed-frame transfer into the existing bounded scheduler (ADR-0482)
+- exact one-reservation regular-movie canonical sink delivery (ADR-0483)
+- exact canonical regular-movie Windows output buffer sink adaptation (ADR-0484)
+- caller-timed regular-movie scheduler reservation admission (ADR-0485)
+- bounded regular-movie timed-delivery wait driving (ADR-0486)
+- bounded regular-movie Windows output reconfiguration (ADR-0487)
+- coordinated regular-movie timed-delivery generation reset (ADR-0488)
+- bounded regular-movie native decoder discontinuity reset (ADR-0489)
 - bounded ISO BMFF AVC NAL-header classification
 - bounded non-materialized AVC parameter-set prefix planning
 - bounded owned AVC length-prefixed payload materialization
@@ -551,6 +567,97 @@ exact metadata-only completion certification, and non-acknowledging completed
 segment reconstruction.
 Delivery attempt/outcome, clock conversion, cross-track merge, `mdat` admission,
 payload access, streaming, and production fragmented demux remain incomplete.
+
+ADR-0474 begins the production-oriented regular MP4 composition phase. It
+connects the existing sample plan through edit admission, byte-range and `mdat`
+validation, owned payloads, sample-description and codec parsing, AVC／AAC
+packet composition, and exact track／movie binding into one finite bounded
+regular-track packet sequence. It retains caller-selected sample-window
+truncation and copies compressed payloads before returning. Multi-track movie
+composition is supplied by ADR-0475, which validates an exact same-movie track
+set, applies caller-explicit video/audio selection, and produces a bounded
+cross-track merge traversal while retaining owned packets and cursor state.
+The selected managed decoder-preparation bridge is supplied by ADR-0476 below;
+native submission, scheduling, and playback remain incomplete.
+
+ADR-0476 binds those selected streams to the first managed decoder-preparation
+ownership boundary. It owns the selected AVC configuration record and retains
+the exact payload requirements; for ordinary AAC-LC it parses the selected
+`mp4a` decoder configuration and reuses the existing managed parameter,
+declared-symbol, declared-capability, and sample-entry consistency chain. AVC
+parameter-transfer parity, verified runtime binding, native decoder open,
+packet submission, scheduling, and playback remain incomplete.
+
+ADR-0477 supplies that AVC parity. Selected AVC now reaches an owned padded
+H.264 codec-parameter lease, exact transfer plan, required-symbol coverage, and
+caller-declared dimension/pixel capability binding. Both selected AVC and
+ordinary AAC managed preparations remain source-bound and are disposed by the
+aggregate movie preparation. Installed-runtime verification, native transfer,
+decoder open, submission, scheduling, and playback remain incomplete.
+
+ADR-0478 binds the exact selected AVC/AAC parameter leases and transfer plans
+to caller-supplied, already verified FFmpeg ABI gate leases. It checks role,
+codec, source, availability, and nonzero required-symbol addresses without
+runtime discovery, library loading, symbol lookup, or invocation. Native
+parameter transfer and decoder context allocation/open are supplied by
+ADR-0479 below.
+
+ADR-0479 consumes that exact binding in one fail-closed video-then-audio
+transaction. It creates each selected context, transfers the exact managed
+parameters, configures `1 / mdhd.timescale`, opens the decoder, and retains sole
+context/gate ownership with complete partial-failure cleanup. Managed tests use
+only injected fake operations. Packet submission is supplied by ADR-0480
+below.
+
+ADR-0480 consumes that opened session and submits the precomputed merge steps
+one packet at a time with exact owned payload, media-unit PTS/DTS/duration,
+stream index, track time base, and IDR-derived key flag. Backpressure retains
+the same packet and merge index; cursor state advances only after acceptance,
+and any other rejection closes the complete session. Tests use injected fake
+operations only. Flush and receive are supplied by ADR-0481 below.
+
+ADR-0481 advances at most one packet, flush, or receive action per call. It
+copies exactly one managed frame to relieve packet/flush backpressure, blocks
+further progress while that completion is owned, flushes exhausted selected
+roles in video-then-audio order, and drains each to EOS under a fixed frame
+limit. Tests use injected operations only. ADR-0482 then consumes the exact
+active completion and transfers its managed frame once into the existing
+bounded scheduler with monotonic frame and scheduler sequences. Cancellation
+before detach retains the frame for retry; enqueue rejection closes the
+aggregate. Scheduler execution, canonical sink delivery, and playback remain
+incomplete.
+
+ADR-0483 consumes that scheduler-ingress owner and reserves at most one queued
+frame per asynchronous call. It selects the exact video or audio decoder
+context, reuses the existing awaited canonical sink adaptation/conversion
+boundary, consumes only successful delivery, and retains the same reservation
+on cancellation. Tests inject delivery results only. Clock admission, Windows
+output processing, application integration, and physical output remain
+incomplete. ADR-0484 supplies the next sink adapter: canonical BGRA32 and
+interleaved PCM are projected without copying into the existing
+generation-tagged Windows output buffer contract. The adapter borrows that
+output lifetime and fails closed on every non-processed result. Timing
+admission is supplied by ADR-0485: each exact reservation is classified before
+conversion as process-now, retained wait, late-video drop, retained late-audio
+recovery, clock-not-started, or reset-required using caller-explicit role
+generations. Delay execution and output reset/recovery orchestration remain
+incomplete. ADR-0486 supplies finite caller-side wait execution with bounded
+decision, single-delay, and cumulative-wait limits. Cancellation during an
+injected delay preserves the exact reservation for a later drive, while any
+limit breach closes the aggregate. Timing/output reset coordination remains
+incomplete. ADR-0487 adds the caller-quiesced output half: buffer, stream, and
+binding layers are rebuilt with exact role generations, with complete rollback
+to the prior configuration on rejection. Atomic delivery quiescence, timing
+reset, and sink/delivery generation commit remain incomplete.
+ADR-0488 supplies that atomic owner: one driver gate quiesces delivery while
+output, sink, timing, and delivery generations commit in order. Timing
+rejection restores the exact prior output/sink generations; partial rollback
+closes the aggregate. Decoder reset, audio recovery, and continuous pumping
+remain incomplete.
+ADR-0489 adds the caller-quiesced decoder half: selected opened AAC and H.264
+contexts are flushed audio-before-video through the verified existing
+capability, retaining healthy ownership only after complete success. Atomic
+integration under the delivery gate and late-audio recovery remain incomplete.
 
 ### Windows application boundary
 

@@ -319,6 +319,22 @@ and fragmented MP4 remain future work.
 - `docs/adr/ADR-0471-bounded-iso-bmff-fragment-sample-merge-traversal-submission-manifest-segment-traversal.md`
 - `docs/adr/ADR-0472-exact-iso-bmff-fragment-sample-merge-traversal-submission-manifest-segment-completion.md`
 - `docs/adr/ADR-0473-exact-iso-bmff-fragment-sample-merge-traversal-submission-manifest-completed-segment-view.md`
+- `docs/adr/ADR-0474-bounded-iso-bmff-regular-track-demux-composition.md`
+- `docs/adr/ADR-0475-bounded-iso-bmff-regular-movie-demux-composition.md`
+- `docs/adr/ADR-0476-selected-iso-bmff-regular-movie-managed-decoder-preparation.md`
+- `docs/adr/ADR-0477-bounded-iso-bmff-avc-managed-decoder-preparation.md`
+- `docs/adr/ADR-0478-exact-iso-bmff-regular-movie-verified-runtime-capability-binding.md`
+- `docs/adr/ADR-0479-bounded-iso-bmff-regular-movie-native-decoder-session.md`
+- `docs/adr/ADR-0480-bounded-iso-bmff-regular-movie-native-packet-submission.md`
+- `docs/adr/ADR-0481-bounded-iso-bmff-regular-movie-native-decode-progress.md`
+- `docs/adr/ADR-0482-exact-iso-bmff-regular-movie-scheduler-ingress.md`
+- `docs/adr/ADR-0483-exact-iso-bmff-regular-movie-scheduler-canonical-sink-delivery.md`
+- `docs/adr/ADR-0484-exact-iso-bmff-regular-movie-windows-output-sink-adaptation.md`
+- `docs/adr/ADR-0485-caller-timed-iso-bmff-regular-movie-scheduler-delivery-admission.md`
+- `docs/adr/ADR-0486-bounded-iso-bmff-regular-movie-timed-delivery-wait-driver.md`
+- `docs/adr/ADR-0487-bounded-iso-bmff-regular-movie-windows-output-reconfiguration.md`
+- `docs/adr/ADR-0488-coordinated-iso-bmff-regular-movie-timed-delivery-reset.md`
+- `docs/adr/ADR-0489-bounded-iso-bmff-regular-movie-native-decoder-discontinuity-reset.md`
 - `docs/reviews/PCN-0177-OPT-IN-DECODED-BUFFER-DURATION-CUTOFF.md`
 - `docs/reviews/PCN-0183-BOUNDED-ISO-BMFF-BOX-HEADER-PARSER.md`
 - `docs/reviews/PCN-0241-BOUNDED-ISO-BMFF-MPEG4-DESCRIPTOR-HEADER.md`
@@ -563,6 +579,22 @@ and fragmented MP4 remain future work.
 - `docs/reviews/PCN-0481-BOUNDED-ISO-BMFF-FRAGMENT-SAMPLE-MERGE-TRAVERSAL-SUBMISSION-MANIFEST-SEGMENT-TRAVERSAL.md`
 - `docs/reviews/PCN-0482-EXACT-ISO-BMFF-FRAGMENT-SAMPLE-MERGE-TRAVERSAL-SUBMISSION-MANIFEST-SEGMENT-COMPLETION.md`
 - `docs/reviews/PCN-0483-EXACT-ISO-BMFF-FRAGMENT-SAMPLE-MERGE-TRAVERSAL-SUBMISSION-MANIFEST-COMPLETED-SEGMENT-VIEW.md`
+- `docs/reviews/PCN-0484-BOUNDED-ISO-BMFF-REGULAR-TRACK-DEMUX-COMPOSITION.md`
+- `docs/reviews/PCN-0485-BOUNDED-ISO-BMFF-REGULAR-MOVIE-DEMUX-COMPOSITION.md`
+- `docs/reviews/PCN-0486-SELECTED-ISO-BMFF-REGULAR-MOVIE-MANAGED-DECODER-PREPARATION.md`
+- `docs/reviews/PCN-0487-BOUNDED-ISO-BMFF-AVC-MANAGED-DECODER-PREPARATION.md`
+- `docs/reviews/PCN-0488-EXACT-ISO-BMFF-REGULAR-MOVIE-VERIFIED-RUNTIME-CAPABILITY-BINDING.md`
+- `docs/reviews/PCN-0489-BOUNDED-ISO-BMFF-REGULAR-MOVIE-NATIVE-DECODER-SESSION.md`
+- `docs/reviews/PCN-0490-BOUNDED-ISO-BMFF-REGULAR-MOVIE-NATIVE-PACKET-SUBMISSION.md`
+- `docs/reviews/PCN-0491-BOUNDED-ISO-BMFF-REGULAR-MOVIE-NATIVE-DECODE-PROGRESS.md`
+- `docs/reviews/PCN-0492-EXACT-ISO-BMFF-REGULAR-MOVIE-SCHEDULER-INGRESS.md`
+- `docs/reviews/PCN-0493-EXACT-ISO-BMFF-REGULAR-MOVIE-SCHEDULER-CANONICAL-SINK-DELIVERY.md`
+- `docs/reviews/PCN-0494-EXACT-ISO-BMFF-REGULAR-MOVIE-WINDOWS-OUTPUT-SINK-ADAPTATION.md`
+- `docs/reviews/PCN-0495-CALLER-TIMED-ISO-BMFF-REGULAR-MOVIE-SCHEDULER-DELIVERY-ADMISSION.md`
+- `docs/reviews/PCN-0496-BOUNDED-ISO-BMFF-REGULAR-MOVIE-TIMED-DELIVERY-WAIT-DRIVER.md`
+- `docs/reviews/PCN-0497-BOUNDED-ISO-BMFF-REGULAR-MOVIE-WINDOWS-OUTPUT-RECONFIGURATION.md`
+- `docs/reviews/PCN-0498-COORDINATED-ISO-BMFF-REGULAR-MOVIE-TIMED-DELIVERY-RESET.md`
+- `docs/reviews/PCN-0499-BOUNDED-ISO-BMFF-REGULAR-MOVIE-NATIVE-DECODER-DISCONTINUITY-RESET.md`
 
 ADR-0158 was skipped by assignment error. It is a permanent numbering-error gap
 and must not be retroactively reused, following the recorded ADR-0082 and
@@ -821,7 +853,7 @@ The bounded FLV decoder configures the exact parser stream time base through pub
 
 ## 現在地
 
-**Post-0.0.10e — Bounded ISO BMFF / MP4 Managed Foundation — Complete through ADR-0473**
+**Post-0.0.10e — ISO BMFF / MP4 managed foundation through ADR-0473; regular MP4 production composition through ADR-0489**
 
 - ADR-0167 through ADR-0172 complete the bounded non-physical playback and application prerequisites;
 - ADR-0173 through ADR-0231 establish bounded box traversal, movie/track/media metadata, sample-table reconciliation and lookup, edit mapping, edited-sample ownership, sample entries, `avcC`, and MPEG-4 descriptor headers;
@@ -889,11 +921,27 @@ The bounded FLV decoder configures the exact parser stream time base through pub
 - ADR-0427 orders one fragment by exact presentation, decode, and source-index keys;
 - ADR-0428 through ADR-0432 classify sequence/decode continuity, bind both dimensions, validate exact bounded transition chains, and summarize discontinuities without reset;
 - ADR-0433 through ADR-0473 bind exact sample batches to continuity transitions, produce a bounded cross-fragment presentation merge, traverse its exact immutable cursor-step chain, revalidate exhaustive completion, reconstruct source-bound acknowledgement metadata without claiming delivery, and expose exact timing, deadline, eligibility, caller-bounded selection, target-free request metadata, caller-explicit opaque consumer binding, bounded opaque batch metadata, non-invoking submission-intent classification, bounded included-intent selection, exact non-payload manifest metadata, full-chain manifest source binding, declarative aggregate facts, bounded contiguous fragment segments, an immutable segment cursor-step boundary, bounded exhaustive segment traversal, exact metadata-only completion certification, and non-acknowledging completed-segment reconstruction;
+- ADR-0474 composes one caller-bounded regular track from exact parsed sources and file bytes through the existing sample-plan-to-movie-binding chain into an owned AVC／AAC packet sequence, with explicit truncation and no native invocation;
+- ADR-0475 composes bounded caller-ordered regular tracks over one common file span into an exact same-movie selected sequence set and deterministic cross-track traversal, with explicit exhaustion or truncation and no native invocation;
+- ADR-0476 binds selected regular streams to owned AVC configuration input and ordinary AAC managed decoder preparation, with caller-declared AAC symbols/capability and no runtime loading or native invocation;
+- ADR-0477 brings selected AVC to owned managed codec-parameter, transfer-plan, symbol-coverage, and declared-capability parity with ordinary AAC, without runtime lookup or native invocation;
+- ADR-0478 binds selected managed AVC/AAC preparations to caller-supplied verified ABI gate leases with exact role, codec, parameter, symbol-address, and availability checks but no runtime discovery, loading, lookup, or invocation;
+- ADR-0479 consumes that exact binding in a fail-closed video-then-audio transaction that creates selected decoder contexts, transfers managed parameters, configures exact track time bases, opens codecs, and owns complete cleanup;
+- ADR-0480 submits the exact regular-movie merge one owned metadata-aware packet at a time, retains identical packet ownership across backpressure, advances only after acceptance, and fails closed on any other rejection;
+- ADR-0481 advances packet/backpressure/flush/drain by one action, copies one exclusively owned managed frame at a time, flushes exhausted selected roles in video-then-audio order, and drains each to EOS under a fixed frame bound;
+- ADR-0482 transfers the exact active managed-frame completion once into the existing bounded scheduler with monotonic frame and scheduler sequences, cancellation-before-detach retry, and fail-closed aggregate cleanup;
+- ADR-0483 reserves one regular-movie scheduler frame at a time, selects the matching decoder context, consumes only accepted canonical sink delivery, and retains the exact reservation on cancellation;
+- ADR-0484 projects canonical regular-movie BGRA32 and interleaved PCM into exact generation-tagged existing Windows output buffers while borrowing the output lifetime and accepting only `Processed`;
+- ADR-0485 classifies each retained regular-movie scheduler reservation through caller-supplied timing and exact role generations before conversion, preserving wait/audio recovery, dropping late video, and surfacing reset-required state;
+- ADR-0486 finitely re-drives only that exact retained reservation under caller-bounded decision, single-delay, and cumulative-wait limits, preserving it on cancellation and closing the aggregate on limit breach;
+- ADR-0487 reconfigures the quiesced Windows buffer, stream, and binding layers with exact role generations and restores the complete prior configuration on rejection;
+- ADR-0488 quiesces the timed-delivery owner and commits output, sink, timing, and delivery generations together while retaining the exact reservation and rolling back prior generations on timing rejection;
+- ADR-0489 resets the caller-quiesced selected opened decoder contexts audio-before-video through the verified flush capability, retaining ownership only after complete success;
 - ISO BMFF / MP4 is the second bounded container-parser family alongside the existing FLV v1 parser;
-- automatic AAC sync-search defaults, default timing policies, clock acquisition, repeated observation, runtime instance access and invocation, actual dispatch, cursor mutation, delivery outcome, scheduling, native application of managed PCE layout, AVC runtime capability discovery and decoder integration, production regular-MP4 demux composition, fragmented-MP4 production playback, nested-box policy, and streaming remain incomplete;
-- current reviews span `docs/reviews/PCN-0177-OPT-IN-DECODED-BUFFER-DURATION-CUTOFF.md` through `docs/reviews/PCN-0483-EXACT-ISO-BMFF-FRAGMENT-SAMPLE-MERGE-TRAVERSAL-SUBMISSION-MANIFEST-COMPLETED-SEGMENT-VIEW.md`;
+- automatic AAC sync-search defaults, default timing policies, clock acquisition, repeated observation, runtime instance access and invocation, actual dispatch, cursor mutation, delivery outcome, scheduling, native application of managed PCE layout, AVC runtime capability discovery and decoder integration, production regular-MP4 decoder integration, fragmented-MP4 production playback, nested-box policy, and streaming remain incomplete;
+- current reviews span `docs/reviews/PCN-0177-OPT-IN-DECODED-BUFFER-DURATION-CUTOFF.md` through `docs/reviews/PCN-0499-BOUNDED-ISO-BMFF-REGULAR-MOVIE-NATIVE-DECODER-DISCONTINUITY-RESET.md`;
 - ADR-0158 is a permanent numbering-error gap caused by assignment error, following ADR-0082 and ADR-0096, and must not be retroactively reused;
-- next: use the completed regular-MP4 managed chain as the input to a production vertical slice; retain ADR-0416 through ADR-0473 as the fragmented-MP4 foundation and complete only a narrowly necessary exact chain-closure correction before deferring further fragmented production work.
+- next: integrate ADR-0489 under the ADR-0488 delivery gate, then add late-audio recovery without activating physical output; retain ADR-0416 through ADR-0473 as the fragmented-MP4 foundation.
 
 ### Post-ADR-0473 primary direction
 
@@ -904,6 +952,47 @@ binding, native decoder open and compressed-packet submission, decoded-frame
 transfer, the existing scheduler and D3D11／WASAPI lifecycle, finite cleanup,
 and minimal `Nova.App` composition. This is a direction and dependency order,
 not a claim that production MP4 playback is already implemented.
+
+ADR-0474 now supplies the first track-level connection from caller-provided file
+bytes and exact parsed sources to an owned compressed AVC／AAC packet sequence.
+ADR-0475 joins bounded same-movie tracks through caller-explicit selection and
+deterministic cross-track traversal. The first selected managed preparation
+bridge is supplied by ADR-0476 below.
+
+ADR-0476 binds those selected tracks to owned AVC decoder-configuration input
+and ordinary AAC managed decoder preparation. AVC managed parameter-transfer
+parity, verified runtime binding, native decoder open, packet submission,
+scheduling, output delivery, and application playback remain future slices.
+
+ADR-0477 supplies AVC managed parameter-transfer parity with ordinary AAC. The
+exact verified-gate handoff is supplied by ADR-0478 below.
+
+ADR-0478 supplies the exact handoff to caller-supplied verified ABI gate leases
+without performing runtime discovery, loading, lookup, or invocation. ADR-0479
+consumes that handoff to create, configure, and open selected decoder contexts
+in one fail-closed transaction. ADR-0480 supplies exact merge-ordered packet
+submission with same-packet backpressure retention. ADR-0481 adds bounded
+one-action flush/receive progress and exclusive managed-frame ownership.
+ADR-0482 transfers that exact ownership into the existing bounded scheduler.
+ADR-0483 reserves one frame at a time and reuses the exact decoder context and
+awaited canonical sink delivery boundary with success-only consumption and
+cancellation retention. ADR-0484 adapts its canonical sink to the existing
+generation-tagged Windows output buffers without taking output ownership.
+ADR-0485 adds reservation-side timing admission with caller-explicit role
+generations, retained wait/audio recovery, late-video drop, and reset-required
+classification. ADR-0486 finitely drives retained waits with explicit decision,
+single-delay, and cumulative-wait limits while preserving cancellation retry.
+ADR-0487 reconfigures the caller-quiesced Windows buffer, stream, and binding
+layers with exact role generations and complete previous-configuration
+rollback. Atomic timing and sink/delivery generation commit, recovery
+orchestration, and application playback remain future slices. ADR-0488 adds
+that atomic commit under the timed-delivery gate, retaining the exact scheduler
+reservation and restoring prior output/sink generations on timing rejection.
+Decoder reset, audio recovery, and application playback remain future slices.
+ADR-0489 supplies the caller-quiesced selected-context decoder flush with
+audio-before-video ordering and terminal partial-state cleanup. Integration
+under the delivery gate, audio recovery, and application playback remain future
+slices.
 
 Use approximately 70% production／MVP work, 20% production-required foundation,
 and 10% future research as a prioritization guide. Fragmented-MP4 production
@@ -1211,6 +1300,22 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 - `docs/adr/ADR-0471-bounded-iso-bmff-fragment-sample-merge-traversal-submission-manifest-segment-traversal.md`
 - `docs/adr/ADR-0472-exact-iso-bmff-fragment-sample-merge-traversal-submission-manifest-segment-completion.md`
 - `docs/adr/ADR-0473-exact-iso-bmff-fragment-sample-merge-traversal-submission-manifest-completed-segment-view.md`
+- `docs/adr/ADR-0474-bounded-iso-bmff-regular-track-demux-composition.md`
+- `docs/adr/ADR-0475-bounded-iso-bmff-regular-movie-demux-composition.md`
+- `docs/adr/ADR-0476-selected-iso-bmff-regular-movie-managed-decoder-preparation.md`
+- `docs/adr/ADR-0477-bounded-iso-bmff-avc-managed-decoder-preparation.md`
+- `docs/adr/ADR-0478-exact-iso-bmff-regular-movie-verified-runtime-capability-binding.md`
+- `docs/adr/ADR-0479-bounded-iso-bmff-regular-movie-native-decoder-session.md`
+- `docs/adr/ADR-0480-bounded-iso-bmff-regular-movie-native-packet-submission.md`
+- `docs/adr/ADR-0481-bounded-iso-bmff-regular-movie-native-decode-progress.md`
+- `docs/adr/ADR-0482-exact-iso-bmff-regular-movie-scheduler-ingress.md`
+- `docs/adr/ADR-0483-exact-iso-bmff-regular-movie-scheduler-canonical-sink-delivery.md`
+- `docs/adr/ADR-0484-exact-iso-bmff-regular-movie-windows-output-sink-adaptation.md`
+- `docs/adr/ADR-0485-caller-timed-iso-bmff-regular-movie-scheduler-delivery-admission.md`
+- `docs/adr/ADR-0486-bounded-iso-bmff-regular-movie-timed-delivery-wait-driver.md`
+- `docs/adr/ADR-0487-bounded-iso-bmff-regular-movie-windows-output-reconfiguration.md`
+- `docs/adr/ADR-0488-coordinated-iso-bmff-regular-movie-timed-delivery-reset.md`
+- `docs/adr/ADR-0489-bounded-iso-bmff-regular-movie-native-decoder-discontinuity-reset.md`
 - `docs/reviews/PCN-0177-OPT-IN-DECODED-BUFFER-DURATION-CUTOFF.md`
 - `docs/reviews/PCN-0183-BOUNDED-ISO-BMFF-BOX-HEADER-PARSER.md`
 - `docs/reviews/PCN-0241-BOUNDED-ISO-BMFF-MPEG4-DESCRIPTOR-HEADER.md`
@@ -1455,6 +1560,22 @@ GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして�
 - `docs/reviews/PCN-0481-BOUNDED-ISO-BMFF-FRAGMENT-SAMPLE-MERGE-TRAVERSAL-SUBMISSION-MANIFEST-SEGMENT-TRAVERSAL.md`
 - `docs/reviews/PCN-0482-EXACT-ISO-BMFF-FRAGMENT-SAMPLE-MERGE-TRAVERSAL-SUBMISSION-MANIFEST-SEGMENT-COMPLETION.md`
 - `docs/reviews/PCN-0483-EXACT-ISO-BMFF-FRAGMENT-SAMPLE-MERGE-TRAVERSAL-SUBMISSION-MANIFEST-COMPLETED-SEGMENT-VIEW.md`
+- `docs/reviews/PCN-0484-BOUNDED-ISO-BMFF-REGULAR-TRACK-DEMUX-COMPOSITION.md`
+- `docs/reviews/PCN-0485-BOUNDED-ISO-BMFF-REGULAR-MOVIE-DEMUX-COMPOSITION.md`
+- `docs/reviews/PCN-0486-SELECTED-ISO-BMFF-REGULAR-MOVIE-MANAGED-DECODER-PREPARATION.md`
+- `docs/reviews/PCN-0487-BOUNDED-ISO-BMFF-AVC-MANAGED-DECODER-PREPARATION.md`
+- `docs/reviews/PCN-0488-EXACT-ISO-BMFF-REGULAR-MOVIE-VERIFIED-RUNTIME-CAPABILITY-BINDING.md`
+- `docs/reviews/PCN-0489-BOUNDED-ISO-BMFF-REGULAR-MOVIE-NATIVE-DECODER-SESSION.md`
+- `docs/reviews/PCN-0490-BOUNDED-ISO-BMFF-REGULAR-MOVIE-NATIVE-PACKET-SUBMISSION.md`
+- `docs/reviews/PCN-0491-BOUNDED-ISO-BMFF-REGULAR-MOVIE-NATIVE-DECODE-PROGRESS.md`
+- `docs/reviews/PCN-0492-EXACT-ISO-BMFF-REGULAR-MOVIE-SCHEDULER-INGRESS.md`
+- `docs/reviews/PCN-0493-EXACT-ISO-BMFF-REGULAR-MOVIE-SCHEDULER-CANONICAL-SINK-DELIVERY.md`
+- `docs/reviews/PCN-0494-EXACT-ISO-BMFF-REGULAR-MOVIE-WINDOWS-OUTPUT-SINK-ADAPTATION.md`
+- `docs/reviews/PCN-0495-CALLER-TIMED-ISO-BMFF-REGULAR-MOVIE-SCHEDULER-DELIVERY-ADMISSION.md`
+- `docs/reviews/PCN-0496-BOUNDED-ISO-BMFF-REGULAR-MOVIE-TIMED-DELIVERY-WAIT-DRIVER.md`
+- `docs/reviews/PCN-0497-BOUNDED-ISO-BMFF-REGULAR-MOVIE-WINDOWS-OUTPUT-RECONFIGURATION.md`
+- `docs/reviews/PCN-0498-COORDINATED-ISO-BMFF-REGULAR-MOVIE-TIMED-DELIVERY-RESET.md`
+- `docs/reviews/PCN-0499-BOUNDED-ISO-BMFF-REGULAR-MOVIE-NATIVE-DECODER-DISCONTINUITY-RESET.md`
 
 ### Completed physical validation archive
 
