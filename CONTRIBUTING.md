@@ -32,6 +32,18 @@ When adding the latest ADR and PCN pair, update `README.md`, `ROADMAP.md`,
 tests verify filename/header numbering, the latest ADR/PCN title pair, current
 document markers, Navigation links, and ROADMAP document paths.
 
+### ADR granularity
+
+Use an ADR when a change records a durable architecture decision, ownership or
+lifecycle boundary, irreversible compatibility choice, safety／authorization
+boundary, or production policy. Preserve the existing fail-closed,
+bounded-ownership, and exact source-provenance principles.
+
+Do not mechanically create one ADR for each metadata projection, cursor wrapper,
+or source-binding helper. A cohesive production composition slice may be covered
+by one appropriately scoped ADR when its ownership, lifecycle, and failure
+boundaries are reviewed together.
+
 ## Definition of Done
 
 - 設計意図が説明されている

@@ -1468,19 +1468,61 @@ streams, native packet submission,
 production MP4 demux composition, fragmented MP4, and streaming remain
 incomplete.
 
+### Post-ADR-0473 production direction
+
+ADR-0473 completes the current planned managed-foundation phase. The primary
+direction now shifts from extending metadata-only or projection-only chains to
+connecting the existing regular non-fragmented MP4 foundation to a usable
+production vertical slice. The existing fail-closed, bounded-ownership, exact
+source-provenance, and finite-lifecycle rules remain mandatory.
+
+As a prioritization guide rather than a release formula, approximately 70% of
+development should directly advance MVP／production use, 20% should provide
+foundation work required by that production path, and 10% may cover future
+research such as fragmented MP4.
+
+The next production-oriented architecture slices should reuse the existing
+sample planning, edit admission, byte-range and `mdat` containment, owned
+payload, sample-description selection, `avcC`／`esds`, AVC／AAC packet
+composition, track／movie binding, packet sequence, cross-track merge, timing,
+deadline, request, and invocation-intent foundations. The intended connection
+order is:
+
+1. regular MP4 production demux ownership and composition;
+2. selected AVC／AAC decoder-preparation ownership;
+3. verified FFmpeg runtime capability binding;
+4. native codec-parameter transfer and decoder open;
+5. compressed-packet submission;
+6. decoded video／audio transfer to the existing scheduler;
+7. the existing D3D11／WASAPI output lifecycle;
+8. finite stop, cancellation, and cleanup; and
+9. minimal `Nova.App` integration.
+
+This sequence does not claim that production MP4 playback, native submission,
+or physical output is implemented. It should be divided into the minimum
+cohesive architecture slices needed to preserve ownership and lifecycle
+clarity, not into one ADR per metadata projection, cursor wrapper, or
+source-binding helper.
+
+ADR-0416 through ADR-0473 remain the retained fragmented-MP4 managed
+foundation. A very small source-binding or completion correction needed to
+close its current exact chain may be completed, but indefinite metadata-only
+extension, fragmented production demux, streaming, and payload delivery are not
+the primary 0.1.0 path.
+
 ### Deferred
 
 - FFmpeg binary bundling or Nova-hosted runtime pack
 - playback-owned output dispatcher or message pump
 - automatic device-loss recovery／source reconnect
-- MP4／fragmented MP4 streaming, nested-box policy, remaining payload
-  semantics, brand policy, and decoder composition
+- fragmented MP4 production demux／playback and payload delivery
+- MP4 streaming, nested-box policy, and remaining brand policy
 - avformat integration beyond the reviewed runtime inventory
 - production discontinuity integration and decoder-context reuse after flush
 - complete all-media decoded-buffer duration policy
 - independent audio recovery generation changes
 - complete synchronization／resampling／drift correction
-- GUI、installer、recorder until the native/output gates are complete
+- advanced GUI, recorder, installer, signing, and updater
 
 ## CI policy
 
@@ -1505,7 +1547,11 @@ Routine Linux CI uses CircleCI while GitHub Actions usage is exhausted. Final br
 
 ## 0.1.0 Genesis gate
 
-- bounded demux and production composition
+- existing PeerCast／PCP／FLV production playback
+- regular non-fragmented MP4 production playback for selected H.264／AVC and AAC
+- bounded regular MP4 demux ownership and production composition
+- reuse of the existing FFmpeg decoder infrastructure and verified runtime boundary
+- reuse of the existing scheduler and D3D11／WASAPI output lifecycle
 - exact built-in approval and explicit host-attested replacement boundary
 - finite application-owned Windows lifecycle composition
 - finite decoded buffering and output lifecycle
@@ -1513,4 +1559,9 @@ Routine Linux CI uses CircleCI while GitHub Actions usage is exhausted. Final br
 - controlled accepted visible video evidence
 - controlled accepted and recognizable audio evidence
 - paired video／audio admission
-- user-facing application and packaging
+- minimal user-facing `Nova.App` composition and portable distribution
+
+Fragmented MP4 production playback, MP4 streaming, recorder, installer,
+signing, updater, automatic device-loss recovery, complete A/V resampling and
+drift correction, advanced GUI, and broad codec support beyond the selected
+H.264／AAC scope are not required for the 0.1.0 Genesis candidate.

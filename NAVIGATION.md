@@ -890,10 +890,26 @@ The bounded FLV decoder configures the exact parser stream time base through pub
 - ADR-0428 through ADR-0432 classify sequence/decode continuity, bind both dimensions, validate exact bounded transition chains, and summarize discontinuities without reset;
 - ADR-0433 through ADR-0473 bind exact sample batches to continuity transitions, produce a bounded cross-fragment presentation merge, traverse its exact immutable cursor-step chain, revalidate exhaustive completion, reconstruct source-bound acknowledgement metadata without claiming delivery, and expose exact timing, deadline, eligibility, caller-bounded selection, target-free request metadata, caller-explicit opaque consumer binding, bounded opaque batch metadata, non-invoking submission-intent classification, bounded included-intent selection, exact non-payload manifest metadata, full-chain manifest source binding, declarative aggregate facts, bounded contiguous fragment segments, an immutable segment cursor-step boundary, bounded exhaustive segment traversal, exact metadata-only completion certification, and non-acknowledging completed-segment reconstruction;
 - ISO BMFF / MP4 is the second bounded container-parser family alongside the existing FLV v1 parser;
-- automatic AAC sync-search defaults, default timing policies, clock acquisition, repeated observation, runtime instance access and invocation, actual dispatch, cursor mutation, delivery outcome, scheduling, automatic multi-sample packet composition and cross-track sequence merge, native application of managed PCE layout, AVC runtime capability discovery and decoder integration, production MP4 demux composition, nested-box and streaming policy, and fragmented MP4 remain incomplete;
+- automatic AAC sync-search defaults, default timing policies, clock acquisition, repeated observation, runtime instance access and invocation, actual dispatch, cursor mutation, delivery outcome, scheduling, native application of managed PCE layout, AVC runtime capability discovery and decoder integration, production regular-MP4 demux composition, fragmented-MP4 production playback, nested-box policy, and streaming remain incomplete;
 - current reviews span `docs/reviews/PCN-0177-OPT-IN-DECODED-BUFFER-DURATION-CUTOFF.md` through `docs/reviews/PCN-0483-EXACT-ISO-BMFF-FRAGMENT-SAMPLE-MERGE-TRAVERSAL-SUBMISSION-MANIFEST-COMPLETED-SEGMENT-VIEW.md`;
 - ADR-0158 is a permanent numbering-error gap caused by assignment error, following ADR-0082 and ADR-0096, and must not be retroactively reused;
-- next: bind the completed-segment view back to the exact manifest source without acknowledgement, payload access, authorization, invocation, dispatch, or delivery claims.
+- next: use the completed regular-MP4 managed chain as the input to a production vertical slice; retain ADR-0416 through ADR-0473 as the fragmented-MP4 foundation and complete only a narrowly necessary exact chain-closure correction before deferring further fragmented production work.
+
+### Post-ADR-0473 primary direction
+
+The primary path is now regular non-fragmented MP4 H.264／AAC production
+integration for the 0.1.0 Genesis candidate. New work should connect existing
+demux ownership, managed decoder preparation, verified FFmpeg capability
+binding, native decoder open and compressed-packet submission, decoded-frame
+transfer, the existing scheduler and D3D11／WASAPI lifecycle, finite cleanup,
+and minimal `Nova.App` composition. This is a direction and dependency order,
+not a claim that production MP4 playback is already implemented.
+
+Use approximately 70% production／MVP work, 20% production-required foundation,
+and 10% future research as a prioritization guide. Fragmented-MP4 production
+demux, streaming, and payload delivery remain later work; the existing managed
+foundation is preserved. See `ROADMAP.md` for the complete Genesis and deferred
+scope.
 
 **0.0.10e — Shared Windows Application Ownership Boundary — Complete**
 

@@ -9,6 +9,8 @@ Detailed history through 0.0.8g remains preserved in Git history at commit
 
 - Added repository contract tests for ADR/PCN filename and heading consistency, latest-pair synchronization across current documents, Navigation Markdown links, and ROADMAP document paths.
 - Added contributor and pull-request checklist guidance for synchronized ADR/PCN documentation updates.
+- Shifted the post-ADR-0473 primary direction from continued metadata-only expansion to a regular MP4 H.264／AAC production vertical slice for the 0.1.0 Genesis candidate, while preserving the fragmented-MP4 managed foundation as later work.
+- Documented the narrower ADR granularity policy for architecture, ownership, lifecycle, compatibility, safety, authorization, and production decisions.
 
 ### Post-0.0.10e - Bounded ISO BMFF AVC, AAC, and packet-to-event metadata
 

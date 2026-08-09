@@ -565,7 +565,8 @@ payload access, streaming, and production fragmented demux remain incomplete.
 PeerCast Nova は現在、一般利用向けの完成版プレイヤー／配信アプリではありません。
 
 - user-facing GUI and application features
-- MP4／fragmented MP4 streaming, nested-box policy, and remaining payload semantics
+- regular MP4 production composition and playback integration
+- fragmented MP4 production playback, MP4 streaming, nested-box policy, and remaining payload semantics
 - complete all-media decoded-buffer duration policy
 - production discontinuity-time native reset integration
 - complete A/V synchronization、resampling、and drift correction
@@ -576,20 +577,29 @@ PeerCast Nova は現在、一般利用向けの完成版プレイヤー／配信
 
 FFmpeg binary bundling／redistributionは既定方針として禁止です。別runtime packを将来検討する場合は、新しいADRとexact corresponding source／build／notice compliance archiveが必要です。
 
-## 次の開発候補
+## 次の開発方針
 
-0.0.10d／0.0.10eは完了済みです。次の開発スライスはまだ自動選択されていません。
+ADR-0473まででmanaged foundationは十分に厚くなりました。今後の主軸は、
+metadata-only境界を機械的に増やすことではなく、既存のregular
+non-fragmented MP4 chainをproduction vertical sliceへ接続することです。
 
-候補:
+0.1.0 Genesis candidateでは、既存PeerCast／PCP／FLV production playbackを
+維持しつつ、selected H.264／AVCとAACによるregular MP4 production playback、
+既存FFmpeg decoder infrastructure、scheduler、D3D11／WASAPI lifecycle、最低限の
+`Nova.App` composition、portable distributionを主要目標とします。
 
-- user-facing application機能
-- MP4／fragmented MP4 streaming, nested-box policy, and remaining payload semantics
-- complete all-media decoded-buffer duration policy
-- production discontinuity-time native reset integration
-- A/V synchronization／resampling／drift correction
-- installer境界の別ADR／設計
-- code-signing境界の別ADR／設計
-- updater境界の別ADR／設計
+優先順は、regular MP4 demux ownership／composition、selected AVC／AAC decoder
+preparation、verified runtime capability binding、native parameter transferと
+decoder open、compressed-packet submission、decoded outputの既存schedulerへの
+transfer、既存Windows output lifecycle、finite stop／cancel／cleanup、`Nova.App`
+integrationです。これは未実装部分を完了扱いするものではありません。
+
+開発配分は厳密な規則ではなく、70%をMVP／productionへ直接近づく作業、20%を
+そのために必要な基盤、10%をfragmented MP4などの将来研究へ向ける指針です。
+ADR-0416〜0473のfragmented MP4 managed foundationは保持しますが、production
+demux／playback、streaming、payload deliveryは0.1.0の必須条件ではありません。
+recorder、installer、signing、updater、automatic device-loss recovery、完全な
+A/V resampling／drift correction、advanced GUI、広範なcodec対応も後続工程です。
 
 All readiness and physical-run authorizations used to establish 0.0.10d are consumed. Historical helpers／diagnostics and consumed paths must not be reused. Any future physical run remains a separate reviewed authorization decision.
 
