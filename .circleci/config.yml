@@ -1,5 +1,13 @@
 version: 2.1
 
+# GitHub Actions is the normal automatic CI for this repository.
+# CircleCI is retained only as a manual fallback when GitHub Actions is
+# unavailable (for example, service outage or usage-limit exhaustion).
+parameters:
+  run_fallback:
+    type: boolean
+    default: false
+
 jobs:
   build-and-test:
     docker:
@@ -25,6 +33,7 @@ jobs:
           command: dotnet format PeerCast-Nova.sln --verify-no-changes --no-restore
 
 workflows:
-  validation:
+  fallback-validation:
+    when: << pipeline.parameters.run_fallback >>
     jobs:
       - build-and-test
