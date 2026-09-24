@@ -1,70 +1,32 @@
 # Control Plane and Data Plane
 
-## Overview
+PeerCast Nova keeps user-visible state and commands separate from media payload transfer.
 
-```text
-                       CONTROL PLANE
+~~~text
+Control: Nova.App / Nova.Cli (composition roots)
+             |-> Nova.Core    -> lifecycle, channel state, immutable status
+             +-> Nova.Network -> session and relay control
 
-UI / CLI
-   |
-   v
-Nova.Core  ---- commands, lifecycle, status, faults ----> Nova.Network
-   ^                                                        |
-   |                                                        |
-   +---------------- immutable status snapshots ------------+
-
-
-                         DATA PLANE
-
-Upstream TCP
-   |
-   v
-PCP framing / stream session
-   |
-   +----> Relay sink      bounded queue; disconnect slow child
-   |
-   +----> Player sink     latency-oriented bounded buffer
-   |
-   +----> Recorder sink   no silent loss; explicit discontinuity/fault
-```
+Data:    Peer TCP -> PCP session -> bounded Network packet flow
+                                  |-> PCP relay coordinator -> downstream peer
+                                   |-> playback input -> loopback HTTP-FLV -> PCRPlayer / DSPlayer
+                                   +-> managed Playback pipeline (additional post-MVP path)
+~~~
 
 ## Rules
 
-1. Media payload bytes do not travel through `NovaApplication`.
-2. A generic event bus must not be used as a media transport.
-3. Every consumer owns an explicit backpressure policy.
-4. Buffers are finite and observable.
-5. Cancellation and shutdown propagate from the owning stream session.
-6. Discontinuities are data, not hidden log messages.
-7. Status exposed to UI is immutable and rate-limited independently of payload flow.
+1. Media payload bytes do not travel through Core status or generic application events.
+2. Every consumer owns an explicit packet/byte bound and backpressure policy.
+3. Cancellation and shutdown propagate from the owning session.
+4. Discontinuities and terminal outcomes are explicit data, not hidden log messages.
+5. UI status is an immutable control-plane snapshot and is rate-limited independently from payload flow.
 
-## Current relay stream unit
+## Current relay flow
 
-`PcpRelayPacket` now exposes to one child callback:
+`PcpRelayPacket` exposes one callback-scoped packet with its sequence, protocol position when available, numeric packet type, payload memory, and explicit discontinuity details. It contains no channel, peer, or session identifier. Child status and termination use separate fixed-field snapshots. Slow children are isolated through bounded queues.
 
-- monotonically increasing sequence;
-- byte position or protocol position when available;
-- numeric packet type;
-- callback-scoped payload memory;
-- explicit discontinuity details when present.
+## Current playback flows
 
-It deliberately contains no channel, peer, or session identifier. Child
-termination and queue status use a separate fixed-field snapshot. The bounded
-downstream PCP writer and relay coordinator completed this path in 0.0.4.
+The accepted MVP playback flow in the daily Windows app receives a selected PCP channel, exposes a loopback-only HTTP-FLV endpoint, and starts a compatible external player, including PCRPlayer and DSPlayer. This external-player path satisfies the MVP playback requirement.
 
-## Current playback input unit
-
-`PcpPlaybackLatencyBuffer` implements a separate player policy:
-
-- one owned pooled copy of each accepted callback-scoped payload;
-- independent packet and byte bounds;
-- oldest-queued eviction to prefer recent data;
-- explicit `Source` and `LatencySkip` discontinuity flags;
-- one disposable payload lease for a single reader;
-- fixed counters for queued, outstanding, received, dequeued, and skipped
-  data;
-- finite graceful completion and immediate owner stop.
-
-This 0.0.5a boundary has no decoder or renderer. Container probing, media
-decode, clocks, A/V synchronization, and actual output remain later Playback
-slices.
+`Nova.Playback` also contains bounded input ownership and managed/native decode, scheduler, and Windows output boundaries. Integrating that managed path into the daily app, adding managed regular-MP4 production playback, and expanding Windows output are post-MVP work. A completed parser, decoder slice, or controlled output validation is evidence for that additional route only; it does not narrow or reopen the accepted MVP path.

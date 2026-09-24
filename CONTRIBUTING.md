@@ -1,53 +1,48 @@
 # Contributing
 
-PeerCast Nova への貢献を歓迎します。
+PeerCast Nova への貢献を歓迎します。小さくレビューしやすい変更を作り、利用者が既存の PeerCast／PeerCastStation ネットワークを使えることを優先してください。
 
-## 基本方針
+## 開発で守る方針
 
-- 誰の案かではなく、より良い案を選ぶ
-- 小さく明確な Pull Request を作る
-- 公開 API の変更には RFC を用意する
-- 仕様変更の理由を ADR に残す
-- コードと同時にテストと文書を更新する
+- P2P First、Simplicity、Lightweight を優先し、MVP に不要な必須依存や常駐処理を増やさない。
+- PeerCastStation との互換性を最初に確認する。MVP に Nova 固有の必須 wire protocol を追加しない。
+- Core と UI を分離し、payload を control plane に流さない。
+- 境界、ownership、backpressure、停止と cleanup を明確にする。
+- 実装済みの範囲と検証範囲を区別し、未実装を完了扱いしない。
+- Protocol やネットワークの実例を記録するときは、channel ID、peer address、個人情報を公開前に除去する。
 
-## 開発手順
+## ローカル開発
 
-```powershell
-dotnet restore
-dotnet build
-dotnet test
-```
+必要環境は .NET 10 SDK です。標準の restore、Release build、full test、format 検証は次のとおりです。
 
-## ブランチ
+~~~powershell
+dotnet restore PeerCast-Nova.sln
+dotnet build PeerCast-Nova.sln -c Release --no-restore
+dotnet test PeerCast-Nova.sln -c Release --no-build --no-restore
+dotnet format PeerCast-Nova.sln --verify-no-changes --no-restore
+~~~
 
-- `main`: 常にビルド可能
-- `feature/*`: 機能開発
-- `fix/*`: 修正
-- `docs/*`: 文書
+Windows の日常アプリを起動する場合:
 
-## Documentation synchronization
+~~~powershell
+dotnet run --project src/Nova.App
+~~~
 
-When adding the latest ADR and PCN pair, update `README.md`, `ROADMAP.md`,
-`CHANGELOG.md`, and `NAVIGATION.md` in the same change. The repository contract
-tests verify filename/header numbering, the latest ADR/PCN title pair, current
-document markers, Navigation links, and ROADMAP document paths.
+MVP の再生は PCRPlayer／DSPlayer など対応 external player を使います。現在の `Nova.App` は既定で `PCRPlayer64.exe` を PATH から探します。別の実行ファイルを使う場合は `--pcrplayer-executable <path>` または `NOVA_PCRPLAYER_EXE` を指定してください。
 
-### ADR granularity
+GitHub Actions は main push と Pull Request で自動実行されます。CircleCI は GitHub Actions が起動前に利用できない場合の手動 fallback です。CI の結果は作業中の最新 SHA に結び付けて確認してください。Routine CI は Windows native output の物理確認を行いません。
 
-Use an ADR when a change records a durable architecture decision, ownership or
-lifecycle boundary, irreversible compatibility choice, safety／authorization
-boundary, or production policy. Preserve the existing fail-closed,
-bounded-ownership, and exact source-provenance principles.
+## 変更とレビュー
 
-Do not mechanically create one ADR for each metadata projection, cursor wrapper,
-or source-binding helper. A cohesive production composition slice may be covered
-by one appropriately scoped ADR when its ownership, lifecycle, and failure
-boundaries are reviewed together.
+- 変更目的を一つに絞り、レビュー可能な大きさにする。
+- 実装を変更する場合は、影響する動作を自動テストで確認し、必要な文書も同じ変更に含める。
+- 文書のみの変更は、リンク、コマンド、差分が実装と矛盾しないことを確認する。
+- 公開 API、protocol compatibility、lifecycle／ownership など長期的な境界判断は ADR に記録する。PeerCastStation wire behavior を変更・拡張する提案では、互換性と negotiation 方法を RFC として説明する。
+- 新しい最新 ADR／PCN の組を追加する変更では、README、ROADMAP、CHANGELOG、NAVIGATION の最新案内を同期し、NAVIGATION のリンクを更新する。Repository documentation checks が番号とリンクを確認します。
 
 ## Definition of Done
 
-- 設計意図が説明されている
-- 実装されている
-- テストがある
-- 文書が更新されている
-- レビュー可能な大きさである
+- 変更された動作と利用者への影響が説明されている。
+- 関連する自動テストと format check が通っている。物理 Windows output の証拠は別途記録する。
+- 文書と実装の対応が取れている。
+- 差分に無関係な生成物や実験記録を含めない。

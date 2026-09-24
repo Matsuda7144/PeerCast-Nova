@@ -1,62 +1,39 @@
 # PCN-0004 System Architecture
 
-## Dependency Rule
+## Dependency rule
 
-Composition stays at the host boundary. Project references point only toward
-the contracts and deterministic codecs they consume:
+Composition stays at the host boundary. Core remains UI independent; protocol and network code do not depend on a UI or decoder. The Windows host owns operating-system resources, while Playback borrows its public output boundary.
 
-```text
-                    Nova.Cli / Future Host
-                      |       |       |
-                      v       v       v
-                Nova.Core  Nova.Playback ---> Nova.Network
-                    |                         |       |
-                    v                         v       v
-             Nova.Foundation          Nova.Core  Nova.Protocol.Pcp
-```
+## Current project responsibilities
 
-`Nova.Core` does not reference the concrete network implementation. The host
-constructs both, while `Nova.Network` implements Core lifecycle/control
-contracts. `Nova.Protocol.Pcp` is a deterministic codec with no Nova project
-dependency.
+| Project | Responsibility |
+| --- | --- |
+| `Nova.Foundation` | Shared low-level contracts such as clocks, identifiers, and configuration. |
+| `Nova.Core` | UI-independent lifecycle, channel control state, use cases, and immutable status. |
+| `Nova.Protocol.Pcp` | PCP wire codecs without socket, UI, or application-lifecycle ownership. |
+| `Nova.Network` | Peer connections, HTTP/PCP sessions, bounded channel input, relay flow, and backpressure. |
+| `Nova.Playback` | Bounded playback input and managed/native decode, scheduling, and output contracts. |
+| `Nova.Windows` | Shared Win32 window, message loop, owner thread, bounded dispatcher, and Windows resource cleanup. |
+| `Nova.App` | Minimal Windows user-facing composition for channel playback and PCP relay. |
+| `Nova.Cli` | Development and controlled command entry point. |
 
-`Nova.Playback` depends on the Network packet boundary for its initial PCP
-adapter. Network does not reference Playback, a decoder, renderer, or UI.
+## Host and module boundaries
 
-## Module Responsibilities
+- `Nova.App` composes Core, Network, and the shared Windows host.
+- `Nova.Cli` composes Core, Network, Playback, and the shared Windows host.
+- `Nova.Windows` depends on the Playback output contract; Playback does not own the Win32 window or message loop.
+- Network implements Core lifecycle/control contracts and does not depend on Playback or UI.
+- `Nova.Network` may expose payload through bounded data-plane interfaces. Media payload does not pass through Core status snapshots.
+- Foundation has no dependency on other Nova projects. PCP codecs remain deterministic and transport independent.
 
-### Nova.Foundation
+## Current user-facing flows
 
-Logging, configuration contracts, clocks, identifiers, and other
-lowest-level infrastructure abstractions. It depends on no Nova module.
-
-### Nova.Core
-
-Application lifecycle, channel control-plane state, and use-case orchestration.
-It is UI-independent and never transports media payload bytes.
-
-### Nova.Network
-
-Peer connections, protocol framing, relay flow, timeouts, and bandwidth
-management. It must not depend on Player or UI.
-
-### Nova.Playback
-
-Bounded player input ownership, latency-oriented skip policy, and future media
-format/decoder/renderer orchestration. It never places payload bytes in Core
-and cannot make Network depend on a media backend.
-
-### Nova.Cli
-
-Development and diagnostics entry point. It is replaceable by future UIs.
+The Windows app offers two accepted MVP flows. Playback receives a selected PCP channel and exposes a loopback-only HTTP-FLV stream to a compatible external player, including PCRPlayer and DSPlayer. Relay starts a bounded PCP relay listener and displays the LAN endpoint for another peer. The separate Nova-managed decoder／scheduler／Windows output route and regular MP4 integration are post-MVP additions, not MVP blockers.
 
 ## Rules
 
-- UI does not call sockets directly.
-- Network does not know the UI or media decoder.
-- Core coordinates modules through interfaces.
-- Foundation has no dependency on other Nova projects.
-- Protocol codecs do not know sockets, UI, logging, or application lifecycle.
-- Channel status snapshots are immutable control-plane objects.
-- Media payload ownership and backpressure stay in the Network data plane.
-- Public APIs remain minimal until the protocol stabilizes.
+- UI code does not open peer sockets directly; hosts call module boundaries.
+- Control status and media payload use separate paths.
+- Every consumer has an explicit queue/backpressure and cancellation policy.
+- Ownership transfer, finite shutdown, and cleanup are explicit.
+- Public interfaces stay small until a concrete use case requires more.

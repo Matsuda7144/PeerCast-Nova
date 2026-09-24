@@ -2,35 +2,33 @@
 
 ## Target
 
-- .NET 10 LTS
-- C# latest language version supported by the selected SDK
+- .NET 10 (`net10.0`)
+- C# language version selected by the pinned .NET SDK
 - Central package version management
-- Warnings treated as errors
-- Nullable reference types enabled
+- Nullable reference types and warnings-as-errors policy
 
-## Current Projects
+## Application and library projects
 
-| Project | Type | References |
-|---|---|---|
-| Nova.Foundation | Class Library | none |
-| Nova.Core | Class Library | Foundation |
-| Nova.Protocol.Pcp | Class Library | none |
-| Nova.Network | Class Library | Core, Foundation, Protocol.Pcp |
-| Nova.Playback | Class Library | Network |
-| Nova.Cli | Console | Core, Network, Playback, Protocol.Pcp |
-| Nova.Foundation.Tests | xUnit | Foundation |
-| Nova.Core.Tests | xUnit | Core |
-| Nova.Protocol.Pcp.Tests | xUnit | Protocol.Pcp |
-| Nova.Network.Tests | xUnit | Network |
-| Nova.Playback.Tests | xUnit | Playback |
-| Nova.Cli.Tests | xUnit | CLI |
+| Project | Type | Direct Nova references |
+| --- | --- | --- |
+| `Nova.Foundation` | Class library | none |
+| `Nova.Core` | Class library | Foundation |
+| `Nova.Protocol.Pcp` | Class library | none |
+| `Nova.Network` | Class library | Core, Foundation, Protocol.Pcp |
+| `Nova.Playback` | Class library | Network |
+| `Nova.Windows` | Class library | Playback |
+| `Nova.App` | Windows application host | Core, Network, Windows |
+| `Nova.Cli` | Console and controlled-command host | Core, Network, Playback, Windows |
+| `Nova.ControlledWindowsRunner` | Controlled Windows runner | Cli |
 
-`Nova.Common` was removed by ADR-0016. Types remain with the module that owns
-their behavior until a stable, genuinely shared boundary is demonstrated.
+`Nova.App` is the small user-facing Windows entry point. `Nova.Cli` remains the development and controlled-command entry point. The controlled runner is not a second daily application host.
 
-## Deferred Projects
+## Test projects
 
-Decoder backend, Renderer, Recorder, Plugin, API, and Windows UI projects are
-deliberately deferred until their interfaces are justified by an implemented
-use case. The initial bounded player-input policy now belongs to
-`Nova.Playback`; decoder and renderer types remain deferred.
+The solution includes `Nova.Foundation.Tests`, `Nova.Core.Tests`, `Nova.Protocol.Pcp.Tests`, `Nova.Network.Tests`, `Nova.Playback.Tests`, `Nova.Cli.Tests`, and `Nova.App.Tests`. Tests target the module boundary they exercise; routine solution tests do not perform physical Windows audio/video acceptance.
+
+## Dependency direction
+
+`Nova.Core` depends only on Foundation. `Nova.Network` implements Core contracts and owns peer/data-plane behavior. Playback consumes the Network packet boundary. `Nova.Windows` owns the shared Windows implementation and exposes it to the hosts. `Nova.App` and `Nova.Cli` are composition roots; UI code is not a dependency of Core or Network.
+
+`Nova.Common` was removed by ADR-0016. Types stay with the module that owns their behavior until a stable, genuinely shared boundary is demonstrated.

@@ -1,5 +1,20 @@
 # PeerCast Nova Navigation
 
+## Read this first
+
+The Version 0.1.0 product MVP is complete and integrated into main: playback and relay are both established. PeerCastStation compatibility is the first protocol target.
+
+The accepted playback path hands a loopback-only HTTP-FLV stream to a compatible external player, including PCRPlayer and DSPlayer. Managed decoder／scheduler／Windows output integration and regular MP4 production playback through that additional route are post-MVP work, not MVP blockers.
+
+- User-facing summary and build instructions: [README.md](README.md)
+- MVP completion and post-MVP roadmap: [ROADMAP.md](ROADMAP.md)
+- Project principles: [PROJECT_CHARTER.md](PROJECT_CHARTER.md)
+- Architecture and module boundaries: [PCN-0004](docs/architecture/PCN-0004-SYSTEM-ARCHITECTURE.md), [PCN-0005](docs/architecture/PCN-0005-SOLUTION-STRUCTURE.md), and [Control/Data Planes](docs/architecture/CONTROL-AND-DATA-PLANES.md)
+- Compatibility scope: [PCP Compatibility Plan](docs/protocol/PCP-COMPATIBILITY-PLAN.md)
+- Current post-MVP managed boundary: [ADR-0489](docs/adr/ADR-0489-bounded-iso-bmff-regular-movie-native-decoder-discontinuity-reset.md) and [PCN-0499](docs/reviews/PCN-0499-BOUNDED-ISO-BMFF-REGULAR-MOVIE-NATIVE-DECODER-DISCONTINUITY-RESET.md)
+
+The detailed entries below preserve implementation and validation history. A historical result applies to its recorded boundary and run; it is not a blanket feature or device-support claim.
+
 ## Post-0.0.10e bounded ISO BMFF / MP4 managed foundation
 
 PeerCast Nova now has two bounded container-parser families: the existing pure
@@ -938,20 +953,21 @@ The bounded FLV decoder configures the exact parser stream time base through pub
 - ADR-0488 quiesces the timed-delivery owner and commits output, sink, timing, and delivery generations together while retaining the exact reservation and rolling back prior generations on timing rejection;
 - ADR-0489 resets the caller-quiesced selected opened decoder contexts audio-before-video through the verified flush capability, retaining ownership only after complete success;
 - ISO BMFF / MP4 is the second bounded container-parser family alongside the existing FLV v1 parser;
-- automatic AAC sync-search defaults, default timing policies, clock acquisition, repeated observation, runtime instance access and invocation, actual dispatch, cursor mutation, delivery outcome, scheduling, native application of managed PCE layout, AVC runtime capability discovery and decoder integration, production regular-MP4 decoder integration, fragmented-MP4 production playback, nested-box policy, and streaming remain incomplete;
+- automatic AAC sync-search defaults, default timing policies, clock acquisition, repeated observation, runtime instance access and invocation, actual dispatch, cursor mutation, delivery outcome, scheduling, native application of managed PCE layout, AVC runtime capability discovery and decoder integration, production regular-MP4 decoder integration, fragmented-MP4 production playback, nested-box policy, and streaming remain additional post-MVP managed-path work;
 - current reviews span `docs/reviews/PCN-0177-OPT-IN-DECODED-BUFFER-DURATION-CUTOFF.md` through `docs/reviews/PCN-0499-BOUNDED-ISO-BMFF-REGULAR-MOVIE-NATIVE-DECODER-DISCONTINUITY-RESET.md`;
 - ADR-0158 is a permanent numbering-error gap caused by assignment error, following ADR-0082 and ADR-0096, and must not be retroactively reused;
-- next: integrate ADR-0489 under the ADR-0488 delivery gate, then add late-audio recovery without activating physical output; retain ADR-0416 through ADR-0473 as the fragmented-MP4 foundation.
+- next post-MVP managed-path work: integrate ADR-0489 under the ADR-0488 delivery gate, then add late-audio recovery without activating physical output; retain ADR-0416 through ADR-0473 as the fragmented-MP4 foundation.
 
-### Post-ADR-0473 primary direction
+### Post-MVP managed regular-MP4 direction
 
-The primary path is now regular non-fragmented MP4 H.264／AAC production
-integration for the 0.1.0 Genesis candidate. New work should connect existing
+An additional post-MVP managed playback path may connect regular
+non-fragmented MP4 H.264／AAC production integration. This is not part of the
+accepted 0.1.0 playback path or a blocker for its completion. New work may connect existing
 demux ownership, managed decoder preparation, verified FFmpeg capability
 binding, native decoder open and compressed-packet submission, decoded-frame
 transfer, the existing scheduler and D3D11／WASAPI lifecycle, finite cleanup,
-and minimal `Nova.App` composition. This is a direction and dependency order,
-not a claim that production MP4 playback is already implemented.
+and minimal `Nova.App` composition. This is a possible post-MVP direction and
+dependency order, not a claim that production MP4 playback is already implemented.
 
 ADR-0474 now supplies the first track-level connection from caller-provided file
 bytes and exact parsed sources to an owned compressed AVC／AAC packet sequence.
@@ -994,11 +1010,11 @@ audio-before-video ordering and terminal partial-state cleanup. Integration
 under the delivery gate, audio recovery, and application playback remain future
 slices.
 
-Use approximately 70% production／MVP work, 20% production-required foundation,
-and 10% future research as a prioritization guide. Fragmented-MP4 production
-demux, streaming, and payload delivery remain later work; the existing managed
-foundation is preserved. See `ROADMAP.md` for the complete Genesis and deferred
-scope.
+Use approximately 70% managed playback／productization, 20% foundation required
+by that additional route, and 10% future research as a post-MVP prioritization
+guide. Fragmented-MP4 production demux, streaming, and payload delivery remain
+later work; the existing managed foundation is preserved. See `ROADMAP.md` for
+the historical Genesis plan and post-MVP scope.
 
 **0.0.10e — Shared Windows Application Ownership Boundary — Complete**
 
@@ -1045,11 +1061,11 @@ scope.
 - fixture: `66,939` bytes, SHA-256 `32872B300286525F4EF97FEE3533E25419AC8E48BFD4BC2C4FD9545F071B1E15`;
 - no runtime path, fixture path, record path, device／endpoint identity, HWND, thread ID, pointer, handle, HRESULT, raw process output, or payload is retained in the repository.
 
-Any later physical audio run requires a separately selected exact `main`, final-head and post-merge CircleCI success, a newly captured and independently revalidated canonical readiness record, fresh repository-external outcome paths, a new explicit one-run authorization, and exactly one invocation through the readiness-required entrypoint. Readiness, a documentation-only merge, and the literal invocation guard are not authorization.
+Any later physical audio run requires a separately selected exact `main`, final-head and post-merge success from the then-configured exact-SHA CI (GitHub Actions by default; CircleCI only as a manual fallback when GitHub Actions cannot start), a newly captured and independently revalidated canonical readiness record, fresh repository-external outcome paths, a new explicit one-run authorization, and exactly one invocation through the readiness-required entrypoint. Readiness, a documentation-only merge, and the literal invocation guard are not authorization.
 
 ## CI
 
-GitHub Actions利用枠消費中はCircleCIをroutine Linux merge gateとして使用します。最終headでrestore、Release build with analyzers、full solution tests、format verificationを通してからmergeします。Physical Windows execution remains a separate explicit authorization boundary and is never implied by routine CI.
+GitHub Actions は main push と Pull Request で動く通常の自動 Linux CI です。restore、Release build、full solution tests、format verification を実行します。CircleCI は GitHub Actions が起動できない場合の手動 fallback とし、通常の並列 gate にはしません。CI の状態は exact SHA ごとに確認してください。Routine CI は Windows の物理 audio/video acceptance を意味しません。
 
 ## 最新の入口
 

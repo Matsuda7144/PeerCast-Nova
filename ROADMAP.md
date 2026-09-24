@@ -1,5 +1,20 @@
 # Roadmap
 
+## Product MVP and current status — Complete
+
+The Version 0.1.0 product MVP is complete and integrated into main. Its accepted scope is playback and relay on the existing PeerCast／PeerCastStation network, with straightforward channel selection, start/stop, connection status, and recoverable errors. A recorder, advanced UI, and a Nova-only mandatory protocol are outside the MVP.
+
+main `8caf7069c54c879fd1a7eb2683ab214a337aa883` includes landed PR #245/#246. Resulting-main CI run `36020495159` / job `107703845407` reports Restore, Build, Test, and Format all SUCCESS; physical acceptance is also complete as separate evidence.
+
+- MVP PLAYBACK: ESTABLISHED / INTEGRATED INTO MAIN
+- MVP RELAY: ESTABLISHED / INTEGRATED INTO MAIN
+- MVP OVERALL: ESTABLISHED / INTEGRATED INTO MAIN
+PEERCAST NOVA MVP IMPLEMENTATION: COMPLETE
+
+The accepted playback path hands PCP input through a loopback-only HTTP-FLV endpoint to a compatible external player, including PCRPlayer and DSPlayer. This path meets the MVP playback requirement. The bounded PCP Relay flow meets the relay requirement. Nova-managed playback, regular MP4 production playback through that additional route, Windows output expansion, productization, and post-MVP hardening are later work, not MVP blockers.
+
+The engineering milestones below record bounded implementation and validation slices, including additional post-MVP managed-playback work. A completed parser, decoder boundary, CI run, or controlled physical observation applies only to its stated scope. Read [PROJECT_CHARTER.md](PROJECT_CHARTER.md) for product principles and [README.md](README.md) for the current user-facing route.
+
 ## 0.0.1-0.0.4 Network Foundation — Verified
 
 - Foundation／Core lifecycle
@@ -15,7 +30,7 @@
 - canonical decoded output contract
 - backend provenance and audit boundaries
 
-## 0.0.6 Decoder and Output Boundaries — Implemented; application composition pending
+## 0.0.6 Decoder and Output Boundaries — Implemented; managed-path app composition pending (Post-MVP)
 
 - verified FFmpeg runtime lease and ABI gate
 - native context through packet／frame processing
@@ -78,7 +93,7 @@
 
 0.0.9z connects controlled real FLV bytes through the real parser, production composition, source-bound decode, decoded-completion transfer, scheduler ownership, and the 0.0.9y lifecycle. It proves exact stream-derived output configuration, one receive／one transfer／one retained retry relief, caller-visible `WouldBlock`, later committed delivery, stop-old-before-create-new discontinuity replacement, output-generation reconfiguration, and production-first cleanup without physical Windows or real FFmpeg activation.
 
-## 0.0.10 Controlled Native Activation and Output Evidence — In Progress
+## 0.0.10 Controlled Native Activation and Output Evidence — In Progress (Post-MVP managed playback)
 
 ### 0.0.10a Approved FFmpeg Candidate Manifest Refresh — Complete
 
@@ -1468,20 +1483,21 @@ streams, native packet submission,
 production MP4 demux composition, fragmented MP4, and streaming remain
 incomplete.
 
-### Post-ADR-0473 production direction
+### Post-MVP managed regular-MP4 direction
 
-ADR-0473 completes the current planned managed-foundation phase. The primary
-direction now shifts from extending metadata-only or projection-only chains to
-connecting the existing regular non-fragmented MP4 foundation to a usable
-production vertical slice. The existing fail-closed, bounded-ownership, exact
-source-provenance, and finite-lifecycle rules remain mandatory.
+ADR-0473 completes the current planned managed-foundation phase. The work below
+describes an additional post-MVP managed playback route: connecting the existing
+regular non-fragmented MP4 foundation to a production vertical slice. It is not
+the accepted MVP path or a condition for MVP completion. The existing fail-closed,
+bounded-ownership, exact source-provenance, and finite-lifecycle rules remain
+mandatory for this additional route.
 
-As a prioritization guide rather than a release formula, approximately 70% of
-development should directly advance MVP／production use, 20% should provide
-foundation work required by that production path, and 10% may cover future
+As a post-MVP prioritization guide rather than a release formula, approximately
+70% of this work may advance managed playback and productization, 20% may provide
+foundation work required by that additional route, and 10% may cover future
 research such as fragmented MP4.
 
-The next production-oriented architecture slices should reuse the existing
+Possible post-MVP architecture slices can reuse the existing
 sample planning, edit admission, byte-range and `mdat` containment, owned
 payload, sample-description selection, `avcC`／`esds`, AVC／AAC packet
 composition, track／movie binding, packet sequence, cross-track merge, timing,
@@ -1498,17 +1514,18 @@ order is:
 8. finite stop, cancellation, and cleanup; and
 9. minimal `Nova.App` integration.
 
-This sequence does not claim that production MP4 playback, native submission,
-or physical output is implemented. It should be divided into the minimum
+This sequence describes possible post-MVP work; it does not claim that
+production MP4 playback, native submission, or physical output for this
+additional route is implemented. It should be divided into the minimum
 cohesive architecture slices needed to preserve ownership and lifecycle
 clarity, not into one ADR per metadata projection, cursor wrapper, or
 source-binding helper.
 
 ADR-0416 through ADR-0473 remain the retained fragmented-MP4 managed
-foundation. A very small source-binding or completion correction needed to
-close its current exact chain may be completed, but indefinite metadata-only
-extension, fragmented production demux, streaming, and payload delivery are not
-the primary 0.1.0 path.
+foundation. The managed regular/fragmented MP4 integration described here is
+post-MVP additional work, not a 0.1.0 blocker. A small source-binding or
+completion correction may close its current exact chain; fragmented production
+demux, streaming, and payload delivery remain future extensions.
 
 ADR-0474 with PCN-0484 implements the first production-oriented regular MP4
 composition slice. One finite caller-bounded operation now reuses the existing
@@ -1636,7 +1653,7 @@ Verification injects reset results only. Integration under the ADR-0488 gate,
 late-audio recovery, finite pumping, application integration, and physical
 output remain unimplemented.
 
-### Deferred
+### Deferred post-MVP work
 
 - FFmpeg binary bundling or Nova-hosted runtime pack
 - playback-owned output dispatcher or message pump
@@ -1652,7 +1669,9 @@ output remain unimplemented.
 
 ## CI policy
 
-Routine Linux CI uses CircleCI while GitHub Actions usage is exhausted. Final branch heads must pass restore, Release build with analyzers, all tests, and format verification. Windows execution remains reserved for a separately approved milestone validation and is never implied by routine CI.
+GitHub Actions is the normal automatic CI for pushes to main and Pull Requests. It runs restore, Release build, the full solution test suite, and format verification on Linux. CircleCI is retained as a manual fallback for a GitHub Actions run that cannot start, such as a provider outage or usage-limit condition; it is not a routine parallel gate. Verify results against the exact source SHA.
+
+Routine CI does not perform physical Windows audio/video acceptance. Managed results, controlled native runs, operator-observed output, and release acceptance remain separate evidence.
 
 ## Platform and dependency policy
 
@@ -1662,7 +1681,7 @@ Routine Linux CI uses CircleCI while GitHub Actions usage is exhausted. Final br
 - do not bundle, mirror, rehost, download, or install FFmpeg in the default distribution
 - preserve explicit-directory and checksum／ABI verification for user replacements
 - do not convert host attestation into Nova review approval
-- keep application window and output dispatcher externally owned
+- Nova.Windows owns the application window and dispatcher implementation; Playback borrows only the required contract and window token
 - keep Windows native output resources under one owner thread
 - keep output generation equal to the active decoder generation
 - make device loss terminal unless a later ADR defines a new complete lifecycle
@@ -1671,7 +1690,12 @@ Routine Linux CI uses CircleCI while GitHub Actions usage is exhausted. Final br
 - never reuse a consumed one-run authorization
 - record provenance and redistribution permission for third-party assets
 
-## 0.1.0 Genesis gate
+## Historical 0.1.0 Genesis acceptance plan — Superseded
+
+The checklist below preserves the earlier 0.1.0 planning gate for history. It
+was superseded by the completed and integrated MVP status above; none of these
+items is a current MVP blocker. Work that remains desirable for the additional
+managed playback route or productization belongs to the post-MVP roadmap.
 
 - existing PeerCast／PCP／FLV production playback
 - regular non-fragmented MP4 production playback for selected H.264／AVC and AAC
@@ -1687,7 +1711,8 @@ Routine Linux CI uses CircleCI while GitHub Actions usage is exhausted. Final br
 - paired video／audio admission
 - minimal user-facing `Nova.App` composition and portable distribution
 
-Fragmented MP4 production playback, MP4 streaming, recorder, installer,
-signing, updater, automatic device-loss recovery, complete A/V resampling and
-drift correction, advanced GUI, and broad codec support beyond the selected
-H.264／AAC scope are not required for the 0.1.0 Genesis candidate.
+The earlier plan excluded fragmented MP4 production playback, MP4 streaming,
+recorder, installer, signing, updater, automatic device-loss recovery, complete
+A/V resampling and drift correction, advanced GUI, and broad codec support beyond
+the selected H.264／AAC scope. These exclusions are retained as historical MVP
+scope; future additions remain post-MVP work.

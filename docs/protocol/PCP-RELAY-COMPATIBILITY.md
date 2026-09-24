@@ -1,12 +1,10 @@
 # PCP Relay Compatibility
 
-## Status
+## Status and scope
 
-Compatibility implementation and controlled loopback tests are complete.
+The implementation and controlled loopback tests cover the recorded HTTP-to-PCP relay handshake. Retained live probes succeeded against official PeerCastStation Stable 4.1.0 and development 7.1.1.0 with the same ordered top-level atom trace: `oleh`, then `ok`.
 
-**Milestone 0.0.2c is Verified. Live probes succeeded against official Stable
-4.1.0 and official master development 7.1.1.0 with the same ordered top-level
-Atom trace: `oleh`, then `ok`.**
+Those results are versioned evidence for the probe described below, not blanket certification of every PeerCastStation version, channel, media type, or relay scenario. The probe closes before consuming media.
 
 ## Independently implemented sequence
 
