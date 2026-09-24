@@ -35,6 +35,64 @@ public sealed class PcpRelayFanoutTests
     }
 
     [Fact]
+    public async Task AddChild_ReplaysOnlyLatestHeadBeforeFutureLiveData()
+    {
+        await using var fanout = new PcpRelayFanout(
+            replayHeadForNewChildren: true);
+        await fanout.ConsumeAsync(
+            CreatePacket(0, [0x10], type: 0x64616568),
+            CancellationToken.None);
+        await fanout.ConsumeAsync(
+            CreatePacket(1, [0x20], type: 0x61746164),
+            CancellationToken.None);
+        await fanout.ConsumeAsync(
+            CreatePacket(2, [0x11], type: 0x64616568),
+            CancellationToken.None);
+
+        var sink = new CollectingRelaySink();
+        await using var child = fanout.AddChild(sink);
+        await sink.WaitForCountAsync(1);
+
+        await fanout.ConsumeAsync(
+            CreatePacket(3, [0x30], type: 0x61746164),
+            CancellationToken.None);
+        await sink.WaitForCountAsync(2);
+
+        Assert.Collection(
+            sink.Packets,
+            head =>
+            {
+                Assert.Equal(0x64616568U, head.Type);
+                Assert.Equal([0x11], head.Payload.ToArray());
+            },
+            data =>
+            {
+                Assert.Equal(0x61746164U, data.Type);
+                Assert.Equal([0x30], data.Payload.ToArray());
+            });
+    }
+
+    [Fact]
+    public async Task Consume_RejectsHeadLargerThanBoundedReplayBudget()
+    {
+        var options = new PcpRelayFanoutOptions
+        {
+            MaxPendingBytesPerChild = 8,
+        };
+        var fanout = new PcpRelayFanout(
+            options,
+            replayHeadForNewChildren: true);
+
+        var exception = await Assert.ThrowsAsync<InvalidDataException>(async () =>
+            await fanout.ConsumeAsync(
+                CreatePacket(0, new byte[9], type: 0x64616568),
+                CancellationToken.None));
+
+        Assert.Contains("bounded 8-byte relay bootstrap limit", exception.Message, StringComparison.Ordinal);
+        await fanout.DisposeAsync();
+    }
+
+    [Fact]
     public async Task Consume_SlowChildIsStoppedWithoutBlockingFastChild()
     {
         var options = new PcpRelayFanoutOptions
@@ -311,14 +369,15 @@ public sealed class PcpRelayFanoutTests
     private static PcpChannelPacket CreatePacket(
         long sequence,
         byte[] payload,
-        PcpStreamDiscontinuity? discontinuity = null)
+        PcpStreamDiscontinuity? discontinuity = null,
+        uint type = 1)
     {
         var wirePosition = checked((uint)(100 + sequence));
         return new PcpChannelPacket(
             ChannelId,
             SessionId,
             sequence,
-            type: 1,
+            type,
             wirePosition,
             discontinuity is null ? wirePosition : null,
             payload,
@@ -399,6 +458,7 @@ public sealed class PcpRelayFanoutTests
                 _packets.Add(
                     new ObservedRelayPacket(
                         packet.Sequence,
+                        packet.Type,
                         packet.StreamPosition,
                         packet.Payload.ToArray(),
                         packet.Discontinuity));
@@ -483,6 +543,7 @@ public sealed class PcpRelayFanoutTests
 
     private sealed record ObservedRelayPacket(
         long Sequence,
+        uint Type,
         long? StreamPosition,
         byte[] Payload,
         PcpStreamDiscontinuity? Discontinuity);

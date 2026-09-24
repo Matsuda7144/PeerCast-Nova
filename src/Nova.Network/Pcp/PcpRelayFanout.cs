@@ -9,20 +9,28 @@ namespace PeerCast.Nova.Network.Pcp;
 /// </summary>
 public sealed class PcpRelayFanout : IPcpChannelPacketConsumer, IAsyncDisposable
 {
+    private const uint HeadPacketType = 0x64616568;
+    private const int MaximumRetainedHeadBytes = 1024 * 1024;
+
     private readonly object _gate = new();
     private readonly HashSet<PcpRelayChildWorker> _activeChildren = [];
     private readonly HashSet<PcpRelayChildWorker> _knownChildren = [];
     private readonly PcpRelayFanoutOptions _options;
+    private readonly bool _replayHeadForNewChildren;
     private Task? _stopTask;
+    private RetainedHead? _retainedHead;
     private int _consumeActive;
     private bool _stopping;
 
-    public PcpRelayFanout(PcpRelayFanoutOptions? options = null)
+    public PcpRelayFanout(
+        PcpRelayFanoutOptions? options = null,
+        bool replayHeadForNewChildren = false)
     {
         _options = options is null
             ? new PcpRelayFanoutOptions()
             : options with { };
         _options.Validate();
+        _replayHeadForNewChildren = replayHeadForNewChildren;
     }
 
     public int ActiveChildCount
@@ -76,6 +84,16 @@ public sealed class PcpRelayFanout : IPcpChannelPacketConsumer, IAsyncDisposable
                 _options,
                 OnChildStoppedAccepting,
                 OnChildCompleted);
+
+            if (_replayHeadForNewChildren &&
+                _retainedHead is { } retainedHead &&
+                !child.TryEnqueue(retainedHead.Packet, retainedHead.Payload))
+            {
+                child.RequestStop(PcpRelayChildEndReason.OwnerRemoved);
+                registration = null;
+                return false;
+            }
+
             _activeChildren.Add(child);
             _knownChildren.Add(child);
             registration = new PcpRelayChildRegistration(child);
@@ -96,22 +114,59 @@ public sealed class PcpRelayFanout : IPcpChannelPacketConsumer, IAsyncDisposable
                 "Relay fan-out consumption must remain sequential.");
         }
 
+        PcpRelaySharedPayload? payload = null;
+        RetainedHead? replacedHead = null;
+
         try
         {
+            if (_replayHeadForNewChildren && packet.Type == HeadPacketType)
+            {
+                var headByteLimit = (int)Math.Min(
+                    MaximumRetainedHeadBytes,
+                    _options.MaxPendingBytesPerChild);
+                if (packet.Payload.Length > headByteLimit)
+                {
+                    throw new InvalidDataException(
+                        $"The PCP HEAD packet exceeds the bounded {headByteLimit}-byte relay bootstrap limit.");
+                }
+
+                payload = PcpRelaySharedPayload.CopyFrom(packet.Payload);
+            }
+
             PcpRelayChildWorker[] children;
 
             lock (_gate)
             {
                 ObjectDisposedException.ThrowIf(_stopping, this);
+
+                if (payload is not null)
+                {
+                    var retainedPacket = new PcpChannelPacket(
+                        packet.ChannelId,
+                        packet.SessionId,
+                        packet.Sequence,
+                        packet.Type,
+                        packet.WirePosition,
+                        packet.StreamPosition,
+                        payload.Memory,
+                        packet.Discontinuity,
+                        packet.Continuation);
+                    payload.AddReference();
+                    replacedHead = _retainedHead;
+                    _retainedHead = new RetainedHead(retainedPacket, payload);
+                }
+
                 children = [.. _activeChildren];
             }
+
+            replacedHead?.Payload.Dispose();
 
             if (children.Length == 0)
             {
                 return ValueTask.CompletedTask;
             }
 
-            using var payload = PcpRelaySharedPayload.CopyFrom(packet.Payload);
+            payload ??= PcpRelaySharedPayload.CopyFrom(packet.Payload);
 
             foreach (var child in children)
             {
@@ -122,6 +177,7 @@ public sealed class PcpRelayFanout : IPcpChannelPacketConsumer, IAsyncDisposable
         }
         finally
         {
+            payload?.Dispose();
             Volatile.Write(ref _consumeActive, 0);
         }
     }
@@ -190,7 +246,9 @@ public sealed class PcpRelayFanout : IPcpChannelPacketConsumer, IAsyncDisposable
                 _stopping = true;
                 var children = _knownChildren.ToArray();
                 _activeChildren.Clear();
-                _stopTask = StopChildrenAsync(children);
+                var retainedHead = _retainedHead;
+                _retainedHead = null;
+                _stopTask = StopChildrenAsync(children, retainedHead);
             }
 
             return new ValueTask(_stopTask);
@@ -198,16 +256,24 @@ public sealed class PcpRelayFanout : IPcpChannelPacketConsumer, IAsyncDisposable
     }
 
     private static async Task StopChildrenAsync(
-        PcpRelayChildWorker[] children)
+        PcpRelayChildWorker[] children,
+        RetainedHead? retainedHead)
     {
-        foreach (var child in children)
+        try
         {
-            child.RequestStop(PcpRelayChildEndReason.FanoutStopped);
-        }
+            foreach (var child in children)
+            {
+                child.RequestStop(PcpRelayChildEndReason.FanoutStopped);
+            }
 
-        var waits = children.Select(
-            child => child.WaitForCompletionAsync(CancellationToken.None));
-        await Task.WhenAll(waits).ConfigureAwait(false);
+            var waits = children.Select(
+                child => child.WaitForCompletionAsync(CancellationToken.None));
+            await Task.WhenAll(waits).ConfigureAwait(false);
+        }
+        finally
+        {
+            retainedHead?.Payload.Dispose();
+        }
     }
 
     private void OnChildStoppedAccepting(PcpRelayChildWorker child)
@@ -226,4 +292,8 @@ public sealed class PcpRelayFanout : IPcpChannelPacketConsumer, IAsyncDisposable
             _knownChildren.Remove(child);
         }
     }
+
+    private sealed record RetainedHead(
+        PcpChannelPacket Packet,
+        PcpRelaySharedPayload Payload);
 }

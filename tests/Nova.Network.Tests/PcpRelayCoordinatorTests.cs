@@ -96,6 +96,69 @@ public sealed class PcpRelayCoordinatorTests
     }
 
     [Fact]
+    public async Task Coordinator_RelaysHeadBeforeFollowingDataToDownstreamPeer()
+    {
+        const uint headType = 0x64616568;
+        const uint dataType = 0x61746164;
+        var transportOptions = CreateTransportOptions();
+        await using var upstreamListener = new TcpTransportListener(
+            new IPEndPoint(IPAddress.Loopback, 0),
+            transportOptions);
+        upstreamListener.Start();
+        using var timeoutSource = new CancellationTokenSource(TestTimeout);
+        var releasePackets = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseDataAfterHead = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var upstreamTask = RunAcceptedUpstreamAttemptAsync(
+            upstreamListener,
+            expectedPosition: 0,
+            releasePackets.Task,
+            [
+                CreatePacketAtom(position: 100, [0x48], packetType: headType),
+                CreatePacketAtom(position: 101, [0x44], packetType: dataType),
+                CreateQuitAtom(),
+            ],
+            timeoutSource.Token,
+            releaseRemainingPackets: releaseDataAfterHead.Task);
+        await using var coordinator = CreateCoordinator(
+            transportOptions,
+            CreateTracker(),
+            maxReconnectAttempts: 0);
+        var runTask = coordinator.RunAsync(
+            upstreamListener.LocalEndPoint.Address.ToString(),
+            upstreamListener.LocalEndPoint.Port,
+            cancellationToken: timeoutSource.Token);
+        var readiness = await coordinator.WaitForReadinessAsync(timeoutSource.Token);
+        releasePackets.TrySetResult();
+        await coordinator.FirstPacketAccepted.WaitAsync(timeoutSource.Token);
+        await using var downstream = await ConnectDownstreamAsync(
+            coordinator.LocalEndPoint,
+            transportOptions,
+            timeoutSource.Token);
+        releaseDataAfterHead.TrySetResult();
+        var packets = await downstream.ReadChannelPacketsAsync(2, timeoutSource.Token);
+        var result = await runTask.WaitAsync(timeoutSource.Token);
+        await upstreamTask;
+
+        Assert.Equal(PcpRelayCoordinatorReadinessOutcome.Ready, readiness);
+        Assert.Collection(
+            packets,
+            head =>
+            {
+                Assert.Equal(headType, head.Type);
+                Assert.Equal([0x48], head.Payload);
+            },
+            data =>
+            {
+                Assert.Equal(dataType, data.Type);
+                Assert.Equal([0x44], data.Payload);
+            });
+        Assert.Equal(PcpRelayCoordinatorEndReason.UpstreamEnded, result.EndReason);
+        Assert.True(result.ShutdownCompleted);
+    }
+
+    [Fact]
     public async Task Coordinator_PreservesDownstreamChildAcrossUpstreamReconnect()
     {
         var transportOptions = CreateTransportOptions();
@@ -443,7 +506,8 @@ public sealed class PcpRelayCoordinatorTests
         long expectedPosition,
         Task releasePackets,
         IReadOnlyList<PcpAtom> postHandshakeAtoms,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Task? releaseRemainingPackets = null)
     {
         await using var connection = await listener.AcceptAsync(
             cancellationToken);
@@ -469,10 +533,25 @@ public sealed class PcpRelayCoordinatorTests
                 ],
                 cancellationToken);
             await releasePackets.WaitAsync(cancellationToken);
-            await WriteAtomsAsync(
-                connection,
-                postHandshakeAtoms,
-                cancellationToken);
+            if (releaseRemainingPackets is not null && postHandshakeAtoms.Count > 0)
+            {
+                await WriteAtomsAsync(
+                    connection,
+                    [postHandshakeAtoms[0]],
+                    cancellationToken);
+                await releaseRemainingPackets.WaitAsync(cancellationToken);
+                await WriteAtomsAsync(
+                    connection,
+                    postHandshakeAtoms.Skip(1).ToArray(),
+                    cancellationToken);
+            }
+            else
+            {
+                await WriteAtomsAsync(
+                    connection,
+                    postHandshakeAtoms,
+                    cancellationToken);
+            }
         }
         finally
         {
@@ -697,7 +776,10 @@ public sealed class PcpRelayCoordinatorTests
                     PcpHeloCodec.LegacyServantVersion)));
     }
 
-    private static PcpAtom CreatePacketAtom(uint position, byte[] payload)
+    private static PcpAtom CreatePacketAtom(
+        uint position,
+        byte[] payload,
+        uint packetType = 1)
     {
         return PcpAtom.Parent(
             PcpKnownAtomNames.Channel,
@@ -708,7 +790,7 @@ public sealed class PcpRelayCoordinatorTests
                 PcpKnownAtomNames.ChannelPacket,
                 PcpAtom.Leaf(
                     PcpKnownAtomNames.Type,
-                    PcpWireValueCodec.EncodeUInt32(1)),
+                    PcpWireValueCodec.EncodeUInt32(packetType)),
                 PcpAtom.Leaf(
                     PcpKnownAtomNames.Position,
                     PcpWireValueCodec.EncodeUInt32(position)),
@@ -758,6 +840,32 @@ public sealed class PcpRelayCoordinatorTests
             }
 
             return payloads.ToArray();
+        }
+
+        public async Task<(uint Type, byte[] Payload)[]> ReadChannelPacketsAsync(
+            int count,
+            CancellationToken cancellationToken)
+        {
+            var packets = new List<(uint Type, byte[] Payload)>(count);
+            await using var atomReader = new PcpAtomPipeMessageReader(
+                _pipeReader,
+                maxBufferedBytes: 1024 * 1024);
+
+            while (packets.Count < count)
+            {
+                var channel = await atomReader.ReadNextAsync(cancellationToken);
+                var packet = channel.FindFirst(PcpKnownAtomNames.ChannelPacket);
+                var type = packet?.FindFirst(PcpKnownAtomNames.Type);
+                var data = packet?.FindFirst(PcpKnownAtomNames.Data);
+                Assert.Equal(PcpKnownAtomNames.Channel, channel.Name);
+                Assert.NotNull(type);
+                Assert.NotNull(data);
+                packets.Add((
+                    PcpWireValueCodec.DecodeUInt32(type!.Content.Span),
+                    data!.Content.ToArray()));
+            }
+
+            return packets.ToArray();
         }
 
         public async ValueTask DisposeAsync()

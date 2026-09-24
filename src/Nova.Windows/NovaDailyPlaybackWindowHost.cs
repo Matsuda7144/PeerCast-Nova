@@ -13,8 +13,8 @@ public enum NovaDailyPlaybackWindowResult
 }
 
 /// <summary>
-/// Owns the small channel-select / Play / Stop Windows shell used by Nova's
-/// ordinary HTTP-FLV daily viewing route.
+/// Owns the small channel-select / Play / Stop / Relay Windows shell used by
+/// Nova's ordinary playback and PCP relay routes.
 /// </summary>
 public sealed class NovaDailyPlaybackWindowHost : IAsyncDisposable
 {
@@ -29,6 +29,7 @@ public sealed class NovaDailyPlaybackWindowHost : IAsyncDisposable
     private const uint WindowMessageDestroy = 0x0002;
     private const uint WindowMessageSetText = 0x000C;
     private const uint WindowMessageSetFont = 0x0030;
+    private const int ComboSelectionChanged = 1;
     private const uint ComboResetContent = 0x014B;
     private const uint ComboAddString = 0x0143;
     private const uint ComboSetCurrentSelection = 0x014E;
@@ -39,6 +40,9 @@ public sealed class NovaDailyPlaybackWindowHost : IAsyncDisposable
     private const int StopControlId = 1003;
     private const int ChannelControlId = 1004;
     private const int StatusControlId = 1005;
+    private const int RelayControlId = 1006;
+    private const int StopRelayControlId = 1007;
+    private const int RelayEndpointControlId = 1008;
     private const int CursorArrow = 32512;
     private const int DefaultGuiFont = 17;
 
@@ -53,6 +57,7 @@ public sealed class NovaDailyPlaybackWindowHost : IAsyncDisposable
     private nint _window;
     private nint _channelCombo;
     private nint _statusLabel;
+    private nint _relayEndpointLabel;
     private string[] _channelNames = [];
     private bool _closeRequested;
     private bool _disposed;
@@ -70,6 +75,12 @@ public sealed class NovaDailyPlaybackWindowHost : IAsyncDisposable
     public event Action<int>? PlayRequested;
 
     public event Action? StopRequested;
+
+    public event Action<int>? RelayRequested;
+
+    public event Action? StopRelayRequested;
+
+    public event Action? ChannelSelectionChanged;
 
     public async ValueTask<NovaDailyPlaybackWindowResult> StartAsync(
         CancellationToken cancellationToken = default)
@@ -161,6 +172,7 @@ public sealed class NovaDailyPlaybackWindowHost : IAsyncDisposable
         }
 
         _ = EnableWindow(GetControl(PlayControlId), names.Length > 0);
+        _ = EnableWindow(GetControl(RelayControlId), names.Length > 0);
     }
 
     public void SetStatus(string status)
@@ -170,6 +182,19 @@ public sealed class NovaDailyPlaybackWindowHost : IAsyncDisposable
         if (label != 0 && IsWindow(label))
         {
             _ = SendMessageW(label, WindowMessageSetText, 0, status);
+        }
+    }
+
+    public void SetRelayEndpoint(string endpoint)
+    {
+        ArgumentNullException.ThrowIfNull(endpoint);
+        var label = Volatile.Read(ref _relayEndpointLabel);
+        if (label != 0 && IsWindow(label))
+        {
+            var text = string.IsNullOrWhiteSpace(endpoint)
+                ? "Relay endpoint: stopped"
+                : $"Relay endpoint (share with a LAN PeerCast peer):\r\n{endpoint}";
+            _ = SendMessageW(label, WindowMessageSetText, 0, text);
         }
     }
 
@@ -269,7 +294,7 @@ public sealed class NovaDailyPlaybackWindowHost : IAsyncDisposable
         nint window = 0;
         try
         {
-            var rectangle = new WindowRectangle { Right = 740, Bottom = 170 };
+            var rectangle = new WindowRectangle { Right = 740, Bottom = 260 };
             if (!AdjustWindowRectEx(ref rectangle, WindowStyleOverlapped, false, 0))
             {
                 Complete(NovaDailyPlaybackWindowResult.Faulted);
@@ -333,6 +358,7 @@ public sealed class NovaDailyPlaybackWindowHost : IAsyncDisposable
             Volatile.Write(ref _window, 0);
             Volatile.Write(ref _channelCombo, 0);
             Volatile.Write(ref _statusLabel, 0);
+            Volatile.Write(ref _relayEndpointLabel, 0);
             if (window != 0 && IsWindow(window))
             {
                 _ = DestroyWindow(window);
@@ -370,6 +396,19 @@ public sealed class NovaDailyPlaybackWindowHost : IAsyncDisposable
         _ = CreateControl(window, instance, "BUTTON", "更新", ChildVisibleTabStop, 586, 48, 62, 28, RefreshControlId);
         _ = CreateControl(window, instance, "BUTTON", "再生", ChildVisibleTabStop, 12, 98, 82, 30, PlayControlId);
         _ = CreateControl(window, instance, "BUTTON", "停止", ChildVisibleTabStop, 104, 98, 82, 30, StopControlId);
+        _ = CreateControl(window, instance, "BUTTON", "Relay開始", ChildVisibleTabStop, 12, 140, 100, 30, RelayControlId);
+        _ = CreateControl(window, instance, "BUTTON", "Relay停止", ChildVisibleTabStop, 122, 140, 100, 30, StopRelayControlId);
+        _relayEndpointLabel = CreateControl(
+            window,
+            instance,
+            "STATIC",
+            "Relay endpoint: stopped",
+            ChildVisible,
+            12,
+            180,
+            700,
+            68,
+            RelayEndpointControlId);
         _ = EnableWindow(GetControl(PlayControlId), false);
 
         foreach (var controlId in new[]
@@ -379,6 +418,9 @@ public sealed class NovaDailyPlaybackWindowHost : IAsyncDisposable
                      RefreshControlId,
                      PlayControlId,
                      StopControlId,
+                     RelayControlId,
+                     StopRelayControlId,
+                     RelayEndpointControlId,
                  })
         {
             _ = SendMessageW(
@@ -451,7 +493,25 @@ public sealed class NovaDailyPlaybackWindowHost : IAsyncDisposable
                     case StopControlId:
                         StopRequested?.Invoke();
                         return 0;
+                    case RelayControlId:
+                        var relayIndex = SelectedChannelIndex;
+                        if (relayIndex >= 0)
+                        {
+                            RelayRequested?.Invoke(relayIndex);
+                        }
+
+                        return 0;
+                    case StopRelayControlId:
+                        StopRelayRequested?.Invoke();
+                        return 0;
                 }
+            }
+
+            if (controlId == ChannelControlId &&
+                notification == ComboSelectionChanged)
+            {
+                ChannelSelectionChanged?.Invoke();
+                return 0;
             }
         }
 

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net;
 using PeerCast.Nova.Windows;
 
 namespace PeerCast.Nova.App.Tests;
@@ -121,11 +122,13 @@ public sealed class NovaDailyPlaybackTests
         var channel = new GenesisChannelItem("test channel", source);
         var window = new FakeWindow();
         var controller = new FakeController();
+        var relayController = new FakeRelayController();
         var composition = new NovaDailyPlaybackStartupComposition(
             explicitPlayerPath: null,
             new FakeWindowFactory(window),
             new FakeControllerFactory(controller),
-            new FakeCatalog(channel));
+            new FakeCatalog(channel),
+            new FakeRelayControllerFactory(relayController));
 
         var result = await composition.RunAsync();
 
@@ -135,6 +138,80 @@ public sealed class NovaDailyPlaybackTests
         Assert.Equal(source, controller.PlayedSource);
         Assert.True(controller.StopCalled);
         Assert.False(controller.ManagedWindowRequested);
+    }
+
+    [Fact]
+    public async Task DailyGuiRelay_UsesSelectedCatalogChannelAndStopsOnSelectionChange()
+    {
+        const string source = "pcp://tracker.example:7144/channel/531DC8DFC7FB42928AC2C0A626517A87";
+        var window = new FakeWindow
+        {
+            RequestRelayOnExit = true,
+            ChangeSelectionAfterRelay = true,
+        };
+        var relayController = new FakeRelayController();
+        var composition = new NovaDailyPlaybackStartupComposition(
+            explicitPlayerPath: null,
+            new FakeWindowFactory(window),
+            new FakeControllerFactory(new FakeController()),
+            new FakeCatalog(new GenesisChannelItem("relay channel", source)),
+            new FakeRelayControllerFactory(relayController));
+
+        var result = await composition.RunAsync();
+
+        Assert.Equal(NovaWindowsStartupResult.Completed, result);
+        Assert.Equal(source, relayController.StartedSource);
+        Assert.Equal(4, relayController.StopCount);
+        Assert.Equal(string.Empty, window.RelayEndpoint);
+        Assert.DoesNotContain("managed", relayController.StartedSource, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task DailyGuiShutdown_StopsActiveRelayOwner()
+    {
+        const string source = "pcp://tracker.example:7144/channel/531DC8DFC7FB42928AC2C0A626517A87";
+        var window = new FakeWindow
+        {
+            RequestRelayOnExit = true,
+            StopRelayAfterStart = false,
+        };
+        var relayController = new FakeRelayController();
+        var composition = new NovaDailyPlaybackStartupComposition(
+            explicitPlayerPath: null,
+            new FakeWindowFactory(window),
+            new FakeControllerFactory(new FakeController()),
+            new FakeCatalog(new GenesisChannelItem("relay channel", source)),
+            new FakeRelayControllerFactory(relayController));
+
+        _ = await composition.RunAsync();
+
+        Assert.Equal(source, relayController.StartedSource);
+        Assert.Equal(2, relayController.StopCount);
+        Assert.Equal(string.Empty, window.RelayEndpoint);
+    }
+
+    [Fact]
+    public void RelayEndpoint_ContainsChannelAndExcludesLoopbackAndLinkLocalAddresses()
+    {
+        var channelId = new PeerCast.Nova.Core.Channels.ChannelId(
+            Guid.ParseExact("531DC8DFC7FB42928AC2C0A626517A87", "N"));
+
+        var endpoints = NovaDailyPcpRelayController.CreateLanEndpoints(
+            channelId,
+            7144,
+            [
+                IPAddress.Parse("192.168.1.8"),
+                IPAddress.Loopback,
+                IPAddress.Parse("169.254.1.2"),
+                IPAddress.Parse("10.0.0.5"),
+            ]);
+
+        Assert.Equal(
+            [
+                "pcp://10.0.0.5:7144/channel/531DC8DFC7FB42928AC2C0A626517A87",
+                "pcp://192.168.1.8:7144/channel/531DC8DFC7FB42928AC2C0A626517A87",
+            ],
+            endpoints);
     }
 
     [Fact]
@@ -191,6 +268,19 @@ public sealed class NovaDailyPlaybackTests
             Action<string> showError) => controller;
     }
 
+    private sealed class FakeRelayControllerFactory(FakeRelayController controller) :
+        INovaDailyRelayControllerFactory
+    {
+        public INovaDailyRelayController Create(
+            Action<string> setStatus,
+            Action<string> setEndpoint,
+            Action<string> showError)
+        {
+            controller.EndpointCallback = setEndpoint;
+            return controller;
+        }
+    }
+
     private sealed class FakeCatalog(GenesisChannelItem channel) : IGenesisChannelCatalog
     {
         public ValueTask<GenesisChannelCatalogSnapshot> ReadAsync(
@@ -218,11 +308,25 @@ public sealed class NovaDailyPlaybackTests
 
         public IReadOnlyList<string> ChannelNames { get; private set; } = [];
 
+        public bool RequestRelayOnExit { get; init; }
+
+        public bool ChangeSelectionAfterRelay { get; init; }
+
+        public bool StopRelayAfterStart { get; init; } = true;
+
+        public string RelayEndpoint { get; private set; } = string.Empty;
+
         public event Action? RefreshRequested;
 
         public event Action<int>? PlayRequested;
 
         public event Action? StopRequested;
+
+        public event Action<int>? RelayRequested;
+
+        public event Action? StopRelayRequested;
+
+        public event Action? ChannelSelectionChanged;
 
         public ValueTask<NovaDailyPlaybackWindowResult> StartAsync(
             CancellationToken cancellationToken) =>
@@ -235,6 +339,20 @@ public sealed class NovaDailyPlaybackTests
             SetChannels(["test channel"]);
             PlayRequested?.Invoke(0);
             StopRequested?.Invoke();
+            if (RequestRelayOnExit)
+            {
+                RelayRequested?.Invoke(0);
+                if (ChangeSelectionAfterRelay)
+                {
+                    ChannelSelectionChanged?.Invoke();
+                }
+
+                if (StopRelayAfterStart)
+                {
+                    StopRelayRequested?.Invoke();
+                }
+            }
+
             return Task.FromResult(NovaDailyPlaybackWindowResult.Stopped);
         }
 
@@ -244,7 +362,35 @@ public sealed class NovaDailyPlaybackTests
         {
         }
 
+        public void SetRelayEndpoint(string endpoint) => RelayEndpoint = endpoint;
+
         public void ShowError(string message) => throw new InvalidOperationException(message);
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    private sealed class FakeRelayController : INovaDailyRelayController
+    {
+        public string? StartedSource { get; private set; }
+
+        public int StopCount { get; private set; }
+
+        public Action<string>? EndpointCallback { get; set; }
+
+        public Task StartAsync(GenesisChannelItem channel, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            StartedSource = channel.Source;
+            EndpointCallback?.Invoke("pcp://192.168.1.2:7144/channel/531DC8DFC7FB42928AC2C0A626517A87");
+            return Task.CompletedTask;
+        }
+
+        public Task StopAsync()
+        {
+            StopCount++;
+            EndpointCallback?.Invoke(string.Empty);
+            return Task.CompletedTask;
+        }
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }

@@ -28,11 +28,12 @@ internal sealed class SystemNovaDailyPlaybackControllerFactory : INovaDailyPlayb
 
 internal sealed class NovaDailyPlaybackStartupComposition
 {
-    internal const string WindowTitle = "PeerCast Nova - Daily Playback";
+    internal const string WindowTitle = "PeerCast Nova - Playback and Relay";
 
     private readonly string? _explicitPlayerPath;
     private readonly INovaDailyPlaybackWindowFactory _windowFactory;
     private readonly INovaDailyPlaybackControllerFactory _controllerFactory;
+    private readonly INovaDailyRelayControllerFactory _relayControllerFactory;
     private readonly IGenesisChannelCatalog _catalog;
 
     public NovaDailyPlaybackStartupComposition(string? explicitPlayerPath)
@@ -40,7 +41,8 @@ internal sealed class NovaDailyPlaybackStartupComposition
             explicitPlayerPath,
             SystemNovaDailyPlaybackWindowFactory.Instance,
             SystemNovaDailyPlaybackControllerFactory.Instance,
-            SpGenesisChannelCatalog.Create())
+            SpGenesisChannelCatalog.Create(),
+            SystemNovaDailyRelayControllerFactory.Instance)
     {
     }
 
@@ -48,7 +50,8 @@ internal sealed class NovaDailyPlaybackStartupComposition
         string? explicitPlayerPath,
         INovaDailyPlaybackWindowFactory windowFactory,
         INovaDailyPlaybackControllerFactory controllerFactory,
-        IGenesisChannelCatalog catalog)
+        IGenesisChannelCatalog catalog,
+        INovaDailyRelayControllerFactory? relayControllerFactory = null)
     {
         ArgumentNullException.ThrowIfNull(windowFactory);
         ArgumentNullException.ThrowIfNull(controllerFactory);
@@ -56,6 +59,8 @@ internal sealed class NovaDailyPlaybackStartupComposition
         _explicitPlayerPath = explicitPlayerPath;
         _windowFactory = windowFactory;
         _controllerFactory = controllerFactory;
+        _relayControllerFactory = relayControllerFactory ??
+            SystemNovaDailyRelayControllerFactory.Instance;
         _catalog = catalog;
     }
 
@@ -80,19 +85,40 @@ internal sealed class NovaDailyPlaybackStartupComposition
             _explicitPlayerPath,
             window.SetStatus,
             window.ShowError);
+        await using var relayController = _relayControllerFactory.Create(
+            window.SetStatus,
+            window.SetRelayEndpoint,
+            window.ShowError);
         var operations = new OperationTracker();
         var channelState = new ChannelSelectionState();
 
-        void RefreshRequested() => operations.Start(
-            () => RefreshAsync(window, channelState.Replace, lifetime.Token));
+        void RefreshRequested() => operations.Start(async () =>
+        {
+            await StopRelayAsync(relayController, window).ConfigureAwait(false);
+            await RefreshAsync(window, channelState.Replace, lifetime.Token).ConfigureAwait(false);
+        });
         void PlayRequested(int index) => operations.Start(
             () => PlayAsync(controller, window, channelState.Snapshot, index, lifetime.Token));
         void StopRequested() => operations.Start(
             () => StopAsync(controller, window));
+        void RelayRequested(int index) => operations.Start(
+            () => StartRelayAsync(
+                relayController,
+                window,
+                channelState.Snapshot,
+                index,
+                lifetime.Token));
+        void StopRelayRequested() => operations.Start(
+            () => StopRelayAsync(relayController, window));
+        void ChannelSelectionChanged() => operations.Start(
+            () => StopRelayAsync(relayController, window));
 
         window.RefreshRequested += RefreshRequested;
         window.PlayRequested += PlayRequested;
         window.StopRequested += StopRequested;
+        window.RelayRequested += RelayRequested;
+        window.StopRelayRequested += StopRelayRequested;
+        window.ChannelSelectionChanged += ChannelSelectionChanged;
         window.SetStatus("チャンネル一覧を取得しています…");
         operations.Start(() => RefreshAsync(window, channelState.Replace, lifetime.Token));
 
@@ -116,6 +142,18 @@ internal sealed class NovaDailyPlaybackStartupComposition
             window.RefreshRequested -= RefreshRequested;
             window.PlayRequested -= PlayRequested;
             window.StopRequested -= StopRequested;
+            window.RelayRequested -= RelayRequested;
+            window.StopRelayRequested -= StopRelayRequested;
+            window.ChannelSelectionChanged -= ChannelSelectionChanged;
+            await operations.DrainAsync().ConfigureAwait(false);
+            try
+            {
+                await relayController.StopAsync().ConfigureAwait(false);
+            }
+            catch (Exception exception)
+            {
+                window.ShowError($"終了時のRelay cleanupに失敗しました: {exception.Message}");
+            }
             try
             {
                 await controller.StopAsync().ConfigureAwait(false);
@@ -123,10 +161,6 @@ internal sealed class NovaDailyPlaybackStartupComposition
             catch (Exception exception)
             {
                 window.ShowError($"終了時の再生cleanupに失敗しました: {exception.Message}");
-            }
-            finally
-            {
-                await operations.DrainAsync().ConfigureAwait(false);
             }
         }
     }
@@ -197,6 +231,50 @@ internal sealed class NovaDailyPlaybackStartupComposition
         catch (Exception exception)
         {
             window.ShowError($"再生の停止に失敗しました: {exception.Message}");
+        }
+    }
+
+    private static async Task StartRelayAsync(
+        INovaDailyRelayController relayController,
+        INovaDailyPlaybackWindow window,
+        Func<IReadOnlyList<GenesisChannelItem>> channels,
+        int index,
+        CancellationToken cancellationToken)
+    {
+        var available = channels();
+        if (index < 0 || index >= available.Count)
+        {
+            window.ShowError("Relayするチャンネルを選択してください。");
+            return;
+        }
+
+        try
+        {
+            await relayController.StartAsync(available[index], cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            window.SetRelayEndpoint(string.Empty);
+            window.ShowError(exception.Message);
+        }
+    }
+
+    private static async Task StopRelayAsync(
+        INovaDailyRelayController relayController,
+        INovaDailyPlaybackWindow window)
+    {
+        try
+        {
+            await relayController.StopAsync().ConfigureAwait(false);
+            window.SetRelayEndpoint(string.Empty);
+        }
+        catch (Exception exception)
+        {
+            window.ShowError($"PCP Relayの停止に失敗しました: {exception.Message}");
         }
     }
 

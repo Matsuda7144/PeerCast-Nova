@@ -10,6 +10,12 @@ internal interface INovaDailyPlaybackWindow : IAsyncDisposable
 
     event Action? StopRequested;
 
+    event Action<int>? RelayRequested;
+
+    event Action? StopRelayRequested;
+
+    event Action? ChannelSelectionChanged;
+
     ValueTask<NovaDailyPlaybackWindowResult> StartAsync(CancellationToken cancellationToken);
 
     Task<NovaDailyPlaybackWindowResult> WaitForExitAsync(CancellationToken cancellationToken);
@@ -17,6 +23,8 @@ internal interface INovaDailyPlaybackWindow : IAsyncDisposable
     void SetChannels(IReadOnlyList<string> channelNames);
 
     void SetStatus(string status);
+
+    void SetRelayEndpoint(string endpoint);
 
     void ShowError(string message);
 }
@@ -59,6 +67,24 @@ internal sealed class SystemNovaDailyPlaybackWindow(NovaDailyPlaybackWindowHost 
         remove => host.StopRequested -= value;
     }
 
+    public event Action<int>? RelayRequested
+    {
+        add => host.RelayRequested += value;
+        remove => host.RelayRequested -= value;
+    }
+
+    public event Action? StopRelayRequested
+    {
+        add => host.StopRelayRequested += value;
+        remove => host.StopRelayRequested -= value;
+    }
+
+    public event Action? ChannelSelectionChanged
+    {
+        add => host.ChannelSelectionChanged += value;
+        remove => host.ChannelSelectionChanged -= value;
+    }
+
     public ValueTask<NovaDailyPlaybackWindowResult> StartAsync(CancellationToken cancellationToken) =>
         host.StartAsync(cancellationToken);
 
@@ -68,6 +94,8 @@ internal sealed class SystemNovaDailyPlaybackWindow(NovaDailyPlaybackWindowHost 
     public void SetChannels(IReadOnlyList<string> channelNames) => host.SetChannels(channelNames);
 
     public void SetStatus(string status) => host.SetStatus(status);
+
+    public void SetRelayEndpoint(string endpoint) => host.SetRelayEndpoint(endpoint);
 
     public void ShowError(string message) => host.ShowError(message);
 

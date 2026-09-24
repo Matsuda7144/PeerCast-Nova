@@ -19,6 +19,8 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
     private readonly TaskCompletionSource<PcpRelayCoordinatorReadinessOutcome>
         _readinessSource = new(
             TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _firstPacketAcceptedSource = new(
+        TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TimeSpan _drainTimeout;
 
     private Task<PcpRelayCoordinatorResult>? _runTask;
@@ -57,8 +59,10 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
         copiedOptions.Validate();
 
         _drainTimeout = copiedOptions.DrainTimeout;
-        _fanout = new PcpRelayFanout(copiedOptions.Fanout);
-        _ingress = new RelayIngressConsumer(_fanout);
+        _fanout = new PcpRelayFanout(
+            copiedOptions.Fanout,
+            replayHeadForNewChildren: true);
+        _ingress = new RelayIngressConsumer(_fanout, _firstPacketAcceptedSource);
         _upstreamSession = new PcpChannelSession(
             upstreamConnector,
             statusTracker,
@@ -90,6 +94,12 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
         _downstreamServer.Snapshot;
 
     public PcpRelayIngressSnapshot IngressSnapshot => _ingress.Snapshot;
+
+    /// <summary>
+    /// Completes after the first upstream packet has been accepted by the
+    /// bounded relay fan-out.
+    /// </summary>
+    public Task FirstPacketAccepted => _firstPacketAcceptedSource.Task;
 
     /// <summary>
     /// Waits until the downstream listener has bound successfully or the
@@ -610,12 +620,16 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
     {
         private readonly object _gate = new();
         private readonly IPcpChannelPacketConsumer _inner;
+        private readonly TaskCompletionSource _firstPacketAccepted;
         private long _acceptedPacketCount;
         private long _acceptedPayloadByteCount;
 
-        public RelayIngressConsumer(IPcpChannelPacketConsumer inner)
+        public RelayIngressConsumer(
+            IPcpChannelPacketConsumer inner,
+            TaskCompletionSource firstPacketAccepted)
         {
             _inner = inner;
+            _firstPacketAccepted = firstPacketAccepted;
         }
 
         public PcpRelayIngressSnapshot Snapshot
@@ -646,6 +660,8 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
                 _acceptedPayloadByteCount = checked(
                     _acceptedPayloadByteCount + packet.Payload.Length);
             }
+
+            _firstPacketAccepted.TrySetResult();
         }
     }
 }
