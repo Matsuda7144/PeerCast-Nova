@@ -16,7 +16,8 @@ public sealed class PcpChannelPacket
         uint wirePosition,
         long? streamPosition,
         ReadOnlyMemory<byte> payload,
-        PcpStreamDiscontinuity? discontinuity)
+        PcpStreamDiscontinuity? discontinuity,
+        byte? continuation = null)
     {
         ChannelId = channelId;
         SessionId = sessionId;
@@ -26,6 +27,7 @@ public sealed class PcpChannelPacket
         StreamPosition = streamPosition;
         Payload = payload;
         Discontinuity = discontinuity;
+        Continuation = continuation;
     }
 
     public ChannelId ChannelId { get; }
@@ -47,4 +49,8 @@ public sealed class PcpChannelPacket
     public ReadOnlyMemory<byte> Payload { get; }
 
     public PcpStreamDiscontinuity? Discontinuity { get; }
+
+    public byte? Continuation { get; }
+
+    public bool HasContinuation => Continuation is not null;
 }

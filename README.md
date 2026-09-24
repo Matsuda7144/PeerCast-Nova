@@ -710,6 +710,12 @@ A/V resampling／drift correction、advanced GUI、広範なcodec対応も後続
 
 All readiness and physical-run authorizations used to establish 0.0.10d are consumed. Historical helpers／diagnostics and consumed paths must not be reused. Any future physical run remains a separate reviewed authorization decision.
 
+## 日常視聴
+
+Windows desktop からチャンネルを選び、Novaの `再生` を押すと、NovaはPCP/FLV入力を開始し、loopback限定のHTTP-FLV URLを用意してPCRPlayerを直接起動します。`停止` とウィンドウ終了ではPCRPlayer、HTTP listener、PCP sessionを順に解放します。Nova独自のmanaged decoder／scheduler／A/V outputはこの日常視聴経路に必要ありません。
+
+PCRPlayerの解決順は `--pcrplayer-executable <path>`、`NOVA_PCRPLAYER_EXE`、PATH上の `PCRPlayer64.exe` です。明示設定が無効な場合は操作可能なエラーを表示し、別playerへ切り替えません。
+
 ## 必要環境
 
 - .NET SDK 10

@@ -17,6 +17,8 @@ public static class PcpKnownAtomNames
     public static readonly PcpAtomName Type = PcpAtomName.FromAscii("type");
     public static readonly PcpAtomName Position = PcpAtomName.FromAscii("pos");
     public static readonly PcpAtomName Data = PcpAtomName.FromAscii("data");
+    public static readonly PcpAtomName ChannelPacketContinuation =
+        PcpAtomName.FromAscii("cont");
     public static readonly PcpAtomName StreamType = PcpAtomName.FromAscii("styp");
     public static readonly PcpAtomName Name = PcpAtomName.FromAscii("name");
     public static readonly PcpAtomName Genre = PcpAtomName.FromAscii("gnre");

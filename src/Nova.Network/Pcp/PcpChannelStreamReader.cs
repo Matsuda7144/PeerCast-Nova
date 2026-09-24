@@ -165,7 +165,8 @@ public sealed class PcpChannelStreamReader
                                             ? applied.Snapshot.StreamPosition
                                             : null,
                                         frame.Payload,
-                                        applied.Discontinuity);
+                                        applied.Discontinuity,
+                                        continuation: applied.Packet.Continuation);
 
                                     try
                                     {

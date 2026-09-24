@@ -29,6 +29,12 @@ public static class PcpWireValueCodec
         return BinaryPrimitives.ReadUInt16LittleEndian(value);
     }
 
+    public static byte DecodeByte(ReadOnlySpan<byte> value)
+    {
+        RequireLength(value, sizeof(byte));
+        return value[0];
+    }
+
     public static byte[] EncodeUInt32(uint value)
     {
         var bytes = new byte[sizeof(uint)];

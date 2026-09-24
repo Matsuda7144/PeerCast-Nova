@@ -25,6 +25,9 @@ public sealed class PcpChannelControlSinkTests
                     PcpKnownAtomNames.Type,
                     PcpWireValueCodec.EncodeUInt32(1)),
                 PcpAtom.Leaf(
+                    PcpKnownAtomNames.ChannelPacketContinuation,
+                    [0x07]),
+                PcpAtom.Leaf(
                     PcpKnownAtomNames.Position,
                     PcpWireValueCodec.EncodeUInt32(4096)),
                 PcpAtom.Leaf(
@@ -62,6 +65,8 @@ public sealed class PcpChannelControlSinkTests
         Assert.Equal((uint)1, packet.Type);
         Assert.Equal((uint)4096, packet.Position);
         Assert.Equal(packetData.Length, packet.DataLength);
+        Assert.Equal((byte)0x07, packet.Continuation);
+        Assert.True(packet.HasContinuation);
 
         var info = Assert.IsType<PcpChannelInfo>(message.Info);
         Assert.Equal("TEST", info.ContentType);
@@ -132,6 +137,28 @@ public sealed class PcpChannelControlSinkTests
                 PcpKnownAtomNames.ChannelInfo,
                 TextLeaf(PcpKnownAtomNames.Name, "First"),
                 TextLeaf(PcpKnownAtomNames.Name, "Second")));
+
+        Assert.Throws<InvalidDataException>(() => DecodeSingle(atom));
+    }
+
+    [Fact]
+    public void ContinuationField_RequiresSingleByte()
+    {
+        var atom = PcpAtom.Parent(
+            PcpKnownAtomNames.Channel,
+            PcpAtom.Leaf(
+                PcpKnownAtomNames.ChannelId,
+                PcpWireValueCodec.EncodeGuid(ChannelId)),
+            PcpAtom.Parent(
+                PcpKnownAtomNames.ChannelPacket,
+                PcpAtom.Leaf(
+                    PcpKnownAtomNames.Type,
+                    PcpWireValueCodec.EncodeUInt32(1)),
+                PcpAtom.Leaf(
+                    PcpKnownAtomNames.Position,
+                    PcpWireValueCodec.EncodeUInt32(4096)),
+                PcpAtom.Leaf(PcpKnownAtomNames.ChannelPacketContinuation, [0x07, 0x08]),
+                PcpAtom.Leaf(PcpKnownAtomNames.Data, [0x00])));
 
         Assert.Throws<InvalidDataException>(() => DecodeSingle(atom));
     }

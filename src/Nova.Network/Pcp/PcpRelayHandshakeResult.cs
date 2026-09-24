@@ -11,7 +11,8 @@ internal sealed record PcpRelayHandshakeResult(
     PcpOlehInfo? RemotePeer,
     PcpAtomName? TerminalAtom,
     uint? TerminalCode,
-    ImmutableArray<PcpAtomName> ReceivedAtomNames)
+    ImmutableArray<PcpAtomName> ReceivedAtomNames,
+    ImmutableArray<PcpRelayHostCandidate> RelayHostCandidates = default)
 {
     public PcpCompatibilityProbeResult ToCompatibilityResult()
     {

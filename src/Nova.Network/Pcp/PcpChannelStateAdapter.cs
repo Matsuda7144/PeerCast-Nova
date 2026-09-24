@@ -9,8 +9,13 @@ namespace PeerCast.Nova.Network.Pcp;
 /// </summary>
 public sealed class PcpChannelStateAdapter
 {
+    private const uint HeadPacketType = 0x64616568;
+    private const uint DataPacketType = 0x61746164;
+
     private readonly ChannelStatusTracker _statusTracker;
-    private readonly PcpStreamPositionTracker _positionTracker = new();
+    private PcpStreamPositionTracker _positionTracker = new();
+    private bool _dataBaselinePending;
+    private long? _coreStreamPositionFloor;
 
     public PcpChannelStateAdapter(ChannelStatusTracker statusTracker)
     {
@@ -50,7 +55,51 @@ public sealed class PcpChannelStateAdapter
                 $"A CHAN packet cannot be applied while the session is {current.State}.");
         }
 
+        var isFirstDataAfterHead =
+            message.Packet.Type == DataPacketType &&
+            _dataBaselinePending;
+
+        if (message.Packet.Type == HeadPacketType)
+        {
+            _dataBaselinePending = true;
+            _coreStreamPositionFloor = null;
+        }
+        else if (isFirstDataAfterHead)
+        {
+            // A relay may send a retained HEAD followed by current DATA whose
+            // position is far from the retained header. The first DATA starts
+            // the continuity domain used for subsequent DATA packets.
+            _positionTracker = new PcpStreamPositionTracker();
+            _dataBaselinePending = false;
+        }
+
         var position = _positionTracker.Observe(message.Packet.Position);
+        var streamPosition = position.AbsolutePosition;
+        if (message.Packet.Type == DataPacketType)
+        {
+            if (isFirstDataAfterHead &&
+                current.StreamPosition is long currentStreamPosition &&
+                streamPosition < currentStreamPosition)
+            {
+                // Core stream position is monotonic. A lower first DATA
+                // position is still a valid new DATA baseline, but must not
+                // move the Core snapshot backwards without an explicit
+                // discontinuity.
+                _coreStreamPositionFloor = currentStreamPosition;
+                streamPosition = currentStreamPosition;
+            }
+            else if (_coreStreamPositionFloor is long floor)
+            {
+                if (streamPosition < floor)
+                {
+                    streamPosition = floor;
+                }
+                else
+                {
+                    _coreStreamPositionFloor = null;
+                }
+            }
+        }
 
         if (position.Kind ==
             PcpStreamPositionObservationKind.BackwardDiscontinuity)
@@ -69,7 +118,7 @@ public sealed class PcpChannelStateAdapter
         return new PcpChannelApplyResult(
             _statusTracker.ApplyObservation(
                 metadata,
-                position.AbsolutePosition),
+                streamPosition),
             message.Packet,
             Discontinuity: null);
     }

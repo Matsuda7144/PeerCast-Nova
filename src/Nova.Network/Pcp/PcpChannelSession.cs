@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.IO.Pipelines;
 using System.Net;
 using System.Net.Sockets;
@@ -15,18 +16,33 @@ namespace PeerCast.Nova.Network.Pcp;
 public sealed class PcpChannelSession : IAsyncDisposable
 {
     private readonly object _gate = new();
-    private readonly TcpTransportConnector _connector;
+    private readonly IPcpChannelTransportConnector _connector;
     private readonly ChannelStatusTracker _statusTracker;
     private readonly PcpChannelStateAdapter _stateAdapter;
     private readonly IPcpChannelPacketConsumer _packetConsumer;
     private readonly PcpChannelSessionOptions _options;
     private readonly CancellationTokenSource _stopSource = new();
+    private readonly TaskCompletionSource<PcpChannelSessionNegotiationResult>
+        _negotiation = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     private Task<PcpChannelSessionResult>? _runTask;
     private int _disposed;
 
     public PcpChannelSession(
         TcpTransportConnector connector,
+        ChannelStatusTracker statusTracker,
+        IPcpChannelPacketConsumer packetConsumer,
+        PcpChannelSessionOptions? options = null)
+        : this(
+            new TcpTransportConnectorAdapter(connector),
+            statusTracker,
+            packetConsumer,
+            options)
+    {
+    }
+
+    internal PcpChannelSession(
+        IPcpChannelTransportConnector connector,
         ChannelStatusTracker statusTracker,
         IPcpChannelPacketConsumer packetConsumer,
         PcpChannelSessionOptions? options = null)
@@ -56,6 +72,15 @@ public sealed class PcpChannelSession : IAsyncDisposable
         _stateAdapter = new PcpChannelStateAdapter(statusTracker);
         _packetConsumer = packetConsumer;
     }
+
+    /// <summary>
+    /// Completes after the first accepted handshake enters Receiving, or after
+    /// a terminal handshake rejection is recorded. It remains accepted across
+    /// later reconnects. A stop, caller cancellation, or failure before that
+    /// point cancels or faults the task respectively.
+    /// </summary>
+    public Task<PcpChannelSessionNegotiationResult> Negotiation =>
+        _negotiation.Task;
 
     public Task<PcpChannelSessionResult> RunAsync(
         string host,
@@ -125,6 +150,7 @@ public sealed class PcpChannelSession : IAsyncDisposable
     {
         ThrowIfDisposed();
         _stopSource.Cancel();
+        _negotiation.TrySetCanceled(_stopSource.Token);
     }
 
     public async Task StopAsync(
@@ -139,6 +165,8 @@ public sealed class PcpChannelSession : IAsyncDisposable
             _stopSource.Cancel();
             runTask = _runTask;
         }
+
+        _negotiation.TrySetCanceled(_stopSource.Token);
 
         if (runTask is null)
         {
@@ -174,6 +202,8 @@ public sealed class PcpChannelSession : IAsyncDisposable
             runTask = _runTask;
         }
 
+        _negotiation.TrySetCanceled(_stopSource.Token);
+
         try
         {
             if (runTask is null)
@@ -207,32 +237,70 @@ public sealed class PcpChannelSession : IAsyncDisposable
                 callerCancellationToken,
                 _stopSource.Token);
         var token = linkedSource.Token;
-        var countingConsumer = new CountingPacketConsumer(_packetConsumer);
         var progress = new SessionProgress();
-
+        var countingConsumer = new CountingPacketConsumer(_packetConsumer);
         var attemptCount = 0;
         var reconnectCount = 0;
-
-        _statusTracker.TransitionTo(ChannelSessionState.Connecting);
+        var redirectAttemptCount = 0;
+        var attemptedEndpoints = new HashSet<PcpRelayHostEndpoint>();
+        var startupRedirectPlan = ImmutableArray<PcpRelayRedirectPlanEntry>.Empty;
+        var startupRedirectPlanIndex = 0;
+        var startupRedirectActive = false;
+        var hasEverAccepted = false;
+        PcpRelayHandshakeResult? originalRelayFull = null;
+        var attemptTarget = new AttemptTarget(host, port, RedirectEndpoint: null);
 
         try
         {
+            _statusTracker.TransitionTo(ChannelSessionState.Connecting);
+
             while (true)
             {
                 token.ThrowIfCancellationRequested();
                 attemptCount = checked(attemptCount + 1);
-
                 var attempt = await RunAttemptAsync(
-                    host,
-                    port,
+                    attemptTarget.Host,
+                    attemptTarget.Port,
+                    attemptTarget.RedirectEndpoint,
                     initialStreamPosition,
                     countingConsumer,
                     progress,
                     token).ConfigureAwait(false);
 
+                if (attempt.ReachedAccepted)
+                {
+                    hasEverAccepted = true;
+                    startupRedirectActive = false;
+                    startupRedirectPlan = ImmutableArray<PcpRelayRedirectPlanEntry>.Empty;
+                    originalRelayFull = null;
+                }
+
                 if (attempt.RetryableFailure is not null)
                 {
-                    if (CanReconnect(attemptCount))
+                    if (!hasEverAccepted && startupRedirectActive)
+                    {
+                        if (TrySelectNextRedirectTarget(
+                                startupRedirectPlan,
+                                ref startupRedirectPlanIndex,
+                                ref redirectAttemptCount,
+                                attemptedEndpoints) is { } nextTarget)
+                        {
+                            attemptTarget = nextTarget;
+                            continue;
+                        }
+
+                        var originalHandshake = originalRelayFull ??
+                            throw new InvalidOperationException(
+                                "A startup redirect has no original RelayFull handshake.");
+                        return CompleteOriginalRelayFull(
+                            originalHandshake,
+                            attemptCount,
+                            reconnectCount,
+                            progress,
+                            countingConsumer);
+                    }
+
+                    if (CanReconnect(reconnectCount))
                     {
                         reconnectCount = checked(reconnectCount + 1);
                         await PrepareReconnectAsync(token).ConfigureAwait(false);
@@ -256,10 +324,71 @@ public sealed class PcpChannelSession : IAsyncDisposable
 
                 if (handshake.Outcome != PcpCompatibilityOutcome.Accepted)
                 {
+                    if (!hasEverAccepted && startupRedirectActive)
+                    {
+                        if (TrySelectNextRedirectTarget(
+                                startupRedirectPlan,
+                                ref startupRedirectPlanIndex,
+                                ref redirectAttemptCount,
+                                attemptedEndpoints) is { } nextTarget)
+                        {
+                            attemptTarget = nextTarget;
+                            continue;
+                        }
+
+                        var originalHandshake = originalRelayFull ??
+                            throw new InvalidOperationException(
+                                "A startup redirect has no original RelayFull handshake.");
+                        return CompleteOriginalRelayFull(
+                            originalHandshake,
+                            attemptCount,
+                            reconnectCount,
+                            progress,
+                            countingConsumer);
+                    }
+
+                    if (!hasEverAccepted &&
+                        handshake.Outcome == PcpCompatibilityOutcome.RelayFull)
+                    {
+                        originalRelayFull = handshake;
+                        if (attempt.ConnectedEndpoint is { } originalEndpoint)
+                        {
+                            attemptedEndpoints.Add(originalEndpoint);
+                        }
+
+                        startupRedirectPlan =
+                            PcpRelayRedirectPlanner.CreatePlan(
+                                handshake.RelayHostCandidates,
+                                attemptedEndpoints);
+                        startupRedirectPlanIndex = 0;
+                        startupRedirectActive = true;
+
+                        if (TrySelectNextRedirectTarget(
+                                startupRedirectPlan,
+                                ref startupRedirectPlanIndex,
+                                ref redirectAttemptCount,
+                                attemptedEndpoints) is { } nextTarget)
+                        {
+                            attemptTarget = nextTarget;
+                            continue;
+                        }
+
+                        return CompleteOriginalRelayFull(
+                            handshake,
+                            attemptCount,
+                            reconnectCount,
+                            progress,
+                            countingConsumer);
+                    }
+
                     RecordFault(CreateHandshakeFaultSnapshot(
                         handshake.Outcome,
                         attemptCount,
                         reconnectCount));
+                    _negotiation.TrySetResult(new(
+                        PcpChannelSessionNegotiationOutcome.Rejected,
+                        handshake.HttpStatusCode,
+                        handshake.Outcome));
                     return CreateTerminalHandshakeResult(
                         handshake,
                         attemptCount,
@@ -288,7 +417,7 @@ public sealed class PcpChannelSession : IAsyncDisposable
                         countingConsumer);
                 }
 
-                if (CanReconnect(attemptCount))
+                if (CanReconnect(reconnectCount))
                 {
                     reconnectCount = checked(reconnectCount + 1);
                     await PrepareReconnectAsync(token).ConfigureAwait(false);
@@ -312,6 +441,7 @@ public sealed class PcpChannelSession : IAsyncDisposable
         catch (OperationCanceledException)
             when (_stopSource.IsCancellationRequested)
         {
+            _negotiation.TrySetCanceled(_stopSource.Token);
             TransitionToStopped();
             return CreateResult(
                 PcpChannelSessionEndReason.Stopped,
@@ -324,6 +454,7 @@ public sealed class PcpChannelSession : IAsyncDisposable
         catch (OperationCanceledException)
             when (callerCancellationToken.IsCancellationRequested)
         {
+            _negotiation.TrySetCanceled(callerCancellationToken);
             TransitionToStopped();
             throw;
         }
@@ -341,6 +472,8 @@ public sealed class PcpChannelSession : IAsyncDisposable
                     reconnectCount));
             }
 
+            _negotiation.TrySetException(exception);
+
             throw;
         }
     }
@@ -348,6 +481,7 @@ public sealed class PcpChannelSession : IAsyncDisposable
     private async Task<AttemptResult> RunAttemptAsync(
         string host,
         int port,
+        IPEndPoint? redirectEndpoint,
         long initialStreamPosition,
         CountingPacketConsumer countingConsumer,
         SessionProgress progress,
@@ -357,10 +491,14 @@ public sealed class PcpChannelSession : IAsyncDisposable
 
         try
         {
-            connection = await _connector.ConnectAsync(
-                host,
-                port,
-                cancellationToken).ConfigureAwait(false);
+            connection = redirectEndpoint is null
+                ? await _connector.ConnectOriginalAsync(
+                    host,
+                    port,
+                    cancellationToken).ConfigureAwait(false)
+                : await _connector.ConnectRedirectAsync(
+                    redirectEndpoint,
+                    cancellationToken).ConfigureAwait(false);
         }
         catch (TimeoutException exception)
         {
@@ -380,6 +518,10 @@ public sealed class PcpChannelSession : IAsyncDisposable
                 exception,
                 ChannelFaultStage.Connecting);
         }
+
+        var connectedEndpoint = new PcpRelayHostEndpoint(
+            connection.RemoteEndPoint.Address,
+            connection.RemoteEndPoint.Port);
 
         await using (connection.ConfigureAwait(false))
         {
@@ -437,10 +579,16 @@ public sealed class PcpChannelSession : IAsyncDisposable
                         handshake,
                         Stream: null,
                         RetryableFailure: null,
-                        FailureStage: null);
+                        FailureStage: null,
+                        ConnectedEndpoint: connectedEndpoint);
                 }
 
+                cancellationToken.ThrowIfCancellationRequested();
                 _statusTracker.TransitionTo(ChannelSessionState.Receiving);
+                _negotiation.TrySetResult(new(
+                    PcpChannelSessionNegotiationOutcome.Accepted,
+                    handshake.HttpStatusCode,
+                    handshake.Outcome));
 
                 var streamReader = new PcpChannelStreamReader(
                     pipeReader,
@@ -460,19 +608,25 @@ public sealed class PcpChannelSession : IAsyncDisposable
                         handshake,
                         stream,
                         RetryableFailure: null,
-                        FailureStage: null);
+                        FailureStage: null,
+                        ConnectedEndpoint: connectedEndpoint,
+                        ReachedAccepted: true);
                 }
                 catch (TimeoutException exception)
                 {
                     return AttemptResult.FromRetryableFailure(
                         exception,
-                        ChannelFaultStage.Receiving);
+                        ChannelFaultStage.Receiving,
+                        connectedEndpoint,
+                        reachedAccepted: true);
                 }
                 catch (IOException exception)
                 {
                     return AttemptResult.FromRetryableFailure(
                         exception,
-                        ChannelFaultStage.Receiving);
+                        ChannelFaultStage.Receiving,
+                        connectedEndpoint,
+                        reachedAccepted: true);
                 }
                 catch (PcpProtocolException exception)
                     when (exception.Error ==
@@ -480,7 +634,9 @@ public sealed class PcpChannelSession : IAsyncDisposable
                 {
                     return AttemptResult.FromRetryableFailure(
                         exception,
-                        ChannelFaultStage.Receiving);
+                        ChannelFaultStage.Receiving,
+                        connectedEndpoint,
+                        reachedAccepted: true);
                 }
             }
             catch (Exception exception)
@@ -541,9 +697,65 @@ public sealed class PcpChannelSession : IAsyncDisposable
         }
     }
 
-    private bool CanReconnect(int attemptCount)
+    private AttemptTarget? TrySelectNextRedirectTarget(
+        ImmutableArray<PcpRelayRedirectPlanEntry> plan,
+        ref int planIndex,
+        ref int redirectAttemptCount,
+        HashSet<PcpRelayHostEndpoint> attemptedEndpoints)
     {
-        return attemptCount <= _options.MaxReconnectAttempts;
+        while (planIndex < plan.Length)
+        {
+            var entry = plan[planIndex++];
+            var eligibility = PcpRelayRedirectPolicy.Evaluate(
+                entry,
+                redirectAttemptCount);
+            if (!eligibility.IsEligible ||
+                !attemptedEndpoints.Add(entry.Endpoint))
+            {
+                continue;
+            }
+
+            redirectAttemptCount = checked(redirectAttemptCount + 1);
+            _statusTracker.TransitionTo(ChannelSessionState.Reconnecting);
+
+            var endpoint = new IPEndPoint(
+                entry.Endpoint.Address,
+                entry.Endpoint.Port);
+            return new AttemptTarget(
+                entry.Endpoint.Address.ToString(),
+                entry.Endpoint.Port,
+                endpoint);
+        }
+
+        return null;
+    }
+
+    private PcpChannelSessionResult CompleteOriginalRelayFull(
+        PcpRelayHandshakeResult handshake,
+        int attemptCount,
+        int reconnectCount,
+        SessionProgress progress,
+        CountingPacketConsumer countingConsumer)
+    {
+        RecordFault(CreateHandshakeFaultSnapshot(
+            handshake.Outcome,
+            attemptCount,
+            reconnectCount));
+        _negotiation.TrySetResult(new(
+            PcpChannelSessionNegotiationOutcome.Rejected,
+            handshake.HttpStatusCode,
+            handshake.Outcome));
+        return CreateTerminalHandshakeResult(
+            handshake,
+            attemptCount,
+            reconnectCount,
+            progress,
+            countingConsumer);
+    }
+
+    private bool CanReconnect(int reconnectCount)
+    {
+        return reconnectCount < _options.MaxReconnectAttempts;
     }
 
     private async Task PrepareReconnectAsync(
@@ -731,24 +943,34 @@ public sealed class PcpChannelSession : IAsyncDisposable
         PcpRelayHandshakeResult? Handshake,
         PcpChannelStreamResult? Stream,
         Exception? RetryableFailure,
-        ChannelFaultStage? FailureStage)
+        ChannelFaultStage? FailureStage,
+        PcpRelayHostEndpoint? ConnectedEndpoint,
+        bool ReachedAccepted = false)
     {
         public static AttemptResult FromRetryableFailure(
             Exception exception,
-            ChannelFaultStage stage)
+            ChannelFaultStage stage,
+            PcpRelayHostEndpoint? connectedEndpoint = null,
+            bool reachedAccepted = false)
         {
             return new AttemptResult(
                 Handshake: null,
                 Stream: null,
                 RetryableFailure: exception,
-                FailureStage: stage);
+                FailureStage: stage,
+                ConnectedEndpoint: connectedEndpoint,
+                ReachedAccepted: reachedAccepted);
         }
     }
+
+    private sealed record AttemptTarget(
+        string Host,
+        int Port,
+        IPEndPoint? RedirectEndpoint);
 
     private sealed class CountingPacketConsumer : IPcpChannelPacketConsumer
     {
         private readonly IPcpChannelPacketConsumer _inner;
-
         public CountingPacketConsumer(IPcpChannelPacketConsumer inner)
         {
             _inner = inner;

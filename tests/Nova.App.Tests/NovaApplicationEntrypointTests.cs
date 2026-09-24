@@ -81,7 +81,7 @@ public sealed class NovaApplicationEntrypointTests
         Assert.Equal(0, launches);
         Assert.Empty(output.ToString());
         Assert.Equal(
-            $"Usage: Nova.App [--help | --about]{Environment.NewLine}",
+            $"Usage: Nova.App [--help | --about] [--pcrplayer-executable <path>]{Environment.NewLine}",
             error.ToString());
     }
 

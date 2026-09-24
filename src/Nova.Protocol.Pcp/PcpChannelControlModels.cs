@@ -12,7 +12,11 @@ public sealed record PcpChannelControlMessage(
 public sealed record PcpChannelPacketHeader(
     uint Type,
     uint Position,
-    int DataLength);
+    int DataLength,
+    byte? Continuation = null)
+{
+    public bool HasContinuation => Continuation is not null;
+}
 
 public sealed record PcpChannelInfo(
     string? ContentType,

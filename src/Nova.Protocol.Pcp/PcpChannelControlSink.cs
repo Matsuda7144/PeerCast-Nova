@@ -172,6 +172,13 @@ public sealed class PcpChannelControlSink : IPcpAtomSink
                 PcpKnownAtomNames.Data);
             channel.PacketDataLength = atom.Header.Value;
         }
+        else if (atom.Header.Name == PcpKnownAtomNames.ChannelPacketContinuation)
+        {
+            channel.MarkField(
+                PcpKnownAtomNames.ChannelPacket,
+                PcpKnownAtomNames.ChannelPacketContinuation);
+            channel.PacketContinuation = DecodeByte(atom);
+        }
     }
 
     private void ParseInfoLeaf(
@@ -312,6 +319,14 @@ public sealed class PcpChannelControlSink : IPcpAtomSink
         return PcpWireValueCodec.DecodeUInt32(value);
     }
 
+    private static byte DecodeByte(PcpLeafAtom atom)
+    {
+        RequireLength(atom, sizeof(byte));
+        Span<byte> value = stackalloc byte[sizeof(byte)];
+        atom.Payload.CopyTo(value);
+        return PcpWireValueCodec.DecodeByte(value);
+    }
+
     private static void RequireLength(PcpLeafAtom atom, int expectedLength)
     {
         if (atom.Header.Value != expectedLength)
@@ -343,6 +358,8 @@ public sealed class PcpChannelControlSink : IPcpAtomSink
         public uint? PacketPosition { get; set; }
 
         public int? PacketDataLength { get; set; }
+
+        public byte? PacketContinuation { get; set; }
 
         public string? ContentType { get; set; }
 
@@ -420,7 +437,8 @@ public sealed class PcpChannelControlSink : IPcpAtomSink
                 packet = new PcpChannelPacketHeader(
                     PacketType.Value,
                     PacketPosition.Value,
-                    PacketDataLength.Value);
+                    PacketDataLength.Value,
+                    PacketContinuation);
             }
 
             PcpChannelInfo? info = null;

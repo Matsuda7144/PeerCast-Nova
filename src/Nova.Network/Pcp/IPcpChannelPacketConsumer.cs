@@ -13,3 +13,14 @@ public interface IPcpChannelPacketConsumer
         PcpChannelPacket packet,
         CancellationToken cancellationToken);
 }
+
+/// <summary>
+/// A packet consumer whose enclosing channel-session owner must release its
+/// complete lifetime asynchronously after the Network session has stopped.
+/// The Network session borrows the consumer and does not dispose it itself.
+/// </summary>
+public interface IOwnedPcpChannelPacketConsumer :
+    IPcpChannelPacketConsumer,
+    IAsyncDisposable
+{
+}

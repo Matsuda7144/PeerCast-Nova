@@ -9,6 +9,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Nova.Windows\Nova.Windows.csproj" />
+    <ProjectReference Include="..\Nova.Core\Nova.Core.csproj" />
+    <ProjectReference Include="..\Nova.Network\Nova.Network.csproj" />
   </ItemGroup>
 
   <ItemGroup>

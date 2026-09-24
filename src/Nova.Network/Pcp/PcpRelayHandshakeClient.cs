@@ -85,6 +85,9 @@ internal static class PcpRelayHandshakeClient
         PcpOlehInfo? remotePeer = null;
         var receivedAtomNames =
             ImmutableArray.CreateBuilder<PcpAtomName>();
+        var relayHostCandidates =
+            ImmutableArray.CreateBuilder<PcpRelayHostCandidate>(
+                PcpRelayHostCandidateParser.MaximumCandidates);
 
         for (var index = 0;
             index < settings.MaxAtomsBeforeTerminal;
@@ -93,6 +96,14 @@ internal static class PcpRelayHandshakeClient
             var atom = await atomReader.ReadNextAsync(
                 cancellationToken).ConfigureAwait(false);
             receivedAtomNames.Add(atom.Name);
+
+            if (atom.Name == PcpKnownAtomNames.Host &&
+                relayHostCandidates.Count <
+                    PcpRelayHostCandidateParser.MaximumCandidates &&
+                PcpRelayHostCandidateParser.TryParse(atom) is { } hostCandidate)
+            {
+                relayHostCandidates.Add(hostCandidate);
+            }
 
             if (remotePeer is null)
             {
@@ -108,7 +119,8 @@ internal static class PcpRelayHandshakeClient
                         response,
                         remotePeer,
                         atom,
-                        receivedAtomNames.ToImmutable());
+                        receivedAtomNames.ToImmutable(),
+                        relayHostCandidates.ToImmutable());
                 }
 
                 continue;
@@ -124,7 +136,8 @@ internal static class PcpRelayHandshakeClient
                     remotePeer,
                     atom.Name,
                     DecodeOptionalUInt32(atom),
-                    receivedAtomNames.ToImmutable());
+                    receivedAtomNames.ToImmutable(),
+                    relayHostCandidates.ToImmutable());
             }
 
             if (atom.Name == PcpKnownAtomNames.Quit)
@@ -133,7 +146,8 @@ internal static class PcpRelayHandshakeClient
                     response,
                     remotePeer,
                     atom,
-                    receivedAtomNames.ToImmutable());
+                    receivedAtomNames.ToImmutable(),
+                    relayHostCandidates.ToImmutable());
             }
 
             // HOST and other control atoms may precede a terminal Atom.
@@ -147,7 +161,8 @@ internal static class PcpRelayHandshakeClient
         PcpHttpResponseHeader response,
         PcpOlehInfo? remotePeer,
         PcpAtom atom,
-        ImmutableArray<PcpAtomName> receivedAtomNames)
+        ImmutableArray<PcpAtomName> receivedAtomNames,
+        ImmutableArray<PcpRelayHostCandidate> relayHostCandidates)
     {
         return new PcpRelayHandshakeResult(
             response.StatusCode == 503
@@ -159,7 +174,8 @@ internal static class PcpRelayHandshakeClient
             remotePeer,
             atom.Name,
             DecodeOptionalUInt32(atom),
-            receivedAtomNames);
+            receivedAtomNames,
+            relayHostCandidates);
     }
 
     private static uint? DecodeOptionalUInt32(PcpAtom atom)

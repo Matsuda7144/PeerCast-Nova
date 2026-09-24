@@ -10,12 +10,12 @@ Console.CancelKeyPress += cancelHandler;
 
 try
 {
-    Environment.ExitCode = await NovaApplicationEntrypoint.RunAsync(
+    Environment.ExitCode = await NovaApplicationEntrypoint.RunDailyAsync(
         args,
         Console.Out,
         Console.Error,
-        static cancellationToken =>
-            new NovaWindowsStartupComposition().RunAsync(cancellationToken),
+        static (playerPath, cancellationToken) =>
+            new NovaDailyPlaybackStartupComposition(playerPath).RunAsync(cancellationToken),
         cancellationSource.Token);
 }
 finally
