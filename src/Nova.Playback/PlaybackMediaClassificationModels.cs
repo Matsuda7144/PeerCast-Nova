@@ -9,6 +9,7 @@ public enum PlaybackMediaContainer
     AdvancedSystemsFormat,
     Matroska,
     WebM,
+    FragmentedMp4,
 }
 
 public enum PlaybackMediaClassificationState
@@ -25,6 +26,7 @@ public enum PlaybackMediaClassificationBasis
     CapturePattern,
     RepeatedPacketSync,
     EbmlDocumentType,
+    Fmp4InitializationProfile,
 }
 
 public enum PlaybackMediaClassificationLimit

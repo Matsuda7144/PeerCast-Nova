@@ -440,6 +440,438 @@ public sealed class PlaybackFmp4LiveEncodedSampleBatchAdapterTests
         Assert.Equal(PlaybackEncodedDiscontinuity.None, resumed.Discontinuity);
     }
 
+    [Fact]
+    public async Task DecodeBatch_PreservesTrackTimingAndUsesDecodedOutputSink()
+    {
+        var adapter = CreateAdapter(CreateInitializationSegment());
+        using var batch = CreateBatch(
+            adapter,
+            CreateMediaSegment(
+                1,
+                VideoTrack(
+                    90_000,
+                    Sample([0x11, 0x12, 0x13, 0x14], 1_001, 0x02000000)),
+                AudioTrack(48_000, Sample([0xa1, 0xb2, 0xc3], 1_024, 0))));
+        var outputSink = new RecordingOutputSink();
+        var factory = new RecordingDecoderFactory(outputSink, emitFrames: true);
+
+        Assert.Equal(
+            PlaybackFmp4LiveDecoderSessionCreateResult.Created,
+            PlaybackFmp4LiveDecoderSession.Create(
+                adapter.StreamDescription,
+                factory,
+                out var createdSession,
+                outputSink));
+        await using var session = Assert.IsType<PlaybackFmp4LiveDecoderSession>(
+            createdSession);
+
+        Assert.Equal(PlaybackMediaContainer.FragmentedMp4, factory.Context.Container);
+        Assert.Equal(
+            PlaybackMediaClassificationBasis.Fmp4InitializationProfile,
+            factory.Context.Basis);
+        Assert.Same(adapter.StreamDescription, factory.Context.EncodedStreamDescription);
+
+        await session.DecodeBatchAsync(batch);
+
+        var decoder = Assert.IsType<RecordingDecoder>(factory.Decoder);
+        Assert.Collection(
+            decoder.Inputs,
+            video =>
+            {
+                Assert.Equal(0, video.Sequence);
+                Assert.Equal(VideoTrackId, video.Metadata.TrackId);
+                Assert.Equal(PlaybackEncodedMediaRole.Video, video.Metadata.MediaRole);
+                Assert.Equal(PlaybackEncodedCodecKind.Avc, video.Metadata.CodecKind);
+                Assert.Equal(new PlaybackEncodedTimeBase(1, 90_000), video.Metadata.TimeBase);
+                Assert.Equal(90_000, video.Metadata.DtsTicks);
+                Assert.Equal(90_000, video.Metadata.PtsTicks);
+                Assert.Equal(1_001, video.Metadata.DurationTicks);
+                Assert.Equal([0x11, 0x12, 0x13, 0x14], video.Payload);
+                Assert.Equal(PlaybackDiscontinuityKind.None, video.Discontinuity);
+            },
+            audio =>
+            {
+                Assert.Equal(1, audio.Sequence);
+                Assert.Equal(AudioTrackId, audio.Metadata.TrackId);
+                Assert.Equal(PlaybackEncodedMediaRole.Audio, audio.Metadata.MediaRole);
+                Assert.Equal(PlaybackEncodedCodecKind.Aac, audio.Metadata.CodecKind);
+                Assert.Equal(new PlaybackEncodedTimeBase(1, 48_000), audio.Metadata.TimeBase);
+                Assert.Equal(48_000, audio.Metadata.DtsTicks);
+                Assert.Equal(48_000, audio.Metadata.PtsTicks);
+                Assert.Equal(1_024, audio.Metadata.DurationTicks);
+                Assert.Equal([0xa1, 0xb2, 0xc3], audio.Payload);
+            });
+        Assert.Single(outputSink.VideoFrames);
+        Assert.Single(outputSink.AudioFrames);
+        Assert.All(decoder.InputPayloads, payload =>
+            Assert.All(payload.ToArray(), value => Assert.Equal(0, value)));
+    }
+
+    [Fact]
+    public async Task DecodeBatch_SubmitsSamplesByExactCrossTrackDecodeTime()
+    {
+        var adapter = CreateAdapter(CreateInitializationSegment());
+        using var batch = CreateBatch(
+            adapter,
+            CreateMediaSegment(
+                1,
+                VideoTrack(
+                    90_000,
+                    Sample([0x11, 0x12, 0x13, 0x14], 1_001, 0x02000000)),
+                AudioTrack(24_000, Sample([0xa1, 0xb2, 0xc3], 1_024, 0))));
+        var factory = new RecordingDecoderFactory(new RecordingOutputSink());
+        Assert.Equal(
+            PlaybackFmp4LiveDecoderSessionCreateResult.Created,
+            PlaybackFmp4LiveDecoderSession.Create(
+                adapter.StreamDescription,
+                factory,
+                out var createdSession));
+        await using var session = Assert.IsType<PlaybackFmp4LiveDecoderSession>(
+            createdSession);
+
+        await session.DecodeBatchAsync(batch);
+
+        var decoder = Assert.IsType<RecordingDecoder>(factory.Decoder);
+        Assert.Collection(
+            decoder.Inputs,
+            audio =>
+            {
+                Assert.Equal(0, audio.Sequence);
+                Assert.Equal(AudioTrackId, audio.Metadata.TrackId);
+                Assert.Equal(PlaybackEncodedMediaRole.Audio,
+                    audio.Metadata.MediaRole);
+                Assert.Equal(new PlaybackEncodedTimeBase(1, 48_000),
+                    audio.Metadata.TimeBase);
+                Assert.Equal(24_000, audio.Metadata.DtsTicks);
+                Assert.Equal([0xa1, 0xb2, 0xc3], audio.Payload);
+            },
+            video =>
+            {
+                Assert.Equal(1, video.Sequence);
+                Assert.Equal(VideoTrackId, video.Metadata.TrackId);
+                Assert.Equal(PlaybackEncodedMediaRole.Video,
+                    video.Metadata.MediaRole);
+                Assert.Equal(new PlaybackEncodedTimeBase(1, 90_000),
+                    video.Metadata.TimeBase);
+                Assert.Equal(90_000, video.Metadata.DtsTicks);
+                Assert.Equal([0x11, 0x12, 0x13, 0x14], video.Payload);
+            });
+    }
+
+    [Fact]
+    public async Task DecodeBatch_InterleavesTrackHeadsAndPreservesMetadata()
+    {
+        var adapter = CreateAdapter(CreateInitializationSegment());
+        using var batch = CreateBatch(
+            adapter,
+            CreateMediaSegment(
+                3,
+                VideoTrack(
+                    0,
+                    Sample([0x10], 2_970, 0x02000000),
+                    Sample([0x13], 2_970, 0x01000000)),
+                AudioTrack(
+                    480,
+                    Sample([0x11], 1_008, 0),
+                    Sample([0x12], 1_008, 0))));
+        var factory = new RecordingDecoderFactory(new RecordingOutputSink());
+        Assert.Equal(
+            PlaybackFmp4LiveDecoderSessionCreateResult.Created,
+            PlaybackFmp4LiveDecoderSession.Create(
+                adapter.StreamDescription,
+                factory,
+                out var createdSession));
+        await using var session = Assert.IsType<PlaybackFmp4LiveDecoderSession>(
+            createdSession);
+
+        await session.DecodeBatchAsync(batch);
+
+        var decoder = Assert.IsType<RecordingDecoder>(factory.Decoder);
+        Assert.Collection(
+            decoder.Inputs,
+            input =>
+            {
+                Assert.Equal(0, input.Sequence);
+                Assert.Equal(new PlaybackFmp4SampleMetadata(
+                    adapter.StreamDescription.StreamGenerationId,
+                    VideoTrackId,
+                    PlaybackEncodedMediaRole.Video,
+                    PlaybackEncodedCodecKind.Avc,
+                    PlaybackEncodedCodecVariant.Avc1,
+                    new PlaybackEncodedTimeBase(1, 90_000),
+                    0,
+                    3,
+                    0,
+                    0,
+                    0,
+                    2_970,
+                    PlaybackEncodedRandomAccessClassification
+                        .IndependentlyDecodable), input.Metadata);
+                Assert.Equal([0x10], input.Payload);
+            },
+            input =>
+            {
+                Assert.Equal(1, input.Sequence);
+                Assert.Equal(new PlaybackFmp4SampleMetadata(
+                    adapter.StreamDescription.StreamGenerationId,
+                    AudioTrackId,
+                    PlaybackEncodedMediaRole.Audio,
+                    PlaybackEncodedCodecKind.Aac,
+                    PlaybackEncodedCodecVariant.Aac,
+                    new PlaybackEncodedTimeBase(1, 48_000),
+                    0,
+                    3,
+                    0,
+                    480,
+                    480,
+                    1_008,
+                    PlaybackEncodedRandomAccessClassification.NotApplicable),
+                    input.Metadata);
+                Assert.Equal([0x11], input.Payload);
+            },
+            input =>
+            {
+                Assert.Equal(2, input.Sequence);
+                Assert.Equal(new PlaybackFmp4SampleMetadata(
+                    adapter.StreamDescription.StreamGenerationId,
+                    AudioTrackId,
+                    PlaybackEncodedMediaRole.Audio,
+                    PlaybackEncodedCodecKind.Aac,
+                    PlaybackEncodedCodecVariant.Aac,
+                    new PlaybackEncodedTimeBase(1, 48_000),
+                    0,
+                    3,
+                    1,
+                    1_488,
+                    1_488,
+                    1_008,
+                    PlaybackEncodedRandomAccessClassification.NotApplicable),
+                    input.Metadata);
+                Assert.Equal([0x12], input.Payload);
+            },
+            input =>
+            {
+                Assert.Equal(3, input.Sequence);
+                Assert.Equal(new PlaybackFmp4SampleMetadata(
+                    adapter.StreamDescription.StreamGenerationId,
+                    VideoTrackId,
+                    PlaybackEncodedMediaRole.Video,
+                    PlaybackEncodedCodecKind.Avc,
+                    PlaybackEncodedCodecVariant.Avc1,
+                    new PlaybackEncodedTimeBase(1, 90_000),
+                    0,
+                    3,
+                    1,
+                    2_970,
+                    2_970,
+                    2_970,
+                    PlaybackEncodedRandomAccessClassification
+                        .NotIndependentlyDecodable), input.Metadata);
+                Assert.Equal([0x13], input.Payload);
+            });
+        Assert.All(decoder.InputPayloads, payload =>
+            Assert.All(payload.ToArray(), value => Assert.Equal(0, value)));
+    }
+
+    [Fact]
+    public async Task DecodeBatch_UsesPreferVideoForEqualDtsRegardlessOfTrackIdOrder()
+    {
+        var videoTrackId = AudioTrackId;
+        var audioTrackId = VideoTrackId;
+        var adapter = CreateAdapter(CreateInitializationSegment(
+            videoTrackId,
+            audioTrackId));
+        using var batch = CreateBatch(
+            adapter,
+            CreateMediaSegment(
+                1,
+                new FixtureTrack(
+                    audioTrackId,
+                    48_000,
+                    [Sample([0xa1], 1_024, 0)]),
+                new FixtureTrack(
+                    videoTrackId,
+                    90_000,
+                    [Sample([0x11], 1_001, 0x02000000)])));
+        var factory = new RecordingDecoderFactory(new RecordingOutputSink());
+        Assert.Equal(
+            PlaybackFmp4LiveDecoderSessionCreateResult.Created,
+            PlaybackFmp4LiveDecoderSession.Create(
+                adapter.StreamDescription,
+                factory,
+                out var createdSession));
+        await using var session = Assert.IsType<PlaybackFmp4LiveDecoderSession>(
+            createdSession);
+
+        await session.DecodeBatchAsync(batch);
+
+        var decoder = Assert.IsType<RecordingDecoder>(factory.Decoder);
+        Assert.Equal(
+            [videoTrackId, audioTrackId],
+            decoder.Inputs.Select(static input => input.Metadata.TrackId));
+        Assert.Equal(
+            [PlaybackEncodedMediaRole.Video, PlaybackEncodedMediaRole.Audio],
+            decoder.Inputs.Select(static input => input.Metadata.MediaRole));
+    }
+
+    [Fact]
+    public async Task DecodeBatch_AppliesGlobalDiscontinuityToFirstDtsOrderedSample()
+    {
+        var adapter = CreateAdapter(CreateInitializationSegment());
+        using var first = CreateBatch(
+            adapter,
+            CreateMediaSegment(
+                10,
+                VideoTrack(90_000, Sample([1, 2, 3, 4], 1_001, 0x02000000)),
+                AudioTrack(48_000, Sample([5, 6, 7], 1_024, 0))));
+        using var discontinuous = CreateBatch(
+            adapter,
+            CreateMediaSegment(
+                12,
+                VideoTrack(100_000, Sample([8, 9, 10, 11], 1_001, 0x02000000)),
+                AudioTrack(49_024, Sample([12, 13, 14], 1_024, 0))));
+        var factory = new RecordingDecoderFactory(new RecordingOutputSink());
+        Assert.Equal(
+            PlaybackFmp4LiveDecoderSessionCreateResult.Created,
+            PlaybackFmp4LiveDecoderSession.Create(
+                adapter.StreamDescription,
+                factory,
+                out var createdSession));
+        await using var session = Assert.IsType<PlaybackFmp4LiveDecoderSession>(
+            createdSession);
+
+        await session.DecodeBatchAsync(first);
+        await session.DecodeBatchAsync(discontinuous);
+
+        var decoder = Assert.IsType<RecordingDecoder>(factory.Decoder);
+        Assert.Equal(1, decoder.ResetCount);
+        Assert.Equal(
+            ["decode:0", "decode:1", "reset", "decode:2", "decode:3"],
+            decoder.Events);
+        Assert.Equal(AudioTrackId, decoder.Inputs[2].Metadata.TrackId);
+        Assert.Equal(PlaybackDiscontinuityKind.Source,
+            decoder.Inputs[2].Discontinuity);
+        Assert.Equal(VideoTrackId, decoder.Inputs[3].Metadata.TrackId);
+        Assert.Equal(PlaybackDiscontinuityKind.None,
+            decoder.Inputs[3].Discontinuity);
+        Assert.All(decoder.Inputs.Take(2), input =>
+            Assert.Equal(PlaybackDiscontinuityKind.None, input.Discontinuity));
+        Assert.Equal(1UL, decoder.Inputs[2].Metadata.EpochId);
+        Assert.Equal(1UL, decoder.Inputs[3].Metadata.EpochId);
+    }
+
+    [Fact]
+    public async Task DecodeBatch_ResetsOnceForGlobalEpochTransition()
+    {
+        var adapter = CreateAdapter(CreateInitializationSegment());
+        using var first = CreateBatch(
+            adapter,
+            CreateMediaSegment(
+                10,
+                VideoTrack(90_000, Sample([1, 2, 3, 4], 1_001, 0x02000000)),
+                AudioTrack(48_000, Sample([5, 6, 7], 1_024, 0))));
+        using var discontinuous = CreateBatch(
+            adapter,
+            CreateMediaSegment(
+                12,
+                VideoTrack(100_000, Sample([8, 9, 10, 11], 1_001, 0x02000000))));
+        var factory = new RecordingDecoderFactory(new RecordingOutputSink());
+        Assert.Equal(
+            PlaybackFmp4LiveDecoderSessionCreateResult.Created,
+            PlaybackFmp4LiveDecoderSession.Create(
+                adapter.StreamDescription,
+                factory,
+                out var createdSession));
+        await using var session = Assert.IsType<PlaybackFmp4LiveDecoderSession>(
+            createdSession);
+
+        await session.DecodeBatchAsync(first);
+        await session.DecodeBatchAsync(discontinuous);
+
+        var decoder = Assert.IsType<RecordingDecoder>(factory.Decoder);
+        Assert.Equal(1, decoder.ResetCount);
+        Assert.Collection(
+            decoder.Events,
+            value => Assert.Equal("decode:0", value),
+            value => Assert.Equal("decode:1", value),
+            value => Assert.Equal("reset", value),
+            value => Assert.Equal("decode:2", value));
+        Assert.Equal(PlaybackDiscontinuityKind.Source, decoder.Inputs[2].Discontinuity);
+        Assert.Equal(1UL, decoder.Inputs[2].Metadata.EpochId);
+    }
+
+    [Fact]
+    public async Task DecodeBatch_RejectsAnotherGenerationWithoutFaultingSession()
+    {
+        var adapter = CreateAdapter(CreateInitializationSegment());
+        var otherAdapter = CreateAdapter(CreateInitializationSegment());
+        using var validBatch = CreateBatch(
+            adapter,
+            CreateMediaSegment(
+                1,
+                VideoTrack(90_000, Sample([1, 2, 3, 4], 1_001, 0x02000000))));
+        using var foreignBatch = CreateBatch(
+            otherAdapter,
+            CreateMediaSegment(
+                1,
+                VideoTrack(90_000, Sample([5, 6, 7, 8], 1_001, 0x02000000))));
+        var factory = new RecordingDecoderFactory(new RecordingOutputSink());
+        Assert.Equal(
+            PlaybackFmp4LiveDecoderSessionCreateResult.Created,
+            PlaybackFmp4LiveDecoderSession.Create(
+                adapter.StreamDescription,
+                factory,
+                out var createdSession));
+        await using var session = Assert.IsType<PlaybackFmp4LiveDecoderSession>(
+            createdSession);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await session.DecodeBatchAsync(foreignBatch));
+        await session.DecodeBatchAsync(validBatch);
+
+        Assert.Single(Assert.IsType<RecordingDecoder>(factory.Decoder).Inputs);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_CompletesDecoderBeforeDisposal()
+    {
+        var adapter = CreateAdapter(CreateInitializationSegment());
+        var factory = new RecordingDecoderFactory(new RecordingOutputSink());
+        Assert.Equal(
+            PlaybackFmp4LiveDecoderSessionCreateResult.Created,
+            PlaybackFmp4LiveDecoderSession.Create(
+                adapter.StreamDescription,
+                factory,
+                out var createdSession));
+        var session = Assert.IsType<PlaybackFmp4LiveDecoderSession>(createdSession);
+
+        await session.CompleteAsync();
+        await session.DisposeAsync();
+
+        var decoder = Assert.IsType<RecordingDecoder>(factory.Decoder);
+        Assert.Equal(1, decoder.CompleteCount);
+        Assert.Equal(1, decoder.DisposeCount);
+        Assert.True(session.IsDisposed);
+    }
+
+    [Fact]
+    public void Create_ReturnsUnsupportedWhenBackendDoesNotSupportFmp4()
+    {
+        var adapter = CreateAdapter(CreateInitializationSegment());
+        var backend = new FlashVideoOnlyDecoderBackend();
+        var factory = new PlaybackDecoderBackendFactory([backend]);
+
+        Assert.Equal(
+            PlaybackFmp4LiveDecoderSessionCreateResult.DecoderUnsupported,
+            PlaybackFmp4LiveDecoderSession.Create(
+                adapter.StreamDescription,
+                factory,
+                out var session));
+
+        Assert.Null(session);
+        Assert.Equal(0, backend.CreateCount);
+    }
+
     private static PlaybackFmp4LiveEncodedSampleBatchAdapter CreateAdapter(
         byte[] initializationSegment,
         PlaybackFmp4LiveEncodedSampleBatchAdapterOptions? options = null)
@@ -463,7 +895,9 @@ public sealed class PlaybackFmp4LiveEncodedSampleBatchAdapterTests
         return Assert.IsType<PlaybackEncodedSampleBatch>(batch);
     }
 
-    private static byte[] CreateInitializationSegment()
+    private static byte[] CreateInitializationSegment(
+        uint videoTrackId = VideoTrackId,
+        uint audioTrackId = AudioTrackId)
     {
         var (videoSampleDescription, _) =
             PlaybackIsoBmffAvcDecoderConfigurationParserTests.CreateVisualEntry(
@@ -477,19 +911,19 @@ public sealed class PlaybackFmp4LiveEncodedSampleBatchAdapterTests
             Box(
                 Moov,
                 InitializationTrack(
-                    VideoTrackId,
+                    videoTrackId,
                     Vide,
                     90_000,
                     videoSampleDescription),
                 InitializationTrack(
-                    AudioTrackId,
+                    audioTrackId,
                     Soun,
                     48_000,
                     audioSampleDescription),
                 Box(
                     Mvex,
-                    TrackExtends(VideoTrackId, 1_001, 4, 0x02000000),
-                    TrackExtends(AudioTrackId, 1_024, 3, 0))));
+                    TrackExtends(videoTrackId, 1_001, 4, 0x02000000),
+                    TrackExtends(audioTrackId, 1_024, 3, 0))));
     }
 
     private static byte[] CreateMediaSegment(
@@ -763,6 +1197,165 @@ public sealed class PlaybackFmp4LiveEncodedSampleBatchAdapterTests
         box[10] = (byte)(flags >> 8);
         box[11] = (byte)flags;
     }
+
+    private sealed class RecordingDecoderFactory(
+        IPlaybackDecodedFrameSink outputSink,
+        bool emitFrames = false) : IPlaybackDecoderFactory
+    {
+        public PlaybackDecoderCreationContext Context { get; private set; }
+
+        public RecordingDecoder? Decoder { get; private set; }
+
+        public IPlaybackDecoder? Create(PlaybackDecoderCreationContext context)
+        {
+            Context = context;
+            Decoder = new(outputSink, emitFrames);
+            return Decoder;
+        }
+    }
+
+    private sealed class FlashVideoOnlyDecoderBackend : IPlaybackDecoderBackend
+    {
+        public PlaybackDecoderBackendDescriptor Descriptor { get; } = new(
+            "flash-video-only-test",
+            priority: 0,
+            [PlaybackMediaContainer.FlashVideo],
+            PlaybackDecoderBackendProvenance.FirstPartyManaged);
+
+        public int CreateCount { get; private set; }
+
+        public IPlaybackDecoder Create(PlaybackDecoderCreationContext context)
+        {
+            CreateCount++;
+            throw new InvalidOperationException(
+                "An unsupported backend must not be constructed.");
+        }
+    }
+
+    private sealed class RecordingDecoder(
+        IPlaybackDecodedFrameSink outputSink,
+        bool emitFrames) : IPlaybackDecoder
+    {
+        public List<InputObservation> Inputs { get; } = [];
+
+        public List<ReadOnlyMemory<byte>> InputPayloads { get; } = [];
+
+        public List<string> Events { get; } = [];
+
+        public int ResetCount { get; private set; }
+
+        public int CompleteCount { get; private set; }
+
+        public int DisposeCount { get; private set; }
+
+        public async ValueTask DecodeAsync(
+            PlaybackEncodedInput input,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var metadata = input.Fmp4SampleMetadata ??
+                throw new InvalidOperationException("Missing fMP4 sample metadata.");
+            Inputs.Add(new(
+                input.Sequence,
+                input.Discontinuity,
+                metadata,
+                input.Payload.ToArray()));
+            InputPayloads.Add(input.Payload);
+            Events.Add($"decode:{input.Sequence}");
+
+            if (!emitFrames)
+            {
+                return;
+            }
+
+            if (metadata.MediaRole == PlaybackEncodedMediaRole.Video)
+            {
+                var frame = PlaybackDecodedVideoFrame.Create(
+                    input.Sequence,
+                    TimeSpan.FromMilliseconds(1),
+                    TimeSpan.FromMilliseconds(1),
+                    input.Discontinuity == PlaybackDiscontinuityKind.None
+                        ? PlaybackDecodedFrameDiscontinuityKind.None
+                        : PlaybackDecodedFrameDiscontinuityKind.DecoderReset,
+                    PlaybackDecodedVideoPixelFormat.Bgra32,
+                    width: 1,
+                    height: 1,
+                    stride: 4,
+                    payload: new byte[4]);
+                await outputSink.WriteVideoAsync(frame, cancellationToken);
+            }
+            else
+            {
+                var frame = PlaybackDecodedAudioFrame.Create(
+                    input.Sequence,
+                    TimeSpan.FromMilliseconds(1),
+                    TimeSpan.FromMilliseconds(20),
+                    input.Discontinuity == PlaybackDiscontinuityKind.None
+                        ? PlaybackDecodedFrameDiscontinuityKind.None
+                        : PlaybackDecodedFrameDiscontinuityKind.DecoderReset,
+                    PlaybackDecodedAudioSampleFormat.PcmSigned16Interleaved,
+                    sampleRate: 48_000,
+                    channelCount: 2,
+                    sampleCount: 1,
+                    payload: new byte[4]);
+                await outputSink.WriteAudioAsync(frame, cancellationToken);
+            }
+        }
+
+        public ValueTask ResetAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ResetCount++;
+            Events.Add("reset");
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask CompleteAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            CompleteCount++;
+            Events.Add("complete");
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            DisposeCount++;
+            Events.Add("dispose");
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingOutputSink : IPlaybackDecodedFrameSink
+    {
+        public List<PlaybackDecodedAudioFrame> AudioFrames { get; } = [];
+
+        public List<PlaybackDecodedVideoFrame> VideoFrames { get; } = [];
+
+        public ValueTask WriteAudioAsync(
+            PlaybackDecodedAudioFrame frame,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            AudioFrames.Add(frame);
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask WriteVideoAsync(
+            PlaybackDecodedVideoFrame frame,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            VideoFrames.Add(frame);
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed record InputObservation(
+        long Sequence,
+        PlaybackDiscontinuityKind Discontinuity,
+        PlaybackFmp4SampleMetadata Metadata,
+        byte[] Payload);
 
     private sealed record FixtureTrack(
         uint TrackId,

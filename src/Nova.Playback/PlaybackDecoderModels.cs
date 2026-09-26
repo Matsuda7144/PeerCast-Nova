@@ -28,6 +28,22 @@ public readonly record struct PlaybackDecoderCreationContext
         Container = container;
         Basis = basis;
         OutputSink = outputSink;
+        EncodedStreamDescription = null;
+    }
+
+    internal static PlaybackDecoderCreationContext CreateForFmp4(
+        PlaybackEncodedStreamDescription streamDescription,
+        IPlaybackDecodedFrameSink outputSink)
+    {
+        ArgumentNullException.ThrowIfNull(streamDescription);
+        ArgumentNullException.ThrowIfNull(outputSink);
+        return new PlaybackDecoderCreationContext(
+            PlaybackMediaContainer.FragmentedMp4,
+            PlaybackMediaClassificationBasis.Fmp4InitializationProfile,
+            outputSink)
+        {
+            EncodedStreamDescription = streamDescription,
+        };
     }
 
     public PlaybackMediaContainer Container { get; }
@@ -35,7 +51,32 @@ public readonly record struct PlaybackDecoderCreationContext
     public PlaybackMediaClassificationBasis Basis { get; }
 
     public IPlaybackDecodedFrameSink OutputSink { get; }
+
+    public PlaybackEncodedStreamDescription? EncodedStreamDescription
+    {
+        get;
+        private init;
+    }
 }
+
+/// <summary>
+/// Track-bound timing and identity for one encoded fMP4 sample.
+/// Codec configuration is supplied once through the decoder creation context.
+/// </summary>
+public readonly record struct PlaybackFmp4SampleMetadata(
+    Guid StreamGenerationId,
+    uint TrackId,
+    PlaybackEncodedMediaRole MediaRole,
+    PlaybackEncodedCodecKind CodecKind,
+    PlaybackEncodedCodecVariant CodecVariant,
+    PlaybackEncodedTimeBase TimeBase,
+    ulong EpochId,
+    uint FragmentSequence,
+    int SampleOrdinal,
+    long DtsTicks,
+    long PtsTicks,
+    long DurationTicks,
+    PlaybackEncodedRandomAccessClassification RandomAccessClassification);
 
 /// <summary>
 /// Encoded bytes whose payload is valid only until the decoder callback
@@ -56,7 +97,23 @@ public readonly record struct PlaybackEncodedInput
         StreamPosition = streamPosition;
         Discontinuity = discontinuity;
         Payload = payload;
+        Fmp4SampleMetadata = null;
     }
+
+    internal static PlaybackEncodedInput CreateFmp4Sample(
+        long sequence,
+        PlaybackDiscontinuityKind discontinuity,
+        ReadOnlyMemory<byte> payload,
+        PlaybackFmp4SampleMetadata metadata) =>
+        new PlaybackEncodedInput(
+            PlaybackEncodedInputKind.Packet,
+            sequence,
+            streamPosition: null,
+            discontinuity,
+            payload)
+        {
+            Fmp4SampleMetadata = metadata,
+        };
 
     public PlaybackEncodedInputKind Kind { get; }
 
@@ -67,6 +124,12 @@ public readonly record struct PlaybackEncodedInput
     public PlaybackDiscontinuityKind Discontinuity { get; }
 
     public ReadOnlyMemory<byte> Payload { get; }
+
+    public PlaybackFmp4SampleMetadata? Fmp4SampleMetadata
+    {
+        get;
+        private init;
+    }
 }
 
 /// <summary>
