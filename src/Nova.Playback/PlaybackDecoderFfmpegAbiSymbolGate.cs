@@ -80,9 +80,9 @@ public sealed class PlaybackDecoderFfmpegAbiSymbolGate
 
     private static readonly HashSet<string> AllowedSystemDependencies = new(
         [
-            "advapi32.dll", "bcrypt.dll", "cfgmgr32.dll", "combase.dll",
+            "advapi32.dll", "bcrypt.dll", "bcryptprimitives.dll", "cfgmgr32.dll", "combase.dll",
             "crypt32.dll", "d2d1.dll", "dwrite.dll", "dwmapi.dll", "gdi32.dll",
-            "imm32.dll", "iphlpapi.dll", "kernel32.dll",
+            "dnsapi.dll", "imm32.dll", "iphlpapi.dll", "kernel32.dll", "msimg32.dll",
             "mf.dll", "mfplat.dll", "mfuuid.dll", "ncrypt.dll", "ntdll.dll",
             "ole32.dll", "oleaut32.dll", "powrprof.dll", "propsys.dll",
             "rpcrt4.dll", "secur32.dll", "setupapi.dll", "shell32.dll",

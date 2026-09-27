@@ -16,4 +16,8 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Nova.Playback/Nova.Playback.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Fixtures/fmp4-avc1-aac.mp4"
+                      LogicalName="PeerCast.Nova.Playback.Tests.Fixtures.fmp4-avc1-aac.mp4" />
+  </ItemGroup>
 </Project>

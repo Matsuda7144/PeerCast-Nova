@@ -76,8 +76,12 @@ public sealed class PlaybackDecoderFfmpegAbiSymbolGateTests
 
     [Theory]
     [InlineData("d2d1.dll")]
+    [InlineData("dnsapi.dll")]
     [InlineData("dwrite.dll")]
     [InlineData("iphlpapi.dll")]
+    [InlineData("msimg32.dll")]
+    [InlineData("bcryptprimitives.dll")]
+    [InlineData("api-ms-win-core-synch-l1-2-0.dll")]
     [InlineData("usp10.dll")]
     public void Verify_NewWindowsSystemDependenciesAreAllowed(string dependency)
     {

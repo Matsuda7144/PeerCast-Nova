@@ -92,6 +92,17 @@ public sealed class PlaybackDecoderFfmpegContextLeaseFactory
     public PlaybackDecoderFfmpegContextLeaseCreation Create(
         VerifiedPlaybackDecoderRuntimeLease runtimeLease,
         PlaybackDecoderFfmpegCodecId codecId)
+        => Create(runtimeLease, codecId, ownsRuntimeLease: true);
+
+    internal PlaybackDecoderFfmpegContextLeaseCreation CreateSharingRuntime(
+        VerifiedPlaybackDecoderRuntimeLease runtimeLease,
+        PlaybackDecoderFfmpegCodecId codecId)
+        => Create(runtimeLease, codecId, ownsRuntimeLease: false);
+
+    private PlaybackDecoderFfmpegContextLeaseCreation Create(
+        VerifiedPlaybackDecoderRuntimeLease runtimeLease,
+        PlaybackDecoderFfmpegCodecId codecId,
+        bool ownsRuntimeLease)
     {
         ArgumentNullException.ThrowIfNull(runtimeLease);
         if (!Enum.IsDefined(codecId))
@@ -118,12 +129,18 @@ public sealed class PlaybackDecoderFfmpegContextLeaseFactory
                     : PlaybackDecoderFfmpegContextLeaseResult.GateRejected);
         }
 
-        return Create(gateLease, codecId);
+        return Create(gateLease, codecId, ownsRuntimeLease);
     }
 
     public PlaybackDecoderFfmpegContextLeaseCreation Create(
         PlaybackDecoderFfmpegAbiSymbolGateLease gateLease,
         PlaybackDecoderFfmpegCodecId codecId)
+        => Create(gateLease, codecId, ownsRuntimeLease: true);
+
+    private PlaybackDecoderFfmpegContextLeaseCreation Create(
+        PlaybackDecoderFfmpegAbiSymbolGateLease gateLease,
+        PlaybackDecoderFfmpegCodecId codecId,
+        bool ownsRuntimeLease)
     {
         ArgumentNullException.ThrowIfNull(gateLease);
         if (!Enum.IsDefined(codecId))
@@ -200,7 +217,8 @@ public sealed class PlaybackDecoderFfmpegContextLeaseFactory
                 _nativeApi,
                 codecId,
                 freeContext,
-                context));
+                context,
+                ownsRuntimeLease));
     }
 }
 
@@ -210,6 +228,7 @@ public sealed class PlaybackDecoderFfmpegContextLease : IDisposable, IAsyncDispo
     private readonly VerifiedPlaybackDecoderRuntimeLease _runtimeLease;
     private readonly PlaybackDecoderFfmpegAbiSymbolGateLease _gateLease;
     private readonly IPlaybackDecoderFfmpegContextNativeApi _nativeApi;
+    private readonly bool _ownsRuntimeLease;
     private readonly nint _freeContext;
     private nint _context;
     private bool _parametersTransferred;
@@ -222,11 +241,13 @@ public sealed class PlaybackDecoderFfmpegContextLease : IDisposable, IAsyncDispo
         IPlaybackDecoderFfmpegContextNativeApi nativeApi,
         PlaybackDecoderFfmpegCodecId codecId,
         nint freeContext,
-        nint context)
+        nint context,
+        bool ownsRuntimeLease = true)
     {
         _runtimeLease = runtimeLease;
         _gateLease = gateLease;
         _nativeApi = nativeApi;
+        _ownsRuntimeLease = ownsRuntimeLease;
         CodecId = codecId;
         _freeContext = freeContext;
         _context = context;
@@ -383,7 +404,10 @@ public sealed class PlaybackDecoderFfmpegContextLease : IDisposable, IAsyncDispo
             }
             finally
             {
-                _runtimeLease.Dispose();
+                if (_ownsRuntimeLease)
+                {
+                    _runtimeLease.Dispose();
+                }
             }
         }
     }
