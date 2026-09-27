@@ -15,6 +15,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/Nova.Playback/Nova.Playback.csproj" />
+    <ProjectReference Include="../../src/Nova.Windows/Nova.Windows.csproj" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Fixtures/fmp4-avc1-aac.mp4"

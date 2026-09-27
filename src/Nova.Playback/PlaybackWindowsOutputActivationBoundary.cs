@@ -270,6 +270,11 @@ internal interface IPlaybackWindowsWasapiBorrowedResource
     void ResetAudioClient();
 }
 
+internal interface IPlaybackWindowsWasapiPaddingSource
+{
+    bool TryGetCurrentPaddingFrames(out uint frameCount);
+}
+
 internal interface IPlaybackWindowsOutputNativeActivation
 {
     PlaybackWindowsOutputActivationResult InitializeComApartment(out IDisposable? apartment);
@@ -540,7 +545,8 @@ internal sealed class SystemPlaybackWindowsOutputNativeActivation :
         nint client,
         nint eventHandle,
         IPlaybackWindowsAudioNativeStageReporter audioNativeStageReporter) :
-        IDisposable, IPlaybackWindowsWasapiBorrowedResource
+        IDisposable, IPlaybackWindowsWasapiBorrowedResource,
+        IPlaybackWindowsWasapiPaddingSource
     {
         private readonly IPlaybackWindowsAudioNativeStageReporter _audioNativeStageReporter =
             audioNativeStageReporter;
@@ -591,6 +597,25 @@ internal sealed class SystemPlaybackWindowsOutputNativeActivation :
                 if (result < 0 || renderClient == 0) return false;
                 _renderClient = renderClient;
                 return true;
+            }
+            finally
+            {
+                Marshal.FinalReleaseComObject(clientObject);
+            }
+        }
+
+        public bool TryGetCurrentPaddingFrames(out uint frameCount)
+        {
+            frameCount = 0;
+            if (_client == 0)
+            {
+                return false;
+            }
+
+            var clientObject = (IAudioClientReset)Marshal.GetObjectForIUnknown(_client);
+            try
+            {
+                return clientObject.GetCurrentPadding(out frameCount) >= 0;
             }
             finally
             {

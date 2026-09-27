@@ -35,6 +35,22 @@ public enum PlaybackWindowsOutputBufferResetResult
     Failure,
 }
 
+public enum PlaybackWindowsAudioPaddingReadResult
+{
+    Available,
+    NotStarted,
+    Busy,
+    ActivationRequired,
+    Unsupported,
+    InvalidEnvironment,
+    Disposed,
+    Failure,
+}
+
+public readonly record struct PlaybackWindowsAudioPaddingRead(
+    PlaybackWindowsAudioPaddingReadResult Result,
+    int PaddingFrameCount);
+
 public readonly record struct PlaybackWindowsVideoFrameBuffer(
     PlaybackDecodedVideoPixelFormat PixelFormat,
     int Width,
@@ -202,6 +218,69 @@ public sealed class PlaybackWindowsOutputBufferProcessingBoundary : IDisposable
         long generation, CancellationToken cancellationToken) =>
         ResetAsync(generation, video: false, cancellationToken);
 
+    public PlaybackWindowsAudioPaddingRead ReadAudioPadding()
+    {
+        if (_isDisposed)
+        {
+            return new(PlaybackWindowsAudioPaddingReadResult.Disposed, 0);
+        }
+
+        if (!_audioGate.Wait(0))
+        {
+            return new(PlaybackWindowsAudioPaddingReadResult.Busy, 0);
+        }
+
+        try
+        {
+            if (_isDisposed)
+            {
+                return new(PlaybackWindowsAudioPaddingReadResult.Disposed, 0);
+            }
+
+            if (!_audioStarted)
+            {
+                return new(PlaybackWindowsAudioPaddingReadResult.NotStarted, 0);
+            }
+
+            var paddingFrameCount = 0;
+            var paddingResult = PlaybackWindowsAudioPaddingReadResult.Failure;
+            var borrowed = _activation.BorrowActivatedResources(resources =>
+            {
+                if (resources.Wasapi is not
+                    IPlaybackWindowsWasapiPaddingSource paddingSource)
+                {
+                    paddingResult = PlaybackWindowsAudioPaddingReadResult.Unsupported;
+                    return PlaybackWindowsOutputResourceBorrowResult.Success;
+                }
+
+                if (!paddingSource.TryGetCurrentPaddingFrames(out var frameCount) ||
+                    frameCount > int.MaxValue)
+                {
+                    return PlaybackWindowsOutputResourceBorrowResult.Failure;
+                }
+
+                paddingFrameCount = (int)frameCount;
+                paddingResult = PlaybackWindowsAudioPaddingReadResult.Available;
+                return PlaybackWindowsOutputResourceBorrowResult.Success;
+            });
+
+            if (borrowed != PlaybackWindowsOutputResourceBorrowResult.Success)
+            {
+                return new(MapPaddingRead(borrowed), 0);
+            }
+
+            return new(paddingResult, paddingFrameCount);
+        }
+        catch
+        {
+            return new(PlaybackWindowsAudioPaddingReadResult.Failure, 0);
+        }
+        finally
+        {
+            _audioGate.Release();
+        }
+    }
+
     public void Dispose()
     {
         if (_isDisposed) return;
@@ -322,6 +401,18 @@ public sealed class PlaybackWindowsOutputBufferProcessingBoundary : IDisposable
         }
         return mapped;
     }
+
+    private static PlaybackWindowsAudioPaddingReadResult MapPaddingRead(
+        PlaybackWindowsOutputResourceBorrowResult result) => result switch
+        {
+            PlaybackWindowsOutputResourceBorrowResult.ActivationRequired =>
+                PlaybackWindowsAudioPaddingReadResult.ActivationRequired,
+            PlaybackWindowsOutputResourceBorrowResult.InvalidEnvironment =>
+                PlaybackWindowsAudioPaddingReadResult.InvalidEnvironment,
+            PlaybackWindowsOutputResourceBorrowResult.Disposed =>
+                PlaybackWindowsAudioPaddingReadResult.Disposed,
+            _ => PlaybackWindowsAudioPaddingReadResult.Failure,
+        };
 
     private static PlaybackWindowsOutputResourceBorrowResult MapNative(
         PlaybackWindowsOutputNativeBufferResult result) => result switch

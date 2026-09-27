@@ -32,6 +32,35 @@ public sealed class PlaybackWindowsOutputBufferProcessingBoundaryTests
         Assert.Equal([true, false], native.Starts);
     }
 
+    [Fact]
+    public async Task ReadsWasapiPaddingAfterAudioStartsAndReportsZeroForDrainedTail()
+    {
+        using var setup = await SetupAsync();
+        using var boundary = Create(setup, new RecordingProcessor());
+
+        Assert.Equal(
+            new PlaybackWindowsAudioPaddingRead(
+                PlaybackWindowsAudioPaddingReadResult.NotStarted,
+                0),
+            boundary.ReadAudioPadding());
+
+        Assert.Equal(PlaybackWindowsOutputBufferProcessingResult.Processed,
+            await boundary.ProcessAudioAsync(Audio(), default));
+        setup.PaddingSource.PaddingFrameCount = 512;
+        Assert.Equal(
+            new PlaybackWindowsAudioPaddingRead(
+                PlaybackWindowsAudioPaddingReadResult.Available,
+                512),
+            boundary.ReadAudioPadding());
+
+        setup.PaddingSource.PaddingFrameCount = 0;
+        Assert.Equal(
+            new PlaybackWindowsAudioPaddingRead(
+                PlaybackWindowsAudioPaddingReadResult.Available,
+                0),
+            boundary.ReadAudioPadding());
+    }
+
     [Theory]
     [InlineData(PlaybackDecodedAudioSampleFormat.PcmFloat32Interleaved, 48_000, 2)]
     [InlineData(PlaybackDecodedAudioSampleFormat.PcmSigned16Interleaved, 44_100, 2)]
@@ -205,8 +234,9 @@ public sealed class PlaybackWindowsOutputBufferProcessingBoundaryTests
         PlaybackDecodedAudioSampleFormat audioFormat =
             PlaybackDecodedAudioSampleFormat.PcmSigned16Interleaved)
     {
+        var nativeActivation = new RecordingActivation();
         var activation = new PlaybackWindowsOutputActivationBoundary(
-            new RecordingActivation(), static () => true);
+            nativeActivation, static () => true);
         Assert.Equal(PlaybackWindowsOutputActivationResult.Activated, activation.Activate());
         var binding = new PlaybackWindowsOutputResourceBindingBoundary(
             activation, new RecordingBinding(), static () => true);
@@ -221,7 +251,7 @@ public sealed class PlaybackWindowsOutputBufferProcessingBoundaryTests
                     new(1, 2, 2, PlaybackDecodedVideoPixelFormat.Bgra32, 7),
                     new(audioFormat, 48_000, 2,
                         TimeSpan.FromMilliseconds(100), 11), default));
-        return new(activation, binding, initialization);
+        return new(activation, binding, initialization, nativeActivation.PaddingSource);
     }
 
     private static PlaybackWindowsVideoFrameBuffer Video() =>
@@ -235,21 +265,43 @@ public sealed class PlaybackWindowsOutputBufferProcessingBoundaryTests
     private sealed class Setup(
         PlaybackWindowsOutputActivationBoundary activation,
         PlaybackWindowsOutputResourceBindingBoundary binding,
-        PlaybackWindowsOutputStreamInitializationBoundary initialization) : IDisposable
+        PlaybackWindowsOutputStreamInitializationBoundary initialization,
+        PaddingLease paddingSource) : IDisposable
     {
         public PlaybackWindowsOutputActivationBoundary Activation { get; } = activation;
         public PlaybackWindowsOutputResourceBindingBoundary Binding { get; } = binding;
         public PlaybackWindowsOutputStreamInitializationBoundary Initialization { get; } = initialization;
+        public PaddingLease PaddingSource { get; } = paddingSource;
         public void Dispose() { Initialization.Dispose(); Binding.Dispose(); Activation.Dispose(); }
     }
 
     private sealed class RecordingActivation : IPlaybackWindowsOutputNativeActivation
     {
+        public PaddingLease PaddingSource { get; } = new();
+
         public PlaybackWindowsOutputActivationResult InitializeComApartment(out IDisposable? apartment) { apartment = new Lease(); return PlaybackWindowsOutputActivationResult.Activated; }
         public PlaybackWindowsOutputActivationResult ActivateDirect3D11(out IDisposable? device) { device = new Lease(); return PlaybackWindowsOutputActivationResult.Activated; }
-        public PlaybackWindowsOutputActivationResult ActivateWasapiSharedEventDriven(out IDisposable? audio) { audio = new Lease(); return PlaybackWindowsOutputActivationResult.Activated; }
+        public PlaybackWindowsOutputActivationResult ActivateWasapiSharedEventDriven(out IDisposable? audio) { audio = PaddingSource; return PlaybackWindowsOutputActivationResult.Activated; }
     }
     private sealed class Lease : IDisposable { public void Dispose() { } }
+    private sealed class PaddingLease : IDisposable,
+        IPlaybackWindowsWasapiBorrowedResource,
+        IPlaybackWindowsWasapiPaddingSource
+    {
+        public int PaddingFrameCount { get; set; }
+        public nint AudioClient => 1;
+        public nint AudioRenderClient => 1;
+        public nint EventHandle => 1;
+        public bool EnsureAudioRenderClient() => true;
+        public bool RecreateAudioClient() => true;
+        public void ResetAudioClient() { }
+        public bool TryGetCurrentPaddingFrames(out uint frameCount)
+        {
+            frameCount = checked((uint)PaddingFrameCount);
+            return true;
+        }
+        public void Dispose() { }
+    }
     private sealed class RecordingBinding : IPlaybackWindowsOutputNativeResourceBinding
     {
         public PlaybackWindowsOutputNativeBindingResult BindVideo(IDisposable resource, PlaybackVideoRendererConfiguration configuration) => PlaybackWindowsOutputNativeBindingResult.Bound;
