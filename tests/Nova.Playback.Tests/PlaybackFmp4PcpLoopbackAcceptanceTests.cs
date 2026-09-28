@@ -159,6 +159,7 @@ public sealed class PlaybackFmp4PcpLoopbackAcceptanceTests
     {
         var run = await RunManagedLoopbackAsync(callerCancellation: false);
         var result = run.RunResult;
+        var publisher = run.Publisher;
         var session = Assert.IsType<PcpChannelSessionResult>(result.Session);
         var composition = result.Composition;
         var server = run.Server;
@@ -167,17 +168,17 @@ public sealed class PlaybackFmp4PcpLoopbackAcceptanceTests
         Assert.False(result.CallerCancelled);
         Assert.Null(result.CompletionFailure);
         Assert.Equal(PcpChannelSessionEndReason.Stopped, session.EndReason);
-        Assert.Equal(6, session.ChannelMessageCount);
-        Assert.Equal(6, session.PacketCount);
+        Assert.Equal(publisher.AcceptedPacketCount, session.ChannelMessageCount);
+        Assert.Equal(publisher.AcceptedPacketCount, session.PacketCount);
         Assert.Equal(Fmp4PcpLoopbackAcceptanceFixture.ExpectedLength,
             session.PayloadByteCount);
         // The runner captures this result snapshot immediately before its awaited disposal.
         Assert.Equal(PlaybackPcpFmp4CompositionState.Accepting, composition.State);
         Assert.Equal(PlaybackPcpFmp4CompositionResult.PacketAccepted,
             composition.Result);
-        Assert.Equal(6, composition.AcceptedPacketCount);
-        Assert.Equal(2, composition.HeadPacketCount);
-        Assert.Equal(4, composition.DataPacketCount);
+        Assert.Equal(publisher.AcceptedPacketCount, composition.AcceptedPacketCount);
+        Assert.Equal(1, composition.HeadPacketCount);
+        Assert.Equal(publisher.DataPacketCount, composition.DataPacketCount);
         Assert.Equal(Fmp4PcpLoopbackAcceptanceFixture.ExpectedLength,
             composition.PayloadByteCount);
         Assert.Equal(1, composition.InitializationGenerationCount);
@@ -189,7 +190,7 @@ public sealed class PlaybackFmp4PcpLoopbackAcceptanceTests
 
         Assert.Equal(1, server.AcceptedConnectionCount);
         Assert.Equal(1, server.AcceptedHandshakeCount);
-        Assert.Equal(6, server.DeliveredPacketCount);
+        Assert.Equal(publisher.AcceptedPacketCount, server.DeliveredPacketCount);
         Assert.Equal(Fmp4PcpLoopbackAcceptanceFixture.ExpectedLength,
             server.DeliveredByteCount);
         Assert.Equal(0, server.DiscardedPacketCount);
@@ -197,6 +198,15 @@ public sealed class PlaybackFmp4PcpLoopbackAcceptanceTests
         Assert.Equal(0, server.CleanupIncompleteCount);
         Assert.Equal(0, server.InternalFailureCount);
         Assert.Equal(0, server.ActiveConnectionCount);
+        Assert.Equal(1, publisher.InitializationSegmentCount);
+        Assert.Equal(2, publisher.MediaSegmentCount);
+        Assert.Equal(1, publisher.HeadPacketCount);
+        Assert.True(publisher.DataPacketCount > 2);
+        Assert.Equal(publisher.AcceptedPacketCount, publisher.NextSequence);
+        Assert.Equal((uint)Fmp4PcpLoopbackAcceptanceFixture.ExpectedLength,
+            publisher.NextWirePosition);
+        Assert.Equal((long)Fmp4PcpLoopbackAcceptanceFixture.ExpectedLength,
+            publisher.NextStreamPosition);
 
         var decoder = Assert.Single(run.Decoders.Decoders);
         Assert.Equal(PlaybackMediaContainer.FragmentedMp4, decoder.Context.Container);
@@ -217,6 +227,7 @@ public sealed class PlaybackFmp4PcpLoopbackAcceptanceTests
     {
         var run = await RunManagedLoopbackAsync(callerCancellation: true);
         var result = run.RunResult;
+        var publisher = run.Publisher;
 
         Assert.True(result.CallerCancelled);
         Assert.False(result.DurationLimitReached);
@@ -225,7 +236,7 @@ public sealed class PlaybackFmp4PcpLoopbackAcceptanceTests
         // The completed RunAsync task awaits disposal after capturing this snapshot.
         Assert.Equal(PlaybackPcpFmp4CompositionState.Accepting,
             result.Composition.State);
-        Assert.Equal(6, result.Composition.AcceptedPacketCount);
+        Assert.Equal(publisher.AcceptedPacketCount, result.Composition.AcceptedPacketCount);
         Assert.Equal(2, result.Composition.MediaSegmentCount);
         Assert.Equal(0, result.Composition.AssemblerCarryBytes);
 
@@ -246,15 +257,16 @@ public sealed class PlaybackFmp4PcpLoopbackAcceptanceTests
         var fixture = Fmp4PcpLoopbackAcceptanceFixture.Load();
         var channelId = new ChannelId(ChannelGuid);
         var sessionId = new ChannelSessionId(SessionGuid);
-        var packetPlan = Fmp4PcpLoopbackAcceptanceFixture.CreatePacketPlan(
-            fixture,
-            channelId,
-            sessionId);
         var decoders = new RecordingDecoderFactory();
         var outputs = new RecordingPresentationFactory();
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
-        await using var fanout = new PcpRelayFanout();
+        await using var fanout = new PcpRelayFanout(
+            new PcpRelayFanoutOptions
+            {
+                MaxPendingPacketsPerChild = 32,
+            },
+            replayHeadForNewChildren: true);
         await using var server = new PcpDownstreamRelayServer(
             new IPEndPoint(IPAddress.Loopback, 0),
             fanout,
@@ -292,15 +304,78 @@ public sealed class PlaybackFmp4PcpLoopbackAcceptanceTests
             fanout,
             runnerTask,
             deadline.Token);
-        foreach (var packet in packetPlan)
+        Assert.Equal(
+            PcpFmp4PublishingBoundaryCreateResult.Created,
+            PcpFmp4PublishingBoundary.Create(
+                channelId,
+                sessionId,
+                fanout,
+                out var createdPublisher,
+                new PcpFmp4PublishingBoundaryOptions
+                {
+                    MaximumInitializationBytes = fixture.InitializationSegment.Length,
+                    MaximumMediaSegmentBytes = 16 * 1024 * 1024,
+                    MaximumPacketPayloadBytes = fixture.InitializationSegment.Length,
+                }));
+        await using var publisherBoundary = Assert.IsType<PcpFmp4PublishingBoundary>(
+            createdPublisher);
+
+        Assert.Equal(
+            PcpFmp4PublishingResult.Published,
+            await publisherBoundary.PublishSegmentAsync(
+                fixture.InitializationSegment,
+                PcpFmp4PublishingSegmentRole.Initialization,
+                deadline.Token));
+        foreach (var segment in fixture.MediaSegments)
         {
-            await fanout.ConsumeAsync(packet, deadline.Token);
+            Assert.Equal(
+                PcpFmp4PublishingResult.Published,
+                await publisherBoundary.PublishSegmentAsync(
+                    segment,
+                    PcpFmp4PublishingSegmentRole.Media,
+                    deadline.Token));
         }
+
+        var publisherSnapshot = publisherBoundary.Snapshot;
+        Assert.Equal(1, publisherSnapshot.InitializationSegmentCount);
+        Assert.Equal(2, publisherSnapshot.MediaSegmentCount);
+        Assert.Equal(1, publisherSnapshot.HeadPacketCount);
+        var expectedDataPacketCount = fixture.MediaSegments.Sum(segment =>
+            (segment.Length + fixture.InitializationSegment.Length - 1) /
+            fixture.InitializationSegment.Length);
+        Assert.Equal(expectedDataPacketCount, publisherSnapshot.DataPacketCount);
+        Assert.Equal(fixture.Bytes.Length, publisherSnapshot.AcceptedByteCount);
 
         Assert.True(await fanout.WaitForIdleAsync(
             TimeSpan.FromSeconds(5),
             deadline.Token));
-        await outputs.BothTracksPresented.Task.WaitAsync(deadline.Token);
+        var presentationWait = outputs.BothTracksPresented.Task;
+        var presentationOrStop = await Task.WhenAny(
+            presentationWait,
+            runnerTask,
+            Task.Delay(TimeSpan.FromSeconds(5), deadline.Token));
+        if (ReferenceEquals(presentationOrStop, runnerTask))
+        {
+            var stoppedRun = await runnerTask;
+            throw new InvalidOperationException(
+                $"The PCP fMP4 receiver stopped before both tracks reached managed output: " +
+                $"session={stoppedRun.Session?.EndReason}; " +
+                $"composition={stoppedRun.Composition.State}/{stoppedRun.Composition.Result}; " +
+                $"packets={stoppedRun.Composition.AcceptedPacketCount}; " +
+                $"heads/data={stoppedRun.Composition.HeadPacketCount}/{stoppedRun.Composition.DataPacketCount}; " +
+                $"carry={stoppedRun.Composition.AssemblerCarryBytes}; " +
+                $"server={server.Snapshot.DeliveredPacketCount}/{server.Snapshot.DeliveredByteCount}; " +
+                $"active children={fanout.ActiveChildCount}.");
+        }
+
+        if (!ReferenceEquals(presentationOrStop, presentationWait))
+        {
+            throw new TimeoutException(
+                $"Both fMP4 tracks did not reach managed output within five seconds. " +
+                $"runner completed={runnerTask.IsCompleted}; " +
+                $"server={server.Snapshot.DeliveredPacketCount}/{server.Snapshot.DeliveredByteCount}; " +
+                $"active children={fanout.ActiveChildCount}.");
+        }
 
         if (callerCancellation)
         {
@@ -317,7 +392,7 @@ public sealed class PlaybackFmp4PcpLoopbackAcceptanceTests
 
         return new(
             sourceUri,
-            packetPlan,
+            publisherSnapshot,
             runResult,
             serverResult.Snapshot,
             decoders,
@@ -350,7 +425,7 @@ public sealed class PlaybackFmp4PcpLoopbackAcceptanceTests
 
     private sealed record ManagedLoopbackRun(
         string SourceUri,
-        IReadOnlyList<PcpChannelPacket> PacketPlan,
+        PcpFmp4PublishingBoundarySnapshot Publisher,
         PlaybackPcpFmp4LiveSessionRunResult RunResult,
         PcpDownstreamRelayServerSnapshot Server,
         RecordingDecoderFactory Decoders,
