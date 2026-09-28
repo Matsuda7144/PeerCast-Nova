@@ -1,11 +1,58 @@
 using System.Buffers.Binary;
 using System.Diagnostics;
+using System.Net;
 using System.Security.Cryptography;
 using System.Text;
+using PeerCast.Nova.Core.Channels;
+using PeerCast.Nova.Network.Pcp;
 using PeerCast.Nova.Windows;
 using Xunit.Abstractions;
 
 namespace PeerCast.Nova.Playback.Tests;
+
+public sealed class Fmp4PcpLoopbackPhysicalAcceptanceFactAttribute : FactAttribute
+{
+    public const string RunOnceEnvironmentVariable =
+        "NOVA_FMP4_PCP_LOOPBACK_RUN_ONCE";
+    public const string ExpectedHeadEnvironmentVariable =
+        "NOVA_FMP4_PCP_LOOPBACK_HEAD";
+
+    public Fmp4PcpLoopbackPhysicalAcceptanceFactAttribute()
+    {
+        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22_000) ||
+            !Environment.Is64BitProcess)
+        {
+            Skip = "Requires the Windows 11 x64 Nova physical output host.";
+            return;
+        }
+
+        if (!string.Equals(
+                Environment.GetEnvironmentVariable(RunOnceEnvironmentVariable),
+                "RUN-ONCE",
+                StringComparison.Ordinal))
+        {
+            Skip = $"Set {RunOnceEnvironmentVariable}=RUN-ONCE for one explicit PCP loopback run.";
+            return;
+        }
+
+        var expectedHead = Environment.GetEnvironmentVariable(
+            ExpectedHeadEnvironmentVariable);
+        if (expectedHead is null || expectedHead.Length != 40 ||
+            !expectedHead.All(Uri.IsHexDigit))
+        {
+            Skip = $"Set {ExpectedHeadEnvironmentVariable} to the exact tested HEAD SHA.";
+            return;
+        }
+
+        var runtimeDirectory = Environment.GetEnvironmentVariable(
+            PlaybackFmp4FfmpegNativeAcceptanceTests.RuntimeDirectoryEnvironmentVariable);
+        if (string.IsNullOrWhiteSpace(runtimeDirectory) ||
+            !Directory.Exists(runtimeDirectory))
+        {
+            Skip = "Set NOVA_FMP4_FFMPEG_TEST_RUNTIME to the accepted #249 runtime inventory.";
+        }
+    }
+}
 
 public sealed class Fmp4PhysicalPresentationAcceptanceFactAttribute : FactAttribute
 {
@@ -331,6 +378,327 @@ public sealed class PlaybackFmp4PhysicalPresentationAcceptanceTests(
         }
     }
 
+    [Fmp4PcpLoopbackPhysicalAcceptanceFact]
+    public async Task RealPcpLoopbackFixturePresentsThroughNativeFfmpegAndNovaWindowsOutput()
+    {
+        var runId = $"FMP4-PCP-LOOPBACK-{DateTimeOffset.UtcNow:yyyyMMdd'T'HHmmssfff'Z'}-" +
+            Guid.NewGuid().ToString("N")[..8];
+        var expectedHead = Environment.GetEnvironmentVariable(
+            Fmp4PcpLoopbackPhysicalAcceptanceFactAttribute.ExpectedHeadEnvironmentVariable)!;
+        Assert.Equal(expectedHead, ReadRepositoryHead());
+
+        var fixture = Fmp4PcpLoopbackAcceptanceFixture.Load();
+        var runtimeDirectory = Environment.GetEnvironmentVariable(
+            PlaybackFmp4FfmpegNativeAcceptanceTests.RuntimeDirectoryEnvironmentVariable)!;
+        var runtimeManifest = CreateRuntimeManifest();
+        var runtimeResult = await PlaybackDecoderBackendInstalledRuntimeLocator
+            .LocateAndVerifyAsync(runtimeDirectory, runtimeManifest.RuntimeInventory);
+        Assert.Equal(
+            PlaybackDecoderBackendInstalledRuntimeLocation.Verified,
+            runtimeResult.Location);
+        using var runtimeLease = Assert.IsType<VerifiedPlaybackDecoderRuntimeLease>(
+            runtimeResult.Lease);
+        var abi = new PlaybackDecoderFfmpegAbiSymbolGate().Acquire(runtimeLease);
+        Assert.Equal(PlaybackDecoderFfmpegAbiSymbolGateResult.Verified, abi.Result);
+        abi.Lease?.Dispose();
+
+        var channelGuid = Guid.ParseExact("642ED9E0B91349E0ABCE5B4E6EC1CC38", "N");
+        var sourceSessionGuid = Guid.ParseExact("8A54CA9872E84D18B26940BF1375F224", "N");
+        var channelId = new ChannelId(channelGuid);
+        var sourceSessionId = new ChannelSessionId(sourceSessionGuid);
+        var packetPlan = Fmp4PcpLoopbackAcceptanceFixture.CreatePacketPlan(
+            fixture,
+            channelId,
+            sourceSessionId);
+        var windowRunner = new PlaybackWindowsPhysicalRunnerHost(new()
+        {
+            ClientWidth = 640,
+            ClientHeight = 360,
+            Title = $"PeerCast Nova PCP fMP4 loopback {runId}",
+            MaximumPendingOperations = 4,
+        });
+        using var runTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        var runToken = runTimeout.Token;
+        PresentationResources? resources = null;
+        WindowsLoopbackPresentationFactory? presentationFactory = null;
+        PcpRelayFanout? fanout = null;
+        PcpDownstreamRelayServer? server = null;
+        PlaybackPcpFmp4LiveSessionRunner? liveRunner = null;
+        CancellationTokenSource? receiverStop = null;
+        Task<PlaybackPcpFmp4LiveSessionRunResult>? receiverTask = null;
+        Task<PcpDownstreamRelayServerResult>? serverTask = null;
+        var windowRunnerStopped = false;
+
+        WriteLine($"Run-ID: {runId}");
+        WriteLine($"HEAD: {expectedHead}");
+        WriteLine($"Fixture: {fixture.Bytes.Length} bytes SHA-256 {Fmp4PcpLoopbackAcceptanceFixture.ExpectedSha256}");
+        WriteLine($"FFmpeg runtime: {runtimeManifest.BuildId}; {runtimeManifest.Version}; host-attested/unreviewed");
+        WriteLine($"Runtime ABI/symbol gate: {abi.Result}; verified files={runtimeLease.FileCount}");
+        WriteLine("Human observation required during this run: visible moving test pattern; audible 440 Hz tone.");
+
+        try
+        {
+            var started = await windowRunner.StartAsync(runToken);
+            Assert.Equal(PlaybackWindowsPhysicalRunnerResult.Started, started);
+            var windowAtStart = windowRunner.Snapshot;
+            Assert.Equal(PlaybackWindowsPhysicalRunnerState.Running, windowAtStart.State);
+            Assert.True(windowAtStart.WindowToken > 0);
+            Assert.True(windowAtStart.HasMessageLoop);
+            WriteLine($"Nova output surface: HWND token {windowAtStart.WindowToken}; 640x360; owner thread {windowAtStart.OwnerManagedThreadId}");
+
+            var initialized = await windowRunner.InvokeAsync(
+                cancellationToken => PresentationResources.CreateAsync(
+                    windowAtStart.WindowToken,
+                    cancellationToken),
+                runToken);
+            Assert.Equal(
+                PlaybackWindowsOutputDispatcherInvocationResult.Completed,
+                initialized.Result);
+            resources = Assert.IsType<PresentationResources>(initialized.Value);
+            presentationFactory = new WindowsLoopbackPresentationFactory(
+                windowRunner,
+                resources);
+            var decoderFactory = new RecordingNativeDecoderFactory(
+                new PlaybackFmp4FfmpegDecoderFactory(runtimeLease));
+
+            fanout = new PcpRelayFanout();
+            server = new PcpDownstreamRelayServer(
+                new IPEndPoint(IPAddress.Loopback, 0),
+                fanout,
+                channelId,
+                sourceSessionGuid);
+            serverTask = server.RunAsync();
+            var endpoint = server.LocalEndPoint;
+            var sourceUri = $"pcp://127.0.0.1:{endpoint.Port}/channel/{channelGuid:N}";
+            Assert.True(PlaybackPcpFmp4LiveSource.TryParse(sourceUri, out var source));
+            WriteLine($"Source endpoint: {endpoint}; URI: {sourceUri}");
+            WriteLine($"Source identity: ChannelId={channelGuid:N}; SessionId={sourceSessionGuid:N}");
+            WriteLine($"Packet plan: HEAD=2, DATA=4, total={packetPlan.Count}, payload={packetPlan.Sum(static packet => packet.Payload.Length)} bytes; split init at byte 5, first moof at byte 11, cross-fragment DATA packet");
+
+            liveRunner = new PlaybackPcpFmp4LiveSessionRunner(
+                Assert.IsType<PlaybackPcpFmp4LiveSource>(source),
+                decoderFactory,
+                presentationFactory,
+                new PlaybackPcpFmp4LiveSessionOptions
+                {
+                    MaximumRunDuration = TimeSpan.FromSeconds(15),
+                    ConnectTimeout = TimeSpan.FromSeconds(3),
+                    Session = new PcpChannelSessionOptions
+                    {
+                        HandshakeTimeout = TimeSpan.FromSeconds(5),
+                        MaxReconnectAttempts = 0,
+                        ReconnectDelay = TimeSpan.Zero,
+                    },
+                });
+            receiverStop = new CancellationTokenSource();
+            receiverTask = liveRunner.RunAsync(receiverStop.Token);
+            await WaitForLoopbackChildRegistrationAsync(
+                fanout,
+                receiverTask,
+                runToken);
+            WriteLine($"PCP child subscription ready: active children={fanout.ActiveChildCount}");
+
+            foreach (var packet in packetPlan)
+            {
+                await fanout.ConsumeAsync(packet, runToken);
+            }
+
+            Assert.True(await fanout.WaitForIdleAsync(
+                TimeSpan.FromSeconds(5),
+                runToken));
+            await presentationFactory.WaitForMeaningfulOutputAsync(runToken);
+            var receiver = await receiverTask.WaitAsync(runToken);
+            Assert.True(receiver.DurationLimitReached);
+            Assert.False(receiver.CallerCancelled);
+            Assert.Null(receiver.CompletionFailure);
+            var session = Assert.IsType<PcpChannelSessionResult>(receiver.Session);
+            Assert.Equal(PcpChannelSessionEndReason.Stopped, session.EndReason);
+
+            await server.StopAsync(runToken);
+            var serverResult = await serverTask.WaitAsync(runToken);
+            var serverSnapshot = serverResult.Snapshot;
+            var composition = receiver.Composition;
+            var presentation = Assert.Single(presentationFactory.Adapters).Snapshot;
+            var outputSnapshot = resources.Sink.Snapshot;
+            var native = outputSnapshot.Output.NativeEvidence;
+            var paddingRead = await windowRunner.InvokeAsync(
+                _ => ValueTask.FromResult(resources.Output.ReadAudioPadding()),
+                runToken);
+            Assert.Equal(
+                PlaybackWindowsOutputDispatcherInvocationResult.Completed,
+                paddingRead.Result);
+
+            WriteLine($"Source counters: packets={packetPlan.Count}; HEAD=2; DATA=4; payload={fixture.Bytes.Length} bytes");
+            WriteLine($"PCP server: state/end={serverSnapshot.State}/{serverResult.EndReason}; accepted connections={serverSnapshot.AcceptedConnectionCount}; accepted handshakes={serverSnapshot.AcceptedHandshakeCount}; delivered packets/bytes={serverSnapshot.DeliveredPacketCount}/{serverSnapshot.DeliveredByteCount}; discarded={serverSnapshot.DiscardedPacketCount}/{serverSnapshot.DiscardedByteCount}; active={serverSnapshot.ActiveConnectionCount}; cleanup incomplete={serverSnapshot.CleanupIncompleteCount}; internal failures={serverSnapshot.InternalFailureCount}");
+            WriteLine($"Receiver: end={session.EndReason}; channel messages={session.ChannelMessageCount}; packets={session.PacketCount}; payload={session.PayloadByteCount}; attempts/reconnects={session.AttemptCount}/{session.ReconnectCount}");
+            WriteLine($"#251 composition: result={composition.Result}; accepted/head/data={composition.AcceptedPacketCount}/{composition.HeadPacketCount}/{composition.DataPacketCount}; payload={composition.PayloadByteCount}; init generations={composition.InitializationGenerationCount}; segments={composition.MediaSegmentCount}; batches={composition.BatchCount}; decoder submissions={composition.DecoderSubmissionCount}; discontinuities={composition.DiscontinuityCount}; carry={composition.AssemblerCarryBytes}");
+            WriteLine($"Native decoder: configured tracks={string.Join(",", decoderFactory.ConfiguredTracks.Select(static track => $"{track.MediaRole}:{track.CodecVariant}"))}; H.264/AAC samples={decoderFactory.VideoSampleCount}/{decoderFactory.AudioSampleCount}; decoded video/audio frames={presentation.VideoFrameSubmittedCount}/{presentation.AudioFrameSubmittedCount}; resets={decoderFactory.ResetCount}; failures={decoderFactory.FailureCount}; disposed={decoderFactory.DisposeCount}");
+            WriteLine($"Video output: D3D11 Present acknowledgements={native.VideoPresentAcknowledgementCount}; presented={presentation.VideoPresentedCount}; late drops={presentation.LateVideoDropCount}; first/last PTS={presentation.FirstVideoPresentationTimestamp}/{presentation.LastVideoPresentationTimestamp}; sink state/result={outputSnapshot.State}/{outputSnapshot.Result}; device lost={native.VideoDeviceLostCount}");
+            WriteLine($"Audio output: WASAPI writes={native.AudioWriteAcknowledgementCount}; written={presentation.AudioWrittenCount}; format={native.AudioSampleFormat}; rate/channels={native.AudioSampleRate}/{native.AudioChannelCount}; late delivery={presentation.LateAudioDeliveryCount}; final padding={paddingRead.Value.Result}/{paddingRead.Value.PaddingFrameCount}; sink state/result={outputSnapshot.State}/{outputSnapshot.Result}; device lost={native.AudioDeviceLostCount}");
+            WriteLine("Human visual observation: not recorded by instrumentation; direct user report required.");
+            WriteLine("Human audible observation: not recorded by instrumentation; direct user report required.");
+
+            Assert.Equal(1, serverSnapshot.AcceptedConnectionCount);
+            Assert.Equal(1, serverSnapshot.AcceptedHandshakeCount);
+            Assert.Equal(packetPlan.Count, serverSnapshot.DeliveredPacketCount);
+            Assert.Equal(fixture.Bytes.Length, serverSnapshot.DeliveredByteCount);
+            Assert.Equal(0, serverSnapshot.DiscardedPacketCount);
+            Assert.Equal(0, serverSnapshot.ProtocolRejectedCount);
+            Assert.Equal(0, serverSnapshot.WriteFailedCount);
+            Assert.Equal(0, serverSnapshot.CleanupIncompleteCount);
+            Assert.Equal(0, serverSnapshot.InternalFailureCount);
+            Assert.Equal(0, serverSnapshot.ActiveConnectionCount);
+            Assert.Equal(packetPlan.Count, session.ChannelMessageCount);
+            Assert.Equal(packetPlan.Count, session.PacketCount);
+            Assert.Equal(fixture.Bytes.Length, session.PayloadByteCount);
+            Assert.Equal(packetPlan.Count, composition.AcceptedPacketCount);
+            Assert.Equal(2, composition.HeadPacketCount);
+            Assert.Equal(4, composition.DataPacketCount);
+            Assert.Equal(fixture.Bytes.Length, composition.PayloadByteCount);
+            Assert.Equal(1, composition.InitializationGenerationCount);
+            Assert.Equal(2, composition.MediaSegmentCount);
+            Assert.Equal(2, composition.BatchCount);
+            Assert.Equal(2, composition.DecoderSubmissionCount);
+            Assert.Equal(0, composition.DiscontinuityCount);
+            Assert.Equal(0, composition.AssemblerCarryBytes);
+            Assert.Equal(PlaybackPcpFmp4CompositionState.Accepting, composition.State);
+            Assert.Equal(PlaybackPcpFmp4CompositionResult.PacketAccepted,
+                composition.Result);
+            Assert.Single(decoderFactory.Decoders);
+            Assert.True(decoderFactory.VideoSampleCount > 0);
+            Assert.True(decoderFactory.AudioSampleCount > 0);
+            Assert.Equal(0, decoderFactory.FailureCount);
+            Assert.Equal(0, decoderFactory.ResetCount);
+            Assert.Equal(0, decoderFactory.CompleteCount);
+            Assert.Equal(1, decoderFactory.DisposeCount);
+            Assert.Equal(0, Assert.Single(decoderFactory.Decoders).CompleteCount);
+            Assert.Equal(2, decoderFactory.ConfiguredTracks.Count);
+            Assert.Contains(decoderFactory.ConfiguredTracks, static track =>
+                track.MediaRole == PlaybackEncodedMediaRole.Video &&
+                track.CodecVariant == PlaybackEncodedCodecVariant.Avc1);
+            Assert.Contains(decoderFactory.ConfiguredTracks, static track =>
+                track.MediaRole == PlaybackEncodedMediaRole.Audio &&
+                track.CodecVariant == PlaybackEncodedCodecVariant.Aac);
+            Assert.True(presentation.VideoFrameSubmittedCount > 0);
+            Assert.True(presentation.AudioFrameSubmittedCount > 0);
+            Assert.Equal(PlaybackDecodedFrameWindowsPresentationState.Disposed,
+                presentation.State);
+            Assert.True(presentation.VideoPresentedCount >= 2);
+            Assert.True(presentation.AudioWrittenCount >= 2);
+            Assert.True(native.VideoPresentAcknowledgementCount >= 2);
+            Assert.Equal(presentation.VideoPresentedCount,
+                native.VideoPresentAcknowledgementCount);
+            Assert.True(native.AudioWriteAcknowledgementCount >= 2);
+            Assert.Equal(presentation.AudioWrittenCount,
+                native.AudioWriteAcknowledgementCount);
+            Assert.Equal(PlaybackDecodedVideoPixelFormat.Bgra32, native.VideoPixelFormat);
+            Assert.Equal(PlaybackControlledWindowsOutputEvidenceSource.SystemWindows,
+                native.Source);
+            Assert.Equal(64, native.VideoWidth);
+            Assert.Equal(48, native.VideoHeight);
+            Assert.False(native.CounterOverflowed);
+            Assert.False(native.VideoConfigurationConflict);
+            Assert.False(native.AudioConfigurationConflict);
+            Assert.Equal(PlaybackDecodedAudioSampleFormat.PcmFloat32Interleaved,
+                native.AudioSampleFormat);
+            Assert.Equal(48_000, native.AudioSampleRate);
+            Assert.Equal(2, native.AudioChannelCount);
+            Assert.True(native.AudioStartAcknowledgementCount > 0);
+            Assert.Equal(0, native.VideoDeviceLostCount);
+            Assert.Equal(0, native.AudioDeviceLostCount);
+            Assert.Equal(PlaybackIsoBmffRegularMovieWindowsOutputSinkState.Accepting,
+                outputSnapshot.State);
+            Assert.NotEqual(PlaybackIsoBmffRegularMovieWindowsOutputSinkResult.Faulted,
+                outputSnapshot.Result);
+
+            var cleanup = await windowRunner.InvokeAsync(
+                async cancellationToken =>
+                {
+                    await resources.DisposeAsync();
+                    return resources.CleanupSnapshot;
+                },
+                CancellationToken.None);
+            Assert.Equal(PlaybackWindowsOutputDispatcherInvocationResult.Completed,
+                cleanup.Result);
+            Assert.Equal(PlaybackIsoBmffRegularMovieWindowsOutputSinkState.Disposed,
+                cleanup.Value.SinkState);
+            Assert.Equal(PlaybackWindowsOutputBufferState.Disposed,
+                cleanup.Value.VideoBufferState);
+            Assert.Equal(PlaybackWindowsOutputBufferState.Disposed,
+                cleanup.Value.AudioBufferState);
+            Assert.Equal(PlaybackWindowsOutputStreamState.Disposed,
+                cleanup.Value.VideoStreamState);
+            Assert.Equal(PlaybackWindowsOutputStreamState.Disposed,
+                cleanup.Value.AudioStreamState);
+            Assert.Equal(PlaybackWindowsOutputBindingState.Disposed,
+                cleanup.Value.VideoBindingState);
+            Assert.Equal(PlaybackWindowsOutputBindingState.Disposed,
+                cleanup.Value.AudioBindingState);
+            Assert.Equal(PlaybackIsoBmffRegularMovieWindowsOutputReconfigurationState.Disposed,
+                cleanup.Value.ReconfigurationState);
+            resources = null;
+
+            var stop = await windowRunner.StopAsync();
+            windowRunnerStopped = true;
+            Assert.Equal(PlaybackWindowsPhysicalRunnerResult.Stopped, stop);
+            Assert.Equal(PlaybackWindowsPhysicalRunnerState.Stopped,
+                windowRunner.Snapshot.State);
+            Assert.False(windowRunner.Snapshot.HasMessageLoop);
+            WriteLine("Cleanup: receiver/session disposed; PCP server stopped; Windows output resources released; owner thread stopped.");
+        }
+        finally
+        {
+            receiverStop?.Cancel();
+            if (receiverTask is { IsCompleted: false })
+            {
+                try
+                {
+                    await receiverTask.WaitAsync(TimeSpan.FromSeconds(5));
+                }
+                catch (OperationCanceledException)
+                {
+                    // The one physical attempt has been stopped and is not retried.
+                }
+            }
+
+            if (liveRunner is not null)
+            {
+                await liveRunner.DisposeAsync();
+            }
+
+            if (server is not null)
+            {
+                await server.StopAsync();
+            }
+
+            if (fanout is not null)
+            {
+                await fanout.DisposeAsync();
+            }
+
+            presentationFactory?.Dispose();
+            if (resources is not null && windowRunner.Snapshot.State ==
+                    PlaybackWindowsPhysicalRunnerState.Running)
+            {
+                await windowRunner.InvokeAsync(
+                    async _ =>
+                    {
+                        await resources.DisposeAsync();
+                        return true;
+                    },
+                    CancellationToken.None);
+            }
+
+            if (!windowRunnerStopped)
+            {
+                await windowRunner.StopAsync();
+            }
+
+            await windowRunner.DisposeAsync();
+            receiverStop?.Dispose();
+        }
+    }
+
     private static byte[] ReadFixture()
     {
         using var stream = typeof(PlaybackFmp4PhysicalPresentationAcceptanceTests)
@@ -342,6 +710,72 @@ public sealed class PlaybackFmp4PhysicalPresentationAcceptanceTests(
         using var bytes = new MemoryStream();
         ownedStream.CopyTo(bytes);
         return bytes.ToArray();
+    }
+
+    private static string ReadRepositoryHead()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        while (current is not null &&
+            !File.Exists(Path.Combine(current.FullName, ".git")) &&
+            !Directory.Exists(Path.Combine(current.FullName, ".git")))
+        {
+            current = current.Parent;
+        }
+
+        if (current is null)
+        {
+            throw new InvalidOperationException(
+                "The loopback acceptance test could not locate its Git worktree.");
+        }
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "git",
+            WorkingDirectory = current.FullName,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        startInfo.ArgumentList.Add("rev-parse");
+        startInfo.ArgumentList.Add("HEAD");
+        using var process = Process.Start(startInfo) ??
+            throw new InvalidOperationException(
+                "Git could not start for the exact-head physical acceptance gate.");
+        var head = process.StandardOutput.ReadToEnd().Trim();
+        var error = process.StandardError.ReadToEnd();
+        if (!process.WaitForExit(5_000) || process.ExitCode != 0 ||
+            head.Length != 40 || !head.All(Uri.IsHexDigit))
+        {
+            throw new InvalidOperationException(
+                $"The exact-head physical acceptance gate failed: {error.Trim()}");
+        }
+
+        return head;
+    }
+
+    private static async Task WaitForLoopbackChildRegistrationAsync(
+        PcpRelayFanout fanout,
+        Task receiverTask,
+        CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(10));
+        while (fanout.ActiveChildCount != 1)
+        {
+            if (receiverTask.IsCompleted)
+            {
+                await receiverTask.ConfigureAwait(false);
+                throw new InvalidOperationException(
+                    "The receiver stopped before the loopback PCP child registered.");
+            }
+
+            if (!await timer.WaitForNextTickAsync(cancellationToken)
+                    .ConfigureAwait(false))
+            {
+                throw new TimeoutException(
+                    "The loopback PCP child did not register before the deadline.");
+            }
+        }
     }
 
     private static PlaybackFfmpegExternalRuntimeManifest CreateRuntimeManifest()
@@ -470,6 +904,265 @@ public sealed class PlaybackFmp4PhysicalPresentationAcceptanceTests(
     }
 
     private readonly record struct TopLevelBox(int Offset, int Length, uint Type);
+
+    private sealed class WindowsLoopbackPresentationFactory :
+        IPlaybackPcpFmp4PresentationOutputGenerationFactory,
+        IDisposable
+    {
+        private readonly object _gate = new();
+        private readonly PlaybackWindowsPhysicalRunnerHost _runner;
+        private readonly PresentationResources _resources;
+        private readonly List<PlaybackDecodedFrameWindowsPresentationAdapter> _adapters = [];
+        private readonly List<PlaybackAvTimingDecisionBoundary> _timings = [];
+
+        public WindowsLoopbackPresentationFactory(
+            PlaybackWindowsPhysicalRunnerHost runner,
+            PresentationResources resources)
+        {
+            _runner = runner;
+            _resources = resources;
+        }
+
+        public IReadOnlyList<PlaybackDecodedFrameWindowsPresentationAdapter> Adapters
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return [.. _adapters];
+                }
+            }
+        }
+
+        public IPlaybackPcpFmp4PresentationOutputGeneration Create(long generation)
+        {
+            var timing = new PlaybackAvTimingDecisionBoundary(
+                new StopwatchPlaybackMonotonicClock(),
+                new PlaybackAvTimingTolerances(),
+                videoGeneration: generation,
+                audioGeneration: generation);
+            var adapter = new PlaybackDecodedFrameWindowsPresentationAdapter(
+                _runner,
+                _resources.Sink,
+                timing,
+                generation,
+                generation,
+                resetOutput: async (videoGeneration, audioGeneration, token) =>
+                {
+                    var invocation = await _runner.InvokeAsync(
+                        async outputToken =>
+                        {
+                            var result = await _resources.Reconfiguration.ReconfigureAsync(
+                                videoGeneration,
+                                audioGeneration,
+                                outputToken);
+                            return result ==
+                                    PlaybackIsoBmffRegularMovieWindowsOutputReconfigurationResult.Reconfigured &&
+                                _resources.Sink.CommitReconfiguration(
+                                    videoGeneration,
+                                    audioGeneration);
+                        },
+                        token);
+                    return invocation.Result ==
+                            PlaybackWindowsOutputDispatcherInvocationResult.Completed &&
+                        invocation.Value;
+                },
+                readAudioPadding: async token =>
+                {
+                    var invocation = await _runner.InvokeAsync(
+                        _ => ValueTask.FromResult(_resources.Output.ReadAudioPadding()),
+                        token);
+                    return invocation.Result ==
+                            PlaybackWindowsOutputDispatcherInvocationResult.Completed
+                        ? invocation.Value
+                        : new(PlaybackWindowsAudioPaddingReadResult.Failure, 0);
+                });
+
+            lock (_gate)
+            {
+                _timings.Add(timing);
+                _adapters.Add(adapter);
+            }
+
+            return new PlaybackPcpFmp4WindowsPresentationOutputGeneration(adapter);
+        }
+
+        public async Task WaitForMeaningfulOutputAsync(
+            CancellationToken cancellationToken)
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(20));
+            while (true)
+            {
+                foreach (var adapter in Adapters)
+                {
+                    var snapshot = adapter.Snapshot;
+                    var videoSpan = GetSpan(
+                        snapshot.FirstVideoPresentationTimestamp,
+                        snapshot.LastVideoPresentationTimestamp);
+                    var audioSpan = GetSpan(
+                        snapshot.FirstAudioPresentationTimestamp,
+                        snapshot.LastAudioPresentationTimestamp);
+                    if (snapshot.VideoPresentedCount >= 2 &&
+                        snapshot.AudioWrittenCount >= 2 &&
+                        videoSpan >= TimeSpan.FromMilliseconds(500) &&
+                        audioSpan >= TimeSpan.FromMilliseconds(500))
+                    {
+                        return;
+                    }
+                }
+
+                if (!await timer.WaitForNextTickAsync(cancellationToken)
+                        .ConfigureAwait(false))
+                {
+                    throw new TimeoutException(
+                        "Nova did not present both fMP4 tracks before the physical run deadline.");
+                }
+            }
+        }
+
+        public void Dispose()
+        {
+            lock (_gate)
+            {
+                foreach (var timing in _timings)
+                {
+                    timing.Dispose();
+                }
+
+                _timings.Clear();
+            }
+        }
+
+        private static TimeSpan GetSpan(TimeSpan? first, TimeSpan? last) =>
+            first is { } start && last is { } end
+                ? end - start
+                : TimeSpan.Zero;
+    }
+
+    private sealed class RecordingNativeDecoderFactory(
+        IPlaybackDecoderFactory inner) : IPlaybackDecoderFactory
+    {
+        public List<PlaybackEncodedTrackDescription> ConfiguredTracks { get; } = [];
+
+        public List<RecordingNativeDecoder> Decoders { get; } = [];
+
+        public int VideoSampleCount => Decoders.Sum(static decoder => decoder.VideoSampleCount);
+
+        public int AudioSampleCount => Decoders.Sum(static decoder => decoder.AudioSampleCount);
+
+        public int ResetCount => Decoders.Sum(static decoder => decoder.ResetCount);
+
+        public int CompleteCount => Decoders.Sum(static decoder => decoder.CompleteCount);
+
+        public int FailureCount { get; private set; }
+
+        public int DisposeCount => Decoders.Sum(static decoder => decoder.DisposeCount);
+
+        public IPlaybackDecoder? Create(PlaybackDecoderCreationContext context)
+        {
+            try
+            {
+                if (context.EncodedStreamDescription is { } description)
+                {
+                    ConfiguredTracks.AddRange(description.TrackDescriptions);
+                }
+
+                var decoder = inner.Create(context);
+                if (decoder is null)
+                {
+                    FailureCount++;
+                    return null;
+                }
+
+                var recordingDecoder = new RecordingNativeDecoder(decoder, this);
+                Decoders.Add(recordingDecoder);
+                return recordingDecoder;
+            }
+            catch
+            {
+                FailureCount++;
+                throw;
+            }
+        }
+
+        public void RecordFailure() => FailureCount++;
+    }
+
+    private sealed class RecordingNativeDecoder(
+        IPlaybackDecoder inner,
+        RecordingNativeDecoderFactory owner) : IPlaybackDecoder
+    {
+        public int VideoSampleCount { get; private set; }
+
+        public int AudioSampleCount { get; private set; }
+
+        public int ResetCount { get; private set; }
+
+        public int CompleteCount { get; private set; }
+
+        public int DisposeCount { get; private set; }
+
+        public async ValueTask DecodeAsync(
+            PlaybackEncodedInput input,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                var metadata = input.Fmp4SampleMetadata ??
+                    throw new InvalidOperationException(
+                        "A native fMP4 decoder submission has no track metadata.");
+                if (metadata.MediaRole == PlaybackEncodedMediaRole.Video)
+                {
+                    VideoSampleCount++;
+                }
+                else if (metadata.MediaRole == PlaybackEncodedMediaRole.Audio)
+                {
+                    AudioSampleCount++;
+                }
+
+                await inner.DecodeAsync(input, cancellationToken).ConfigureAwait(false);
+            }
+            catch
+            {
+                owner.RecordFailure();
+                throw;
+            }
+        }
+
+        public async ValueTask ResetAsync(CancellationToken cancellationToken)
+        {
+            try
+            {
+                ResetCount++;
+                await inner.ResetAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch
+            {
+                owner.RecordFailure();
+                throw;
+            }
+        }
+
+        public async ValueTask CompleteAsync(CancellationToken cancellationToken)
+        {
+            try
+            {
+                CompleteCount++;
+                await inner.CompleteAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch
+            {
+                owner.RecordFailure();
+                throw;
+            }
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            DisposeCount++;
+            await inner.DisposeAsync().ConfigureAwait(false);
+        }
+    }
 
     private readonly record struct PresentationCleanupSnapshot(
         PlaybackIsoBmffRegularMovieWindowsOutputSinkState SinkState,
