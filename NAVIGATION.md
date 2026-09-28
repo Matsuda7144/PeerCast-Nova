@@ -12,6 +12,7 @@ The accepted playback path hands a loopback-only HTTP-FLV stream to a compatible
 - Architecture and module boundaries: [PCN-0004](docs/architecture/PCN-0004-SYSTEM-ARCHITECTURE.md), [PCN-0005](docs/architecture/PCN-0005-SOLUTION-STRUCTURE.md), and [Control/Data Planes](docs/architecture/CONTROL-AND-DATA-PLANES.md)
 - Compatibility scope: [PCP Compatibility Plan](docs/protocol/PCP-COMPATIBILITY-PLAN.md)
 - Current post-MVP managed boundary: [ADR-0489](docs/adr/ADR-0489-bounded-iso-bmff-regular-movie-native-decoder-discontinuity-reset.md) and [PCN-0499](docs/reviews/PCN-0499-BOUNDED-ISO-BMFF-REGULAR-MOVIE-NATIVE-DECODER-DISCONTINUITY-RESET.md)
+- Recording Core closeout: [ADR-0490](docs/adr/ADR-0490-shared-manual-and-automatic-recording-runtime.md) and [PCN-0500](docs/reviews/PCN-0500-SHARED-MANUAL-AND-AUTOMATIC-RECORDING-RUNTIME.md) preserve the earlier design and managed-review snapshot; subsequent end-user recording and FLV timestamp normalization physical acceptance are recorded in [PR #242](https://github.com/Matsuda7144/PeerCast-Nova/pull/242). GUI integration remains separate PR #230 work.
 
 The detailed entries below preserve implementation and validation history. A historical result applies to its recorded boundary and run; it is not a blanket feature or device-support claim.
 
@@ -350,6 +351,7 @@ and fragmented MP4 remain future work.
 - `docs/adr/ADR-0487-bounded-iso-bmff-regular-movie-windows-output-reconfiguration.md`
 - `docs/adr/ADR-0488-coordinated-iso-bmff-regular-movie-timed-delivery-reset.md`
 - `docs/adr/ADR-0489-bounded-iso-bmff-regular-movie-native-decoder-discontinuity-reset.md`
+- `docs/adr/ADR-0490-shared-manual-and-automatic-recording-runtime.md`
 - `docs/reviews/PCN-0177-OPT-IN-DECODED-BUFFER-DURATION-CUTOFF.md`
 - `docs/reviews/PCN-0183-BOUNDED-ISO-BMFF-BOX-HEADER-PARSER.md`
 - `docs/reviews/PCN-0241-BOUNDED-ISO-BMFF-MPEG4-DESCRIPTOR-HEADER.md`
@@ -610,6 +612,7 @@ and fragmented MP4 remain future work.
 - `docs/reviews/PCN-0497-BOUNDED-ISO-BMFF-REGULAR-MOVIE-WINDOWS-OUTPUT-RECONFIGURATION.md`
 - `docs/reviews/PCN-0498-COORDINATED-ISO-BMFF-REGULAR-MOVIE-TIMED-DELIVERY-RESET.md`
 - `docs/reviews/PCN-0499-BOUNDED-ISO-BMFF-REGULAR-MOVIE-NATIVE-DECODER-DISCONTINUITY-RESET.md`
+- `docs/reviews/PCN-0500-SHARED-MANUAL-AND-AUTOMATIC-RECORDING-RUNTIME.md`
 
 ADR-0158 was skipped by assignment error. It is a permanent numbering-error gap
 and must not be retroactively reused, following the recorded ADR-0082 and
@@ -952,11 +955,12 @@ The bounded FLV decoder configures the exact parser stream time base through pub
 - ADR-0487 reconfigures the quiesced Windows buffer, stream, and binding layers with exact role generations and restores the complete prior configuration on rejection;
 - ADR-0488 quiesces the timed-delivery owner and commits output, sink, timing, and delivery generations together while retaining the exact reservation and rolling back prior generations on timing rejection;
 - ADR-0489 resets the caller-quiesced selected opened decoder contexts audio-before-video through the verified flush capability, retaining ownership only after complete success;
+- PR #242 completes the headless shared manual/automatic recording runtime over the existing PCP relay fan-out; managed validation and end-user physical recording acceptance are complete, including FLV timestamp normalization. Physical results retain their recorded predecessor code-head provenance; GUI integration remains separate PR #230 work, and recording-start keyframe quality is deferred;
 - ISO BMFF / MP4 is the second bounded container-parser family alongside the existing FLV v1 parser;
 - automatic AAC sync-search defaults, default timing policies, clock acquisition, repeated observation, runtime instance access and invocation, actual dispatch, cursor mutation, delivery outcome, scheduling, native application of managed PCE layout, AVC runtime capability discovery and decoder integration, production regular-MP4 decoder integration, fragmented-MP4 production playback, nested-box policy, and streaming remain additional post-MVP managed-path work;
-- current reviews span `docs/reviews/PCN-0177-OPT-IN-DECODED-BUFFER-DURATION-CUTOFF.md` through `docs/reviews/PCN-0499-BOUNDED-ISO-BMFF-REGULAR-MOVIE-NATIVE-DECODER-DISCONTINUITY-RESET.md`;
+- current numbered review history spans `docs/reviews/PCN-0177-OPT-IN-DECODED-BUFFER-DURATION-CUTOFF.md` through `docs/reviews/PCN-0500-SHARED-MANUAL-AND-AUTOMATIC-RECORDING-RUNTIME.md`;
 - ADR-0158 is a permanent numbering-error gap caused by assignment error, following ADR-0082 and ADR-0096, and must not be retroactively reused;
-- next post-MVP managed-path work: integrate ADR-0489 under the ADR-0488 delivery gate, then add late-audio recovery without activating physical output; retain ADR-0416 through ADR-0473 as the fragmented-MP4 foundation.
+- next post-MVP work: integrate GUI recording controls and rule editing through the separate PR #230 lane; managed playback work remains to integrate ADR-0489 under the ADR-0488 delivery gate and add late-audio recovery without activating physical output. Retain ADR-0416 through ADR-0473 as the fragmented-MP4 foundation.
 
 ### Post-MVP managed regular-MP4 direction
 

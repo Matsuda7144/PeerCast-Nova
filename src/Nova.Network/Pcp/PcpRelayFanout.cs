@@ -87,7 +87,10 @@ public sealed class PcpRelayFanout : IPcpChannelPacketConsumer, IAsyncDisposable
 
             if (_replayHeadForNewChildren &&
                 _retainedHead is { } retainedHead &&
-                !child.TryEnqueue(retainedHead.Packet, retainedHead.Payload))
+                !child.TryEnqueue(
+                    retainedHead.Packet,
+                    retainedHead.Payload,
+                    isRetainedHeadReplay: true))
             {
                 child.RequestStop(PcpRelayChildEndReason.OwnerRemoved);
                 registration = null;

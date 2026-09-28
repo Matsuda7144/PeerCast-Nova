@@ -1,5 +1,6 @@
 using System.Net;
 using PeerCast.Nova.Core.Channels;
+using PeerCast.Nova.Core.Recording;
 using PeerCast.Nova.Network.Transport;
 
 namespace PeerCast.Nova.Network.Pcp;
@@ -8,13 +9,24 @@ namespace PeerCast.Nova.Network.Pcp;
 /// Owns one upstream channel session, its bounded relay fan-out, and one
 /// downstream relay server. The caller owns the Core tracker and connector.
 /// </summary>
+/// <remarks>
+/// When a recording source registry is injected, this coordinator owns only
+/// its identity-bound registration token. The registry and shared fan-out
+/// remain owned by their runtime composition; existing recording leases are
+/// completed during owner shutdown.
+/// </remarks>
 public sealed class PcpRelayCoordinator : IAsyncDisposable
 {
     private readonly object _gate = new();
     private readonly PcpRelayFanout _fanout;
+    private readonly PcpRelayFanoutRecordingStreamSourceLeaseFactory
+        _recordingSourceLeaseFactory;
+    private readonly RecordingStreamSourceLeaseRegistry?
+        _recordingSourceLeaseRegistry;
     private readonly RelayIngressConsumer _ingress;
     private readonly PcpChannelSession _upstreamSession;
     private readonly PcpDownstreamRelayServer _downstreamServer;
+    private readonly ChannelStatusTracker _statusTracker;
     private readonly CancellationTokenSource _stopSource = new();
     private readonly TaskCompletionSource<PcpRelayCoordinatorReadinessOutcome>
         _readinessSource = new(
@@ -24,6 +36,7 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
     private readonly TimeSpan _drainTimeout;
 
     private Task<PcpRelayCoordinatorResult>? _runTask;
+    private IDisposable? _recordingSourceRegistration;
     private PcpRelayCoordinatorState _state = PcpRelayCoordinatorState.Created;
     private int _stopRequested;
     private int _callerCanceled;
@@ -33,7 +46,8 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
         TcpTransportConnector upstreamConnector,
         ChannelStatusTracker statusTracker,
         IPEndPoint downstreamEndPoint,
-        PcpRelayCoordinatorOptions? options = null)
+        PcpRelayCoordinatorOptions? options = null,
+        RecordingStreamSourceLeaseRegistry? recordingSourceLeaseRegistry = null)
     {
         ArgumentNullException.ThrowIfNull(upstreamConnector);
         ArgumentNullException.ThrowIfNull(statusTracker);
@@ -59,9 +73,16 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
         copiedOptions.Validate();
 
         _drainTimeout = copiedOptions.DrainTimeout;
+        _statusTracker = statusTracker;
+        _recordingSourceLeaseRegistry = recordingSourceLeaseRegistry;
         _fanout = new PcpRelayFanout(
             copiedOptions.Fanout,
             replayHeadForNewChildren: true);
+        _recordingSourceLeaseFactory =
+            new PcpRelayFanoutRecordingStreamSourceLeaseFactory(
+                statusTracker.Snapshot.ChannelId,
+                statusTracker.Snapshot.SessionId,
+                _fanout);
         _ingress = new RelayIngressConsumer(_fanout, _firstPacketAcceptedSource);
         _upstreamSession = new PcpChannelSession(
             upstreamConnector,
@@ -94,6 +115,16 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
         _downstreamServer.Snapshot;
 
     public PcpRelayIngressSnapshot IngressSnapshot => _ingress.Snapshot;
+
+    /// <summary>
+    /// Recording reader leases from this coordinator's existing upstream
+    /// channel fan-out. The factory is available only while the owner runs.
+    /// </summary>
+    public IRecordingStreamSourceLeaseFactory RecordingStreamSourceLeaseFactory =>
+        _recordingSourceLeaseFactory;
+
+    internal RecordingStreamSourceLeaseRegistry? RecordingSourceLeaseRegistry =>
+        _recordingSourceLeaseRegistry;
 
     /// <summary>
     /// Completes after the first upstream packet has been accepted by the
@@ -165,6 +196,7 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
     public void RequestStop()
     {
         ThrowIfDisposed();
+        RemoveRecordingSourceRegistration();
         Interlocked.Exchange(ref _stopRequested, 1);
         _readinessSource.TrySetResult(
             PcpRelayCoordinatorReadinessOutcome.Stopped);
@@ -209,6 +241,7 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
             return;
         }
 
+        RemoveRecordingSourceRegistration();
         Interlocked.Exchange(ref _stopRequested, 1);
         _readinessSource.TrySetResult(
             PcpRelayCoordinatorReadinessOutcome.Stopped);
@@ -291,8 +324,6 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
                 {
                     downstreamTask = _downstreamServer.RunAsync(
                         CancellationToken.None);
-                    _readinessSource.TrySetResult(
-                        PcpRelayCoordinatorReadinessOutcome.Ready);
                 }
                 catch (Exception)
                 {
@@ -312,6 +343,13 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
                         upstreamPort,
                         initialStreamPosition,
                         CancellationToken.None);
+
+                    if (!_stopSource.IsCancellationRequested)
+                    {
+                        StartRecordingSourcePublication();
+                        _readinessSource.TrySetResult(
+                            PcpRelayCoordinatorReadinessOutcome.Ready);
+                    }
                 }
                 catch (Exception)
                 {
@@ -327,6 +365,7 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
 
                 if (ReferenceEquals(first, upstreamTask))
                 {
+                    RemoveRecordingSourceRegistration();
                     var observation = await ObserveUpstreamAsync(
                         upstreamTask).ConfigureAwait(false);
                     upstreamResult = observation.Result;
@@ -358,6 +397,7 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
                 }
                 else
                 {
+                    RemoveRecordingSourceRegistration();
                     downstreamCompletedFirst = true;
                     var observation = await ObserveDownstreamAsync(
                         downstreamTask).ConfigureAwait(false);
@@ -374,6 +414,7 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
         }
         finally
         {
+            RemoveRecordingSourceRegistration();
             _readinessSource.TrySetResult(
                 _stopSource.IsCancellationRequested
                     ? PcpRelayCoordinatorReadinessOutcome.Stopped
@@ -418,6 +459,48 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
                     downstreamTask).ConfigureAwait(false);
                 downstreamResult = observation.Result;
                 downstreamFailed |= observation.Failed;
+            }
+
+            var recordingDrainCompleted =
+                drainOutcome == PcpRelayDrainOutcome.Completed;
+
+            if (!recordingDrainCompleted)
+            {
+                try
+                {
+                    recordingDrainCompleted = await _fanout.WaitForIdleAsync(
+                        _drainTimeout,
+                        CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (Exception)
+                {
+                    recordingDrainCompleted = false;
+                }
+            }
+
+            var recordingTerminalFault =
+                !recordingDrainCompleted ||
+                upstreamFailed ||
+                downstreamFailed ||
+                (downstreamCompletedFirst &&
+                    Volatile.Read(ref _stopRequested) == 0 &&
+                    Volatile.Read(ref _callerCanceled) == 0) ||
+                internalFailure ||
+                _statusTracker.Snapshot.Fault is not null
+                    ? new IOException(
+                        recordingDrainCompleted
+                            ? "The channel owner ended with a terminal fault."
+                            : "The channel owner stopped before recording packets drained.")
+                    : null;
+
+            try
+            {
+                await _recordingSourceLeaseFactory.CompleteAsync(
+                    recordingTerminalFault).ConfigureAwait(false);
+            }
+            catch (Exception)
+            {
+                shutdownCompleted = false;
             }
 
             try
@@ -499,12 +582,51 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
 
     private void CancelFromCaller()
     {
+        RemoveRecordingSourceRegistration();
         Interlocked.Exchange(ref _callerCanceled, 1);
         _readinessSource.TrySetResult(
             PcpRelayCoordinatorReadinessOutcome.Stopped);
         SetStoppingState();
         CancelBestEffort(_stopSource);
         RequestOwnedStopBestEffort();
+    }
+
+    private void StartRecordingSourcePublication()
+    {
+        lock (_gate)
+        {
+            _recordingSourceLeaseFactory.StartAccepting();
+
+            if (_recordingSourceLeaseRegistry is null)
+            {
+                return;
+            }
+
+            try
+            {
+                _recordingSourceRegistration =
+                    _recordingSourceLeaseRegistry.Register(
+                        _statusTracker.Snapshot.ChannelId,
+                        _recordingSourceLeaseFactory);
+            }
+            catch (InvalidOperationException)
+            {
+                // Recording is optional; registry capacity must not stop the
+                // existing PCP relay owner.
+                _recordingSourceLeaseFactory.StopAccepting();
+            }
+        }
+    }
+
+    private void RemoveRecordingSourceRegistration()
+    {
+        lock (_gate)
+        {
+            _recordingSourceLeaseFactory.StopAccepting();
+            var registration = _recordingSourceRegistration;
+            _recordingSourceRegistration = null;
+            registration?.Dispose();
+        }
     }
 
     private void SetStoppingState()

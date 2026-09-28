@@ -61,7 +61,8 @@ internal sealed class PcpRelayChildWorker : IAsyncDisposable
 
     public bool TryEnqueue(
         PcpChannelPacket source,
-        PcpRelaySharedPayload payload)
+        PcpRelaySharedPayload payload,
+        bool isRetainedHeadReplay = false)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(payload);
@@ -89,7 +90,10 @@ internal sealed class PcpRelayChildWorker : IAsyncDisposable
             }
             else
             {
-                var packet = new PcpRelayQueuedPacket(source, payload);
+                var packet = new PcpRelayQueuedPacket(
+                    source,
+                    payload,
+                    isRetainedHeadReplay);
                 _pending.Enqueue(packet);
                 _pendingPacketCount = checked(_pendingPacketCount + 1);
                 _pendingByteCount = checked(

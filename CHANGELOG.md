@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Added the PR #242 headless manual/automatic recording runtime over existing PCP relay fan-out, with per-channel shared session ownership, source-start cancellation on stop, `.partial` file finalization, and a managed PCP-to-file integration test. Its design and managed-review snapshot are documented in ADR-0490 and PCN-0500. Subsequent closeout established **END-USER RECORDING ACCEPTANCE — PROVEN** and **FLV TIMESTAMP NORMALIZATION — PHYSICAL ACCEPTANCE PROVEN**; run IDs and predecessor code-head provenance are recorded in [PR #242](https://github.com/Matsuda7144/PeerCast-Nova/pull/242).
+- GUI recording controls and rule editing remain separate work in [PR #230](https://github.com/Matsuda7144/PeerCast-Nova/pull/230). Recording-start keyframe quality remains deferred.
+
 Detailed history through 0.0.8g remains preserved in Git history at commit
 `f078dab5372a45a8c577c1c802a697ab72b45c02` and in milestone ADR/PCN records.
 

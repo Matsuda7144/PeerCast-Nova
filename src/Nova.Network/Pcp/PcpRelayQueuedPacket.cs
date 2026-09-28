@@ -6,7 +6,8 @@ internal sealed class PcpRelayQueuedPacket : IDisposable
 
     public PcpRelayQueuedPacket(
         PcpChannelPacket source,
-        PcpRelaySharedPayload payload)
+        PcpRelaySharedPayload payload,
+        bool isRetainedHeadReplay = false)
     {
         payload.AddReference();
 
@@ -19,7 +20,8 @@ internal sealed class PcpRelayQueuedPacket : IDisposable
                 source.WirePosition,
                 source.StreamPosition,
                 payload.Memory,
-                source.Discontinuity);
+                source.Discontinuity,
+                isRetainedHeadReplay);
         }
         catch
         {

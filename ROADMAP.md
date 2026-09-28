@@ -1653,6 +1653,23 @@ Verification injects reset results only. Integration under the ADR-0488 gate,
 late-audio recovery, finite pumping, application integration, and physical
 output remain unimplemented.
 
+### PR #242 recording Core — closeout complete
+
+[ADR-0490](docs/adr/ADR-0490-shared-manual-and-automatic-recording-runtime.md)
+with
+[PCN-0500](docs/reviews/PCN-0500-SHARED-MANUAL-AND-AUTOMATIC-RECORDING-RUNTIME.md)
+defines a GUI-independent boundary for manual starts, channel stops, state
+queries, automatic rule evaluation, and shutdown. Both start paths share one
+per-channel session coordinator. The PCP application composition reads the
+existing relay fan-out recording stream and writes a growing `.partial` file
+that is finalized on stop. Managed validation and end-user physical recording
+acceptance are complete. FLV timestamp normalization also has physical
+acceptance; both outcomes and run-specific predecessor code-head provenance
+are recorded in [PR #242](https://github.com/Matsuda7144/PeerCast-Nova/pull/242).
+ADR-0490 and PCN-0500 preserve the earlier managed-review snapshot. GUI
+recording controls and rule editing remain separate work in PR #230.
+Recording-start keyframe quality remains deferred.
+
 ### Deferred post-MVP work
 
 - FFmpeg binary bundling or Nova-hosted runtime pack

@@ -64,11 +64,13 @@ public sealed class PcpRelayFanoutTests
             {
                 Assert.Equal(0x64616568U, head.Type);
                 Assert.Equal([0x11], head.Payload.ToArray());
+                Assert.True(head.IsRetainedHeadReplay);
             },
             data =>
             {
                 Assert.Equal(0x61746164U, data.Type);
                 Assert.Equal([0x30], data.Payload.ToArray());
+                Assert.False(data.IsRetainedHeadReplay);
             });
     }
 
@@ -461,7 +463,8 @@ public sealed class PcpRelayFanoutTests
                         packet.Type,
                         packet.StreamPosition,
                         packet.Payload.ToArray(),
-                        packet.Discontinuity));
+                        packet.Discontinuity,
+                        packet.IsRetainedHeadReplay));
                 packetAdded = _packetAdded;
                 _packetAdded = CreatePacketAddedSource();
             }
@@ -546,5 +549,6 @@ public sealed class PcpRelayFanoutTests
         uint Type,
         long? StreamPosition,
         byte[] Payload,
-        PcpStreamDiscontinuity? Discontinuity);
+        PcpStreamDiscontinuity? Discontinuity,
+        bool IsRetainedHeadReplay);
 }

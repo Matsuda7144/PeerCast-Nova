@@ -88,7 +88,8 @@ internal static class RelayDiagnosticCommand
         var tracker = new ChannelStatusTracker(
             new ChannelId(options.ChannelId),
             new ChannelSessionId(Guid.NewGuid()));
-        await using var coordinator = new PcpRelayCoordinator(
+        await using var runtime = new PcpRelayRuntimeComposition();
+        var coordinator = runtime.CreateCoordinator(
             new TcpTransportConnector(transportOptions),
             tracker,
             new IPEndPoint(IPAddress.Loopback, options.ListenPort),

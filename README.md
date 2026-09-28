@@ -90,7 +90,9 @@ CI は managed build／tests を検証します。Windows 上の native device o
 - [ROADMAP.md](ROADMAP.md)
 - [NAVIGATION.md](NAVIGATION.md)
 
-現在の managed-path 技術境界: [ADR-0489](docs/adr/ADR-0489-bounded-iso-bmff-regular-movie-native-decoder-discontinuity-reset.md) ／ [PCN-0499](docs/reviews/PCN-0499-BOUNDED-ISO-BMFF-REGULAR-MOVIE-NATIVE-DECODER-DISCONTINUITY-RESET.md)。これは post-MVP の追加 playback 経路に関する bounded slice であり、採用済み MVP 経路の範囲を変更したり、regular MP4 の一般向け再生全体を主張したりするものではありません。
+現在の managed playback 技術境界: [ADR-0489](docs/adr/ADR-0489-bounded-iso-bmff-regular-movie-native-decoder-discontinuity-reset.md) ／ [PCN-0499](docs/reviews/PCN-0499-BOUNDED-ISO-BMFF-REGULAR-MOVIE-NATIVE-DECODER-DISCONTINUITY-RESET.md)。これは post-MVP の追加 playback 経路に関する bounded slice であり、採用済み MVP 経路の範囲を変更したり、regular MP4 の一般向け再生全体を主張したりするものではありません。
+
+録画Coreは、[ADR-0490](docs/adr/ADR-0490-shared-manual-and-automatic-recording-runtime.md) ／ [PCN-0500](docs/reviews/PCN-0500-SHARED-MANUAL-AND-AUTOMATIC-RECORDING-RUNTIME.md) に記録したGUI非依存の手動・自動録画ランタイムを基盤にしています。PR #242のcloseoutでは managed 検証に加え、**END-USER RECORDING ACCEPTANCE — PROVEN** と **FLV TIMESTAMP NORMALIZATION — PHYSICAL ACCEPTANCE PROVEN** を確認しました。Run-IDと実行時のコードHEADは[PR #242](https://github.com/Matsuda7144/PeerCast-Nova/pull/242)に記録しています。GUI録画操作とルール編集は別作業の[PR #230](https://github.com/Matsuda7144/PeerCast-Nova/pull/230)に残ります。
 
 ## ライセンス
 
