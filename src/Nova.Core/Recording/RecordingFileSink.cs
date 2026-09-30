@@ -120,7 +120,8 @@ public sealed class RecordingFileSink :
                     ".flv",
                     StringComparison.OrdinalIgnoreCase))
             {
-                source = new FlvRecordingTimestampNormalizingStream(source);
+                source = new FlvRecordingTimestampNormalizingStream(
+                    new FlvRecordingDecodableStartStream(source));
             }
 
             if (!active.TryStart(
@@ -226,9 +227,12 @@ public sealed class RecordingFileSink :
         }
 
         RemoveIfCurrent(active);
+        var noDecodableVideoStart = active.NoDecodableVideoStart;
         active.Dispose();
 
-        return RecordingSinkStopResult.Stopped;
+        return noDecodableVideoStart
+            ? RecordingSinkStopResult.NoDecodableVideoStart
+            : RecordingSinkStopResult.Stopped;
     }
 
     public bool TryGetStatus(
@@ -280,6 +284,9 @@ public sealed class RecordingFileSink :
             RecordingFileSinkSessionStatusKind.Completed =>
                 RecordingSinkSessionLifecycleKind.Completed,
 
+            RecordingFileSinkSessionStatusKind.NoDecodableVideoStart =>
+                RecordingSinkSessionLifecycleKind.NoDecodableVideoStart,
+
             RecordingFileSinkSessionStatusKind.Faulted =>
                 RecordingSinkSessionLifecycleKind.Faulted,
 
@@ -327,11 +334,11 @@ public sealed class RecordingFileSink :
     {
         private readonly object gate = new();
         private readonly CancellationTokenSource stopping = new();
-        private readonly TaskCompletionSource<Task<RecordingFileWriteResult>?>
+        private readonly TaskCompletionSource<Task<RecordingFileWriteOutcome>?>
             startCompletion = new(
                 TaskCreationOptions.RunContinuationsAsynchronously);
-        private Task<RecordingFileWriteResult>? writeTask;
-        private RecordingFileWriteResult? writeResult;
+        private Task<RecordingFileWriteOutcome>? writeTask;
+        private RecordingFileWriteOutcome? writeOutcome;
         private RecordingFaultDescriptor? fault;
         private Exception? startFailure;
         private bool faulted;
@@ -495,10 +502,18 @@ public sealed class RecordingFileSink :
                         fault);
                 }
 
+                if (writeOutcome?.IsNoDecodableVideoStart == true)
+                {
+                    return new RecordingFileSinkSessionStatus(
+                        Session,
+                        RecordingFileSinkSessionStatusKind.NoDecodableVideoStart,
+                        writeResult: null);
+                }
+
                 return new RecordingFileSinkSessionStatus(
                     Session,
                     RecordingFileSinkSessionStatusKind.Completed,
-                    writeResult);
+                    writeOutcome?.WriteResult);
             }
         }
 
@@ -525,7 +540,18 @@ public sealed class RecordingFileSink :
             }
         }
 
-        private async Task<RecordingFileWriteResult> RunAsync(
+        public bool NoDecodableVideoStart
+        {
+            get
+            {
+                lock (gate)
+                {
+                    return writeOutcome?.IsNoDecodableVideoStart == true;
+                }
+            }
+        }
+
+        private async Task<RecordingFileWriteOutcome> RunAsync(
             Stream source,
             string path)
         {
@@ -533,7 +559,7 @@ public sealed class RecordingFileSink :
             {
                 await using (source.ConfigureAwait(false))
                 {
-                    var result = await RecordingStreamFileWriter.WriteAsync(
+                    var result = await RecordingStreamFileWriter.WriteForFileSinkAsync(
                         source,
                         path,
                         (stage, exception) =>
@@ -549,7 +575,7 @@ public sealed class RecordingFileSink :
 
                     lock (gate)
                     {
-                        writeResult = result;
+                        writeOutcome = result;
                     }
 
                     return result;

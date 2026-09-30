@@ -14,7 +14,7 @@ public static class RecordingStreamFileWriter
         string path,
         CancellationToken stoppingToken)
     {
-        return WriteCoreAsync(
+        return WriteFinalizedResultAsync(
             source,
             path,
             failureObserver: null,
@@ -28,17 +28,49 @@ public static class RecordingStreamFileWriter
         CancellationToken stoppingToken)
     {
         ArgumentNullException.ThrowIfNull(failureObserver);
-        return WriteCoreAsync(
+        return WriteFinalizedResultAsync(
             source,
             path,
             failureObserver,
             stoppingToken);
     }
 
-    private static async ValueTask<RecordingFileWriteResult> WriteCoreAsync(
+    internal static ValueTask<RecordingFileWriteOutcome> WriteForFileSinkAsync(
+        Stream source,
+        string path,
+        Action<RecordingFailureStage, Exception> failureObserver,
+        CancellationToken stoppingToken)
+    {
+        ArgumentNullException.ThrowIfNull(failureObserver);
+        return WriteCoreAsync(
+            source,
+            path,
+            failureObserver,
+            allowNoDecodableVideoStart: true,
+            stoppingToken);
+    }
+
+    private static async ValueTask<RecordingFileWriteResult> WriteFinalizedResultAsync(
         Stream source,
         string path,
         Action<RecordingFailureStage, Exception>? failureObserver,
+        CancellationToken stoppingToken)
+    {
+        var outcome = await WriteCoreAsync(
+            source,
+            path,
+            failureObserver,
+            allowNoDecodableVideoStart: false,
+            stoppingToken).ConfigureAwait(false);
+        return outcome.WriteResult ?? throw new InvalidOperationException(
+            "The recording file writer did not produce a finalized file.");
+    }
+
+    private static async ValueTask<RecordingFileWriteOutcome> WriteCoreAsync(
+        Stream source,
+        string path,
+        Action<RecordingFailureStage, Exception>? failureObserver,
+        bool allowNoDecodableVideoStart,
         CancellationToken stoppingToken)
     {
         ArgumentNullException.ThrowIfNull(source);
@@ -51,7 +83,23 @@ public static class RecordingStreamFileWriter
                 nameof(source));
         }
 
-        stoppingToken.ThrowIfCancellationRequested();
+        if (stoppingToken.IsCancellationRequested)
+        {
+            if (allowNoDecodableVideoStart &&
+                source is IRecordingFileWriteOutcomeSource initialOutcomeSource &&
+                initialOutcomeSource.NoDecodableVideoStart)
+            {
+                return RecordingFileWriteOutcome.NoDecodableVideoStart;
+            }
+
+            if (source is not IRecordingFileWriteOutcomeSource
+                {
+                    HasPendingDecodableStartOutput: true,
+                })
+            {
+                stoppingToken.ThrowIfCancellationRequested();
+            }
+        }
 
         var fullPath = System.IO.Path.GetFullPath(path);
         var directory = System.IO.Path.GetDirectoryName(fullPath);
@@ -83,6 +131,7 @@ public static class RecordingStreamFileWriter
         long bytesWritten = 0;
         var completionKind =
             RecordingFileWriteCompletionKind.EndOfStream;
+        var drainingDecodableStartOutput = false;
 
         try
         {
@@ -115,19 +164,32 @@ public static class RecordingStreamFileWriter
                 while (true)
                 {
                     int read;
+                    var readToken = drainingDecodableStartOutput
+                        ? CancellationToken.None
+                        : stoppingToken;
 
                     try
                     {
                         read = await source.ReadAsync(
                             buffer.AsMemory(),
-                            stoppingToken).ConfigureAwait(false);
+                            readToken).ConfigureAwait(false);
                     }
                     catch (OperationCanceledException)
                         when (stoppingToken.IsCancellationRequested)
                     {
                         completionKind =
                             RecordingFileWriteCompletionKind.Stopped;
-                        break;
+                        drainingDecodableStartOutput =
+                            source is IRecordingFileWriteOutcomeSource
+                            {
+                                HasPendingDecodableStartOutput: true,
+                            };
+                        if (!drainingDecodableStartOutput)
+                        {
+                            break;
+                        }
+
+                        continue;
                     }
                     catch (RecordingStreamTransformException exception)
                     {
@@ -148,6 +210,21 @@ public static class RecordingStreamFileWriter
 
                     if (read == 0)
                     {
+                        if (drainingDecodableStartOutput &&
+                            source is IRecordingFileWriteOutcomeSource
+                            {
+                                HasPendingDecodableStartOutput: true,
+                            })
+                        {
+                            var exception = new InvalidDataException(
+                                "The accepted decodable start output ended before it was fully drained.");
+                            ReportFailure(
+                                failureObserver,
+                                RecordingFailureStage.SourceRead,
+                                exception);
+                            throw exception;
+                        }
+
                         break;
                     }
 
@@ -167,6 +244,15 @@ public static class RecordingStreamFileWriter
                     }
 
                     bytesWritten += read;
+
+                    if (drainingDecodableStartOutput &&
+                        source is IRecordingFileWriteOutcomeSource
+                        {
+                            HasPendingDecodableStartOutput: false,
+                        })
+                    {
+                        break;
+                    }
                 }
 
                 try
@@ -185,6 +271,18 @@ public static class RecordingStreamFileWriter
                 }
             }
 
+            if (source is IRecordingFileWriteOutcomeSource outcomeSource &&
+                outcomeSource.NoDecodableVideoStart)
+            {
+                if (allowNoDecodableVideoStart)
+                {
+                    return RecordingFileWriteOutcome.NoDecodableVideoStart;
+                }
+
+                throw new InvalidOperationException(
+                    "A stream without a decodable video start cannot produce a finalized file.");
+            }
+
             try
             {
                 File.Move(
@@ -201,10 +299,11 @@ public static class RecordingStreamFileWriter
                 throw;
             }
 
-            return new RecordingFileWriteResult(
+            var result = new RecordingFileWriteResult(
                 fullPath,
                 bytesWritten,
                 completionKind);
+            return RecordingFileWriteOutcome.Finalized(result);
         }
         finally
         {

@@ -215,7 +215,7 @@ public sealed class FlvRecordingTimestampNormalizingStreamTests : IDisposable
             sink,
             session,
             RecordingFileSinkSessionStatusKind.Completed);
-        Assert.Equal(CreateExpectedNormalizedBytes(input), await File.ReadAllBytesAsync(path));
+        Assert.Equal(CreateExpectedAfterFirstIdr(input), await File.ReadAllBytesAsync(path));
 
         var stopped = await sink.StopAsync(
             new RecordingSinkStopRequest(session),
@@ -279,11 +279,49 @@ public sealed class FlvRecordingTimestampNormalizingStreamTests : IDisposable
             AacConfiguration(0),
             AvcConfiguration(0),
             AudioMedia(4_127_509, 0xAF, 0x01, 0x11, 0x12),
-            VideoMedia(4_127_520, 0x17, 0x01, 0x00, 0x00, 0x03, 0x65, 0xAA),
+            VideoMedia(4_127_520, 0x17, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x65, 0xAA),
             AudioMedia(4_127_530, 0xAF, 0x01, 0x21, 0x22),
-            VideoMedia(4_127_530, 0x17, 0x01, 0x00, 0x00, 0x01, 0x41, 0xBC),
-            VideoMedia(4_127_543, 0x17, 0x01, 0x00, 0x00, 0x01, 0x41, 0xBB),
-            VideoMedia(4_162_602, 0x17, 0x01, 0x00, 0x00, 0x02, 0x41, 0xCC));
+            VideoMedia(4_127_530, 0x27, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x41, 0xBC),
+            VideoMedia(4_127_543, 0x27, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x41, 0xBB),
+            VideoMedia(4_162_602, 0x27, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x41, 0xCC));
+    }
+
+    private static byte[] CreateExpectedAfterFirstIdr(byte[] source)
+    {
+        var tags = ParseTags(source);
+        var idrIndex = tags.FindIndex(tag =>
+        {
+            if (tag.Type != VideoTagType || !tag.IsMedia || tag.DataSize < 11)
+            {
+                return false;
+            }
+
+            var body = source.AsSpan(tag.Offset + 11, (int)tag.DataSize);
+            return (body[0] & 0x0F) == AvcCodecId &&
+                   body[1] == AvcNalu &&
+                   body[5] == 0 &&
+                   body[6] == 0 &&
+                   body[7] == 0 &&
+                   body[8] == 2 &&
+                   (body[9] & 0x1F) == 5;
+        });
+        Assert.True(idrIndex >= 0, "The fixture must contain an AVC IDR tag.");
+
+        var headerLength = checked(
+            (int)BinaryPrimitives.ReadUInt32BigEndian(source.AsSpan(5, 4)) + 4);
+        var retained = new List<byte>(source.Length);
+        retained.AddRange(source.AsSpan(0, headerLength).ToArray());
+        for (var index = 0; index < tags.Count; index++)
+        {
+            if (tags[index].IsMedia && index < idrIndex)
+            {
+                continue;
+            }
+
+            retained.AddRange(source.AsSpan(tags[index].Offset, tags[index].Length).ToArray());
+        }
+
+        return CreateExpectedNormalizedBytes(retained.ToArray());
     }
 
     private async Task<NormalizationResult> NormalizeAsync(
@@ -438,7 +476,15 @@ public sealed class FlvRecordingTimestampNormalizingStreamTests : IDisposable
         new(AudioTagType, timestamp, [0xAF, AacSequenceHeader, 0x12, 0x10]);
 
     private static Tag AvcConfiguration(uint timestamp) =>
-        new(VideoTagType, timestamp, [0x17, AvcSequenceHeader, 0, 0, 0, 1, 0x64]);
+        new(
+            VideoTagType,
+            timestamp,
+            [
+                0x17, AvcSequenceHeader, 0, 0, 0,
+                1, 0x64, 0, 0x1F, 0xFF, 0xE1,
+                0, 2, 0x67, 0x64,
+                1, 0, 2, 0x68, 0xEE,
+            ]);
 
     private static Tag AudioMedia(uint timestamp, params byte[] body) =>
         new(AudioTagType, timestamp, body);
@@ -506,6 +552,12 @@ public sealed class FlvRecordingTimestampNormalizingStreamTests : IDisposable
             if (sink.TryGetStatus(session, out var status) && status!.Kind == expected)
             {
                 return;
+            }
+
+            if (status?.Kind == RecordingFileSinkSessionStatusKind.Faulted)
+            {
+                Assert.Fail(
+                    $"The file sink faulted at {status.Fault!.Stage}: {status.Fault.ExceptionType}.");
             }
 
             await Task.Delay(5, timeout.Token);

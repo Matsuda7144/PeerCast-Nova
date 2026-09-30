@@ -6,7 +6,8 @@ namespace PeerCast.Nova.Core.Recording;
 /// Validates and rebases actual FLV audio/video media-tag timestamps onto one
 /// shared recording timeline. It owns and disposes the wrapped source.
 /// </summary>
-internal sealed class FlvRecordingTimestampNormalizingStream : Stream
+internal sealed class FlvRecordingTimestampNormalizingStream : Stream,
+    IRecordingFileWriteOutcomeSource
 {
     private const byte AudioTagType = 8;
     private const byte VideoTagType = 9;
@@ -32,6 +33,7 @@ internal sealed class FlvRecordingTimestampNormalizingStream : Stream
     private bool headerRead;
     private bool sourceEnded;
     private bool isDisposed;
+    private bool hasPendingDecodableStartOutput;
 
     public FlvRecordingTimestampNormalizingStream(Stream source)
     {
@@ -44,6 +46,19 @@ internal sealed class FlvRecordingTimestampNormalizingStream : Stream
         }
 
         this.source = source;
+    }
+
+    public bool NoDecodableVideoStart =>
+        source is IRecordingFileWriteOutcomeSource outcomeSource &&
+        outcomeSource.NoDecodableVideoStart;
+
+    public bool HasPendingDecodableStartOutput
+    {
+        get
+        {
+            ObservePendingDecodableStartOutput();
+            return hasPendingDecodableStartOutput;
+        }
     }
 
     public override bool CanRead => !isDisposed && source.CanRead;
@@ -124,6 +139,11 @@ internal sealed class FlvRecordingTimestampNormalizingStream : Stream
         {
             pendingOutput = null;
             pendingOutputOffset = 0;
+            if (hasPendingDecodableStartOutput &&
+                !SourceHasPendingDecodableStartOutput())
+            {
+                hasPendingDecodableStartOutput = false;
+            }
         }
 
         return count;
@@ -298,9 +318,11 @@ internal sealed class FlvRecordingTimestampNormalizingStream : Stream
         while (totalRead < destination.Length)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            ObservePendingDecodableStartOutput();
             var read = await source.ReadAsync(
                 destination[totalRead..],
                 cancellationToken).ConfigureAwait(false);
+            ObservePendingDecodableStartOutput();
             if (read == 0)
             {
                 if (allowCleanEnd && totalRead == 0)
@@ -315,6 +337,20 @@ internal sealed class FlvRecordingTimestampNormalizingStream : Stream
         }
 
         return true;
+    }
+
+    private void ObservePendingDecodableStartOutput()
+    {
+        if (SourceHasPendingDecodableStartOutput())
+        {
+            hasPendingDecodableStartOutput = true;
+        }
+    }
+
+    private bool SourceHasPendingDecodableStartOutput()
+    {
+        return source is IRecordingFileWriteOutcomeSource outcomeSource &&
+               outcomeSource.HasPendingDecodableStartOutput;
     }
 
     private static bool IsAudioMediaTag(ReadOnlySpan<byte> body)

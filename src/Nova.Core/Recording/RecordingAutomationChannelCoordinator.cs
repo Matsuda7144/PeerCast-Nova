@@ -278,6 +278,9 @@ public sealed class RecordingAutomationChannelCoordinator : IDisposable
                 RecordingSinkStopResultKind.Stopped =>
                     RecordingAutomationStopResultKind.Stopped,
 
+                RecordingSinkStopResultKind.NoDecodableVideoStart =>
+                    RecordingAutomationStopResultKind.NoDecodableVideoStart,
+
                 RecordingSinkStopResultKind.AlreadyStopped =>
                     RecordingAutomationStopResultKind.AlreadyStopped,
 
@@ -353,6 +356,9 @@ public sealed class RecordingAutomationChannelCoordinator : IDisposable
         return stopResult.Kind switch
         {
             RecordingSinkStopResultKind.Stopped =>
+                RecordingAutomationExecutionState.Idle,
+
+            RecordingSinkStopResultKind.NoDecodableVideoStart =>
                 RecordingAutomationExecutionState.Idle,
 
             RecordingSinkStopResultKind.AlreadyStopped =>

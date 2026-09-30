@@ -3,6 +3,7 @@ namespace PeerCast.Nova.Core.Recording;
 public enum RecordingSinkStopResultKind
 {
     Stopped,
+    NoDecodableVideoStart,
     AlreadyStopped,
     Rejected,
     Faulted,
@@ -23,6 +24,9 @@ public sealed record RecordingSinkStopResult
 
     public static RecordingSinkStopResult Stopped { get; } =
         new(RecordingSinkStopResultKind.Stopped);
+
+    public static RecordingSinkStopResult NoDecodableVideoStart { get; } =
+        new(RecordingSinkStopResultKind.NoDecodableVideoStart);
 
     public static RecordingSinkStopResult AlreadyStopped { get; } =
         new(RecordingSinkStopResultKind.AlreadyStopped);

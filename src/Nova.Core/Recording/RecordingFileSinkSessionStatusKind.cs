@@ -5,5 +5,6 @@ public enum RecordingFileSinkSessionStatusKind
     Starting,
     Writing,
     Completed,
+    NoDecodableVideoStart,
     Faulted,
 }

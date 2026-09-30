@@ -7,6 +7,7 @@ public enum RecordingAutomationExecutionResultKind
     StartAlreadyRunning,
     StartRejected,
     Stopped,
+    StopNoDecodableVideoStart,
     StopAlreadyStopped,
     StopRejected,
     StopFaulted,

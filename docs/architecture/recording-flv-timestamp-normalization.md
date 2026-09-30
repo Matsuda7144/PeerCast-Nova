@@ -41,8 +41,9 @@ not alter payloads, codec configuration, AVC composition-time offsets, sizes,
 StreamID, or `PreviousTagSize`, and adds no remuxing or transcoding dependency.
 The existing explicit PCP discontinuity and source-sequence rejection behavior
 remains in force. The previously observed 3.417-second delay before the first
-decodable video frame is a separate recording-start keyframe-quality issue and
-is out of scope.
+decodable video frame is historical motivation for the bounded recording
+decodeable-start gate in `recording-flv-decodable-start.md`; it is not a
+universal fixed GOP delay.
 
 PeCaRecorder was examined only as behavioral reference material. No source or
 decompiled implementation was copied, and this design makes no claim about its

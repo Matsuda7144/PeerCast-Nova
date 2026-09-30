@@ -194,6 +194,9 @@ public static class RecordingAutomationExecutor
             RecordingSinkStopResultKind.Stopped =>
                 RecordingAutomationExecutionResultKind.Stopped,
 
+            RecordingSinkStopResultKind.NoDecodableVideoStart =>
+                RecordingAutomationExecutionResultKind.StopNoDecodableVideoStart,
+
             RecordingSinkStopResultKind.AlreadyStopped =>
                 RecordingAutomationExecutionResultKind.StopAlreadyStopped,
 

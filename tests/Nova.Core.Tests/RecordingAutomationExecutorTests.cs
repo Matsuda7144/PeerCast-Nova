@@ -152,6 +152,9 @@ public sealed class RecordingAutomationExecutorTests
         RecordingSinkStopResultKind.Stopped,
         RecordingAutomationExecutionResultKind.Stopped)]
     [InlineData(
+        RecordingSinkStopResultKind.NoDecodableVideoStart,
+        RecordingAutomationExecutionResultKind.StopNoDecodableVideoStart)]
+    [InlineData(
         RecordingSinkStopResultKind.AlreadyStopped,
         RecordingAutomationExecutionResultKind.StopAlreadyStopped)]
     [InlineData(
@@ -323,6 +326,9 @@ public sealed class RecordingAutomationExecutorTests
         {
             RecordingSinkStopResultKind.Stopped =>
                 RecordingSinkStopResult.Stopped,
+
+            RecordingSinkStopResultKind.NoDecodableVideoStart =>
+                RecordingSinkStopResult.NoDecodableVideoStart,
 
             RecordingSinkStopResultKind.AlreadyStopped =>
                 RecordingSinkStopResult.AlreadyStopped,

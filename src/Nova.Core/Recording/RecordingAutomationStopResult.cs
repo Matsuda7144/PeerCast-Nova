@@ -6,6 +6,7 @@ public enum RecordingAutomationStopResultKind
 {
     NoActiveSession,
     Stopped,
+    NoDecodableVideoStart,
     AlreadyStopped,
     Rejected,
     Faulted,
