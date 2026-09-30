@@ -1,10 +1,167 @@
 using System.Buffers.Binary;
+using System.Runtime.InteropServices;
 using Result = PeerCast.Nova.Playback.PlaybackIsoBmffRegularMovieManagedDecoderPreparationResult;
 
 namespace PeerCast.Nova.Playback.Tests;
 
 public sealed class PlaybackIsoBmffRegularMovieManagedDecoderPreparationTests
 {
+    [Fact]
+    public void AvcPreparationInput_CopiesMutableConfigurationRecordAtConstruction()
+    {
+        var (movie, _, _) = MovieWithValidAac(new(0, null));
+        var videoTrack = movie.Tracks[0];
+        var codecConfiguration =
+            videoTrack.PacketComposition.Source.Entries[0];
+        var sourceRecord = codecConfiguration.AvcConfiguration!
+            .ConfigurationRecord;
+        var expected = sourceRecord.ToArray();
+        var input = new PlaybackIsoBmffRegularAvcDecoderPreparationInput(
+            videoTrack,
+            codecConfiguration,
+            videoTrack.PacketComposition.AvcRequirements!);
+
+        Assert.True(MemoryMarshal.TryGetArray(
+            sourceRecord,
+            out var sourceSegment));
+        Assert.NotNull(sourceSegment.Array);
+        sourceSegment.Array![sourceSegment.Offset] = 0x02;
+
+        Assert.Equal(expected, input.ConfigurationRecord.ToArray());
+    }
+
+    [Fact]
+    public void AvcPreparationInput_PublicGetterReturnsIndependentSnapshots()
+    {
+        var (movie, _, _) = MovieWithValidAac(new(0, null));
+        Assert.Equal(
+            Result.Prepared,
+            PlaybackIsoBmffRegularMovieManagedDecoderPreparationComposer
+                .Compose(movie, out var preparation, Options()));
+        using var prepared = Assert.IsType<
+            PlaybackIsoBmffRegularMovieManagedDecoderPreparation>(preparation);
+        var input = Assert.IsType<
+            PlaybackIsoBmffAvcManagedDecoderPreparation>(prepared.Video).Input;
+        var expected = input.ConfigurationRecord.ToArray();
+        var first = input.ConfigurationRecord;
+        var second = input.ConfigurationRecord;
+
+        Assert.True(MemoryMarshal.TryGetArray(first, out var firstSegment));
+        Assert.True(MemoryMarshal.TryGetArray(second, out var secondSegment));
+        Assert.NotNull(firstSegment.Array);
+        Assert.NotNull(secondSegment.Array);
+        Assert.NotSame(firstSegment.Array, secondSegment.Array);
+
+        firstSegment.Array![firstSegment.Offset] = 0x02;
+        Assert.Equal(expected, second.ToArray());
+        Assert.Equal(expected, input.ConfigurationRecord.ToArray());
+
+        secondSegment.Array![secondSegment.Offset + 1] ^= 0xFF;
+        Assert.Equal(expected, input.ConfigurationRecord.ToArray());
+    }
+
+    [Fact]
+    public void AvcPreparationInput_PostValidationMutationDoesNotAlterResolverOrCodecParameters()
+    {
+        var (movie, _, _) = MovieWithValidAac(new(0, null));
+        Assert.Equal(
+            Result.Prepared,
+            PlaybackIsoBmffRegularMovieManagedDecoderPreparationComposer
+                .Compose(movie, out var preparation, Options()));
+        using var prepared = Assert.IsType<
+            PlaybackIsoBmffRegularMovieManagedDecoderPreparation>(preparation);
+        var input = Assert.IsType<
+            PlaybackIsoBmffAvcManagedDecoderPreparation>(prepared.Video).Input;
+        var original = input.ConfigurationRecord.ToArray();
+        Assert.Equal((byte)0x01, original[0]);
+
+        Assert.True(MemoryMarshal.TryGetArray(
+            input.ConfigurationRecord,
+            out var publicSegment));
+        Assert.NotNull(publicSegment.Array);
+        publicSegment.Array![publicSegment.Offset] = 0x02;
+        Assert.Equal((byte)0x02, publicSegment.Array[publicSegment.Offset]);
+
+        Assert.Equal(original, input.ConfigurationRecord.ToArray());
+        Assert.Equal(
+            PlaybackIsoBmffAvcFfmpegCodecParametersInputResolutionResult
+                .Resolved,
+            PlaybackIsoBmffAvcFfmpegCodecParametersInputResolver.Resolve(
+                input,
+                out var resolution));
+        var resolved = Assert.IsType<
+            PlaybackIsoBmffAvcFfmpegCodecParametersInputResolution>(resolution);
+        Assert.Equal(original, resolved.Input.Extradata.ToArray());
+
+        var creation = PlaybackDecoderFfmpegCodecParametersFactory.Create(
+            resolved.Input);
+        Assert.Equal(
+            PlaybackDecoderFfmpegCodecParametersResult.Created,
+            creation.Result);
+        using var lease = Assert.IsType<
+            PlaybackDecoderFfmpegCodecParametersLease>(creation.Lease);
+        Assert.Equal(
+            original,
+            lease.UseOwnedParameters(
+                static parameters => parameters.Extradata.ToArray()));
+    }
+
+    [Fact]
+    public void AvcPreparationInput_PublicMutationDoesNotChangeDeterministicResolution()
+    {
+        var (firstMovie, _, _) = MovieWithValidAac(new(0, null));
+        var (secondMovie, _, _) = MovieWithValidAac(new(0, null));
+        Assert.Equal(
+            Result.Prepared,
+            PlaybackIsoBmffRegularMovieManagedDecoderPreparationComposer
+                .Compose(firstMovie, out var firstPreparation, Options()));
+        Assert.Equal(
+            Result.Prepared,
+            PlaybackIsoBmffRegularMovieManagedDecoderPreparationComposer
+                .Compose(secondMovie, out var secondPreparation, Options()));
+        using var firstPrepared = Assert.IsType<
+            PlaybackIsoBmffRegularMovieManagedDecoderPreparation>(
+                firstPreparation);
+        using var secondPrepared = Assert.IsType<
+            PlaybackIsoBmffRegularMovieManagedDecoderPreparation>(
+                secondPreparation);
+        var firstInput = Assert.IsType<
+            PlaybackIsoBmffAvcManagedDecoderPreparation>(
+                firstPrepared.Video).Input;
+        var secondInput = Assert.IsType<
+            PlaybackIsoBmffAvcManagedDecoderPreparation>(
+                secondPrepared.Video).Input;
+        var expected = firstInput.ConfigurationRecord.ToArray();
+        Assert.Equal(expected, secondInput.ConfigurationRecord.ToArray());
+
+        Assert.True(MemoryMarshal.TryGetArray(
+            firstInput.ConfigurationRecord,
+            out var publicSegment));
+        Assert.NotNull(publicSegment.Array);
+        publicSegment.Array![publicSegment.Offset] = 0x02;
+
+        Assert.Equal(
+            PlaybackIsoBmffAvcFfmpegCodecParametersInputResolutionResult
+                .Resolved,
+            PlaybackIsoBmffAvcFfmpegCodecParametersInputResolver.Resolve(
+                firstInput,
+                out var firstResolution));
+        Assert.Equal(
+            PlaybackIsoBmffAvcFfmpegCodecParametersInputResolutionResult
+                .Resolved,
+            PlaybackIsoBmffAvcFfmpegCodecParametersInputResolver.Resolve(
+                secondInput,
+                out var secondResolution));
+        var firstResolved = Assert.IsType<
+            PlaybackIsoBmffAvcFfmpegCodecParametersInputResolution>(
+                firstResolution);
+        var secondResolved = Assert.IsType<
+            PlaybackIsoBmffAvcFfmpegCodecParametersInputResolution>(
+                secondResolution);
+        Assert.Equal(expected, firstResolved.Input.Extradata.ToArray());
+        Assert.Equal(expected, secondResolved.Input.Extradata.ToArray());
+    }
+
     [Fact]
     public async Task Compose_OwnsSelectedAvcInputAndAacManagedPreparation()
     {

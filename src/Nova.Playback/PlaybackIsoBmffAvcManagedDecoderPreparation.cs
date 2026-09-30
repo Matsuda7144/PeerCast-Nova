@@ -55,10 +55,11 @@ public static class PlaybackIsoBmffAvcFfmpegCodecParametersInputResolver
         }
 
         var visualEntry = source.AvcConfiguration.VisualEntry;
+        var configurationRecord = source.ConfigurationRecordSpan;
         if (!ReferenceEquals(
                 visualEntry,
                 source.CodecConfiguration.Source.VisualEntry) ||
-            source.ConfigurationRecord.IsEmpty)
+            configurationRecord.IsEmpty)
         {
             return PlaybackIsoBmffAvcFfmpegCodecParametersInputResolutionResult
                 .SourceMismatch;
@@ -83,7 +84,7 @@ public static class PlaybackIsoBmffAvcFfmpegCodecParametersInputResolver
             PlaybackDecoderFfmpegCodecParametersInput.ForH264(
                 visualEntry.Width,
                 visualEntry.Height,
-                source.ConfigurationRecord));
+                configurationRecord.ToArray()));
         return PlaybackIsoBmffAvcFfmpegCodecParametersInputResolutionResult
             .Resolved;
     }

@@ -72,7 +72,11 @@ public sealed class PlaybackIsoBmffRegularAvcDecoderPreparationInput
 
     public PlaybackIsoBmffAvcPayloadRequirements Requirements { get; }
 
-    public ReadOnlyMemory<byte> ConfigurationRecord => _configurationRecord;
+    public ReadOnlyMemory<byte> ConfigurationRecord =>
+        _configurationRecord.ToArray();
+
+    internal ReadOnlySpan<byte> ConfigurationRecordSpan =>
+        _configurationRecord;
 }
 
 public sealed class PlaybackIsoBmffRegularMovieManagedDecoderPreparation :
