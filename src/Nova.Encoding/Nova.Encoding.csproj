@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>PeerCast.Nova.Encoding</AssemblyName>
+    <RootNamespace>PeerCast.Nova.MediaEncoding</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Reuse the existing verified native runtime boundary without relocating it. -->
+    <ProjectReference Include="../Nova.Playback/Nova.Playback.csproj" />
+  </ItemGroup>
+</Project>

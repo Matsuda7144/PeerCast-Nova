@@ -280,6 +280,43 @@ public sealed class PlaybackDecoderFfmpegAbiSymbolGateTests
         Assert.False(runtime.Lease.IsDisposed);
     }
 
+    [Fact]
+    public void EncodingSymbolsAreOptInAndMissingSymbolReleasesModules()
+    {
+        using var runtime = new FakeRuntime();
+        var decoderLoader = new FakeLoader { MissingSymbol = "avcodec_send_frame" };
+        var decoder = CreateGate(decoderLoader).Acquire(runtime.Lease);
+        Assert.Equal(PlaybackDecoderFfmpegAbiSymbolGateResult.Verified, decoder.Result);
+        decoder.Lease!.Dispose();
+        Assert.DoesNotContain("avcodec_send_frame", decoderLoader.RequestedSymbols);
+        var encoderLoader = new FakeLoader { MissingSymbol = "avcodec_send_frame" };
+        var encoder = CreateGate(encoderLoader).AcquireForEncoding(runtime.Lease);
+        Assert.Equal(PlaybackDecoderFfmpegAbiSymbolGateResult.SymbolMissing, encoder.Result);
+        Assert.Null(encoder.Lease);
+        Assert.Equal(encoderLoader.LoadedModules.AsEnumerable().Reverse(), encoderLoader.FreedModules);
+        Assert.False(runtime.Lease.IsDisposed);
+    }
+
+    [Fact]
+    public void EncodingGateAcquiresRequiredSymbolsAndKeepsRuntimeCallerOwned()
+    {
+        using var runtime = new FakeRuntime();
+        var loader = new FakeLoader();
+        var acquisition = CreateGate(loader).AcquireForEncoding(runtime.Lease);
+        Assert.Equal(PlaybackDecoderFfmpegAbiSymbolGateResult.Verified, acquisition.Result);
+        foreach (var symbol in new[] { "avcodec_find_encoder_by_name", "avcodec_send_frame",
+            "avcodec_receive_packet", "avcodec_parameters_from_context",
+            "av_packet_unref", "av_frame_get_buffer", "av_frame_make_writable", "av_opt_set_int" })
+        {
+            Assert.Contains(symbol, loader.RequestedSymbols);
+        }
+
+        acquisition.Lease!.Dispose();
+        acquisition.Lease.Dispose();
+        Assert.False(runtime.Lease.IsDisposed);
+        Assert.Equal(loader.LoadedModules.AsEnumerable().Reverse(), loader.FreedModules);
+    }
+
     private static PlaybackDecoderFfmpegAbiSymbolGate CreateGate(
         FakeLoader loader,
         FakeInspector? inspector = null) =>

@@ -38,6 +38,19 @@ internal interface IPlaybackDecoderNativeDependencyInspector
 
 public sealed class PlaybackDecoderFfmpegAbiSymbolGate
 {
+    // Encoding is opt-in: existing decoder acquisitions keep their original requirements.
+    private static readonly string[] EncodingUtilSymbols =
+    [
+        "av_frame_get_buffer", "av_frame_make_writable",
+        "av_opt_set_int",
+    ];
+
+    private static readonly string[] EncodingCodecSymbols =
+    [
+        "avcodec_find_encoder_by_name", "avcodec_send_frame", "avcodec_receive_packet",
+        "avcodec_parameters_from_context", "av_packet_unref",
+    ];
+
     private static readonly ModuleRequirement[] Requirements =
     [
         new("avutil-60.dll", "avutil_version", 60,
@@ -131,6 +144,16 @@ public sealed class PlaybackDecoderFfmpegAbiSymbolGate
 
     public PlaybackDecoderFfmpegAbiSymbolGateLeaseResult Acquire(
         VerifiedPlaybackDecoderRuntimeLease lease)
+        => Acquire(lease, forEncoding: false);
+
+    /// <summary>Verifies the decoder requirements plus the finite software encoder API.</summary>
+    public PlaybackDecoderFfmpegAbiSymbolGateLeaseResult AcquireForEncoding(
+        VerifiedPlaybackDecoderRuntimeLease lease)
+        => Acquire(lease, forEncoding: true);
+
+    private PlaybackDecoderFfmpegAbiSymbolGateLeaseResult Acquire(
+        VerifiedPlaybackDecoderRuntimeLease lease,
+        bool forEncoding)
     {
         ArgumentNullException.ThrowIfNull(lease);
         if (!_isSupportedPlatform)
@@ -140,7 +163,8 @@ public sealed class PlaybackDecoderFfmpegAbiSymbolGate
 
         try
         {
-            return lease.UseVerifiedRuntime(runtime => AcquireGuardedRuntime(lease, runtime));
+            return lease.UseVerifiedRuntime(runtime =>
+                AcquireGuardedRuntime(lease, runtime, forEncoding));
         }
         catch (ObjectDisposedException)
         {
@@ -150,7 +174,8 @@ public sealed class PlaybackDecoderFfmpegAbiSymbolGate
 
     private PlaybackDecoderFfmpegAbiSymbolGateLeaseResult AcquireGuardedRuntime(
         VerifiedPlaybackDecoderRuntimeLease owner,
-        IReadOnlyDictionary<string, VerifiedPlaybackDecoderRuntimeFile> runtime)
+        IReadOnlyDictionary<string, VerifiedPlaybackDecoderRuntimeFile> runtime,
+        bool forEncoding)
     {
         if (runtime.Count < Requirements.Length ||
             runtime.Keys.Any(static name => !AllowedVerifiedInventoryNames.Contains(name)) ||
@@ -206,7 +231,18 @@ public sealed class PlaybackDecoderFfmpegAbiSymbolGate
 
             loaded.Add(module);
             nint versionSymbol = 0;
-            foreach (var symbol in requirement.RequiredSymbols)
+            var requiredSymbols = requirement.RequiredSymbols.AsEnumerable();
+            if (forEncoding)
+            {
+                requiredSymbols = requiredSymbols.Concat(requirement.FileName switch
+                {
+                    "avutil-60.dll" => EncodingUtilSymbols,
+                    "avcodec-62.dll" => EncodingCodecSymbols,
+                    _ => [],
+                });
+            }
+
+            foreach (var symbol in requiredSymbols)
             {
                 nint address;
                 try
