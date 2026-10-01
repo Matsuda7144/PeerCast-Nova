@@ -6,5 +6,6 @@
   <ItemGroup>
     <!-- Reuse the existing verified native runtime boundary without relocating it. -->
     <ProjectReference Include="../Nova.Playback/Nova.Playback.csproj" />
+    <ProjectReference Include="../Nova.Network/Nova.Network.csproj" />
   </ItemGroup>
 </Project>

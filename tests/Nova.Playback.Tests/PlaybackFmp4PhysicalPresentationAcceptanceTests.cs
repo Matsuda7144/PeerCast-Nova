@@ -926,7 +926,7 @@ public sealed class PlaybackFmp4PhysicalPresentationAcceptanceTests(
 
     private readonly record struct TopLevelBox(int Offset, int Length, uint Type);
 
-    private sealed class WindowsLoopbackPresentationFactory :
+    internal sealed class WindowsLoopbackPresentationFactory :
         IPlaybackPcpFmp4PresentationOutputGenerationFactory,
         IDisposable
     {
@@ -1185,7 +1185,7 @@ public sealed class PlaybackFmp4PhysicalPresentationAcceptanceTests(
         }
     }
 
-    private readonly record struct PresentationCleanupSnapshot(
+    internal readonly record struct PresentationCleanupSnapshot(
         PlaybackIsoBmffRegularMovieWindowsOutputSinkState SinkState,
         PlaybackWindowsOutputBufferState VideoBufferState,
         PlaybackWindowsOutputBufferState AudioBufferState,
@@ -1195,7 +1195,7 @@ public sealed class PlaybackFmp4PhysicalPresentationAcceptanceTests(
         PlaybackWindowsOutputBindingState AudioBindingState,
         PlaybackIsoBmffRegularMovieWindowsOutputReconfigurationState ReconfigurationState);
 
-    private sealed class PresentationResources : IAsyncDisposable
+    internal sealed class PresentationResources : IAsyncDisposable
     {
         private bool _disposed;
 
