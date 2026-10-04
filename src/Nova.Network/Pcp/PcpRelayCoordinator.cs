@@ -1,6 +1,7 @@
 using System.Net;
 using PeerCast.Nova.Core.Channels;
 using PeerCast.Nova.Core.Recording;
+using PeerCast.Nova.Network.PortMapping;
 using PeerCast.Nova.Network.Transport;
 
 namespace PeerCast.Nova.Network.Pcp;
@@ -47,7 +48,8 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
         ChannelStatusTracker statusTracker,
         IPEndPoint downstreamEndPoint,
         PcpRelayCoordinatorOptions? options = null,
-        RecordingStreamSourceLeaseRegistry? recordingSourceLeaseRegistry = null)
+        RecordingStreamSourceLeaseRegistry? recordingSourceLeaseRegistry = null,
+        NatPortMappingManager? portMapping = null)
     {
         ArgumentNullException.ThrowIfNull(upstreamConnector);
         ArgumentNullException.ThrowIfNull(statusTracker);
@@ -95,7 +97,8 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
             statusTracker.Snapshot.ChannelId,
             statusTracker.Snapshot.SessionId.Value,
             copiedOptions.DownstreamTransport,
-            copiedOptions.DownstreamChild);
+            copiedOptions.DownstreamChild,
+            portMapping);
     }
 
     public PcpRelayCoordinatorState State

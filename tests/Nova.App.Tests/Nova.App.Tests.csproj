@@ -14,5 +14,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/Nova.App/Nova.App.csproj" />
+    <Compile Include="../Nova.Network.Tests/NatPortMappingTestHarness.cs" Link="NatPortMappingTestHarness.cs" />
   </ItemGroup>
 </Project>

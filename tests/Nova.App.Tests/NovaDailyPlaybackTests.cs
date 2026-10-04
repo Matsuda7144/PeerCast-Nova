@@ -1,11 +1,41 @@
 using System.Diagnostics;
 using System.Net;
+using PeerCast.Nova.Network.Tests;
 using PeerCast.Nova.Windows;
 
 namespace PeerCast.Nova.App.Tests;
 
 public sealed class NovaDailyPlaybackTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DailyGuiPortSetting_UsesDesiredStateControlAndPersists(bool finishOn)
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new NovaSettingsStore(Path.Combine(directory.Path, "settings.json"));
+        await using var test = new NatPortMappingTestHarness(enabled: false);
+        using var control = new NovaPortMappingControl(test.Manager, store, new(), false);
+        var window = new FakeWindow { PortMappingSequence = finishOn ? [true, false, true] : [true, false] };
+        var relayController = new FakeRelayController { PortMappingControl = control };
+        var composition = new NovaDailyPlaybackStartupComposition(null,
+            new FakeWindowFactory(window), new FakeControllerFactory(new FakeController()),
+            new FakeCatalog(new GenesisChannelItem("test channel",
+                "pcp://tracker.example:7144/channel/531DC8DFC7FB42928AC2C0A626517A87")),
+            new FakeRelayControllerFactory(relayController));
+
+        var result = await composition.RunAsync();
+
+        Assert.Equal(NovaWindowsStartupResult.Completed, result);
+        Assert.False((await window.FirstPortView.Task).Enabled);
+        Assert.Equal(finishOn, test.Manager.Enabled);
+        Assert.Equal(finishOn, store.Load().AutoPortMapping);
+        Assert.Equal(finishOn, window.LastPortView!.Enabled);
+        Assert.Contains("外部接続: 未確認", window.LastPortView.Summary);
+        Assert.Contains("[Disabled]", window.DisabledPortView!.Diagnostics);
+        Assert.Equal(0, test.Router.Count);
+    }
+
     [Fact]
     public void PcrPlayerExecutableResolution_UsesExplicitThenEnvironmentThenPath()
     {
@@ -302,8 +332,32 @@ public sealed class NovaDailyPlaybackTests
         }
     }
 
-    private sealed class FakeWindow : INovaDailyPlaybackWindow
+    private sealed class FakeWindow : INovaDailyPlaybackWindow, INovaDailyPortMappingWindow
     {
+        private readonly object portGate = new();
+        public bool[] PortMappingSequence { get; init; } = [];
+        public TaskCompletionSource<NovaPortMappingView> FirstPortView { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public NovaPortMappingView? LastPortView { get; private set; }
+        public NovaPortMappingView? DisabledPortView { get; private set; }
+        public event Action<bool>? PortMappingEnabledChanged;
+
+        public void SetPortMapping(NovaPortMappingView view)
+        {
+            lock (portGate)
+            {
+                if (LastPortView is not null && view.Generation < LastPortView.Generation)
+                {
+                    return;
+                }
+                LastPortView = view;
+                if (!view.Enabled)
+                {
+                    DisabledPortView = view;
+                }
+                FirstPortView.TrySetResult(view);
+            }
+        }
         public string Title { get; set; } = string.Empty;
 
         public IReadOnlyList<string> ChannelNames { get; private set; } = [];
@@ -332,9 +386,17 @@ public sealed class NovaDailyPlaybackTests
             CancellationToken cancellationToken) =>
             ValueTask.FromResult(NovaDailyPlaybackWindowResult.Started);
 
-        public Task<NovaDailyPlaybackWindowResult> WaitForExitAsync(
+        public async Task<NovaDailyPlaybackWindowResult> WaitForExitAsync(
             CancellationToken cancellationToken)
         {
+            if (PortMappingSequence.Length > 0)
+            {
+                await FirstPortView.Task.WaitAsync(TimeSpan.FromSeconds(10), cancellationToken);
+                foreach (var enabled in PortMappingSequence)
+                {
+                    PortMappingEnabledChanged?.Invoke(enabled);
+                }
+            }
             RefreshRequested?.Invoke();
             SetChannels(["test channel"]);
             PlayRequested?.Invoke(0);
@@ -353,7 +415,7 @@ public sealed class NovaDailyPlaybackTests
                 }
             }
 
-            return Task.FromResult(NovaDailyPlaybackWindowResult.Stopped);
+            return NovaDailyPlaybackWindowResult.Stopped;
         }
 
         public void SetChannels(IReadOnlyList<string> channelNames) => ChannelNames = channelNames;
@@ -369,8 +431,9 @@ public sealed class NovaDailyPlaybackTests
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
-    private sealed class FakeRelayController : INovaDailyRelayController
+    private sealed class FakeRelayController : INovaDailyRelayController, INovaDailyPortMappingControl
     {
+        public NovaPortMappingControl? PortMappingControl { get; init; }
         public string? StartedSource { get; private set; }
 
         public int StopCount { get; private set; }

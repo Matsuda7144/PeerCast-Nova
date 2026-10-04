@@ -3,6 +3,7 @@ using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using PeerCast.Nova.Core.Channels;
 using PeerCast.Nova.Network.Pcp;
+using PeerCast.Nova.Network.PortMapping;
 using PeerCast.Nova.Network.Transport;
 
 namespace PeerCast.Nova.App;
@@ -30,17 +31,39 @@ internal sealed class SystemNovaDailyRelayControllerFactory : INovaDailyRelayCon
     public INovaDailyRelayController Create(
         Action<string> setStatus,
         Action<string> setEndpoint,
-        Action<string> showError) =>
-        new NovaDailyPcpRelayController(setStatus, setEndpoint, showError);
+        Action<string> showError)
+    {
+        var store = NovaSettingsStore.CreateDefault();
+        var saved = store.Load();
+        var environment = Environment.GetEnvironmentVariable("NOVA_AUTO_PORT_MAPPING");
+        var overridden = !string.IsNullOrWhiteSpace(environment);
+        var options = ReadPortMappingSetting(environment, saved);
+        return new NovaDailyPcpRelayController(setStatus, setEndpoint, showError,
+            options, store, saved, overridden);
+    }
+
+    internal static NatPortMappingOptions ReadPortMappingSetting(string? value,
+        PeerCast.Nova.Foundation.Configuration.NovaOptions? saved = null)
+    {
+        var enabled = value?.Trim().ToLowerInvariant() switch
+        {
+            null or "" => saved?.AutoPortMapping ?? false,
+            "off" => false,
+            "on" => true,
+            _ => throw new ArgumentException("NOVA_AUTO_PORT_MAPPING must be on or off.", nameof(value)),
+        };
+        return new NatPortMappingOptions { Enabled = enabled };
+    }
 }
 
-internal sealed class NovaDailyPcpRelayController : INovaDailyRelayController
+internal sealed class NovaDailyPcpRelayController : INovaDailyRelayController, INovaDailyPortMappingControl
 {
     private readonly object _stateGate = new();
     private readonly SemaphoreSlim _commands = new(1, 1);
     private readonly Action<string> _setStatus;
     private readonly Action<string> _setEndpoint;
     private readonly Action<string> _showError;
+    private readonly NatPortMappingRuntime? _portMappingRuntime;
     private ActiveRelay? _active;
     private CancellationTokenSource? _startupCancellation;
     private bool _disposed;
@@ -48,7 +71,11 @@ internal sealed class NovaDailyPcpRelayController : INovaDailyRelayController
     public NovaDailyPcpRelayController(
         Action<string> setStatus,
         Action<string> setEndpoint,
-        Action<string> showError)
+        Action<string> showError,
+        NatPortMappingOptions? portMappingOptions = null,
+        NovaSettingsStore? settingsStore = null,
+        PeerCast.Nova.Foundation.Configuration.NovaOptions? savedSettings = null,
+        bool startupEnvironmentOverride = false)
     {
         ArgumentNullException.ThrowIfNull(setStatus);
         ArgumentNullException.ThrowIfNull(setEndpoint);
@@ -56,7 +83,18 @@ internal sealed class NovaDailyPcpRelayController : INovaDailyRelayController
         _setStatus = setStatus;
         _setEndpoint = setEndpoint;
         _showError = showError;
+        if (portMappingOptions is not null)
+        {
+            _portMappingRuntime = new NatPortMappingRuntime(portMappingOptions);
+            if (settingsStore is not null)
+            {
+                PortMappingControl = new NovaPortMappingControl(_portMappingRuntime.Manager,
+                    settingsStore, savedSettings ?? new(), startupEnvironmentOverride);
+            }
+        }
     }
+
+    public NovaPortMappingControl? PortMappingControl { get; }
 
     public async Task StartAsync(
         GenesisChannelItem channel,
@@ -95,7 +133,8 @@ internal sealed class NovaDailyPcpRelayController : INovaDailyRelayController
             var coordinator = new PcpRelayCoordinator(
                 new TcpTransportConnector(),
                 tracker,
-                new IPEndPoint(IPAddress.Any, 0));
+                new IPEndPoint(IPAddress.Any, 0),
+                portMapping: _portMappingRuntime?.Manager);
             var active = new ActiveRelay(coordinator);
             startingRelay = active;
             lock (_stateGate)
@@ -223,7 +262,24 @@ internal sealed class NovaDailyPcpRelayController : INovaDailyRelayController
         }
         finally
         {
-            _commands.Release();
+            try
+            {
+                if (_portMappingRuntime is not null)
+                {
+                    try
+                    {
+                        await _portMappingRuntime.DisposeAsync().ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        PortMappingControl?.Dispose();
+                    }
+                }
+            }
+            finally
+            {
+                _commands.Release();
+            }
         }
     }
 

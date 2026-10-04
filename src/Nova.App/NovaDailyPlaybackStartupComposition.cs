@@ -91,6 +91,46 @@ internal sealed class NovaDailyPlaybackStartupComposition
             window.ShowError);
         var operations = new OperationTracker();
         var channelState = new ChannelSelectionState();
+        var portWindow = window as INovaDailyPortMappingWindow;
+        var portControl = (relayController as INovaDailyPortMappingControl)?.PortMappingControl;
+        void PortMappingEnabledChanged(bool enabled) => operations.Start(async () =>
+        {
+            try
+            {
+                var save = portControl!.SetEnabledAsync(enabled);
+                portWindow!.SetPortMapping(NovaPortMappingView.Create(
+                    portControl.ReadStatus(), portControl.StartupEnvironmentOverride));
+                await save.ConfigureAwait(false);
+            }
+            catch (Exception exception)
+            {
+                window.ShowError($"ポート設定の保存に失敗しました（現在の設定は反映済み）: {exception.Message}");
+            }
+        });
+        async Task UpdatePortMappingAsync()
+        {
+            if (portWindow is null || portControl is null)
+            {
+                return;
+            }
+            try
+            {
+                while (!lifetime.IsCancellationRequested)
+                {
+                    portWindow.SetPortMapping(NovaPortMappingView.Create(
+                        portControl.ReadStatus(), portControl.StartupEnvironmentOverride));
+                    await Task.Delay(TimeSpan.FromMilliseconds(500), lifetime.Token).ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+            {
+            }
+        }
+        if (portWindow is not null && portControl is not null)
+        {
+            portWindow.PortMappingEnabledChanged += PortMappingEnabledChanged;
+        }
+        var portUpdates = Task.Run(UpdatePortMappingAsync, CancellationToken.None);
 
         void RefreshRequested() => operations.Start(async () =>
         {
@@ -139,6 +179,11 @@ internal sealed class NovaDailyPlaybackStartupComposition
         finally
         {
             lifetime.Cancel();
+            if (portWindow is not null && portControl is not null)
+            {
+                portWindow.PortMappingEnabledChanged -= PortMappingEnabledChanged;
+            }
+            await portUpdates.ConfigureAwait(false);
             window.RefreshRequested -= RefreshRequested;
             window.PlayRequested -= PlayRequested;
             window.StopRequested -= StopRequested;

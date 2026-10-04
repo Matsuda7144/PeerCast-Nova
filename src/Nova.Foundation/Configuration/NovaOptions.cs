@@ -7,4 +7,6 @@ public sealed record NovaOptions
     public int ListenPort { get; init; } = 7144;
 
     public bool EnableDetailedDiagnostics { get; init; }
+
+    public bool AutoPortMapping { get; init; }
 }

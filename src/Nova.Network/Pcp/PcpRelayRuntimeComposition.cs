@@ -2,6 +2,7 @@ using System.Net;
 using System.Runtime.ExceptionServices;
 using PeerCast.Nova.Core.Channels;
 using PeerCast.Nova.Core.Recording;
+using PeerCast.Nova.Network.PortMapping;
 using PeerCast.Nova.Network.Transport;
 
 namespace PeerCast.Nova.Network.Pcp;
@@ -15,18 +16,26 @@ public sealed class PcpRelayRuntimeComposition : IAsyncDisposable
 {
     private readonly object gate = new();
     private readonly List<PcpRelayCoordinator> coordinators = [];
+    private readonly NatPortMappingRuntime? portMappingRuntime;
     private int disposed;
 
     public PcpRelayRuntimeComposition(
         int maximumRecordingSourceFactoryCount =
-            RecordingStreamSourceLeaseRegistry.DefaultMaximumFactoryCount)
+            RecordingStreamSourceLeaseRegistry.DefaultMaximumFactoryCount,
+        NatPortMappingOptions? portMappingOptions = null)
     {
         RecordingStreamSourceLeaseRegistry =
             new RecordingStreamSourceLeaseRegistry(
                 maximumRecordingSourceFactoryCount);
         RecordingSourceProvider = new LeasedRecordingStreamSourceProvider(
             RecordingStreamSourceLeaseRegistry);
+        if (portMappingOptions is not null)
+        {
+            portMappingRuntime = new NatPortMappingRuntime(portMappingOptions);
+        }
     }
+
+    public NatPortMappingManager? PortMapping => portMappingRuntime?.Manager;
 
     /// <summary>
     /// The one registry shared by every coordinator and the recording reader
@@ -71,7 +80,8 @@ public sealed class PcpRelayRuntimeComposition : IAsyncDisposable
                 statusTracker,
                 downstreamEndPoint,
                 options,
-                RecordingStreamSourceLeaseRegistry);
+                RecordingStreamSourceLeaseRegistry,
+                PortMapping);
             coordinators.Add(coordinator);
             return coordinator;
         }
@@ -105,6 +115,18 @@ public sealed class PcpRelayRuntimeComposition : IAsyncDisposable
             try
             {
                 await owned[index].DisposeAsync().ConfigureAwait(false);
+            }
+            catch (Exception exception)
+            {
+                (failures ??= []).Add(exception);
+            }
+        }
+
+        if (portMappingRuntime is not null)
+        {
+            try
+            {
+                await portMappingRuntime.DisposeAsync().ConfigureAwait(false);
             }
             catch (Exception exception)
             {

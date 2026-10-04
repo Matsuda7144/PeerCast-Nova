@@ -34,6 +34,13 @@ internal interface INovaDailyPlaybackWindowFactory
     INovaDailyPlaybackWindow Create(string title);
 }
 
+internal interface INovaDailyPortMappingWindow
+{
+    event Action<bool>? PortMappingEnabledChanged;
+
+    void SetPortMapping(NovaPortMappingView view);
+}
+
 internal sealed class SystemNovaDailyPlaybackWindowFactory : INovaDailyPlaybackWindowFactory
 {
     public static SystemNovaDailyPlaybackWindowFactory Instance { get; } = new();
@@ -47,8 +54,17 @@ internal sealed class SystemNovaDailyPlaybackWindowFactory : INovaDailyPlaybackW
 }
 
 internal sealed class SystemNovaDailyPlaybackWindow(NovaDailyPlaybackWindowHost host) :
-    INovaDailyPlaybackWindow
+    INovaDailyPlaybackWindow, INovaDailyPortMappingWindow
 {
+    public event Action<bool>? PortMappingEnabledChanged
+    {
+        add => host.PortMappingEnabledChanged += value;
+        remove => host.PortMappingEnabledChanged -= value;
+    }
+
+    public void SetPortMapping(NovaPortMappingView view) =>
+        host.SetPortMapping(view.Generation, view.Enabled, view.Summary, view.Diagnostics);
+
     public event Action? RefreshRequested
     {
         add => host.RefreshRequested += value;

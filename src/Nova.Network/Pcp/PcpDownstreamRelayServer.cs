@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
 using PeerCast.Nova.Core.Channels;
+using PeerCast.Nova.Network.PortMapping;
 using PeerCast.Nova.Network.Transport;
 
 namespace PeerCast.Nova.Network.Pcp;
@@ -14,6 +15,8 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
 {
     private readonly object _gate = new();
     private readonly TcpTransportListener _listener;
+    private readonly NatPortMappingManager? _portMapping;
+    private IDisposable? _publicMappingOwner;
     private readonly PcpRelayFanout _fanout;
     private readonly ChannelId _channelId;
     private readonly Guid _localSessionId;
@@ -54,7 +57,8 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
         ChannelId channelId,
         Guid localSessionId,
         TcpTransportOptions? transportOptions = null,
-        PcpDownstreamChildOptions? childOptions = null)
+        PcpDownstreamChildOptions? childOptions = null,
+        NatPortMappingManager? portMapping = null)
     {
         ArgumentNullException.ThrowIfNull(localEndPoint);
         ArgumentNullException.ThrowIfNull(fanout);
@@ -80,6 +84,7 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
         _listener = new TcpTransportListener(
             localEndPoint,
             copiedTransportOptions);
+        _portMapping = portMapping;
         _fanout = fanout;
         _channelId = channelId;
         _localSessionId = localSessionId;
@@ -136,6 +141,13 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
 
             _listener.Start();
             _boundEndPoint = _listener.LocalEndPoint;
+            if (_portMapping is not null &&
+                _boundEndPoint.AddressFamily == AddressFamily.InterNetwork &&
+                !IPAddress.IsLoopback(_boundEndPoint.Address))
+            {
+                _publicMappingOwner = _portMapping.AcquirePublicTcpListener(_boundEndPoint);
+            }
+
             _state = PcpDownstreamRelayServerState.Running;
             _runTask = RunCoreAsync(cancellationToken);
             return _runTask;
@@ -269,6 +281,7 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
 
             CancelBestEffort(operationSource);
             await _listener.StopAsync().ConfigureAwait(false);
+            Interlocked.Exchange(ref _publicMappingOwner, null)?.Dispose();
             await WaitForSessionsAsync().ConfigureAwait(false);
 
             lock (_gate)

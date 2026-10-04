@@ -62,12 +62,25 @@ internal static class NovaApplicationEntrypoint
         TextWriter output,
         TextWriter error,
         Func<string?, CancellationToken, ValueTask<NovaWindowsStartupResult>> runApplication,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Func<NovaAcceptanceRelayOptions, TextWriter, CancellationToken, Task<int>>? runAcceptance = null)
     {
         ArgumentNullException.ThrowIfNull(args);
         ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(error);
         ArgumentNullException.ThrowIfNull(runApplication);
+
+        if (args.Contains(NovaAcceptanceRelayOptions.Switch, StringComparer.Ordinal))
+        {
+            if (!NovaAcceptanceRelayOptions.TryParse(args, out var acceptance) || acceptance is null)
+            {
+                await error.WriteLineAsync(NovaAcceptanceRelayOptions.Usage).ConfigureAwait(false);
+                return 2;
+            }
+            return await (runAcceptance ?? (static (options, writer, token) =>
+                NovaAcceptanceRelayHarness.RunAsync(options, writer, token)))(acceptance, output, cancellationToken)
+                .ConfigureAwait(false);
+        }
 
         if (!NovaDailyPlaybackCommandLine.TryParse(
                 args,
@@ -89,6 +102,7 @@ internal static class NovaApplicationEntrypoint
             await output.WriteLineAsync(
                     "  --pcrplayer-executable <path>  Configure PCRPlayer64.exe.")
                 .ConfigureAwait(false);
+            await output.WriteLineAsync("  " + NovaAcceptanceRelayOptions.Usage).ConfigureAwait(false);
             return 0;
         }
 

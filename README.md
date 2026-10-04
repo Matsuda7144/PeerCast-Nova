@@ -43,6 +43,32 @@ MVP の再生要件を満たす採用済み経路は external-player handoff で
 
 明示した実行ファイルが無効な場合はエラーを表示し、別の player へ自動で切り替えません。
 
+## 公開 Relay のポート自動開放
+
+PCP downstream relay listener の IPv4 TCP ポートを、NAT-PMP 対応ルーターへ
+自動で開放・更新・閉鎖する foundation を追加しています。既定は OFF です。
+日常アプリの「ポート自動開放 (ON / OFF)」で切り替えます。設定は
+`%LOCALAPPDATA%\PeerCast\Nova\settings.json` に保存します（未設定は OFF）。
+起動時に `NOVA_AUTO_PORT_MAPPING` が指定されている場合は、その `on` / `off` を
+保存設定より優先します。起動後の GUI 変更は現在の desired state と保存設定へ反映します。
+
+~~~powershell
+$env:NOVA_AUTO_PORT_MAPPING = "on"
+dotnet run --project src/Nova.App
+~~~
+
+公開 listener が実際に bind したポートを対象とし、最後の公開要求がなくなると
+削除を要求します。loopback の HTTP-FLV 再生用 listener は対象外です。
+最初の backend は NAT-PMP で、複数 adapter など経路が曖昧な場合は自動選択しません。
+ルーターの mapping 応答とインターネット側からの到達確認は別の状態です。
+GUI にルーター設定・外部接続の別表示、lease の証拠、診断コード付き要約を追加しています。
+実ルーターで NAT-PMP の Map/Renew/Unmap と restart 後の Map を確認済みです。
+外部到達は `NotChecked`、GUI の実画面 physical acceptance は GUI 操作環境の制約で未完です。
+UPnP、IPv6、外部アドレス取得・到達確認は後続 slice に残ります。
+
+管理境界・競合テスト・cleanup の証拠は
+[NAT Port Mapping Foundation](docs/architecture/NAT-PORT-MAPPING-FOUNDATION.md) を参照してください。
+
 ## Post-MVP の追加範囲
 
 - `Nova.App` から managed decoder、scheduler、Windows output までを結ぶ追加 playback 経路と、managed 経路による regular MP4 production playback。

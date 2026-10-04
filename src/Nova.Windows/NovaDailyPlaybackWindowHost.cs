@@ -43,6 +43,13 @@ public sealed class NovaDailyPlaybackWindowHost : IAsyncDisposable
     private const int RelayControlId = 1006;
     private const int StopRelayControlId = 1007;
     private const int RelayEndpointControlId = 1008;
+    private const int PortMappingControlId = 1009;
+    private const int PortMappingStatusControlId = 1010;
+    private const int PortMappingDiagnosticsControlId = 1011;
+    private const int PortMappingDiagnosticsTitleControlId = 1012;
+    private const uint PortMappingUpdateMessage = 0x8001;
+    private const uint ButtonGetCheck = 0x00F0;
+    private const uint ButtonSetCheck = 0x00F1;
     private const int CursorArrow = 32512;
     private const int DefaultGuiFont = 17;
 
@@ -62,6 +69,9 @@ public sealed class NovaDailyPlaybackWindowHost : IAsyncDisposable
     private bool _closeRequested;
     private bool _disposed;
     private NovaDailyPlaybackWindowResult _terminalResult;
+    private (bool Enabled, string Summary, string Diagnostics) _portMappingView;
+    private string? _shownDiagnostics;
+    private long _portMappingGeneration = -1;
 
     public NovaDailyPlaybackWindowHost(string title = "PeerCast Nova")
     {
@@ -81,6 +91,28 @@ public sealed class NovaDailyPlaybackWindowHost : IAsyncDisposable
     public event Action? StopRelayRequested;
 
     public event Action? ChannelSelectionChanged;
+
+    public event Action<bool>? PortMappingEnabledChanged;
+
+    public void SetPortMapping(long generation, bool enabled, string summary, string diagnostics)
+    {
+        lock (_gate)
+        {
+            if (generation < _portMappingGeneration)
+            {
+                return;
+            }
+            _portMappingGeneration = generation;
+            _portMappingView = (enabled, summary, diagnostics);
+        }
+        var window = Volatile.Read(ref _window);
+        if (window != 0)
+        {
+            // Post rather than synchronously send across threads. Router waits,
+            // persistence and projection never block the native message loop.
+            _ = PostMessageW(window, PortMappingUpdateMessage, 0, 0);
+        }
+    }
 
     public async ValueTask<NovaDailyPlaybackWindowResult> StartAsync(
         CancellationToken cancellationToken = default)
@@ -294,7 +326,7 @@ public sealed class NovaDailyPlaybackWindowHost : IAsyncDisposable
         nint window = 0;
         try
         {
-            var rectangle = new WindowRectangle { Right = 740, Bottom = 260 };
+            var rectangle = new WindowRectangle { Right = 740, Bottom = 660 };
             if (!AdjustWindowRectEx(ref rectangle, WindowStyleOverlapped, false, 0))
             {
                 Complete(NovaDailyPlaybackWindowResult.Faulted);
@@ -410,6 +442,15 @@ public sealed class NovaDailyPlaybackWindowHost : IAsyncDisposable
             68,
             RelayEndpointControlId);
         _ = EnableWindow(GetControl(PlayControlId), false);
+        _ = CreateControl(window, instance, "BUTTON", "ポート自動開放 (ON / OFF)",
+            ChildVisibleTabStop | 0x0003, 12, 256, 400, 28, PortMappingControlId);
+        _ = CreateControl(window, instance, "STATIC", "ポート自動開放: OFF / 外部接続: 未確認",
+            ChildVisible, 12, 290, 710, 150, PortMappingStatusControlId);
+        _ = CreateControl(window, instance, "STATIC", "ポート診断（観測時刻 / 診断コード / 要約）",
+            ChildVisible, 12, 440, 710, 20, PortMappingDiagnosticsTitleControlId);
+        _ = CreateControl(window, instance, "EDIT", "",
+            ChildVisibleTabStop | 0x00800000 | 0x00200000 | 0x0004 | 0x0040 | 0x0800,
+            12, 466, 710, 178, PortMappingDiagnosticsControlId);
 
         foreach (var controlId in new[]
                  {
@@ -421,6 +462,10 @@ public sealed class NovaDailyPlaybackWindowHost : IAsyncDisposable
                      RelayControlId,
                      StopRelayControlId,
                      RelayEndpointControlId,
+                     PortMappingControlId,
+                     PortMappingStatusControlId,
+                     PortMappingDiagnosticsControlId,
+                     PortMappingDiagnosticsTitleControlId,
                  })
         {
             _ = SendMessageW(
@@ -471,6 +516,22 @@ public sealed class NovaDailyPlaybackWindowHost : IAsyncDisposable
 
     private nint ProcessWindowMessage(nint window, uint message, nuint wParam, nint lParam)
     {
+        if (message == PortMappingUpdateMessage)
+        {
+            (bool Enabled, string Summary, string Diagnostics) view;
+            lock (_gate)
+            {
+                view = _portMappingView;
+            }
+            _ = SendMessageW(GetControl(PortMappingControlId), ButtonSetCheck, view.Enabled ? 1u : 0u, 0);
+            _ = SendMessageW(GetControl(PortMappingStatusControlId), WindowMessageSetText, 0, view.Summary);
+            if (_shownDiagnostics != view.Diagnostics)
+            {
+                _shownDiagnostics = view.Diagnostics;
+                _ = SendMessageW(GetControl(PortMappingDiagnosticsControlId), WindowMessageSetText, 0, view.Diagnostics);
+            }
+            return 0;
+        }
         if (message == WindowMessageCommand)
         {
             var controlId = unchecked((int)(wParam & 0xffff));
@@ -479,6 +540,10 @@ public sealed class NovaDailyPlaybackWindowHost : IAsyncDisposable
             {
                 switch (controlId)
                 {
+                    case PortMappingControlId:
+                        var enabled = SendMessageW(GetControl(PortMappingControlId), ButtonGetCheck, 0, 0) != 0;
+                        PortMappingEnabledChanged?.Invoke(enabled);
+                        return 0;
                     case RefreshControlId:
                         RefreshRequested?.Invoke();
                         return 0;
