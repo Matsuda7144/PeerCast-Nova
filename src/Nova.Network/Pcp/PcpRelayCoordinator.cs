@@ -29,6 +29,8 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
     private readonly PcpDownstreamRelayServer _downstreamServer;
     private readonly ChannelStatusTracker _statusTracker;
     private readonly CancellationTokenSource _stopSource = new();
+    private readonly bool _stopWhenNoConsumers;
+    private readonly HashSet<Guid> _consumerLeases = [];
     private readonly TaskCompletionSource<PcpRelayCoordinatorReadinessOutcome>
         _readinessSource = new(
             TaskCreationOptions.RunContinuationsAsynchronously);
@@ -39,6 +41,7 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
     private Task<PcpRelayCoordinatorResult>? _runTask;
     private IDisposable? _recordingSourceRegistration;
     private PcpRelayCoordinatorState _state = PcpRelayCoordinatorState.Created;
+    private bool _consumerLeaseAdmissionClosed;
     private int _stopRequested;
     private int _callerCanceled;
     private int _disposed;
@@ -49,6 +52,7 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
         IPEndPoint downstreamEndPoint,
         PcpRelayCoordinatorOptions? options = null,
         RecordingStreamSourceLeaseRegistry? recordingSourceLeaseRegistry = null,
+        bool stopWhenNoConsumers = false,
         NatPortMappingManager? portMapping = null)
     {
         ArgumentNullException.ThrowIfNull(upstreamConnector);
@@ -76,6 +80,7 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
 
         _drainTimeout = copiedOptions.DrainTimeout;
         _statusTracker = statusTracker;
+        _stopWhenNoConsumers = stopWhenNoConsumers;
         _recordingSourceLeaseRegistry = recordingSourceLeaseRegistry;
         _fanout = new PcpRelayFanout(
             copiedOptions.Fanout,
@@ -84,7 +89,10 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
             new PcpRelayFanoutRecordingStreamSourceLeaseFactory(
                 statusTracker.Snapshot.ChannelId,
                 statusTracker.Snapshot.SessionId,
-                _fanout);
+                _fanout,
+                acquireOwnerLease: stopWhenNoConsumers
+                    ? TryAcquireConsumerLease
+                    : null);
         _ingress = new RelayIngressConsumer(_fanout, _firstPacketAcceptedSource);
         _upstreamSession = new PcpChannelSession(
             upstreamConnector,
@@ -112,6 +120,47 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Gets the number of application consumers that currently keep this
+    /// owner alive when idle shutdown is enabled.
+    /// </summary>
+    public int ActiveConsumerCount
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _consumerLeases.Count;
+            }
+        }
+    }
+
+    public bool CanAcceptConsumers
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return !_consumerLeaseAdmissionClosed &&
+                    Volatile.Read(ref _disposed) == 0 &&
+                    !_stopSource.IsCancellationRequested &&
+                    _state is PcpRelayCoordinatorState.Created or
+                        PcpRelayCoordinatorState.Running;
+            }
+        }
+    }
+
+    public Task<PcpRelayCoordinatorResult>? Completion
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _runTask;
+            }
+        }
+    }
+
     public IPEndPoint LocalEndPoint => _downstreamServer.LocalEndPoint;
 
     public PcpDownstreamRelayServerSnapshot DownstreamSnapshot =>
@@ -134,6 +183,66 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
     /// bounded relay fan-out.
     /// </summary>
     public Task FirstPacketAccepted => _firstPacketAcceptedSource.Task;
+
+    /// <summary>
+    /// Attaches a playback packet consumer directly to this owner's bounded
+    /// fan-out. The adapter restores this coordinator's channel/session identity
+    /// and forwards callback-scoped payloads without opening another PCP link.
+    /// </summary>
+    public async ValueTask<PcpRelayConsumerRegistration?> AttachPlaybackConsumerAsync(
+        IPcpChannelPacketConsumer consumer)
+    {
+        ArgumentNullException.ThrowIfNull(consumer);
+        ThrowIfDisposed();
+
+        ConsumerLease? ownerLease = null;
+        if (_stopWhenNoConsumers)
+        {
+            ownerLease = TryAcquireConsumerLease();
+            if (ownerLease is null)
+            {
+                return null;
+            }
+        }
+
+        PcpRelayChildRegistration? childRegistration = null;
+        try
+        {
+            var identity = _statusTracker.Snapshot;
+            var sink = new PlaybackPacketChildSink(
+                identity.ChannelId,
+                identity.SessionId,
+                consumer);
+            if (!_fanout.TryAddChild(sink, out childRegistration) ||
+                childRegistration is null)
+            {
+                return null;
+            }
+
+            var registration = new PcpRelayConsumerRegistration(
+                childRegistration,
+                ownerLease);
+            childRegistration = null;
+            ownerLease = null;
+            return registration;
+        }
+        catch (ObjectDisposedException)
+        {
+            return null;
+        }
+        finally
+        {
+            if (childRegistration is not null)
+            {
+                await childRegistration.DisposeAsync().ConfigureAwait(false);
+            }
+
+            if (ownerLease is not null)
+            {
+                await ownerLease.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+    }
 
     /// <summary>
     /// Waits until the downstream listener has bound successfully or the
@@ -199,6 +308,7 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
     public void RequestStop()
     {
         ThrowIfDisposed();
+        CloseConsumerLeaseAdmission();
         RemoveRecordingSourceRegistration();
         Interlocked.Exchange(ref _stopRequested, 1);
         _readinessSource.TrySetResult(
@@ -245,6 +355,7 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
         }
 
         RemoveRecordingSourceRegistration();
+        CloseConsumerLeaseAdmission();
         Interlocked.Exchange(ref _stopRequested, 1);
         _readinessSource.TrySetResult(
             PcpRelayCoordinatorReadinessOutcome.Stopped);
@@ -417,6 +528,7 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
         }
         finally
         {
+            CloseConsumerLeaseAdmission();
             RemoveRecordingSourceRegistration();
             _readinessSource.TrySetResult(
                 _stopSource.IsCancellationRequested
@@ -585,6 +697,7 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
 
     private void CancelFromCaller()
     {
+        CloseConsumerLeaseAdmission();
         RemoveRecordingSourceRegistration();
         Interlocked.Exchange(ref _callerCanceled, 1);
         _readinessSource.TrySetResult(
@@ -788,5 +901,126 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
 
             _firstPacketAccepted.TrySetResult();
         }
+    }
+
+    private ConsumerLease? TryAcquireConsumerLease()
+    {
+        lock (_gate)
+        {
+            if (_consumerLeaseAdmissionClosed ||
+                Volatile.Read(ref _disposed) != 0 ||
+                _stopSource.IsCancellationRequested ||
+                _state is not (PcpRelayCoordinatorState.Created or
+                    PcpRelayCoordinatorState.Running))
+            {
+                return null;
+            }
+
+            var leaseId = Guid.NewGuid();
+            _consumerLeases.Add(leaseId);
+            return new ConsumerLease(this, leaseId);
+        }
+    }
+
+    /// <summary>
+    /// Acquires a temporary application owner lease when this coordinator is
+    /// configured to stop after its consumers detach. Returns <see langword="null"/>
+    /// when the owner is stopping or does not use consumer-counted lifetime.
+    /// </summary>
+    public IAsyncDisposable? TryAcquireApplicationConsumerLease() =>
+        _stopWhenNoConsumers
+            ? TryAcquireConsumerLease()
+            : null;
+
+    private async ValueTask ReleaseConsumerLeaseAsync(Guid leaseId)
+    {
+        var stopWhenIdle = false;
+        lock (_gate)
+        {
+            if (!_consumerLeases.Remove(leaseId))
+            {
+                return;
+            }
+
+            if (_stopWhenNoConsumers && _consumerLeases.Count == 0 &&
+                !_consumerLeaseAdmissionClosed)
+            {
+                _consumerLeaseAdmissionClosed = true;
+                stopWhenIdle = true;
+            }
+        }
+
+        if (stopWhenIdle)
+        {
+            try
+            {
+                RequestStop();
+            }
+            catch (ObjectDisposedException)
+            {
+                // Runtime disposal already owns the final shutdown path.
+            }
+
+            Task<PcpRelayCoordinatorResult>? runTask;
+            lock (_gate)
+            {
+                runTask = _runTask;
+            }
+
+            if (runTask is not null)
+            {
+                await runTask.ConfigureAwait(false);
+            }
+            else if (Volatile.Read(ref _disposed) == 0)
+            {
+                await StopAsync().ConfigureAwait(false);
+            }
+        }
+    }
+
+    private void CloseConsumerLeaseAdmission()
+    {
+        lock (_gate)
+        {
+            _consumerLeaseAdmissionClosed = true;
+        }
+    }
+
+    private sealed class ConsumerLease(
+        PcpRelayCoordinator owner,
+        Guid leaseId) : IAsyncDisposable
+    {
+        private readonly object _gate = new();
+        private Task? _disposeTask;
+
+        public ValueTask DisposeAsync()
+        {
+            lock (_gate)
+            {
+                _disposeTask ??= owner.ReleaseConsumerLeaseAsync(leaseId).AsTask();
+                return new ValueTask(_disposeTask);
+            }
+        }
+    }
+
+    private sealed class PlaybackPacketChildSink(
+        ChannelId channelId,
+        ChannelSessionId sessionId,
+        IPcpChannelPacketConsumer consumer) : IPcpRelayChildSink
+    {
+        public ValueTask SendAsync(
+            PcpRelayPacket packet,
+            CancellationToken cancellationToken) =>
+            consumer.ConsumeAsync(
+                new PcpChannelPacket(
+                    channelId,
+                    sessionId,
+                    packet.Sequence,
+                    packet.Type,
+                    packet.WirePosition,
+                    packet.StreamPosition,
+                    packet.Payload,
+                    packet.Discontinuity),
+                cancellationToken);
     }
 }

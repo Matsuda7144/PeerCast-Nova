@@ -12,23 +12,22 @@ internal sealed class PcrPlayerExternalPlayerLauncher
     internal const string ExecutablePathEnvironmentVariable = "NOVA_PCRPLAYER_EXE";
     internal const string ExecutableFileName = "PCRPlayer64.exe";
 
-    private readonly Lazy<string> _executablePath;
+    private readonly Func<string?> _explicitPathProvider;
 
     public PcrPlayerExternalPlayerLauncher(string? explicitPath)
-        : this(() => ResolveExecutablePath(
-            explicitPath,
-            Environment.GetEnvironmentVariable(ExecutablePathEnvironmentVariable),
-            Environment.GetEnvironmentVariable("PATH")))
+        : this(() => explicitPath)
     {
     }
 
-    internal PcrPlayerExternalPlayerLauncher(Func<string> executablePathResolver)
+    private PcrPlayerExternalPlayerLauncher(Func<string?> explicitPathProvider)
     {
-        ArgumentNullException.ThrowIfNull(executablePathResolver);
-        _executablePath = new(
-            executablePathResolver,
-            LazyThreadSafetyMode.ExecutionAndPublication);
+        ArgumentNullException.ThrowIfNull(explicitPathProvider);
+        _explicitPathProvider = explicitPathProvider;
     }
+
+    internal static PcrPlayerExternalPlayerLauncher CreateWithPathProvider(
+        Func<string?> explicitPathProvider) =>
+        new(explicitPathProvider);
 
     internal static string ResolveExecutablePath(
         string? explicitPath,
@@ -77,13 +76,13 @@ internal sealed class PcrPlayerExternalPlayerLauncher
         return startInfo;
     }
 
-    public void ValidateConfiguration() => _ = _executablePath.Value;
+    public void ValidateConfiguration() => _ = ResolveCurrentExecutablePath();
 
     public IDailyExternalPlayerLifetime Launch(string streamUrl)
     {
         var process = new Process
         {
-            StartInfo = CreateStartInfo(_executablePath.Value, streamUrl),
+            StartInfo = CreateStartInfo(ResolveCurrentExecutablePath(), streamUrl),
         };
         try
         {
@@ -100,6 +99,12 @@ internal sealed class PcrPlayerExternalPlayerLauncher
             throw;
         }
     }
+
+    private string ResolveCurrentExecutablePath() =>
+        ResolveExecutablePath(
+            _explicitPathProvider(),
+            Environment.GetEnvironmentVariable(ExecutablePathEnvironmentVariable),
+            Environment.GetEnvironmentVariable("PATH"));
 
     private static string ResolveConfiguredPath(string configuredPath, string? searchPath)
     {

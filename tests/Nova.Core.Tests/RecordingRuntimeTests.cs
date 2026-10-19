@@ -35,6 +35,217 @@ public sealed class RecordingRuntimeTests : IDisposable
     }
 
     [Fact]
+    public async Task EmptyRuntimeReturnsNoActiveSessions()
+    {
+        await using var runtime = CreateRuntime(
+            new SingleStreamSourceProvider(new MemoryStream([1])));
+
+        var sessions = await runtime.GetActiveRecordingSessionsAsync();
+
+        Assert.Empty(sessions);
+        Assert.False(runtime.TryGetState(TestChannelId, out _));
+    }
+
+    [Fact]
+    public async Task RuntimeSnapshotReturnsActiveManualSessionIdentity()
+    {
+        var provider = new GatedSourceProvider();
+        var pathProvider = new FixedPathProvider(
+            Path.Combine(directory, "active-session-snapshot.bin"));
+        await using var runtime = new RecordingRuntime(provider, pathProvider);
+        var starting = runtime.StartManualAsync(CreateCandidate()).AsTask();
+        await provider.OpenStarted.Task.WaitAsync(
+            TimeSpan.FromMilliseconds(TestTimeoutMilliseconds));
+
+        var source = new ProgressiveRecordingStream([1, 2, 3], [4, 5, 6]);
+        provider.Release(source);
+        var started = await starting.WaitAsync(
+            TimeSpan.FromMilliseconds(TestTimeoutMilliseconds));
+        await source.WaitingForSecondChunk.Task.WaitAsync(
+            TimeSpan.FromMilliseconds(TestTimeoutMilliseconds));
+
+        var session = Assert.Single(await runtime.GetActiveRecordingSessionsAsync());
+
+        Assert.Equal(TestChannelId, session.ChannelId);
+        Assert.Equal(started.State.Session!.SessionId, session.SessionId);
+        Assert.Equal(RecordingSessionOrigin.Manual, session.Origin);
+        Assert.Null(session.AutomaticRuleId);
+
+        var stopped = await runtime.StopManualAsync(
+            TestChannelId,
+            session.SessionId);
+        Assert.Equal(RecordingAutomationStopResultKind.Stopped, stopped.Kind);
+        Assert.Empty(await runtime.GetActiveRecordingSessionsAsync());
+    }
+
+    [Fact]
+    public async Task RuntimeDisposeRacesSnapshotWithoutDeadlock()
+    {
+        var provider = new GatedSourceProvider();
+        var pathProvider = new FixedPathProvider(
+            Path.Combine(directory, "dispose-snapshot-race.bin"));
+        await using var runtime = new RecordingRuntime(provider, pathProvider);
+        var starting = runtime.StartManualAsync(CreateCandidate()).AsTask();
+        await provider.OpenStarted.Task.WaitAsync(
+            TimeSpan.FromMilliseconds(TestTimeoutMilliseconds));
+
+        var source = new ProgressiveRecordingStream([7, 8], [9, 10]);
+        provider.Release(source);
+        var started = await starting.WaitAsync(
+            TimeSpan.FromMilliseconds(TestTimeoutMilliseconds));
+        await source.WaitingForSecondChunk.Task.WaitAsync(
+            TimeSpan.FromMilliseconds(TestTimeoutMilliseconds));
+
+        var snapshotTask = runtime.GetActiveRecordingSessionsAsync().AsTask();
+        var disposeTask = runtime.DisposeAsync().AsTask();
+        await Task.WhenAll(snapshotTask, disposeTask).WaitAsync(
+            TimeSpan.FromMilliseconds(TestTimeoutMilliseconds));
+
+        var snapshot = await snapshotTask;
+        if (snapshot.Count == 1)
+        {
+            Assert.Equal(started.State.Session, snapshot[0]);
+        }
+        else
+        {
+            Assert.Empty(snapshot);
+        }
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(
+            async () => await runtime.GetActiveRecordingSessionsAsync());
+    }
+
+    [Fact]
+    public async Task AutomaticStartPreparationRunsOnlyForStartAndCoversSinkStart()
+    {
+        var provider = new GatedSourceProvider();
+        var pathProvider = new FixedPathProvider(
+            Path.Combine(directory, "prepared-automatic.bin"));
+        await using var runtime = new RecordingRuntime(provider, pathProvider);
+        var candidate = CreateCandidate();
+        var ruleSet = new RecordingRuleSet(
+            [CreateRule(RecordingRuleAction.Record)]);
+        var lease = new TestLease();
+        var preparationCalls = 0;
+
+        var unchanged = await runtime.EvaluateAutomaticAsync(
+            candidate,
+            new RecordingRuleSet([]),
+            (_, _) =>
+            {
+                preparationCalls++;
+                return ValueTask.FromResult<IAsyncDisposable?>(lease);
+            });
+
+        Assert.Equal(RecordingAutomationExecutionResultKind.NoChange, unchanged.Kind);
+        Assert.Equal(0, preparationCalls);
+        Assert.Equal(0, provider.OpenCount);
+
+        var starting = runtime.EvaluateAutomaticAsync(
+            candidate,
+            ruleSet,
+            (preparedCandidate, _) =>
+            {
+                Assert.Equal(candidate.ChannelId, preparedCandidate.ChannelId);
+                preparationCalls++;
+                return ValueTask.FromResult<IAsyncDisposable?>(lease);
+            }).AsTask();
+        await provider.OpenStarted.Task.WaitAsync(
+            TimeSpan.FromMilliseconds(TestTimeoutMilliseconds));
+
+        Assert.Equal(1, preparationCalls);
+        Assert.Equal(0, lease.DisposeCount);
+        Assert.Equal(1, pathProvider.CallCount);
+
+        var source = new ProgressiveRecordingStream([1, 2, 3], [4, 5, 6]);
+        provider.Release(source);
+        var started = await starting.WaitAsync(
+            TimeSpan.FromMilliseconds(TestTimeoutMilliseconds));
+        await source.FirstChunkRead.Task.WaitAsync(
+            TimeSpan.FromMilliseconds(TestTimeoutMilliseconds));
+
+        Assert.Equal(RecordingAutomationExecutionResultKind.Started, started.Kind);
+        Assert.Equal(RecordingSessionOrigin.AutomaticRule, started.State.Session!.Origin);
+        Assert.Equal(ruleSet.Rules[0].Id, started.State.Session.AutomaticRuleId);
+        Assert.Equal(1, lease.DisposeCount);
+
+        var stopped = await runtime.EvaluateAutomaticAsync(
+            candidate,
+            new RecordingRuleSet([]),
+            (_, _) =>
+            {
+                preparationCalls++;
+                return ValueTask.FromResult<IAsyncDisposable?>(lease);
+            });
+
+        Assert.Equal(RecordingAutomationExecutionResultKind.Stopped, stopped.Kind);
+        Assert.Equal(1, preparationCalls);
+        Assert.Equal(1, provider.OpenCount);
+        Assert.Equal(1, lease.DisposeCount);
+    }
+
+    [Fact]
+    public async Task AutomaticStartWithoutPreparedOwnershipFailsClosed()
+    {
+        var provider = new GatedSourceProvider();
+        await using var runtime = CreateRuntime(provider);
+
+        var result = await runtime.EvaluateAutomaticAsync(
+            CreateCandidate(),
+            new RecordingRuleSet([CreateRule(RecordingRuleAction.Record)]),
+            static (_, _) => ValueTask.FromResult<IAsyncDisposable?>(null));
+
+        Assert.Equal(RecordingAutomationExecutionResultKind.StartRejected, result.Kind);
+        Assert.Same(RecordingAutomationExecutionState.Idle, result.State);
+        Assert.Equal(0, provider.OpenCount);
+        Assert.Same(RecordingAutomationExecutionState.Idle,
+            runtime.GetState(TestChannelId));
+    }
+
+    [Fact]
+    public async Task AutomaticStartPreparationCancellationDoesNotOpenRecordingSource()
+    {
+        var provider = new GatedSourceProvider();
+        await using var runtime = CreateRuntime(provider);
+        using var cancellation = new CancellationTokenSource();
+        var evaluation = runtime.EvaluateAutomaticAsync(
+            CreateCandidate(),
+            new RecordingRuleSet([CreateRule(RecordingRuleAction.Record)]),
+            async (_, token) =>
+            {
+                await Task.Delay(Timeout.InfiniteTimeSpan, token);
+                return new TestLease();
+            },
+            cancellation.Token).AsTask();
+
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => evaluation.WaitAsync(
+                TimeSpan.FromMilliseconds(TestTimeoutMilliseconds)));
+        Assert.Equal(0, provider.OpenCount);
+        Assert.Same(RecordingAutomationExecutionState.Idle,
+            runtime.GetState(TestChannelId));
+    }
+
+    [Fact]
+    public async Task StopManual_UnknownChannelReturnsNoActiveSession()
+    {
+        await using var runtime = CreateRuntime(
+            new SingleStreamSourceProvider(new MemoryStream([1])));
+
+        var result = await runtime.StopManualAsync(
+            TestChannelId,
+            new RecordingSessionId(Guid.NewGuid()));
+
+        Assert.Equal(
+            RecordingAutomationStopResultKind.NoActiveSession,
+            result.Kind);
+        Assert.Same(RecordingAutomationExecutionState.Idle, result.State);
+        Assert.False(runtime.TryGetState(TestChannelId, out _));
+    }
+
+    [Fact]
     public async Task ManualAndAutomaticStarts_ShareOneSessionAndFinalizeFile()
     {
         var firstChunk = CreatePayload(64 * 1024, seed: 1);
@@ -189,6 +400,26 @@ public sealed class RecordingRuntimeTests : IDisposable
         Assert.Same(RecordingAutomationExecutionState.Idle, evaluated.State);
         Assert.Same(RecordingAutomationExecutionState.Idle, runtime.GetState(TestChannelId));
         Assert.Equal([9, 8, 7], await File.ReadAllBytesAsync(pathProvider.Path));
+    }
+
+    [Fact]
+    public async Task ReconcileState_RefreshesCompletedManualSessionWithoutAnotherEvaluation()
+    {
+        var pathProvider = new FixedPathProvider(
+            Path.Combine(directory, "reconcile-completed.bin"));
+        await using var runtime = new RecordingRuntime(
+            new SingleStreamSourceProvider(new MemoryStream([6, 5, 4])),
+            pathProvider);
+
+        var started = await runtime.StartManualAsync(CreateCandidate());
+        Assert.Equal(RecordingManualStartResultKind.Started, started.Kind);
+        await WaitForFileAsync(pathProvider.Path);
+
+        var reconciled = await runtime.ReconcileStateAsync(TestChannelId);
+
+        Assert.Same(RecordingAutomationExecutionState.Idle, reconciled);
+        Assert.Same(RecordingAutomationExecutionState.Idle, runtime.GetState(TestChannelId));
+        Assert.Equal([6, 5, 4], await File.ReadAllBytesAsync(pathProvider.Path));
     }
 
     [Fact]
@@ -374,6 +605,19 @@ public sealed class RecordingRuntimeTests : IDisposable
             ArgumentNullException.ThrowIfNull(request);
             cancellationToken.ThrowIfCancellationRequested();
             return ValueTask.FromResult(source);
+        }
+    }
+
+    private sealed class TestLease : IAsyncDisposable
+    {
+        private int disposeCount;
+
+        public int DisposeCount => Volatile.Read(ref disposeCount);
+
+        public ValueTask DisposeAsync()
+        {
+            Interlocked.Increment(ref disposeCount);
+            return ValueTask.CompletedTask;
         }
     }
 

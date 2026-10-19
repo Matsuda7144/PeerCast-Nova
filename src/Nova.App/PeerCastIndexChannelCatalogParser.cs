@@ -73,7 +73,8 @@ internal static class PeerCastIndexChannelCatalogParser
                 ParseNonNegativeInteger(fields[RelayField]),
                 ParseNonNegativeInteger(fields[BitrateField]),
                 ParseBroadcastTime(fields[BroadcastTimeField]),
-                NormalizeOptionalText(fields[TypeField])));
+                NormalizeOptionalText(fields[TypeField]),
+                channelId));
         }
 
         return new(Array.AsReadOnly(channels.ToArray()));

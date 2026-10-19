@@ -7,7 +7,15 @@ namespace PeerCast.Nova.Core.Recording;
 internal sealed class RecordingStreamTransformException : IOException
 {
     public RecordingStreamTransformException(string message)
-        : base(message)
+        : this(message, RecordingTransformThrowSite.Unknown)
     {
     }
+
+    internal RecordingStreamTransformException(string message, RecordingTransformThrowSite site)
+        : base(message)
+    {
+        Diagnostic = RecordingTransformFailure.FromSite(site);
+    }
+
+    internal RecordingTransformFailure Diagnostic { get; }
 }

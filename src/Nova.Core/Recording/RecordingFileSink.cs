@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
 using PeerCast.Nova.Core.Channels;
 
@@ -8,7 +9,7 @@ namespace PeerCast.Nova.Core.Recording;
 /// injected file paths. It has no PCP, playback, GUI, or default-path policy.
 /// </summary>
 public sealed class RecordingFileSink :
-    IRecordingSink,
+    IRecordingStopAdmissionSink,
     IRecordingSinkSessionMonitor
 {
     public const int DefaultMaximumActiveSessionCount = 4096;
@@ -17,12 +18,123 @@ public sealed class RecordingFileSink :
     private readonly IRecordingStreamSourceProvider sourceProvider;
     private readonly IRecordingFilePathProvider pathProvider;
     private readonly int maximumActiveSessionCount;
+    private readonly IRecordingSessionTerminalObserver? terminalObserver;
+    private readonly TimeProvider observationTimeProvider;
+    private readonly IRecordingDiagnosticObserver? diagnosticObserver;
     private readonly Dictionary<ChannelId, ActiveRecording> activeByChannel = [];
+    // Canonical session references keep recovery available even when immediate
+    // completion removes the active dictionary entry. No permanent history.
+    private readonly ConditionalWeakTable<RecordingSinkSession, RecordingSinkStopAdmission>
+        stopAdmissions = new();
+
+    public RecordingSinkStopAdmissionResult RequestStopAdmission(
+        RecordingSinkStopRequest request,
+        CancellationToken admissionToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ActiveRecording? active;
+        RecordingSinkStopAdmissionResult result;
+        lock (gate)
+        {
+            if (admissionToken.IsCancellationRequested)
+            {
+                return RecordingSinkStopAdmissionResult.NotAdmitted(
+                    RecordingSinkStopNotAdmittedReason.CancelledBeforeAdmission);
+            }
+
+            if (!activeByChannel.TryGetValue(request.Session.ChannelId, out active) ||
+                active.Session.SessionId != request.Session.SessionId)
+            {
+                return RecordingSinkStopAdmissionResult.NotAdmitted(
+                    RecordingSinkStopNotAdmittedReason.Unavailable);
+            }
+
+            result = active.RequestStopAdmission(admissionToken);
+            if (result.Admission is { } receipt)
+            {
+                stopAdmissions.Add(active.Session, receipt);
+                if (!ReferenceEquals(active.Session, request.Session))
+                {
+                    stopAdmissions.Add(request.Session, receipt);
+                }
+            }
+        }
+
+        if (result.Admission is not null)
+        {
+            active.StartOwnedStop(() => CompleteAdmittedStopAsync(active));
+        }
+
+        return result;
+    }
+
+    public bool TryGetStopAdmission(
+        RecordingSinkSession session,
+        out RecordingSinkStopAdmission? admission)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        lock (gate)
+        {
+            if (stopAdmissions.TryGetValue(session, out admission))
+            {
+                return true;
+            }
+
+            foreach (var pair in stopAdmissions)
+            {
+                if (pair.Key.ChannelId == session.ChannelId &&
+                    pair.Key.SessionId == session.SessionId)
+                {
+                    admission = pair.Value;
+                    return true;
+                }
+            }
+
+            if (activeByChannel.TryGetValue(session.ChannelId, out var active) &&
+                active.Session.SessionId == session.SessionId)
+            {
+                admission = active.Admission;
+                return admission is not null;
+            }
+
+            admission = null;
+            return false;
+        }
+    }
+
+    private async Task CompleteAdmittedStopAsync(ActiveRecording active)
+    {
+        RecordingFaultDescriptor? failure = null;
+        var notification = active.NotifyStopAsync();
+        try
+        {
+            await active.WaitForCompletionAsync(CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            failure = active.GetFault() ?? RecordingFaultDescriptor.FromException(exception);
+        }
+
+        // Join notification even if the writer itself failed.
+        var notificationFailure = await notification.ConfigureAwait(false);
+        failure ??= notificationFailure;
+        var result = failure is not null
+            ? RecordingSinkStopResult.FromFault(failure)
+            : active.NoDecodableVideoStart
+                ? RecordingSinkStopResult.NoDecodableVideoStart
+                : RecordingSinkStopResult.Stopped;
+        RemoveIfCurrent(active);
+        active.Dispose();
+        active.PublishStopCompletion(result);
+    }
 
     public RecordingFileSink(
         IRecordingStreamSourceProvider sourceProvider,
         IRecordingFilePathProvider pathProvider,
-        int maximumActiveSessionCount = DefaultMaximumActiveSessionCount)
+        int maximumActiveSessionCount = DefaultMaximumActiveSessionCount,
+        IRecordingSessionTerminalObserver? terminalObserver = null,
+        TimeProvider? observationTimeProvider = null,
+        IRecordingDiagnosticObserver? diagnosticObserver = null)
     {
         ArgumentNullException.ThrowIfNull(sourceProvider);
         ArgumentNullException.ThrowIfNull(pathProvider);
@@ -32,6 +144,9 @@ public sealed class RecordingFileSink :
         this.sourceProvider = sourceProvider;
         this.pathProvider = pathProvider;
         this.maximumActiveSessionCount = maximumActiveSessionCount;
+        this.terminalObserver = terminalObserver;
+        this.observationTimeProvider = observationTimeProvider ?? TimeProvider.System;
+        this.diagnosticObserver = diagnosticObserver;
     }
 
     public async ValueTask<RecordingSinkStartResult> StartAsync(
@@ -78,7 +193,12 @@ public sealed class RecordingFileSink :
                     $"Unsupported recording session origin: {request.Origin}."),
             };
 
-            active = new ActiveRecording(session);
+            active = new ActiveRecording(
+                session,
+                request,
+                terminalObserver,
+                observationTimeProvider,
+                diagnosticObserver);
             activeByChannel.Add(
                 request.Candidate.ChannelId,
                 active);
@@ -133,8 +253,7 @@ public sealed class RecordingFileSink :
                 await stoppedSource.DisposeAsync().ConfigureAwait(false);
 
                 active.CompleteStartWithoutWrite();
-                RemoveIfCurrent(active);
-                active.Dispose();
+                CleanupUnadmittedStart(active);
 
                 return RecordingSinkStartResult.Rejected;
             }
@@ -157,8 +276,7 @@ public sealed class RecordingFileSink :
                 active.StopRequested)
             {
                 active.CompleteStartWithoutWrite();
-                RemoveIfCurrent(active);
-                active.Dispose();
+                CleanupUnadmittedStart(active);
 
                 return RecordingSinkStartResult.Rejected;
             }
@@ -171,8 +289,7 @@ public sealed class RecordingFileSink :
                     disposeFailure);
 
             active.CompleteStartFailure(failure);
-            RemoveIfCurrent(active);
-            active.Dispose();
+            CleanupUnadmittedStart(active);
 
             if (disposeFailure is not null)
             {
@@ -205,7 +322,17 @@ public sealed class RecordingFileSink :
             }
         }
 
+        if (active.Admission is { } admission)
+        {
+            return await admission.Completion.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         active.RequestStop();
+
+        if (active.Admission is { } concurrentAdmission)
+        {
+            return await concurrentAdmission.Completion.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
 
         try
         {
@@ -301,6 +428,15 @@ public sealed class RecordingFileSink :
         return true;
     }
 
+    private void CleanupUnadmittedStart(ActiveRecording active)
+    {
+        if (active.Admission is null)
+        {
+            RemoveIfCurrent(active);
+            active.Dispose();
+        }
+    }
+
     private void RemoveIfCurrent(ActiveRecording active)
     {
         lock (gate)
@@ -332,6 +468,13 @@ public sealed class RecordingFileSink :
 
     private sealed class ActiveRecording : IDisposable
     {
+        private readonly RecordingSinkStartRequest startRequest;
+        private readonly IRecordingSessionTerminalObserver? terminalObserver;
+        private readonly TimeProvider observationTimeProvider;
+        private readonly IRecordingDiagnosticObserver? diagnosticObserver;
+        private RecordingTransformFailure transformFailure;
+        private bool transformFailed;
+        private DateTimeOffset? admissionObservedAtUtc;
         private readonly object gate = new();
         private readonly CancellationTokenSource stopping = new();
         private readonly TaskCompletionSource<Task<RecordingFileWriteOutcome>?>
@@ -344,11 +487,101 @@ public sealed class RecordingFileSink :
         private bool faulted;
         private bool stopRequested;
         private bool isDisposed;
+        private bool terminalCommitted;
+        private RecordingSinkStopAdmission? admission;
+        private readonly TaskCompletionSource<RecordingSinkStopResult> stopCompletion =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private Task? ownedStop;
+
+        public RecordingSinkStopAdmission? Admission
+        {
+            get
+            {
+                lock (gate)
+                {
+                    return admission;
+                }
+            }
+        }
+
+        public RecordingSinkStopAdmissionResult RequestStopAdmission(CancellationToken token)
+        {
+            lock (gate)
+            {
+                if (token.IsCancellationRequested)
+                {
+                    return RecordingSinkStopAdmissionResult.NotAdmitted(
+                        RecordingSinkStopNotAdmittedReason.CancelledBeforeAdmission);
+                }
+
+                if (terminalCommitted || isDisposed)
+                {
+                    return RecordingSinkStopAdmissionResult.NotAdmitted(
+                        RecordingSinkStopNotAdmittedReason.AlreadyTerminal);
+                }
+
+                if (stopRequested)
+                {
+                    return RecordingSinkStopAdmissionResult.NotAdmitted(
+                        RecordingSinkStopNotAdmittedReason.AlreadyStoppingByOtherOperation);
+                }
+
+                admission = new RecordingSinkStopAdmission(Session, stopCompletion.Task);
+                // Linearization: the canonical receipt and irreversible effect
+                // are committed under the same authority as terminal publication.
+                stopRequested = true;
+                return RecordingSinkStopAdmissionResult.Admitted(admission);
+            }
+        }
+
+        public void StartOwnedStop(Func<Task> complete)
+        {
+            lock (gate)
+            {
+                ownedStop ??= Task.Run(async () =>
+                {
+                    try
+                    {
+                        await complete().ConfigureAwait(false);
+                    }
+                    catch (Exception exception)
+                    {
+                        // Unexpected cleanup failure is not terminal proof.
+                        // Keep the receipt pending and expose a bounded error.
+                        admission!.RecordResolutionFault(exception);
+                    }
+                });
+            }
+        }
+
+        public async Task<RecordingFaultDescriptor?> NotifyStopAsync()
+        {
+            try
+            {
+                await stopping.CancelAsync().ConfigureAwait(false);
+                return null;
+            }
+            catch (Exception exception)
+            {
+                return RecordingFaultDescriptor.FromException(exception);
+            }
+        }
+
+        public void PublishStopCompletion(RecordingSinkStopResult result) =>
+            stopCompletion.TrySetResult(result);
 
         public ActiveRecording(
-            RecordingSinkSession session)
+            RecordingSinkSession session,
+            RecordingSinkStartRequest startRequest,
+            IRecordingSessionTerminalObserver? terminalObserver,
+            TimeProvider observationTimeProvider,
+            IRecordingDiagnosticObserver? diagnosticObserver)
         {
             Session = session;
+            this.startRequest = startRequest;
+            this.terminalObserver = terminalObserver;
+            this.observationTimeProvider = observationTimeProvider;
+            this.diagnosticObserver = diagnosticObserver;
         }
 
         public RecordingSinkSession Session { get; }
@@ -386,6 +619,21 @@ public sealed class RecordingFileSink :
                         "The recording file session has already started.");
                 }
 
+                // Only a writer admitted here produces a terminal history fact.
+                // Source acquisition failures/cancellations remain start attempts.
+                if (terminalObserver is not null)
+                {
+                    try
+                    {
+                        admissionObservedAtUtc = observationTimeProvider.GetUtcNow();
+                    }
+                    catch (Exception)
+                    {
+                        ReportPublicationFailure();
+                    }
+                }
+
+                ObserveDiagnostic(RecordingDiagnosticEventKind.WriterAdmitted);
                 writeTask = RunAsync(
                     source,
                     path);
@@ -400,6 +648,7 @@ public sealed class RecordingFileSink :
             {
                 if (writeTask is null)
                 {
+                    terminalCommitted = true;
                     startCompletion.TrySetResult(null);
                 }
             }
@@ -413,6 +662,7 @@ public sealed class RecordingFileSink :
             {
                 if (writeTask is null)
                 {
+                    terminalCommitted = true;
                     startFailure = exception;
                     fault = RecordingFaultDescriptor.FromException(exception);
                     startCompletion.TrySetResult(null);
@@ -424,7 +674,7 @@ public sealed class RecordingFileSink :
         {
             lock (gate)
             {
-                if (isDisposed)
+                if (isDisposed || admission is not null)
                 {
                     return;
                 }
@@ -569,6 +819,12 @@ public sealed class RecordingFileSink :
                                 fault = RecordingFaultDescriptor.FromException(
                                     stage,
                                     exception);
+                                if (diagnosticObserver is not null && exception is RecordingStreamTransformException transformException)
+                                {
+                                    transformFailure = transformException.Diagnostic;
+                                    transformFailed = true;
+                                    ObserveDiagnostic(RecordingDiagnosticEventKind.TransformFailed);
+                                }
                             }
                         },
                         stopping.Token).ConfigureAwait(false);
@@ -590,6 +846,104 @@ public sealed class RecordingFileSink :
                 }
 
                 throw;
+            }
+            finally
+            {
+                // RunAsync's await-using has disposed the source before this
+                // publication. Admission races this marker under the same gate.
+                lock (gate)
+                {
+                    terminalCommitted = true;
+                }
+
+                PublishTerminalFact();
+                ObserveDiagnostic(RecordingDiagnosticEventKind.Terminal);
+            }
+        }
+
+        private void ObserveDiagnostic(RecordingDiagnosticEventKind kind)
+        {
+            if (diagnosticObserver is null)
+                return;
+
+            // Session is the existing sink-owned identity, even if Start has
+            // not returned yet. Diagnostics never participate in History.
+            var diagnostic = new RecordingDiagnosticEvent(
+                Session.SessionId.Value,
+                kind,
+                transformFailure.Phase,
+                transformFailure.Site,
+                transformFailure.Reason,
+                fault?.Stage ?? RecordingFailureStage.Unknown,
+                transformFailed ? RecordingDiagnosticExceptionType.RecordingStreamTransformException : RecordingDiagnosticExceptionType.Unknown,
+                kind == RecordingDiagnosticEventKind.Terminal
+                    ? faulted ? RecordingSinkSessionLifecycleKind.Faulted
+                        : writeOutcome?.IsNoDecodableVideoStart == true ? RecordingSinkSessionLifecycleKind.NoDecodableVideoStart
+                        : RecordingSinkSessionLifecycleKind.Completed
+                    : null);
+            try
+            {
+                _ = diagnosticObserver.TryObserve(in diagnostic);
+            }
+            catch (Exception)
+            {
+                // Optional evidence must never replace a writer exception,
+                // delay cleanup, or change the terminal outcome.
+            }
+        }
+
+        private void PublishTerminalFact()
+        {
+            if (terminalObserver is null)
+            {
+                return;
+            }
+
+            try
+            {
+                if (admissionObservedAtUtc is not { } admittedAt)
+                {
+                    // The observation clock failed at admission. The gap was
+                    // reported then; never invent an admission timestamp.
+                    return;
+                }
+
+                // The writer task does not finish (and cleanup cannot remove it)
+                // until this bounded application capture has completed.
+                // All facts are self-contained, even if Start has not returned.
+                var kind = faulted
+                    ? RecordingSinkSessionLifecycleKind.Faulted
+                    : writeOutcome?.IsNoDecodableVideoStart == true
+                        ? RecordingSinkSessionLifecycleKind.NoDecodableVideoStart
+                        : RecordingSinkSessionLifecycleKind.Completed;
+                var metadata = startRequest.Candidate.Metadata;
+                terminalObserver.ObserveTerminal(new RecordingSessionTerminalFact(
+                    Session,
+                    metadata.Name,
+                    metadata.StreamType,
+                    metadata.StreamExtension,
+                    admittedAt,
+                    observationTimeProvider.GetUtcNow(),
+                    kind,
+                    writeOutcome?.WriteResult,
+                    faulted ? fault : null));
+            }
+            catch (Exception)
+            {
+                ReportPublicationFailure();
+            }
+        }
+
+        private void ReportPublicationFailure()
+        {
+            try
+            {
+                terminalObserver?.RecordPublicationFailure();
+            }
+            catch (Exception)
+            {
+                // Even a broken secondary failure reporter cannot replace EOF,
+                // successful Stop, or the original recorder fault.
             }
         }
     }

@@ -161,6 +161,122 @@ public sealed class RecordingAutomationChannelCoordinatorTests
     }
 
     [Fact]
+    public async Task StopManualRequiresTheExactManualSessionGeneration()
+    {
+        var session = RecordingSinkSession.Manual(
+            new RecordingSessionId(Guid.NewGuid()),
+            TestChannelId);
+        var initialState = RecordingAutomationExecutionState.ManualRecording(session);
+        var sink = new FixedSink(
+            RecordingSinkStartResult.Rejected,
+            RecordingSinkStopResult.Stopped);
+        using var coordinator = new RecordingAutomationChannelCoordinator(
+            TestChannelId,
+            sink,
+            initialState);
+
+        var staleStop = await coordinator.StopManualAsync(
+            new RecordingSessionId(Guid.NewGuid()),
+            CancellationToken.None);
+
+        Assert.Equal(RecordingAutomationStopResultKind.Rejected, staleStop.Kind);
+        Assert.Same(initialState, staleStop.State);
+        Assert.Equal(0, sink.StopCallCount);
+
+        var stopped = await coordinator.StopManualAsync(
+            session.SessionId,
+            CancellationToken.None);
+
+        Assert.Equal(RecordingAutomationStopResultKind.Stopped, stopped.Kind);
+        Assert.Same(RecordingAutomationExecutionState.Idle, stopped.State);
+        Assert.Equal(1, sink.StopCallCount);
+    }
+
+    [Fact]
+    public async Task StopManualPreservesNoDecodableVideoStartAsTerminalIdleOutcome()
+    {
+        var session = RecordingSinkSession.Manual(
+            new RecordingSessionId(Guid.NewGuid()),
+            TestChannelId);
+        var sink = new FixedSink(
+            RecordingSinkStartResult.Rejected,
+            RecordingSinkStopResult.NoDecodableVideoStart);
+        using var coordinator = new RecordingAutomationChannelCoordinator(
+            TestChannelId,
+            sink,
+            RecordingAutomationExecutionState.ManualRecording(session));
+
+        var result = await coordinator.StopManualAsync(
+            session.SessionId,
+            CancellationToken.None);
+
+        Assert.Equal(
+            RecordingAutomationStopResultKind.NoDecodableVideoStart,
+            result.Kind);
+        Assert.Same(RecordingAutomationExecutionState.Idle, result.State);
+        Assert.Same(RecordingAutomationExecutionState.Idle, coordinator.State);
+        Assert.Equal(1, sink.StopCallCount);
+    }
+
+    [Fact]
+    public async Task StopManualNeverStopsAnAutomaticSession()
+    {
+        var ruleId = Guid.NewGuid();
+        var session = CreateSession(TestChannelId, ruleId);
+        var initialState = RecordingAutomationExecutionState.Recording(
+            RecordingAutomationState.Recording(ruleId),
+            session);
+        var sink = new FixedSink(
+            RecordingSinkStartResult.Rejected,
+            RecordingSinkStopResult.Stopped);
+        using var coordinator = new RecordingAutomationChannelCoordinator(
+            TestChannelId,
+            sink,
+            initialState);
+
+        var stop = await coordinator.StopManualAsync(
+            session.SessionId,
+            CancellationToken.None);
+
+        Assert.Equal(RecordingAutomationStopResultKind.Rejected, stop.Kind);
+        Assert.Same(initialState, stop.State);
+        Assert.Equal(0, sink.StopCallCount);
+    }
+
+    [Fact]
+    public async Task StaleManualStopWaitsForInsteadOfCancelingAutomaticStart()
+    {
+        var rule = CreateRule(RecordingRuleAction.Record);
+        var automaticSession = CreateSession(TestChannelId, rule.Id);
+        var sink = new BlockingStartSink(
+            RecordingSinkStartResult.Started(automaticSession));
+        using var coordinator = new RecordingAutomationChannelCoordinator(
+            TestChannelId,
+            sink);
+
+        var evaluation = coordinator.EvaluateAsync(
+            CreateCandidate(TestChannelId),
+            new RecordingRuleSet([rule]),
+            CancellationToken.None).AsTask();
+        await sink.StartEntered;
+        var staleStop = coordinator.StopManualAsync(
+            new RecordingSessionId(Guid.NewGuid()),
+            CancellationToken.None).AsTask();
+
+        Assert.False(staleStop.IsCompleted);
+        sink.ReleaseStart();
+
+        var started = await evaluation;
+        var rejected = await staleStop;
+
+        Assert.Equal(RecordingAutomationExecutionResultKind.Started, started.Kind);
+        Assert.Equal(RecordingAutomationStopResultKind.Rejected, rejected.Kind);
+        Assert.Equal(0, sink.StopCallCount);
+        Assert.Equal(RecordingSessionOrigin.AutomaticRule,
+            coordinator.State.Session!.Origin);
+    }
+
+    [Fact]
     public async Task CandidateForDifferentChannel_IsRejectedBeforeSinkUse()
     {
         var sink = new FixedSink(
@@ -352,6 +468,7 @@ public sealed class RecordingAutomationChannelCoordinatorTests
         private readonly TaskCompletionSource releaseStart =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
         private int startCallCount;
+        private int stopCallCount;
 
         public BlockingStartSink(
             RecordingSinkStartResult result)
@@ -363,6 +480,9 @@ public sealed class RecordingAutomationChannelCoordinatorTests
 
         public int StartCallCount =>
             Volatile.Read(ref startCallCount);
+
+        public int StopCallCount =>
+            Volatile.Read(ref stopCallCount);
 
         public void ReleaseStart()
         {
@@ -389,6 +509,7 @@ public sealed class RecordingAutomationChannelCoordinatorTests
             RecordingSinkStopRequest request,
             CancellationToken cancellationToken)
         {
+            Interlocked.Increment(ref stopCallCount);
             throw new NotSupportedException();
         }
     }

@@ -10,6 +10,7 @@ public enum GenesisChannelColumn
     Bitrate,
     Uptime,
     Type,
+    YellowPage,
 }
 
 public enum GenesisChannelColumnAlignment
@@ -64,7 +65,27 @@ public static class GenesisChannelListPresentation
                     "タイプ",
                     60,
                     GenesisChannelColumnAlignment.Left),
+                new(
+                    GenesisChannelColumn.YellowPage,
+                    "YP",
+                    70,
+                    GenesisChannelColumnAlignment.Left),
             });
+
+    internal static string[] CreateRowValues(GenesisChannelItem channel)
+    {
+        ArgumentNullException.ThrowIfNull(channel);
+        return
+        [
+            channel.Name,
+            channel.DetailsText,
+            channel.ListenerRelayText,
+            channel.BitrateText,
+            channel.UptimeText,
+            channel.TypeText,
+            channel.YellowPageText,
+        ];
+    }
 }
 
 public sealed record GenesisChannelItem(
@@ -75,8 +96,11 @@ public sealed record GenesisChannelItem(
     int? Relays = null,
     int? BitrateKbps = null,
     TimeSpan? Uptime = null,
-    string? Type = null)
+    string? Type = null,
+    string? ChannelId = null)
 {
+    public string? YellowPage { get; init; }
+
     public string DetailsText => Description ?? string.Empty;
 
     public string ListenerRelayText => Listeners is null && Relays is null
@@ -103,6 +127,8 @@ public sealed record GenesisChannelItem(
     }
 
     public string TypeText => Type ?? string.Empty;
+
+    public string YellowPageText => YellowPage ?? string.Empty;
 
     private static string FormatCount(int? value) =>
         value?.ToString(CultureInfo.InvariantCulture) ?? "-";

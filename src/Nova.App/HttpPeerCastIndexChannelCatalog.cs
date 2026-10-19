@@ -10,16 +10,15 @@ internal interface IPeerCastIndexTextSource
 internal sealed class HttpPeerCastIndexChannelCatalog : IGenesisChannelCatalog
 {
     private readonly Uri _indexUri;
-    private readonly Uri _fallbackTrackerUri;
+    private readonly Uri? _fallbackTrackerUri;
     private readonly IPeerCastIndexTextSource _textSource;
 
     public HttpPeerCastIndexChannelCatalog(
         Uri indexUri,
-        Uri fallbackTrackerUri,
+        Uri? fallbackTrackerUri,
         IPeerCastIndexTextSource textSource)
     {
         ArgumentNullException.ThrowIfNull(indexUri);
-        ArgumentNullException.ThrowIfNull(fallbackTrackerUri);
         ArgumentNullException.ThrowIfNull(textSource);
         ValidateHttpIndexUri(indexUri);
         ValidateTrackerUri(fallbackTrackerUri);
@@ -51,8 +50,13 @@ internal sealed class HttpPeerCastIndexChannelCatalog : IGenesisChannelCatalog
         }
     }
 
-    private static void ValidateTrackerUri(Uri trackerUri)
+    private static void ValidateTrackerUri(Uri? trackerUri)
     {
+        if (trackerUri is null)
+        {
+            return;
+        }
+
         if (!trackerUri.IsAbsoluteUri ||
             !string.Equals(trackerUri.Scheme, "pcp", StringComparison.OrdinalIgnoreCase) ||
             string.IsNullOrWhiteSpace(trackerUri.Host))
@@ -64,6 +68,24 @@ internal sealed class HttpPeerCastIndexChannelCatalog : IGenesisChannelCatalog
     }
 }
 
+internal static class GenesisYellowPageCatalogFactory
+{
+    public static IGenesisChannelCatalog Create(GenesisYellowPageDefinition definition) =>
+        Create(definition, SystemPeerCastIndexTextSource.Instance);
+
+    internal static IGenesisChannelCatalog Create(
+        GenesisYellowPageDefinition definition,
+        IPeerCastIndexTextSource textSource)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        ArgumentNullException.ThrowIfNull(textSource);
+        return new HttpPeerCastIndexChannelCatalog(
+            definition.IndexUri,
+            definition.FallbackTrackerUri,
+            textSource);
+    }
+}
+
 internal static class SpGenesisChannelCatalog
 {
     public static Uri IndexUri { get; } = new("http://bayonet.ddo.jp/sp/index.txt");
@@ -71,11 +93,13 @@ internal static class SpGenesisChannelCatalog
     public static Uri TrackerUri { get; } = new("pcp://bayonet.ddo.jp:7146/");
 
     public static IGenesisChannelCatalog Create() =>
-        Create(SystemPeerCastIndexTextSource.Instance);
+        new GenesisGuiNextYellowPageChannelCatalogRouter(
+            new GenesisAggregatingYellowPageChannelCatalog(
+                GenesisYellowPageConfiguration.CreateDefault()));
 
     public static IGenesisChannelCatalog Create(IPeerCastIndexTextSource textSource)
     {
         ArgumentNullException.ThrowIfNull(textSource);
-        return new HttpPeerCastIndexChannelCatalog(IndexUri, TrackerUri, textSource);
+        return GenesisYellowPageCatalogFactory.Create(GenesisYellowPageDefaults.Sp, textSource);
     }
 }

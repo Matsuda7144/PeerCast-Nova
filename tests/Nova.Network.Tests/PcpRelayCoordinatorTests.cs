@@ -386,6 +386,199 @@ public sealed class PcpRelayCoordinatorTests
     }
 
     [Fact]
+    public async Task SharedOwner_PlaybackAndRecordingShareOneUpstreamAndStopIndependently()
+    {
+        const uint headType = 0x64616568;
+        const uint dataType = 0x61746164;
+        var transportOptions = CreateTransportOptions();
+        await using var upstreamListener = new TcpTransportListener(
+            new IPEndPoint(IPAddress.Loopback, 0),
+            transportOptions);
+        upstreamListener.Start();
+        using var timeoutSource = new CancellationTokenSource(TestTimeout);
+        var accepted = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseHead = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var headWritten = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFirstData = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var firstDataWritten = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseSecondData = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondDataWritten = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseThirdData = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var thirdDataWritten = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var finishUpstream = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var upstreamAcceptCount = 0;
+        var upstreamTask = RunSharedOwnerUpstreamAsync(
+            upstreamListener,
+            accepted,
+            () => Interlocked.Increment(ref upstreamAcceptCount),
+            releaseHead.Task,
+            headWritten,
+            releaseFirstData.Task,
+            firstDataWritten,
+            releaseSecondData.Task,
+            secondDataWritten,
+            releaseThirdData.Task,
+            thirdDataWritten,
+            finishUpstream.Task,
+            timeoutSource.Token);
+
+        var tracker = CreateTracker();
+        await using var runtime = new PcpRelayRuntimeComposition();
+        var options = CreateCoordinatorOptions(
+            transportOptions,
+            maxReconnectAttempts: 0) with
+        {
+            UpstreamSession = new PcpChannelSessionOptions
+            {
+                HandshakeTimeout = TimeSpan.FromSeconds(2),
+                MaxReconnectAttempts = 0,
+                Stream = new PcpChannelStreamOptions
+                {
+                    ReadIdleTimeout = TestTimeout,
+                },
+            },
+        };
+        var coordinator = runtime.CreateCoordinator(
+            new TcpTransportConnector(transportOptions),
+            tracker,
+            new IPEndPoint(IPAddress.Loopback, 0),
+            options,
+            stopWhenNoConsumers: true);
+        var earlyPlayback = new CollectingChannelPacketConsumer();
+        var earlyAttachment = await coordinator.AttachPlaybackConsumerAsync(
+            earlyPlayback);
+        Assert.NotNull(earlyAttachment);
+        Assert.Equal(1, coordinator.ActiveConsumerCount);
+
+        var runTask = coordinator.RunAsync(
+            upstreamListener.LocalEndPoint.Address.ToString(),
+            upstreamListener.LocalEndPoint.Port,
+            cancellationToken: CancellationToken.None);
+        Assert.Equal(
+            PcpRelayCoordinatorReadinessOutcome.Ready,
+            await coordinator.WaitForReadinessAsync(timeoutSource.Token));
+        await accepted.Task.WaitAsync(timeoutSource.Token);
+        await WaitForConditionAsync(
+            () => runtime.RecordingStreamSourceLeaseRegistry.TryGet(
+                tracker.Snapshot.ChannelId,
+                out _),
+            timeoutSource.Token);
+
+        var recordingReader = await runtime.RecordingSourceProvider.OpenReadAsync(
+            CreateRecordingRequest(tracker.Snapshot.ChannelId),
+            timeoutSource.Token);
+        Assert.Equal(2, coordinator.ActiveConsumerCount);
+
+        releaseHead.TrySetResult();
+        var earlyHead = await earlyPlayback.ReceiveAsync(timeoutSource.Token);
+        await headWritten.Task.WaitAsync(timeoutSource.Token);
+
+        var failingPlayback = await coordinator.AttachPlaybackConsumerAsync(
+            new FailingChannelPacketConsumer());
+        Assert.NotNull(failingPlayback);
+        await failingPlayback!.Completion.WaitAsync(timeoutSource.Token);
+        await failingPlayback.DisposeAsync();
+        Assert.Equal(2, coordinator.ActiveConsumerCount);
+
+        var latePlayback = new CollectingChannelPacketConsumer();
+        var lateAttachment = await coordinator.AttachPlaybackConsumerAsync(
+            latePlayback);
+        Assert.NotNull(lateAttachment);
+        var lateHead = await latePlayback.ReceiveAsync(timeoutSource.Token);
+        var recordedHead = new byte[1];
+        await recordingReader.ReadExactlyAsync(
+            recordedHead,
+            timeoutSource.Token);
+
+        Assert.Equal(headType, earlyHead.Type);
+        Assert.Equal(0, earlyHead.Sequence);
+        Assert.Equal(ChannelGuid, earlyHead.ChannelId.Value);
+        Assert.Equal(LocalSessionId, earlyHead.SessionId);
+        Assert.Equal([0x48], earlyHead.Payload);
+        Assert.Equal(headType, lateHead.Type);
+        Assert.Equal(0, lateHead.Sequence);
+        Assert.Equal(LocalSessionId, lateHead.SessionId);
+        Assert.Equal([0x48], lateHead.Payload);
+        Assert.Equal([0x48], recordedHead);
+        Assert.Equal(3, coordinator.ActiveConsumerCount);
+
+        releaseFirstData.TrySetResult();
+        await headWritten.Task.WaitAsync(timeoutSource.Token);
+        var earlyData = await earlyPlayback.ReceiveAsync(timeoutSource.Token);
+        var lateData = await latePlayback.ReceiveAsync(timeoutSource.Token);
+        await firstDataWritten.Task.WaitAsync(timeoutSource.Token);
+        var recordedFirstData = new byte[1];
+        await recordingReader.ReadExactlyAsync(
+            recordedFirstData,
+            timeoutSource.Token);
+        Assert.Equal(dataType, earlyData.Type);
+        Assert.Equal(1, earlyData.Sequence);
+        Assert.Equal([0x44], earlyData.Payload);
+        Assert.Equal(dataType, lateData.Type);
+        Assert.Equal(1, lateData.Sequence);
+        Assert.Equal([0x44], lateData.Payload);
+        Assert.Equal([0x44], recordedFirstData);
+
+        await recordingReader.DisposeAsync();
+        Assert.Equal(2, coordinator.ActiveConsumerCount);
+        Assert.Equal(PcpRelayCoordinatorState.Running, coordinator.State);
+
+        releaseSecondData.TrySetResult();
+        await secondDataWritten.Task.WaitAsync(timeoutSource.Token);
+        var earlySecondData = await earlyPlayback.ReceiveAsync(timeoutSource.Token);
+        var lateSecondData = await latePlayback.ReceiveAsync(timeoutSource.Token);
+        Assert.Equal([0x45], earlySecondData.Payload);
+        Assert.Equal([0x45], lateSecondData.Payload);
+
+        var recordingReaderAfterPlayback =
+            await runtime.RecordingSourceProvider.OpenReadAsync(
+                CreateRecordingRequest(tracker.Snapshot.ChannelId),
+                timeoutSource.Token);
+        var replayedRecordedHead = new byte[1];
+        await recordingReaderAfterPlayback.ReadExactlyAsync(
+            replayedRecordedHead,
+            timeoutSource.Token);
+        Assert.Equal([0x48], replayedRecordedHead);
+
+        await earlyAttachment!.DisposeAsync();
+        await lateAttachment!.DisposeAsync();
+        Assert.Equal(1, coordinator.ActiveConsumerCount);
+        Assert.Equal(PcpRelayCoordinatorState.Running, coordinator.State);
+
+        releaseThirdData.TrySetResult();
+        await thirdDataWritten.Task.WaitAsync(timeoutSource.Token);
+        var recordedThirdData = new byte[1];
+        await recordingReaderAfterPlayback.ReadExactlyAsync(
+            recordedThirdData,
+            timeoutSource.Token);
+        Assert.Equal([0x46], recordedThirdData);
+
+        await recordingReaderAfterPlayback.DisposeAsync();
+        var result = await runTask.WaitAsync(timeoutSource.Token);
+        finishUpstream.TrySetResult();
+        await upstreamTask.WaitAsync(timeoutSource.Token);
+
+        Assert.Equal(1, Volatile.Read(ref upstreamAcceptCount));
+        Assert.Equal(PcpRelayCoordinatorEndReason.Stopped, result.EndReason);
+        Assert.Equal(PcpRelayCoordinatorState.Stopped, coordinator.State);
+        Assert.Equal(0, coordinator.ActiveConsumerCount);
+        Assert.False(runtime.RecordingStreamSourceLeaseRegistry.TryGet(
+            tracker.Snapshot.ChannelId,
+            out _));
+        Assert.True(result.ShutdownCompleted);
+    }
+
+    [Fact]
     public async Task Coordinator_PreservesDownstreamChildAcrossUpstreamReconnect()
     {
         var transportOptions = CreateTransportOptions();
@@ -955,6 +1148,98 @@ public sealed class PcpRelayCoordinatorTests
         }
     }
 
+    private static async Task RunSharedOwnerUpstreamAsync(
+        TcpTransportListener listener,
+        TaskCompletionSource accepted,
+        Action onAccepted,
+        Task releaseHead,
+        TaskCompletionSource headWritten,
+        Task releaseFirstData,
+        TaskCompletionSource firstDataWritten,
+        Task releaseSecondData,
+        TaskCompletionSource secondDataWritten,
+        Task releaseThirdData,
+        TaskCompletionSource thirdDataWritten,
+        Task finishUpstream,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await listener.AcceptAsync(
+            cancellationToken);
+        onAccepted();
+        var pipeReader = PipeReader.Create(
+            connection.TransportStream,
+            new StreamPipeReaderOptions(leaveOpen: true));
+
+        try
+        {
+            await ReadAndAssertUpstreamRequestAsync(
+                pipeReader,
+                expectedPosition: 0,
+                cancellationToken);
+            await WriteHttpResponseAsync(connection, cancellationToken);
+            await ReadAndAssertHeloAsync(pipeReader, cancellationToken);
+            await WriteAtomsAsync(
+                connection,
+                [
+                    CreateOlehAtom(),
+                    PcpAtom.Leaf(
+                        PcpKnownAtomNames.Okay,
+                        PcpWireValueCodec.EncodeUInt32(1)),
+                ],
+                cancellationToken);
+            accepted.TrySetResult();
+
+            await releaseHead.WaitAsync(cancellationToken);
+            await WriteAtomsAsync(
+                connection,
+                [CreatePacketAtom(100, [0x48], 0x64616568)],
+                cancellationToken);
+            headWritten.TrySetResult();
+
+            await releaseFirstData.WaitAsync(cancellationToken);
+            await WriteAtomsAsync(
+                connection,
+                [CreatePacketAtom(101, [0x44], 0x61746164)],
+                cancellationToken);
+            firstDataWritten.TrySetResult();
+
+            await releaseSecondData.WaitAsync(cancellationToken);
+            await WriteAtomsAsync(
+                connection,
+                [CreatePacketAtom(102, [0x45], 0x61746164)],
+                cancellationToken);
+            secondDataWritten.TrySetResult();
+
+            await releaseThirdData.WaitAsync(cancellationToken);
+            await WriteAtomsAsync(
+                connection,
+                [CreatePacketAtom(103, [0x46], 0x61746164)],
+                cancellationToken);
+            thirdDataWritten.TrySetResult();
+
+            await finishUpstream.WaitAsync(cancellationToken);
+            try
+            {
+                await WriteAtomsAsync(
+                    connection,
+                    [CreateQuitAtom()],
+                    cancellationToken);
+            }
+            catch (IOException)
+            {
+                // Last consumer shutdown may close the shared PCP connection first.
+            }
+            catch (ObjectDisposedException)
+            {
+                // Last consumer shutdown may close the shared PCP connection first.
+            }
+        }
+        finally
+        {
+            await pipeReader.CompleteAsync();
+        }
+    }
+
     private static async Task RunHeldRecordingPacketsAsync(
         TcpTransportListener listener,
         byte[] firstPayload,
@@ -1317,6 +1602,49 @@ public sealed class PcpRelayCoordinatorTests
         return PcpAtom.Leaf(
             PcpKnownAtomNames.Quit,
             PcpWireValueCodec.EncodeUInt32(0));
+    }
+
+    private sealed record ChannelPacketSnapshot(
+        ChannelId ChannelId,
+        ChannelSessionId SessionId,
+        long Sequence,
+        uint Type,
+        byte[] Payload);
+
+    private sealed class CollectingChannelPacketConsumer :
+        IPcpChannelPacketConsumer
+    {
+        private readonly System.Threading.Channels.Channel<ChannelPacketSnapshot>
+            _packets = System.Threading.Channels.Channel.CreateUnbounded<
+                ChannelPacketSnapshot>();
+
+        public ValueTask ConsumeAsync(
+            PcpChannelPacket packet,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            _packets.Writer.TryWrite(new(
+                packet.ChannelId,
+                packet.SessionId,
+                packet.Sequence,
+                packet.Type,
+                packet.Payload.ToArray()));
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask<ChannelPacketSnapshot> ReceiveAsync(
+            CancellationToken cancellationToken) =>
+            _packets.Reader.ReadAsync(cancellationToken);
+    }
+
+    private sealed class FailingChannelPacketConsumer :
+        IPcpChannelPacketConsumer
+    {
+        public ValueTask ConsumeAsync(
+            PcpChannelPacket packet,
+            CancellationToken cancellationToken) =>
+            ValueTask.FromException(
+                new IOException("Synthetic playback consumer failure."));
     }
 
     private sealed class DownstreamPeer : IAsyncDisposable

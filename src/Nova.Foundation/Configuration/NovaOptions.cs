@@ -9,4 +9,6 @@ public sealed record NovaOptions
     public bool EnableDetailedDiagnostics { get; init; }
 
     public bool AutoPortMapping { get; init; }
+
+    public string? RecordingOutputDirectory { get; init; }
 }

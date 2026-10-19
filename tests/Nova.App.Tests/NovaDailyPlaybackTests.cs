@@ -466,6 +466,8 @@ public sealed class NovaDailyPlaybackTests
 
         public bool ManagedWindowRequested { get; private set; }
 
+        public event Action<NovaDailyPlaybackTermination>? PlaybackEnded;
+
         public Task PlayAsync(GenesisChannelItem channel, CancellationToken cancellationToken)
         {
             PlayedSource = channel.Source;
@@ -477,6 +479,9 @@ public sealed class NovaDailyPlaybackTests
             StopCalled = true;
             return Task.CompletedTask;
         }
+
+        public void CompletePlayback(bool failed = false) =>
+            PlaybackEnded?.Invoke(new(PlayedSource ?? string.Empty, failed));
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }

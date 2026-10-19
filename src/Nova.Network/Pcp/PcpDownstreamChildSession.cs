@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Globalization;
 using System.IO.Pipelines;
 using System.Net.Sockets;
 using PeerCast.Nova.Core.Channels;
@@ -9,9 +8,11 @@ using PeerCast.Nova.Protocol.Pcp;
 namespace PeerCast.Nova.Network.Pcp;
 
 /// <summary>
-/// Owns one accepted TCP connection from HTTP relay entry through PCP
-/// negotiation, bounded CHAN delivery, remote control monitoring, and cleanup.
-/// The fan-out remains caller-owned.
+/// Runs one downstream PCP child from HTTP relay entry through negotiation,
+/// bounded CHAN delivery, remote control monitoring, and cleanup. Standalone
+/// sessions own their connection and PipeReader; routed sessions borrow both
+/// from the shared listener for the duration of the run. The fan-out remains
+/// caller-owned in either mode.
 /// </summary>
 public sealed class PcpDownstreamChildSession :
     IPcpRelayChildSink,
@@ -19,7 +20,6 @@ public sealed class PcpDownstreamChildSession :
 {
     private const uint AcceptedCode = 1;
     private const uint GenericQuitCode = 0;
-    private const string ChannelPathPrefix = "/channel/";
 
     private readonly object _lifecycleGate = new();
     private readonly TcpTransportConnection _connection;
@@ -28,6 +28,9 @@ public sealed class PcpDownstreamChildSession :
     private readonly ChannelId _channelId;
     private readonly Guid _localSessionId;
     private readonly PcpDownstreamChildOptions _options;
+    private readonly PipeReader? _borrowedPipeReader;
+    private readonly PcpDownstreamRelayRequest? _preRoutedRequest;
+    private readonly bool _ownsTransport;
     private readonly CancellationTokenSource _lifetimeSource = new();
     private readonly TaskCompletionSource _handshakeReady = new(
         TaskCreationOptions.RunContinuationsAsynchronously);
@@ -66,6 +69,29 @@ public sealed class PcpDownstreamChildSession :
         Guid localSessionId,
         PcpDownstreamChildOptions? options,
         IPcpDownstreamPacketWriter? packetWriter)
+        : this(
+            connection,
+            fanout,
+            channelId,
+            localSessionId,
+            options,
+            packetWriter,
+            borrowedPipeReader: null,
+            preRoutedRequest: null,
+            ownsTransport: true)
+    {
+    }
+
+    private PcpDownstreamChildSession(
+        TcpTransportConnection connection,
+        PcpRelayFanout fanout,
+        ChannelId channelId,
+        Guid localSessionId,
+        PcpDownstreamChildOptions? options,
+        IPcpDownstreamPacketWriter? packetWriter,
+        PipeReader? borrowedPipeReader,
+        PcpDownstreamRelayRequest? preRoutedRequest,
+        bool ownsTransport)
     {
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentNullException.ThrowIfNull(fanout);
@@ -78,6 +104,27 @@ public sealed class PcpDownstreamChildSession :
                 nameof(localSessionId));
         }
 
+        if ((borrowedPipeReader is null) != (preRoutedRequest is null))
+        {
+            throw new ArgumentException(
+                "A routed downstream child requires both a PipeReader and a routed request.");
+        }
+
+        if (ownsTransport == (borrowedPipeReader is not null))
+        {
+            throw new ArgumentException(
+                "Transport ownership must match the downstream child input mode.",
+                nameof(ownsTransport));
+        }
+
+        if (preRoutedRequest is not null &&
+            preRoutedRequest.ChannelId != channelId.Value)
+        {
+            throw new ArgumentException(
+                "The routed request channel must match the downstream child channel.",
+                nameof(preRoutedRequest));
+        }
+
         _connection = connection;
         _fanout = fanout;
         _packetWriter = packetWriter ??
@@ -88,6 +135,33 @@ public sealed class PcpDownstreamChildSession :
             ? new PcpDownstreamChildOptions()
             : options with { };
         _options.Validate();
+        _borrowedPipeReader = borrowedPipeReader;
+        _preRoutedRequest = preRoutedRequest;
+        _ownsTransport = ownsTransport;
+    }
+
+    internal static PcpDownstreamChildSession CreateRouted(
+        TcpTransportConnection connection,
+        PipeReader reader,
+        PcpDownstreamRelayRequest request,
+        PcpRelayFanout fanout,
+        Guid localSessionId,
+        PcpDownstreamChildOptions? options = null,
+        IPcpDownstreamPacketWriter? packetWriter = null)
+    {
+        ArgumentNullException.ThrowIfNull(reader);
+        ArgumentNullException.ThrowIfNull(request);
+
+        return new PcpDownstreamChildSession(
+            connection,
+            fanout,
+            new ChannelId(request.ChannelId),
+            localSessionId,
+            options,
+            packetWriter,
+            reader,
+            request,
+            ownsTransport: false);
     }
 
     public Task<PcpDownstreamChildResult> RunAsync(
@@ -128,7 +202,10 @@ public sealed class PcpDownstreamChildSession :
         {
             if (runTask is null)
             {
-                await _connection.DisposeAsync().ConfigureAwait(false);
+                if (_ownsTransport)
+                {
+                    await _connection.DisposeAsync().ConfigureAwait(false);
+                }
             }
             else
             {
@@ -205,7 +282,7 @@ public sealed class PcpDownstreamChildSession :
                 _lifetimeSource.Token);
         _operationToken = operationSource.Token;
 
-        var pipeReader = PipeReader.Create(
+        var pipeReader = _borrowedPipeReader ?? PipeReader.Create(
             _connection.TransportStream,
             new StreamPipeReaderOptions(
                 bufferSize: _options.PipeBufferSize,
@@ -274,13 +351,16 @@ public sealed class PcpDownstreamChildSession :
                     .ConfigureAwait(false);
             }
 
-            try
+            if (_ownsTransport)
             {
-                await pipeReader.CompleteAsync().ConfigureAwait(false);
-            }
-            finally
-            {
-                await _connection.DisposeAsync().ConfigureAwait(false);
+                try
+                {
+                    await pipeReader.CompleteAsync().ConfigureAwait(false);
+                }
+                finally
+                {
+                    await _connection.DisposeAsync().ConfigureAwait(false);
+                }
             }
 
             if (!stopped && _registration is not null)
@@ -316,33 +396,55 @@ public sealed class PcpDownstreamChildSession :
                 handshakeTimeoutSource.Token);
         var handshakeToken = handshakeSource.Token;
 
-        PcpHttpRequestHeader request;
+        PcpDownstreamRelayRequest relayRequest;
 
-        try
+        if (_preRoutedRequest is null)
         {
-            request = await PcpHttpHeaderBlockReader.ReadRequestAsync(
-                pipeReader,
-                _options.MaxHttpHeaderBytes,
-                handshakeToken).ConfigureAwait(false);
+            PcpDownstreamRelayRequestValidation validation;
+
+            try
+            {
+                validation = await PcpDownstreamRelayRequestReader.ReadAsync(
+                    pipeReader,
+                    _options.MaxHttpHeaderBytes,
+                    _options.PcpVersion,
+                    handshakeToken).ConfigureAwait(false);
+            }
+            catch (InvalidDataException)
+            {
+                _httpStatusCode = 400;
+                await TryWriteControlAsync(
+                    PcpDownstreamHttpResponse.CreateRejection(
+                        400,
+                        _options.UserAgent),
+                    operationSource.Token).ConfigureAwait(false);
+                return PcpDownstreamChildEndReason.ProtocolRejected;
+            }
+
+            if (!validation.IsAccepted || validation.Request is null)
+            {
+                _httpStatusCode = validation.StatusCode;
+                await WriteControlAsync(
+                    PcpDownstreamHttpResponse.CreateRejection(
+                        validation.StatusCode,
+                        _options.UserAgent),
+                    handshakeToken).ConfigureAwait(false);
+                return PcpDownstreamChildEndReason.ProtocolRejected;
+            }
+
+            relayRequest = validation.Request;
         }
-        catch (InvalidDataException)
+        else
         {
-            _httpStatusCode = 400;
-            await TryWriteControlAsync(
-                PcpDownstreamHttpResponse.CreateRejection(
-                    400,
-                    _options.UserAgent),
-                operationSource.Token).ConfigureAwait(false);
-            return PcpDownstreamChildEndReason.ProtocolRejected;
+            relayRequest = _preRoutedRequest;
         }
 
-        var validation = ValidateRequest(request);
-        if (validation.StatusCode is 400 or 404)
+        if (relayRequest.ChannelId != _channelId.Value)
         {
-            _httpStatusCode = validation.StatusCode;
+            _httpStatusCode = 404;
             await WriteControlAsync(
                 PcpDownstreamHttpResponse.CreateRejection(
-                    validation.StatusCode,
+                    404,
                     _options.UserAgent),
                 handshakeToken).ConfigureAwait(false);
             return PcpDownstreamChildEndReason.ProtocolRejected;
@@ -356,7 +458,7 @@ public sealed class PcpDownstreamChildSession :
                     503,
                     _options.UserAgent,
                     _options.PcpVersion,
-                    validation.StreamPosition),
+                    relayRequest.StreamPosition),
                 handshakeToken).ConfigureAwait(false);
 
             var heloResult = await ReadAndValidateHeloAsync(
@@ -381,7 +483,7 @@ public sealed class PcpDownstreamChildSession :
                 200,
                 _options.UserAgent,
                 _options.PcpVersion,
-                validation.StreamPosition),
+                relayRequest.StreamPosition),
             handshakeToken).ConfigureAwait(false);
 
         var heloEndReason = await ReadAndValidateHeloAsync(
@@ -497,58 +599,6 @@ public sealed class PcpDownstreamChildSession :
                 return PcpDownstreamChildEndReason.ProtocolRejected;
             }
         }
-    }
-
-    private PcpDownstreamRequestValidation ValidateRequest(
-        PcpHttpRequestHeader request)
-    {
-        if (!string.Equals(request.Method, "GET", StringComparison.Ordinal) ||
-            (request.HttpVersion != new Version(1, 0) &&
-                request.HttpVersion != new Version(1, 1)))
-        {
-            return new PcpDownstreamRequestValidation(400, 0);
-        }
-
-        if (!request.RequestTarget.StartsWith(
-                ChannelPathPrefix,
-                StringComparison.Ordinal) ||
-            request.RequestTarget.Length !=
-                ChannelPathPrefix.Length + 32 ||
-            !Guid.TryParseExact(
-                request.RequestTarget[ChannelPathPrefix.Length..],
-                "N",
-                out var requestedChannelId) ||
-            requestedChannelId != _channelId.Value)
-        {
-            return new PcpDownstreamRequestValidation(404, 0);
-        }
-
-        if (!request.Headers.TryGetValue(
-                "x-peercast-pcp",
-                out var versionValue) ||
-            !int.TryParse(
-                versionValue,
-                NumberStyles.None,
-                CultureInfo.InvariantCulture,
-                out var pcpVersion) ||
-            pcpVersion != _options.PcpVersion)
-        {
-            return new PcpDownstreamRequestValidation(400, 0);
-        }
-
-        if (!request.Headers.TryGetValue(
-                "x-peercast-pos",
-                out var positionValue) ||
-            !long.TryParse(
-                positionValue,
-                NumberStyles.None,
-                CultureInfo.InvariantCulture,
-                out var streamPosition))
-        {
-            return new PcpDownstreamRequestValidation(400, 0);
-        }
-
-        return new PcpDownstreamRequestValidation(200, streamPosition);
     }
 
     private byte[] EncodeHandshakeReply(bool accepted)
@@ -673,8 +723,4 @@ public sealed class PcpDownstreamChildSession :
             // A cancellation callback cannot change session ownership.
         }
     }
-
-    private sealed record PcpDownstreamRequestValidation(
-        int StatusCode,
-        long StreamPosition);
 }

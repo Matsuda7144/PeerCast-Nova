@@ -62,6 +62,29 @@ public sealed class NovaWindowsStartupCompositionTests
     }
 
     [Fact]
+    public async Task StartedHostStopFaultOverridesCancelledExit()
+    {
+        var events = new List<string>();
+        using var cancellation = new CancellationTokenSource();
+        var host = new FakeHost(
+            events,
+            wait: _ =>
+            {
+                cancellation.Cancel();
+                return ValueTask.FromResult(PlaybackWindowsPhysicalRunnerResult.Cancelled);
+            },
+            stopResult: PlaybackWindowsPhysicalRunnerResult.Faulted);
+        var composition = new NovaWindowsStartupComposition(
+            new(),
+            new FakeFactory(host, events));
+
+        var result = await composition.RunAsync(cancellation.Token);
+
+        Assert.Equal(NovaWindowsStartupResult.Faulted, result);
+        Assert.Equal(["Create", "Start", "Wait", "Stop", "Dispose"], events);
+    }
+
+    [Fact]
     public async Task UnsupportedPlatformFailsClosedWithoutRunningApplicationBody()
     {
         var events = new List<string>();
@@ -77,6 +100,99 @@ public sealed class NovaWindowsStartupCompositionTests
         Assert.Equal(NovaWindowsStartupResult.PlatformUnsupported, result);
         Assert.Equal(0, host.WaitCount);
         Assert.Equal(["Create", "Start", "Stop", "Dispose"], events);
+    }
+
+    [Fact]
+    public async Task DefaultGenesisPlaybackControllerIsDailyAdapterAndInertUntilPlay()
+    {
+        using var fixture = new RecordingMetadataFixture();
+        await using var controller = Assert.IsType<GuiNextDailyPlaybackSessionController>(
+            NovaWindowsStartupComposition.CreateDefaultGenesisPlaybackController(
+                fixture.Store, fixture.Settings));
+
+        Assert.Equal(PlaybackSessionState.Stopped, controller.Snapshot.State);
+        Assert.IsAssignableFrom<IGenesisManualRecordingSessionController>(controller);
+        var recording = controller.GetSnapshot(new GenesisChannelItem(
+            "selected station",
+            "pcp://tracker.example:7144/channel/531DC8DFC7FB42928AC2C0A626517A87",
+            ChannelId: "531DC8DFC7FB42928AC2C0A626517A87"));
+        Assert.True(recording.IsCandidateValid);
+        Assert.Equal(GenesisRecordingCoreStateKind.Idle, recording.State);
+    }
+
+    [Fact]
+    public async Task PlaybackSettingsPathReachesProductionControllerForNextPlay()
+    {
+        using var fixture = new RecordingMetadataFixture();
+        var pathSource = new GenesisGuiNextPlaybackPathSource();
+        await using var controller = NovaWindowsStartupComposition
+            .CreateDefaultGenesisPlaybackController(pathSource,
+                fixture.Settings, fixture.Store);
+
+        Assert.Equal(PlaybackSessionState.Stopped, controller.Snapshot.State);
+
+        var configuredPath = Path.Combine(
+            Path.GetTempPath(),
+            $"NovaMissing-{Guid.NewGuid():N}",
+            "PCRPlayer64.exe");
+        pathSource.Set(configuredPath);
+        var outcome = await controller.PlayAsync(new PlaybackSessionRequest(
+            "pcp://127.0.0.1:7144/channel/0123456789ABCDEF0123456789ABCDEF",
+            "Settings path composition",
+            "0123456789ABCDEF0123456789ABCDEF"));
+
+        Assert.Equal(PlaybackSessionCommandResult.Faulted, outcome.Result);
+        Assert.Equal(PlaybackSessionState.Faulted, outcome.Snapshot.State);
+        Assert.Contains(
+            "Playback Settings",
+            outcome.Snapshot.ErrorMessage ?? string.Empty,
+            StringComparison.Ordinal);
+        Assert.Equal(configuredPath, pathSource.Current);
+    }
+
+    [Fact]
+    public async Task GenesisStartupOwnsAndDisposesItsPlaybackController()
+    {
+        var events = new List<string>();
+        var host = new FakeHost(
+            events,
+            startResult: PlaybackWindowsPhysicalRunnerResult.PlatformUnsupported);
+        var playbackController = new DisposableFakePlaybackController(events);
+        var composition = new NovaWindowsStartupComposition(
+            new(),
+            new FakeFactory(host, events),
+            () => playbackController);
+
+        var result = await composition.RunGenesisAsync();
+
+        Assert.Equal(NovaWindowsStartupResult.PlatformUnsupported, result);
+        Assert.True(playbackController.Disposed);
+        Assert.Equal(
+            ["Create", "Start", "Stop", "Dispose", "DisposePlayback"],
+            events);
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task ShutdownCleanupFailuresStayWithinBoundedResult(
+        bool stopThrows,
+        bool disposeThrows)
+    {
+        var events = new List<string>();
+        var host = new FakeHost(
+            events,
+            stopThrows: stopThrows,
+            disposeThrows: disposeThrows);
+        var composition = new NovaWindowsStartupComposition(
+            new(),
+            new FakeFactory(host, events));
+
+        var result = await composition.RunAsync();
+
+        Assert.Equal(NovaWindowsStartupResult.Faulted, result);
+        Assert.Equal(["Create", "Start", "Wait", "Stop", "Dispose"], events);
     }
 
     [Fact]
@@ -150,17 +266,27 @@ public sealed class NovaWindowsStartupCompositionTests
         private readonly PlaybackWindowsPhysicalRunnerResult _startResult;
         private readonly Func<CancellationToken, ValueTask<PlaybackWindowsPhysicalRunnerResult>>
             _wait;
+        private readonly PlaybackWindowsPhysicalRunnerResult _stopResult;
+        private readonly bool _stopThrows;
+        private readonly bool _disposeThrows;
 
         public FakeHost(
             List<string> events,
             PlaybackWindowsPhysicalRunnerResult startResult =
                 PlaybackWindowsPhysicalRunnerResult.Started,
-            Func<CancellationToken, ValueTask<PlaybackWindowsPhysicalRunnerResult>>? wait = null)
+            Func<CancellationToken, ValueTask<PlaybackWindowsPhysicalRunnerResult>>? wait = null,
+            PlaybackWindowsPhysicalRunnerResult stopResult =
+                PlaybackWindowsPhysicalRunnerResult.Stopped,
+            bool stopThrows = false,
+            bool disposeThrows = false)
         {
             _events = events;
             _startResult = startResult;
             _wait = wait ?? (_ => ValueTask.FromResult(
                 PlaybackWindowsPhysicalRunnerResult.Stopped));
+            _stopResult = stopResult;
+            _stopThrows = stopThrows;
+            _disposeThrows = disposeThrows;
         }
 
         public int WaitCount { get; private set; }
@@ -185,12 +311,59 @@ public sealed class NovaWindowsStartupCompositionTests
             CancellationToken cancellationToken)
         {
             _events.Add("Stop");
-            return ValueTask.FromResult(PlaybackWindowsPhysicalRunnerResult.Stopped);
+            if (_stopThrows)
+            {
+                throw new InvalidOperationException("Host stop failed.");
+            }
+
+            return ValueTask.FromResult(_stopResult);
         }
 
         public ValueTask DisposeAsync()
         {
             _events.Add("Dispose");
+            if (_disposeThrows)
+            {
+                throw new InvalidOperationException("Host disposal failed.");
+            }
+
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingMetadataFixture : IDisposable
+    {
+        private readonly string _root = Path.Combine(Path.GetTempPath(), "Nova-startup-metadata-tests", Guid.NewGuid().ToString("N"));
+        public GenesisRecordingHistoryStore Store => new(Path.Combine(_root, "history.json"));
+        public GenesisRecordingOutputDirectorySettings Settings => new(new(Path.Combine(_root, "settings.json")), Path.Combine(_root, "recordings"));
+        public void Dispose() { if (Directory.Exists(_root)) Directory.Delete(_root, recursive: true); }
+    }
+
+    private sealed class DisposableFakePlaybackController(List<string> events) :
+        IPlaybackSessionController,
+        IAsyncDisposable
+    {
+        public PlaybackSessionSnapshot Snapshot { get; } = PlaybackSessionSnapshot.Stopped;
+
+        public bool Disposed { get; private set; }
+
+        public ValueTask<PlaybackSessionCommandOutcome> PlayAsync(
+            string source,
+            CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(new PlaybackSessionCommandOutcome(
+                PlaybackSessionCommandResult.Rejected,
+                Snapshot));
+
+        public ValueTask<PlaybackSessionCommandOutcome> StopAsync(
+            CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(new PlaybackSessionCommandOutcome(
+                PlaybackSessionCommandResult.Completed,
+                Snapshot));
+
+        public ValueTask DisposeAsync()
+        {
+            Disposed = true;
+            events.Add("DisposePlayback");
             return ValueTask.CompletedTask;
         }
     }

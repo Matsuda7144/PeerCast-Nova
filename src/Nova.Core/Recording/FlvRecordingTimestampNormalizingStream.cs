@@ -203,12 +203,12 @@ internal sealed class FlvRecordingTimestampNormalizingStream : Stream,
             fixedHeader[1] != (byte)'L' ||
             fixedHeader[2] != (byte)'V')
         {
-            throw InvalidFlv("The source does not have an FLV signature.");
+            throw InvalidFlv("The source does not have an FLV signature.", RecordingTransformThrowSite.TimestampNormalizationSignature);
         }
 
         if (fixedHeader[3] != 1 || (fixedHeader[4] & ~0x05) != 0)
         {
-            throw InvalidFlv("The FLV version or flags are invalid.");
+            throw InvalidFlv("The FLV version or flags are invalid.", RecordingTransformThrowSite.TimestampNormalizationVersionOrFlags);
         }
 
         var dataOffset = BinaryPrimitives.ReadUInt32BigEndian(
@@ -216,7 +216,7 @@ internal sealed class FlvRecordingTimestampNormalizingStream : Stream,
         if (dataOffset < FlvFixedHeaderLength ||
             dataOffset > MaximumFlvHeaderLength - PreviousTagSizeLength)
         {
-            throw InvalidFlv("The FLV header offset is outside supported bounds.");
+            throw InvalidFlv("The FLV header offset is outside supported bounds.", RecordingTransformThrowSite.TimestampNormalizationHeaderOffset);
         }
 
         var fullHeaderLength = checked((int)dataOffset + PreviousTagSizeLength);
@@ -232,7 +232,7 @@ internal sealed class FlvRecordingTimestampNormalizingStream : Stream,
         if (BinaryPrimitives.ReadUInt32BigEndian(
                 header.AsSpan(previousTagSizeOffset, PreviousTagSizeLength)) != 0)
         {
-            throw InvalidFlv("The FLV initial PreviousTagSize is not zero.");
+            throw InvalidFlv("The FLV initial PreviousTagSize is not zero.", RecordingTransformThrowSite.TimestampNormalizationInitialPreviousTagSize);
         }
 
         return header;
@@ -254,7 +254,7 @@ internal sealed class FlvRecordingTimestampNormalizingStream : Stream,
         var dataSize = ReadUInt24(tagHeader.AsSpan(1, 3));
         if (dataSize > MaximumTagDataLength)
         {
-            throw InvalidFlv("The FLV tag data size is invalid.");
+            throw InvalidFlv("The FLV tag data size is invalid.", RecordingTransformThrowSite.TimestampNormalizationTagDataSize);
         }
 
         var dataLength = checked((int)dataSize);
@@ -270,7 +270,7 @@ internal sealed class FlvRecordingTimestampNormalizingStream : Stream,
 
         if (ReadUInt24(tag.AsSpan(8, 3)) != 0)
         {
-            throw InvalidFlv("The FLV tag StreamID is not zero.");
+            throw InvalidFlv("The FLV tag StreamID is not zero.", RecordingTransformThrowSite.TimestampNormalizationTagStreamId);
         }
 
         var previousTagSizeOffset = TagHeaderLength + dataLength;
@@ -279,7 +279,7 @@ internal sealed class FlvRecordingTimestampNormalizingStream : Stream,
             tag.AsSpan(previousTagSizeOffset, PreviousTagSizeLength));
         if (previousTagSize != expectedPreviousTagSize)
         {
-            throw InvalidFlv("The FLV tag PreviousTagSize is inconsistent.");
+            throw InvalidFlv("The FLV tag PreviousTagSize is inconsistent.", RecordingTransformThrowSite.TimestampNormalizationPreviousTagSize);
         }
 
         var body = tag.AsSpan(TagHeaderLength, dataLength);
@@ -288,7 +288,7 @@ internal sealed class FlvRecordingTimestampNormalizingStream : Stream,
             AudioTagType => IsAudioMediaTag(body),
             VideoTagType => IsVideoMediaTag(body),
             ScriptTagType => false,
-            _ => throw InvalidFlv("The FLV tag type is unsupported."),
+            _ => throw InvalidFlv("The FLV tag type is unsupported.", RecordingTransformThrowSite.TimestampNormalizationMediaTagType),
         };
 
         if (isMediaTag)
@@ -297,7 +297,7 @@ internal sealed class FlvRecordingTimestampNormalizingStream : Stream,
             if (lastMediaTimestamp is { } previousTimestamp &&
                 timestamp < previousTimestamp)
             {
-                throw InvalidFlv("The FLV media timestamp moved backwards.");
+                throw InvalidFlv("The FLV media timestamp moved backwards.", RecordingTransformThrowSite.TimestampNormalizationMediaTimestamp);
             }
 
             baselineTimestamp ??= timestamp;
@@ -330,7 +330,7 @@ internal sealed class FlvRecordingTimestampNormalizingStream : Stream,
                     return false;
                 }
 
-                throw InvalidFlv($"The {description} is truncated.");
+                throw InvalidFlv($"The {description} is truncated.", RecordingTransformThrowSite.TimestampNormalizationReadExactlyTruncated);
             }
 
             totalRead += read;
@@ -357,7 +357,7 @@ internal sealed class FlvRecordingTimestampNormalizingStream : Stream,
     {
         if (body.IsEmpty)
         {
-            throw InvalidFlv("The FLV audio tag has no audio header.");
+            throw InvalidFlv("The FLV audio tag has no audio header.", RecordingTransformThrowSite.TimestampNormalizationAudioHeader);
         }
 
         var soundFormat = (byte)(body[0] >> 4);
@@ -368,14 +368,14 @@ internal sealed class FlvRecordingTimestampNormalizingStream : Stream,
 
         if (body.Length < 2)
         {
-            throw InvalidFlv("The FLV AAC tag is missing its packet type.");
+            throw InvalidFlv("The FLV AAC tag is missing its packet type.", RecordingTransformThrowSite.TimestampNormalizationAacPacketHeader);
         }
 
         return body[1] switch
         {
             AacSequenceHeader => false,
             AacRaw => true,
-            _ => throw InvalidFlv("The FLV AAC packet type is unsupported."),
+            _ => throw InvalidFlv("The FLV AAC packet type is unsupported.", RecordingTransformThrowSite.TimestampNormalizationAacPacketType),
         };
     }
 
@@ -383,7 +383,7 @@ internal sealed class FlvRecordingTimestampNormalizingStream : Stream,
     {
         if (body.IsEmpty)
         {
-            throw InvalidFlv("The FLV video tag has no video header.");
+            throw InvalidFlv("The FLV video tag has no video header.", RecordingTransformThrowSite.TimestampNormalizationVideoHeader);
         }
 
         var codecId = (byte)(body[0] & 0x0F);
@@ -394,7 +394,7 @@ internal sealed class FlvRecordingTimestampNormalizingStream : Stream,
 
         if (body.Length < 5)
         {
-            throw InvalidFlv("The FLV AVC tag is missing its packet header.");
+            throw InvalidFlv("The FLV AVC tag is missing its packet header.", RecordingTransformThrowSite.TimestampNormalizationAvcPacketHeader);
         }
 
         return body[1] switch
@@ -402,7 +402,7 @@ internal sealed class FlvRecordingTimestampNormalizingStream : Stream,
             AvcSequenceHeader => false,
             AvcNalu => true,
             AvcEndOfSequence => false,
-            _ => throw InvalidFlv("The FLV AVC packet type is unsupported."),
+            _ => throw InvalidFlv("The FLV AVC packet type is unsupported.", RecordingTransformThrowSite.TimestampNormalizationAvcPacketType),
         };
     }
 
@@ -429,8 +429,8 @@ internal sealed class FlvRecordingTimestampNormalizingStream : Stream,
                value[2];
     }
 
-    private static RecordingStreamTransformException InvalidFlv(string message)
+    private static RecordingStreamTransformException InvalidFlv(string message, RecordingTransformThrowSite site)
     {
-        return new RecordingStreamTransformException(message);
+        return new RecordingStreamTransformException(message, site);
     }
 }

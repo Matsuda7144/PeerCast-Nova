@@ -55,6 +55,17 @@ public sealed class PcpRelayRuntimeComposition : IAsyncDisposable
         get;
     }
 
+    internal int OwnedCoordinatorCount
+    {
+        get
+        {
+            lock (gate)
+            {
+                return coordinators.Count;
+            }
+        }
+    }
+
     /// <summary>
     /// Creates a relay owner bound to this runtime's shared registry.
     /// The runtime retains ownership until it is disposed.
@@ -63,7 +74,8 @@ public sealed class PcpRelayRuntimeComposition : IAsyncDisposable
         TcpTransportConnector upstreamConnector,
         ChannelStatusTracker statusTracker,
         IPEndPoint downstreamEndPoint,
-        PcpRelayCoordinatorOptions? options = null)
+        PcpRelayCoordinatorOptions? options = null,
+        bool stopWhenNoConsumers = false)
     {
         ArgumentNullException.ThrowIfNull(upstreamConnector);
         ArgumentNullException.ThrowIfNull(statusTracker);
@@ -81,10 +93,28 @@ public sealed class PcpRelayRuntimeComposition : IAsyncDisposable
                 downstreamEndPoint,
                 options,
                 RecordingStreamSourceLeaseRegistry,
-                PortMapping);
+                stopWhenNoConsumers: stopWhenNoConsumers,
+                portMapping: PortMapping);
             coordinators.Add(coordinator);
             return coordinator;
         }
+    }
+
+    /// <summary>
+    /// Retires one owner early while preserving this runtime's registry and
+    /// provider for later owners of the same channel.
+    /// </summary>
+    public async ValueTask ReleaseCoordinatorAsync(
+        PcpRelayCoordinator coordinator)
+    {
+        ArgumentNullException.ThrowIfNull(coordinator);
+
+        lock (gate)
+        {
+            coordinators.Remove(coordinator);
+        }
+
+        await coordinator.DisposeAsync().ConfigureAwait(false);
     }
 
     /// <summary>

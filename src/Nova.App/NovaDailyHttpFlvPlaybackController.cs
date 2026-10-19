@@ -1,40 +1,201 @@
 using PeerCast.Nova.Core.Channels;
+using PeerCast.Nova.Core.Recording;
 using PeerCast.Nova.Network.Pcp;
-using PeerCast.Nova.Network.Transport;
 
 namespace PeerCast.Nova.App;
 
 internal interface INovaDailyPlaybackController : IAsyncDisposable
 {
+    event Action<NovaDailyPlaybackTermination>? PlaybackEnded;
+
     Task PlayAsync(GenesisChannelItem channel, CancellationToken cancellationToken);
 
     Task StopAsync();
 }
 
-internal sealed class NovaDailyHttpFlvPlaybackController : INovaDailyPlaybackController
+internal sealed record NovaDailyPlaybackTermination(string Source, bool Failed);
+
+internal sealed class NovaDailyHttpFlvPlaybackController :
+    INovaDailyPlaybackController,
+    IGenesisRecordingLibraryController,
+    IGenesisRecordingHistoryController,
+    IGenesisManualRecordingSessionController,
+    IGenesisAutomaticRecordingCatalogObserver
 {
     private static readonly TimeSpan BootstrapTimeout = TimeSpan.FromSeconds(30);
 
     private readonly object _stateGate = new();
     private readonly SemaphoreSlim _commands = new(1, 1);
     private readonly PcrPlayerExternalPlayerLauncher _playerLauncher;
+    private readonly GenesisSharedPcpPlaybackRuntime _sharedPlaybackRuntime;
+    private readonly PcpRecordingRuntimeComposition _recordingComposition;
+    private readonly GenesisManualRecordingSessionController _manualRecordingController;
+    private readonly GenesisAutomaticRecordingEvaluationController
+        _automaticRecordingController;
     private readonly Action<string> _setStatus;
     private readonly Action<string> _showError;
     private ActivePlayback? _active;
     private CancellationTokenSource? _startupCancellation;
     private bool _disposed;
 
+    public event Action<NovaDailyPlaybackTermination>? PlaybackEnded;
+
     public NovaDailyHttpFlvPlaybackController(
         string? explicitPlayerPath,
         Action<string> setStatus,
-        Action<string> showError)
+        Action<string> showError,
+        GenesisRecordingOutputDirectorySettings? recordingSettings = null,
+        GenesisRecordingHistoryStore? historyStore = null)
+        : this(
+            new PcrPlayerExternalPlayerLauncher(explicitPlayerPath),
+            setStatus,
+            showError,
+            CreateProductionRecordingComposition(recordingSettings, historyStore))
     {
+    }
+
+    private NovaDailyHttpFlvPlaybackController(
+        PcrPlayerExternalPlayerLauncher playerLauncher,
+        Action<string> setStatus,
+        Action<string> showError,
+        PcpRecordingRuntimeComposition recordingComposition)
+        : this(
+            playerLauncher,
+            setStatus,
+            showError,
+            recordingComposition,
+            new GenesisSharedPcpPlaybackRuntime(recordingComposition))
+    {
+    }
+
+    internal NovaDailyHttpFlvPlaybackController(
+        PcrPlayerExternalPlayerLauncher playerLauncher,
+        Action<string> setStatus,
+        Action<string> showError,
+        PcpRecordingRuntimeComposition recordingComposition,
+        GenesisSharedPcpPlaybackRuntime sharedPlaybackRuntime,
+        IGenesisRecordingRuleSetProvider? ruleSetProvider = null)
+    {
+        ArgumentNullException.ThrowIfNull(playerLauncher);
         ArgumentNullException.ThrowIfNull(setStatus);
         ArgumentNullException.ThrowIfNull(showError);
-        _playerLauncher = new PcrPlayerExternalPlayerLauncher(explicitPlayerPath);
+        ArgumentNullException.ThrowIfNull(recordingComposition);
+        ArgumentNullException.ThrowIfNull(sharedPlaybackRuntime);
+        _playerLauncher = playerLauncher;
+        _recordingComposition = recordingComposition;
+        _sharedPlaybackRuntime = sharedPlaybackRuntime;
+        _manualRecordingController = new(
+            sharedPlaybackRuntime,
+            recordingComposition.Recording);
+        _automaticRecordingController = new(
+            recordingComposition.Recording,
+            sharedPlaybackRuntime,
+            ruleSetProvider ?? GenesisRecordingRuleFileProvider.CreateSystem());
         _setStatus = setStatus;
         _showError = showError;
     }
+
+    public ValueTask<GenesisAutomaticRecordingEvaluationSummary> ObserveAsync(
+        IReadOnlyList<GenesisChannelItem> channels,
+        CancellationToken cancellationToken = default) =>
+        _automaticRecordingController.ObserveAsync(channels, cancellationToken);
+
+    internal IGenesisAutomaticRecordingUserCommands AutomaticRecordingUserCommands => _automaticRecordingController;
+
+    GenesisRecordingHistorySnapshot IGenesisRecordingHistoryController.GetRecordingHistorySnapshot() => GetRecordingHistorySnapshot();
+    GenesisRecordingHistoryDurabilitySnapshot? IGenesisRecordingHistoryController.GetRecordingHistoryDurabilitySnapshot() => GetRecordingHistoryDurabilitySnapshot();
+    GenesisRecordingLibrarySnapshot IGenesisRecordingHistoryController.GetRecordingLibrarySnapshot() => GetRecordingLibrarySnapshot();
+
+    internal GenesisRecordingHistorySnapshot GetRecordingHistorySnapshot() =>
+        _recordingComposition.RecordingHistory.GetSnapshot();
+
+    internal GenesisRecordingHistoryDurabilitySnapshot? GetRecordingHistoryDurabilitySnapshot() =>
+        _recordingComposition.GetHistoryDurabilitySnapshot();
+
+    internal GenesisRecordingLibraryKnownRootSnapshot GetKnownRecordingRootsSnapshot() =>
+        _recordingComposition.KnownRecordingRoots.GetSnapshot();
+
+    internal GenesisRecordingRootRegistrationResult RegisterRecordingLibraryRoot(string? path) =>
+        _recordingComposition.KnownRecordingRoots.RegisterExplicit(path);
+
+    internal GenesisRecordingLibrarySnapshot GetRecordingLibrarySnapshot() =>
+        _recordingComposition.RecordingLibrary.GetSnapshot();
+
+    internal Task<GenesisRecordingLibraryRefreshResult> RefreshRecordingLibraryAsync(CancellationToken cancellationToken = default) =>
+        _recordingComposition.RecordingLibrary.RefreshAsync(cancellationToken);
+
+    GenesisRecordingLibrarySnapshot IGenesisRecordingLibraryController.GetSnapshot() =>
+        GetRecordingLibrarySnapshot();
+
+    Task<GenesisRecordingLibraryRefreshResult> IGenesisRecordingLibraryController.RefreshAsync(CancellationToken cancellationToken) =>
+        RefreshRecordingLibraryAsync(cancellationToken);
+
+    internal static NovaDailyHttpFlvPlaybackController CreateWithPlayerPathProvider(
+        Func<string?> explicitPlayerPathProvider,
+        Action<string> setStatus,
+        Action<string> showError,
+        GenesisRecordingOutputDirectorySettings? recordingSettings = null,
+        GenesisRecordingHistoryStore? historyStore = null) =>
+        new(
+            PcrPlayerExternalPlayerLauncher.CreateWithPathProvider(explicitPlayerPathProvider),
+            setStatus,
+            showError,
+            CreateProductionRecordingComposition(recordingSettings, historyStore));
+
+    internal static PcpRecordingRuntimeComposition CreateProductionRecordingComposition(
+        GenesisRecordingOutputDirectorySettings? settings = null,
+        GenesisRecordingHistoryStore? historyStore = null)
+    {
+        settings ??= GenesisRecordingOutputDirectorySettings.CreateSystem();
+        var diagnostics = RecordingTransformDiagnosticFile.FromEnvironment();
+        try
+        {
+            return new(settings.CurrentRuntimeDirectory, historyStore ?? GenesisRecordingHistoryStore.CreateSystem(),
+                defaultRecordingDirectory: settings.DefaultDirectory, diagnostics: diagnostics);
+        }
+        catch
+        {
+            if (diagnostics is not null)
+                _ = diagnostics.DisposeAsync().AsTask();
+            throw;
+        }
+    }
+
+    public GenesisRecordingCoreSnapshot GetSnapshot(GenesisChannelItem? channel) =>
+        _manualRecordingController.GetSnapshot(channel);
+
+    public GenesisRecordingCoreSnapshot GetSnapshot(ChannelId channelId) =>
+        _manualRecordingController.GetSnapshot(channelId);
+
+    public bool IsKnownManualSession(ChannelId channelId, RecordingSessionId sessionId) =>
+        _manualRecordingController.IsKnownManualSession(channelId, sessionId);
+
+    public ValueTask<GenesisActiveRecordingSessionSnapshot> GetActiveRecordingSessionsAsync(
+        CancellationToken cancellationToken = default) =>
+        _manualRecordingController.GetActiveRecordingSessionsAsync(cancellationToken);
+
+    public ValueTask<GenesisManualRecordingSessionSnapshot>
+        GetActiveManualRecordingsAsync(CancellationToken cancellationToken = default) =>
+        _manualRecordingController.GetActiveManualRecordingsAsync(cancellationToken);
+
+    public ValueTask<GenesisManualRecordingCommandOutcome> StartAsync(
+        GenesisChannelItem channel,
+        CancellationToken cancellationToken = default) =>
+        _manualRecordingController.StartAsync(channel, cancellationToken);
+
+    public ValueTask<GenesisManualRecordingCommandOutcome> StopAsync(
+        GenesisChannelItem channel,
+        CancellationToken cancellationToken = default) =>
+        _manualRecordingController.StopAsync(channel, cancellationToken);
+
+    public ValueTask<GenesisManualRecordingCommandOutcome> StopAsync(
+        ChannelId channelId,
+        RecordingSessionId expectedSessionId,
+        CancellationToken cancellationToken = default) =>
+        _manualRecordingController.StopAsync(
+            channelId,
+            expectedSessionId,
+            cancellationToken);
 
     public async Task PlayAsync(
         GenesisChannelItem channel,
@@ -79,47 +240,23 @@ internal sealed class NovaDailyHttpFlvPlaybackController : INovaDailyPlaybackCon
 
             _setStatus($"{channel.Name}: PCP接続中…");
             host.Start();
-            var sessionId = new ChannelSessionId(Guid.NewGuid());
-            active.Consumer = host.Create(source.ChannelId, sessionId);
-            var tracker = new ChannelStatusTracker(source.ChannelId, sessionId);
-            active.Session = new PcpChannelSession(
-                new TcpTransportConnector(),
-                tracker,
-                active.Consumer);
-            active.SessionTask = active.Session.RunAsync(
-                source.Host,
-                source.Port,
-                startupCancellation.Token);
-
-            var negotiationOrEnded = await Task.WhenAny(
-                    active.Session.Negotiation,
-                    active.SessionTask)
-                .WaitAsync(BootstrapTimeout, startupCancellation.Token)
-                .ConfigureAwait(false);
-            if (ReferenceEquals(negotiationOrEnded, active.SessionTask))
-            {
-                var result = await active.SessionTask.ConfigureAwait(false);
-                throw new InvalidOperationException(
-                    $"The PCP session ended before negotiation completed ({result.EndReason}).");
-            }
-
-            var negotiation = await active.Session.Negotiation.ConfigureAwait(false);
-            if (negotiation.Outcome != PcpChannelSessionNegotiationOutcome.Accepted)
-            {
-                throw new InvalidOperationException(
-                    $"The PCP relay rejected the channel request " +
-                    $"(HTTP {negotiation.HttpStatusCode}, {negotiation.CompatibilityOutcome}).");
-            }
+            var playbackAttachment = await _sharedPlaybackRuntime.AttachPlaybackAsync(
+                source,
+                (channelId, sessionId) => host.Create(channelId, sessionId),
+                startupCancellation.Token).ConfigureAwait(false);
+            active.Consumer = playbackAttachment.Consumer;
+            active.Registration = playbackAttachment.Registration;
+            active.OwnerTask = playbackAttachment.OwnerCompletion;
 
             _setStatus($"{channel.Name}: FLV streamを準備しています…");
-            var readyOrEnded = await Task.WhenAny(ready.Task, active.SessionTask)
+            var readyOrEnded = await Task.WhenAny(ready.Task, active.OwnerTask)
                 .WaitAsync(BootstrapTimeout, startupCancellation.Token)
                 .ConfigureAwait(false);
-            if (ReferenceEquals(readyOrEnded, active.SessionTask))
+            if (ReferenceEquals(readyOrEnded, active.OwnerTask))
             {
-                var result = await active.SessionTask.ConfigureAwait(false);
+                var result = await active.OwnerTask.ConfigureAwait(false);
                 throw new InvalidOperationException(
-                    $"The PCP session ended before an FLV header arrived ({result.EndReason}).");
+                    $"The shared PCP channel owner ended before an FLV header arrived ({result.EndReason}).");
             }
 
             var streamUrl = await ready.Task.ConfigureAwait(false);
@@ -127,7 +264,7 @@ internal sealed class NovaDailyHttpFlvPlaybackController : INovaDailyPlaybackCon
             _setStatus($"{channel.Name}: PCRPlayer起動中…");
             active.Player = _playerLauncher.Launch(streamUrl);
             _setStatus($"{channel.Name}: 再生中");
-            _ = ObservePlaybackEndAsync(active, channel.Name);
+            _ = ObservePlaybackEndAsync(active, channel.Name, channel.Source);
         }
         catch
         {
@@ -198,15 +335,83 @@ internal sealed class NovaDailyHttpFlvPlaybackController : INovaDailyPlaybackCon
             }
         }
 
+        Exception? cleanupFailure = null;
+        try
+        {
+            await _automaticRecordingController.DisposeAsync().ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            cleanupFailure = cleanupFailure is null
+                ? exception
+                : new AggregateException(
+                    "External playback cleanup failed during shutdown.",
+                    cleanupFailure,
+                    exception);
+        }
+
         await _commands.WaitAsync().ConfigureAwait(false);
         try
         {
             await StopActiveCoreAsync().ConfigureAwait(false);
         }
+        catch (Exception exception)
+        {
+            cleanupFailure = exception;
+        }
         finally
         {
             _commands.Release();
             _commands.Dispose();
+        }
+
+        try
+        {
+            await _manualRecordingController.DisposeAsync().ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            cleanupFailure = cleanupFailure is null
+                ? exception
+                : new AggregateException(
+                    "Manual recording commands did not drain cleanly during shutdown.",
+                    cleanupFailure,
+                    exception);
+        }
+
+        try
+        {
+            // Recording sessions release their fan-out leases before the
+            // relay runtime disposes the shared upstream owners.
+            await _recordingComposition.DisposeAsync().ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            cleanupFailure = cleanupFailure is null
+                ? exception
+                : new AggregateException(
+                    "Playback and shared recording ownership did not shut down cleanly.",
+                    cleanupFailure,
+                    exception);
+        }
+
+        try
+        {
+            await _sharedPlaybackRuntime.DisposeAsync().ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            cleanupFailure = cleanupFailure is null
+                ? exception
+                : new AggregateException(
+                    "The shared PCP playback owner failed to release its application state.",
+                    cleanupFailure,
+                    exception);
+        }
+
+        if (cleanupFailure is not null)
+        {
+            throw cleanupFailure;
         }
     }
 
@@ -229,23 +434,10 @@ internal sealed class NovaDailyHttpFlvPlaybackController : INovaDailyPlaybackCon
             () => active.Player?.DisposeAsync().AsTask() ?? Task.CompletedTask,
             failures ??= []).ConfigureAwait(false);
 
-        if (active.Session is not null)
+        if (active.Registration is not null)
         {
-            active.Session.RequestStop();
             await CleanupStepAsync(
-                () => active.Session.StopAsync(CancellationToken.None),
-                failures ??= []).ConfigureAwait(false);
-            await CleanupStepAsync(
-                async () =>
-                {
-                    if (active.SessionTask is not null)
-                    {
-                        await active.SessionTask.ConfigureAwait(false);
-                    }
-                },
-                failures ??= []).ConfigureAwait(false);
-            await CleanupStepAsync(
-                () => active.Session.DisposeAsync().AsTask(),
+                () => active.Registration.DisposeAsync().AsTask(),
                 failures ??= []).ConfigureAwait(false);
         }
 
@@ -266,15 +458,30 @@ internal sealed class NovaDailyHttpFlvPlaybackController : INovaDailyPlaybackCon
         }
     }
 
-    private async Task ObservePlaybackEndAsync(ActivePlayback active, string channelName)
+    private async Task ObservePlaybackEndAsync(
+        ActivePlayback active,
+        string channelName,
+        string source)
     {
         try
         {
-            var endedTask = active.SessionTask is null
-                ? active.Player!.Completion
-                : await Task.WhenAny(active.SessionTask, active.Player!.Completion)
+            var ownerTask = active.OwnerTask;
+            var playerCompletion = active.Player!.Completion;
+            var endedTask = ownerTask is null
+                ? playerCompletion
+                : await Task.WhenAny(ownerTask, playerCompletion)
                     .ConfigureAwait(false);
-            await endedTask.ConfigureAwait(false);
+            bool failed;
+            if (ownerTask is not null && ReferenceEquals(endedTask, ownerTask))
+            {
+                failed = await IsSharedOwnerTerminalFailureAsync(ownerTask)
+                    .ConfigureAwait(false);
+            }
+            else
+            {
+                await endedTask.ConfigureAwait(false);
+                failed = false;
+            }
 
             lock (_stateGate)
             {
@@ -284,8 +491,11 @@ internal sealed class NovaDailyHttpFlvPlaybackController : INovaDailyPlaybackCon
                 }
             }
 
-            _setStatus($"{channelName}: 再生が終了しました");
-            await StopAsync().ConfigureAwait(false);
+            PublishPlaybackEnded(source, failed);
+            _setStatus(failed
+                ? $"{channelName}: 再生セッションが予期せず終了しました"
+                : $"{channelName}: 再生が終了しました");
+            await StopIfCurrentAsync(active).ConfigureAwait(false);
         }
         catch (Exception exception)
         {
@@ -306,14 +516,88 @@ internal sealed class NovaDailyHttpFlvPlaybackController : INovaDailyPlaybackCon
                 // Error presentation must not prevent ownership cleanup.
             }
 
+            PublishPlaybackEnded(source, failed: true);
+
             try
             {
-                await StopAsync().ConfigureAwait(false);
+                await StopIfCurrentAsync(active).ConfigureAwait(false);
             }
             catch
             {
                 // The original session failure has already been reported.
             }
+        }
+    }
+
+    private async Task StopIfCurrentAsync(ActivePlayback expectedActive)
+    {
+        await _commands.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            lock (_stateGate)
+            {
+                if (!ReferenceEquals(_active, expectedActive))
+                {
+                    return;
+                }
+            }
+
+            await StopActiveCoreAsync().ConfigureAwait(false);
+            _setStatus("Ready");
+        }
+        finally
+        {
+            _commands.Release();
+        }
+    }
+
+    internal static async Task<bool> IsSessionTerminalFailureAsync(
+        Task<PcpChannelSessionResult> sessionTask)
+    {
+        ArgumentNullException.ThrowIfNull(sessionTask);
+        try
+        {
+            var result = await sessionTask.ConfigureAwait(false);
+            return result.EndReason != PcpChannelSessionEndReason.Stopped;
+        }
+        catch (OperationCanceledException)
+        {
+            return false;
+        }
+        catch
+        {
+            return true;
+        }
+    }
+
+    internal static async Task<bool> IsSharedOwnerTerminalFailureAsync(
+        Task<PcpRelayCoordinatorResult> ownerTask)
+    {
+        ArgumentNullException.ThrowIfNull(ownerTask);
+        try
+        {
+            var result = await ownerTask.ConfigureAwait(false);
+            return result.EndReason != PcpRelayCoordinatorEndReason.Stopped;
+        }
+        catch (OperationCanceledException)
+        {
+            return false;
+        }
+        catch
+        {
+            return true;
+        }
+    }
+
+    private void PublishPlaybackEnded(string source, bool failed)
+    {
+        try
+        {
+            PlaybackEnded?.Invoke(new(source, failed));
+        }
+        catch
+        {
+            // Playback cleanup must not depend on GUI state observers.
         }
     }
 
@@ -337,9 +621,9 @@ internal sealed class NovaDailyHttpFlvPlaybackController : INovaDailyPlaybackCon
 
         public IOwnedPcpChannelPacketConsumer? Consumer { get; set; }
 
-        public PcpChannelSession? Session { get; set; }
+        public PcpRelayConsumerRegistration? Registration { get; set; }
 
-        public Task<PcpChannelSessionResult>? SessionTask { get; set; }
+        public Task<PcpRelayCoordinatorResult>? OwnerTask { get; set; }
 
         public IDailyExternalPlayerLifetime? Player { get; set; }
     }

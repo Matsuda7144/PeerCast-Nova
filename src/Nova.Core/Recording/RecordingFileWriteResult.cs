@@ -5,6 +5,14 @@ namespace PeerCast.Nova.Core.Recording;
 /// </summary>
 public sealed record RecordingFileWriteResult
 {
+    /// <summary>
+    /// Reconstitutes previously observed finalization values. This does not
+    /// inspect a file or prove its current existence or media validity.
+    /// </summary>
+    public static RecordingFileWriteResult FromFinalizedFacts(
+        string path, long bytesWritten, RecordingFileWriteCompletionKind completionKind) =>
+        new(path, bytesWritten, completionKind);
+
     internal RecordingFileWriteResult(
         string path,
         long bytesWritten,

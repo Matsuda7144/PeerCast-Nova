@@ -15,6 +15,7 @@ public sealed class PcpRelayFanoutRecordingStreamSourceLeaseFactory :
     private readonly ChannelSessionId _sessionId;
     private readonly PcpRelayFanout _fanout;
     private readonly PcpRecordingPacketStreamBridgeOptions _options;
+    private readonly Func<IAsyncDisposable?>? _acquireOwnerLease;
     private readonly HashSet<RecordingLease> _leases = [];
 
     private bool _accepting;
@@ -25,7 +26,8 @@ public sealed class PcpRelayFanoutRecordingStreamSourceLeaseFactory :
         ChannelId channelId,
         ChannelSessionId sessionId,
         PcpRelayFanout fanout,
-        PcpRecordingPacketStreamBridgeOptions? options = null)
+        PcpRecordingPacketStreamBridgeOptions? options = null,
+        Func<IAsyncDisposable?>? acquireOwnerLease = null)
     {
         ArgumentNullException.ThrowIfNull(channelId);
         ArgumentNullException.ThrowIfNull(sessionId);
@@ -40,6 +42,7 @@ public sealed class PcpRelayFanoutRecordingStreamSourceLeaseFactory :
         _sessionId = sessionId;
         _fanout = fanout;
         _options = effectiveOptions;
+        _acquireOwnerLease = acquireOwnerLease;
     }
 
     public ChannelId ChannelId => _channelId;
@@ -94,8 +97,6 @@ public sealed class PcpRelayFanoutRecordingStreamSourceLeaseFactory :
                 nameof(request));
         }
 
-        RecordingLease? rejectedLease = null;
-
         lock (_gate)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -104,33 +105,60 @@ public sealed class PcpRelayFanoutRecordingStreamSourceLeaseFactory :
             {
                 return null;
             }
-
-            var lease = new RecordingLease(
-                this,
-                _channelId,
-                _sessionId,
-                _options);
-
-            try
-            {
-                if (_fanout.TryAddChild(lease, out var registration))
-                {
-                    lease.Attach(registration);
-                    _leases.Add(lease);
-                    lease.ObserveCompletion();
-                    return lease;
-                }
-            }
-            catch (ObjectDisposedException)
-            {
-                // The owner may stop between acquisition and child reservation.
-            }
-
-            rejectedLease = lease;
         }
 
-        await rejectedLease.DisposeAsync().ConfigureAwait(false);
-        return null;
+        var ownerLease = _acquireOwnerLease?.Invoke();
+        if (_acquireOwnerLease is not null && ownerLease is null)
+        {
+            return null;
+        }
+
+        var lease = new RecordingLease(
+            this,
+            _channelId,
+            _sessionId,
+            _options,
+            ownerLease);
+        var accepted = false;
+
+        try
+        {
+            lock (_gate)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (_accepting && !_completed)
+                {
+                    try
+                    {
+                        if (_fanout.TryAddChild(lease, out var registration))
+                        {
+                            lease.Attach(registration);
+                            _leases.Add(lease);
+                            lease.ObserveCompletion();
+                            accepted = true;
+                        }
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        // The owner may stop between acquisition and child reservation.
+                    }
+                }
+            }
+        }
+        catch
+        {
+            await lease.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+
+        if (!accepted)
+        {
+            await lease.DisposeAsync().ConfigureAwait(false);
+            return null;
+        }
+
+        return lease;
     }
 
     /// <summary>
@@ -203,6 +231,7 @@ public sealed class PcpRelayFanoutRecordingStreamSourceLeaseFactory :
         private readonly ChannelId _channelId;
         private readonly ChannelSessionId _sessionId;
         private readonly PcpRecordingPacketStreamBridge _bridge;
+        private readonly IAsyncDisposable? _ownerLease;
 
         private PcpRelayChildRegistration? _registration;
         private Stream? _readStream;
@@ -217,11 +246,13 @@ public sealed class PcpRelayFanoutRecordingStreamSourceLeaseFactory :
             PcpRelayFanoutRecordingStreamSourceLeaseFactory owner,
             ChannelId channelId,
             ChannelSessionId sessionId,
-            PcpRecordingPacketStreamBridgeOptions options)
+            PcpRecordingPacketStreamBridgeOptions options,
+            IAsyncDisposable? ownerLease)
         {
             _owner = owner;
             _channelId = channelId;
             _sessionId = sessionId;
+            _ownerLease = ownerLease;
             _bridge = new PcpRecordingPacketStreamBridge(
                 channelId,
                 options);
@@ -443,6 +474,7 @@ public sealed class PcpRelayFanoutRecordingStreamSourceLeaseFactory :
         private async Task DisposeCoreAsync(
             TaskCompletionSource completionSource)
         {
+            Exception? failure = null;
             try
             {
                 if (_registration is { } registration)
@@ -452,11 +484,36 @@ public sealed class PcpRelayFanoutRecordingStreamSourceLeaseFactory :
                 }
 
                 await _bridge.DisposeAsync().ConfigureAwait(false);
-                completionSource.TrySetResult();
             }
             catch (Exception exception)
             {
-                completionSource.TrySetException(exception);
+                failure = exception;
+            }
+
+            if (_ownerLease is not null)
+            {
+                try
+                {
+                    await _ownerLease.DisposeAsync().ConfigureAwait(false);
+                }
+                catch (Exception exception)
+                {
+                    failure = failure is null
+                        ? exception
+                        : new AggregateException(
+                            "The recording lease and channel owner failed to stop cleanly.",
+                            failure,
+                            exception);
+                }
+            }
+
+            if (failure is null)
+            {
+                completionSource.TrySetResult();
+            }
+            else
+            {
+                completionSource.TrySetException(failure);
             }
         }
     }

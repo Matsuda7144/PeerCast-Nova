@@ -248,12 +248,12 @@ internal sealed class FlvRecordingDecodableStartStream : Stream,
             fixedHeader[1] != (byte)'L' ||
             fixedHeader[2] != (byte)'V')
         {
-            throw InvalidFlv("The source does not have an FLV signature.");
+            throw InvalidFlv("The source does not have an FLV signature.", RecordingTransformThrowSite.DecodableStartSignature);
         }
 
         if (fixedHeader[3] != 1 || (fixedHeader[4] & ~0x05) != 0)
         {
-            throw InvalidFlv("The FLV version or flags are invalid.");
+            throw InvalidFlv("The FLV version or flags are invalid.", RecordingTransformThrowSite.DecodableStartVersionOrFlags);
         }
 
         var dataOffset = BinaryPrimitives.ReadUInt32BigEndian(
@@ -261,7 +261,7 @@ internal sealed class FlvRecordingDecodableStartStream : Stream,
         if (dataOffset < FlvFixedHeaderLength ||
             dataOffset > MaximumFlvHeaderLength - PreviousTagSizeLength)
         {
-            throw InvalidFlv("The FLV header offset is outside supported bounds.");
+            throw InvalidFlv("The FLV header offset is outside supported bounds.", RecordingTransformThrowSite.DecodableStartHeaderOffset);
         }
 
         var fullHeaderLength = checked((int)dataOffset + PreviousTagSizeLength);
@@ -276,7 +276,7 @@ internal sealed class FlvRecordingDecodableStartStream : Stream,
         if (BinaryPrimitives.ReadUInt32BigEndian(
                 header.AsSpan((int)dataOffset, PreviousTagSizeLength)) != 0)
         {
-            throw InvalidFlv("The FLV initial PreviousTagSize is not zero.");
+            throw InvalidFlv("The FLV initial PreviousTagSize is not zero.", RecordingTransformThrowSite.DecodableStartInitialPreviousTagSize);
         }
 
         return header;
@@ -298,7 +298,7 @@ internal sealed class FlvRecordingDecodableStartStream : Stream,
         var dataSize = ReadUInt24(tagHeader.AsSpan(1, 3));
         if (dataSize > MaximumFlvTagDataLength)
         {
-            throw InvalidFlv("The FLV tag data size is invalid.");
+            throw InvalidFlv("The FLV tag data size is invalid.", RecordingTransformThrowSite.DecodableStartTagDataSize);
         }
 
         var dataLength = checked((int)dataSize);
@@ -314,7 +314,7 @@ internal sealed class FlvRecordingDecodableStartStream : Stream,
 
         if (ReadUInt24(tag.AsSpan(8, 3)) != 0)
         {
-            throw InvalidFlv("The FLV tag StreamID is not zero.");
+            throw InvalidFlv("The FLV tag StreamID is not zero.", RecordingTransformThrowSite.DecodableStartTagStreamId);
         }
 
         var expectedPreviousTagSize = checked((uint)(TagHeaderLength + dataLength));
@@ -322,7 +322,7 @@ internal sealed class FlvRecordingDecodableStartStream : Stream,
             tag.AsSpan(TagHeaderLength + dataLength, PreviousTagSizeLength));
         if (previousTagSize != expectedPreviousTagSize)
         {
-            throw InvalidFlv("The FLV tag PreviousTagSize is inconsistent.");
+            throw InvalidFlv("The FLV tag PreviousTagSize is inconsistent.", RecordingTransformThrowSite.DecodableStartPreviousTagSize);
         }
 
         _ = GetMediaClassification(tag);
@@ -349,7 +349,7 @@ internal sealed class FlvRecordingDecodableStartStream : Stream,
                     return false;
                 }
 
-                throw InvalidFlv($"The {description} is truncated.");
+                throw InvalidFlv($"The {description} is truncated.", RecordingTransformThrowSite.DecodableStartReadExactlyTruncated);
             }
 
             totalRead += read;
@@ -428,7 +428,7 @@ internal sealed class FlvRecordingDecodableStartStream : Stream,
                 return;
 
             default:
-                throw InvalidFlv("The FLV tag type is unsupported.");
+                throw InvalidFlv("The FLV tag type is unsupported.", RecordingTransformThrowSite.DecodableStartWaitingTagType);
         }
     }
 
@@ -447,12 +447,12 @@ internal sealed class FlvRecordingDecodableStartStream : Stream,
                         body[5..],
                         out var currentNalLengthSize))
                 {
-                    throw InvalidFlv("The AVCDecoderConfigurationRecord is invalid or unsupported.");
+                    throw InvalidFlv("The AVCDecoderConfigurationRecord is invalid or unsupported.", RecordingTransformThrowSite.DecodableStartAvcConfiguration);
                 }
 
                 if (body.Length - 5 > MaximumAvcConfigurationBytes)
                 {
-                    throw InvalidFlv("The AVCDecoderConfigurationRecord exceeds supported bounds.");
+                    throw InvalidFlv("The AVCDecoderConfigurationRecord exceeds supported bounds.", RecordingTransformThrowSite.DecodableStartAvcConfigurationBounds);
                 }
 
                 nalLengthSize = currentNalLengthSize;
@@ -476,7 +476,7 @@ internal sealed class FlvRecordingDecodableStartStream : Stream,
                 return;
 
             default:
-                throw InvalidFlv("The FLV AVC packet type is unsupported.");
+                throw InvalidFlv("The FLV AVC packet type is unsupported.", RecordingTransformThrowSite.DecodableStartGateAvcPacketType);
         }
     }
 
@@ -535,7 +535,7 @@ internal sealed class FlvRecordingDecodableStartStream : Stream,
                 (long)bootstrapBytes - priorLength + tag.Length);
             if (projectedBytes > MaximumBootstrapBytes)
             {
-                throw InvalidFlv("The retained FLV bootstrap exceeds supported bounds.");
+                throw InvalidFlv("The retained FLV bootstrap exceeds supported bounds.", RecordingTransformThrowSite.DecodableStartReplacementBootstrapBounds);
             }
 
             if (index >= 0)
@@ -554,7 +554,7 @@ internal sealed class FlvRecordingDecodableStartStream : Stream,
         var totalBytes = checked((long)bootstrapBytes + tag.Length);
         if (totalBytes > MaximumBootstrapBytes)
         {
-            throw InvalidFlv("The retained FLV bootstrap exceeds supported bounds.");
+            throw InvalidFlv("The retained FLV bootstrap exceeds supported bounds.", RecordingTransformThrowSite.DecodableStartAdditionalBootstrapBounds);
         }
 
         bootstrapTags.Add(new BootstrapTag(kind, tag));
@@ -614,7 +614,7 @@ internal sealed class FlvRecordingDecodableStartStream : Stream,
             AudioTagType => IsAudioMediaTag(body),
             VideoTagType => IsVideoMediaTag(body),
             ScriptTagType => false,
-            _ => throw InvalidFlv("The FLV tag type is unsupported."),
+            _ => throw InvalidFlv("The FLV tag type is unsupported.", RecordingTransformThrowSite.DecodableStartMediaTagType),
         };
     }
 
@@ -622,7 +622,7 @@ internal sealed class FlvRecordingDecodableStartStream : Stream,
     {
         if (body.IsEmpty)
         {
-            throw InvalidFlv("The FLV audio tag has no audio header.");
+            throw InvalidFlv("The FLV audio tag has no audio header.", RecordingTransformThrowSite.DecodableStartAudioHeader);
         }
 
         if ((body[0] >> 4) != AacSoundFormat)
@@ -632,14 +632,14 @@ internal sealed class FlvRecordingDecodableStartStream : Stream,
 
         if (body.Length < 2)
         {
-            throw InvalidFlv("The FLV AAC tag is missing its packet type.");
+            throw InvalidFlv("The FLV AAC tag is missing its packet type.", RecordingTransformThrowSite.DecodableStartAacPacketHeader);
         }
 
         return body[1] switch
         {
             AacSequenceHeader => false,
             AacRaw => true,
-            _ => throw InvalidFlv("The FLV AAC packet type is unsupported."),
+            _ => throw InvalidFlv("The FLV AAC packet type is unsupported.", RecordingTransformThrowSite.DecodableStartAacPacketType),
         };
     }
 
@@ -647,7 +647,7 @@ internal sealed class FlvRecordingDecodableStartStream : Stream,
     {
         if (body.IsEmpty)
         {
-            throw InvalidFlv("The FLV video tag has no video header.");
+            throw InvalidFlv("The FLV video tag has no video header.", RecordingTransformThrowSite.DecodableStartVideoHeader);
         }
 
         if ((body[0] & 0x0F) != AvcCodecId)
@@ -657,7 +657,7 @@ internal sealed class FlvRecordingDecodableStartStream : Stream,
 
         if (body.Length < 5)
         {
-            throw InvalidFlv("The FLV AVC tag is missing its packet header.");
+            throw InvalidFlv("The FLV AVC tag is missing its packet header.", RecordingTransformThrowSite.DecodableStartAvcPacketHeader);
         }
 
         return body[1] switch
@@ -665,7 +665,7 @@ internal sealed class FlvRecordingDecodableStartStream : Stream,
             AvcSequenceHeader => false,
             AvcNalu => true,
             AvcEndOfSequence => false,
-            _ => throw InvalidFlv("The FLV AVC packet type is unsupported."),
+            _ => throw InvalidFlv("The FLV AVC packet type is unsupported.", RecordingTransformThrowSite.DecodableStartAvcPacketType),
         };
     }
 
@@ -795,7 +795,7 @@ internal sealed class FlvRecordingDecodableStartStream : Stream,
     {
         if (avccPayload.IsEmpty)
         {
-            throw InvalidFlv("The FLV AVC NALU tag has no NAL units.");
+            throw InvalidFlv("The FLV AVC NALU tag has no NAL units.", RecordingTransformThrowSite.DecodableStartEmptyNalPayload);
         }
 
         var offset = 0;
@@ -805,7 +805,7 @@ internal sealed class FlvRecordingDecodableStartStream : Stream,
         {
             if (avccPayload.Length - offset < nalLengthSize)
             {
-                throw InvalidFlv("The FLV AVC NAL length prefix is truncated.");
+                throw InvalidFlv("The FLV AVC NAL length prefix is truncated.", RecordingTransformThrowSite.DecodableStartNalLengthPrefix);
             }
 
             uint nalLength = 0;
@@ -819,14 +819,14 @@ internal sealed class FlvRecordingDecodableStartStream : Stream,
                 nalLength > (uint)(avccPayload.Length - offset))
             {
                 throw InvalidFlv(
-                    $"The FLV AVC NAL length {nalLength} exceeds the {avccPayload.Length - offset} remaining tag bytes.");
+                    $"The FLV AVC NAL length {nalLength} exceeds the {avccPayload.Length - offset} remaining tag bytes.", RecordingTransformThrowSite.DecodableStartNalLength);
             }
 
             var nalHeader = avccPayload[offset];
             var nalType = nalHeader & 0x1F;
             if ((nalHeader & 0x80) != 0 || nalType is 0 or > 23)
             {
-                throw InvalidFlv("The FLV AVC NAL unit type is unsupported.");
+                throw InvalidFlv("The FLV AVC NAL unit type is unsupported.", RecordingTransformThrowSite.DecodableStartNalType);
             }
 
             hasIdr |= nalType == 5;
@@ -834,7 +834,7 @@ internal sealed class FlvRecordingDecodableStartStream : Stream,
             nalCount++;
             if (nalCount > MaximumNalUnitsPerTag)
             {
-                throw InvalidFlv("The FLV AVC NAL unit count exceeds supported bounds.");
+                throw InvalidFlv("The FLV AVC NAL unit count exceeds supported bounds.", RecordingTransformThrowSite.DecodableStartNalCount);
             }
         }
 
@@ -857,9 +857,9 @@ internal sealed class FlvRecordingDecodableStartStream : Stream,
         offset += source.Length;
     }
 
-    private static RecordingStreamTransformException InvalidFlv(string message)
+    private static RecordingStreamTransformException InvalidFlv(string message, RecordingTransformThrowSite site)
     {
-        return new RecordingStreamTransformException(message);
+        return new RecordingStreamTransformException(message, site);
     }
 
     private enum GateState

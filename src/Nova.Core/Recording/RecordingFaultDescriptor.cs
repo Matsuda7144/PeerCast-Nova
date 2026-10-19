@@ -6,6 +6,10 @@ namespace PeerCast.Nova.Core.Recording;
 /// </summary>
 public sealed record RecordingFaultDescriptor
 {
+    /// <summary>Reconstitutes safe stage/type values without an exception payload.</summary>
+    public static RecordingFaultDescriptor FromSafeDetails(RecordingFailureStage stage, string exceptionType) =>
+        new(stage, exceptionType);
+
     internal RecordingFaultDescriptor(
         RecordingFailureStage stage,
         string exceptionType)

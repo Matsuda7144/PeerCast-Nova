@@ -11,15 +11,14 @@ namespace PeerCast.Nova.Core.Recording;
 /// recorder sessions receive their asynchronous stop transition. Dispose
 /// releases coordinator ownership after that shutdown boundary.
 /// </remarks>
-public sealed class RecordingAutomationManager : IDisposable
+public sealed partial class RecordingAutomationManager : IDisposable
 {
     public const int DefaultMaximumChannelCount = 4096;
 
     private readonly object gate = new();
     private readonly IRecordingSink sink;
     private readonly int maximumChannelCount;
-    private readonly Dictionary<ChannelId, RecordingAutomationChannelCoordinator>
-        coordinators = [];
+    private readonly Dictionary<ChannelId, CoordinatorEntry> coordinators = [];
     private bool acceptsEvaluations = true;
     private bool stopAllInProgress;
     private bool isDisposed;
@@ -60,16 +59,28 @@ public sealed class RecordingAutomationManager : IDisposable
         }
     }
 
+    public ValueTask<RecordingAutomationExecutionResult> EvaluateAsync(
+        RecordingCandidate candidate,
+        RecordingRuleSet ruleSet,
+        CancellationToken cancellationToken) =>
+        EvaluateAsync(
+            candidate,
+            ruleSet,
+            prepareStartAsync: null,
+            cancellationToken);
+
     public async ValueTask<RecordingAutomationExecutionResult> EvaluateAsync(
         RecordingCandidate candidate,
         RecordingRuleSet ruleSet,
+        Func<RecordingCandidate, CancellationToken, ValueTask<IAsyncDisposable?>>?
+            prepareStartAsync,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(candidate);
         ArgumentNullException.ThrowIfNull(ruleSet);
         cancellationToken.ThrowIfCancellationRequested();
 
-        RecordingAutomationChannelCoordinator coordinator;
+        CoordinatorEntry entry;
 
         lock (gate)
         {
@@ -81,13 +92,53 @@ public sealed class RecordingAutomationManager : IDisposable
                     "The recording automation manager is shutting down and no longer accepts evaluations.");
             }
 
-            coordinator = GetOrCreateCoordinator(candidate.ChannelId);
+            entry = AcquireCoordinator(candidate.ChannelId);
         }
 
-        return await coordinator.EvaluateAsync(
-            candidate,
-            ruleSet,
-            cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await entry.Coordinator.EvaluateAsync(
+                candidate,
+                ruleSet,
+                prepareStartAsync,
+                cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            ReleaseCoordinator(candidate.ChannelId, entry);
+        }
+    }
+
+    public async ValueTask<RecordingAutomationExecutionResult> EvaluateDecisionAsync(
+        RecordingCandidate candidate,
+        RecordingRuleDecision decision,
+        Func<RecordingCandidate, CancellationToken, ValueTask<IAsyncDisposable?>>? prepareStartAsync,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
+        ArgumentNullException.ThrowIfNull(decision);
+        cancellationToken.ThrowIfCancellationRequested();
+        CoordinatorEntry entry;
+        lock (gate)
+        {
+            ThrowIfDisposed();
+            if (!acceptsEvaluations)
+            {
+                throw new InvalidOperationException("The recording automation manager is shutting down.");
+            }
+
+            entry = AcquireCoordinator(candidate.ChannelId);
+        }
+
+        try
+        {
+            return await entry.Coordinator.EvaluateDecisionAsync(
+                candidate, decision, prepareStartAsync, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            ReleaseCoordinator(candidate.ChannelId, entry);
+        }
     }
 
     public async ValueTask<RecordingManualStartResult> StartManualAsync(
@@ -97,7 +148,7 @@ public sealed class RecordingAutomationManager : IDisposable
         ArgumentNullException.ThrowIfNull(candidate);
         cancellationToken.ThrowIfCancellationRequested();
 
-        RecordingAutomationChannelCoordinator coordinator;
+        CoordinatorEntry entry;
 
         lock (gate)
         {
@@ -109,12 +160,19 @@ public sealed class RecordingAutomationManager : IDisposable
                     "The recording automation manager is shutting down and no longer accepts starts.");
             }
 
-            coordinator = GetOrCreateCoordinator(candidate.ChannelId);
+            entry = AcquireCoordinator(candidate.ChannelId);
         }
 
-        return await coordinator.StartManualAsync(
-            candidate,
-            cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await entry.Coordinator.StartManualAsync(
+                candidate,
+                cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            ReleaseCoordinator(candidate.ChannelId, entry);
+        }
     }
 
     public async ValueTask<RecordingAutomationStopResult> StopAsync(
@@ -124,15 +182,15 @@ public sealed class RecordingAutomationManager : IDisposable
         ArgumentNullException.ThrowIfNull(channelId);
         cancellationToken.ThrowIfCancellationRequested();
 
-        RecordingAutomationChannelCoordinator? coordinator;
+        CoordinatorEntry? entry;
 
         lock (gate)
         {
             ThrowIfDisposed();
-            _ = coordinators.TryGetValue(channelId, out coordinator);
+            entry = TryAcquireCoordinator(channelId);
         }
 
-        if (coordinator is null)
+        if (entry is null)
         {
             return new RecordingAutomationStopResult(
                 channelId,
@@ -140,8 +198,145 @@ public sealed class RecordingAutomationManager : IDisposable
                 RecordingAutomationExecutionState.Idle);
         }
 
-        return await coordinator.StopAsync(
-            cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await entry.Coordinator.StopAsync(
+                cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            ReleaseCoordinator(channelId, entry);
+        }
+    }
+
+    public async ValueTask<RecordingAutomationStopResult> StopManualAsync(
+        ChannelId channelId,
+        RecordingSessionId expectedSessionId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(channelId);
+        ArgumentNullException.ThrowIfNull(expectedSessionId);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        CoordinatorEntry? entry;
+        lock (gate)
+        {
+            ThrowIfDisposed();
+            entry = TryAcquireCoordinator(channelId);
+        }
+
+        if (entry is null)
+        {
+            return new RecordingAutomationStopResult(
+                channelId,
+                RecordingAutomationStopResultKind.NoActiveSession,
+                RecordingAutomationExecutionState.Idle);
+        }
+
+        try
+        {
+            return await entry.Coordinator.StopManualAsync(
+                expectedSessionId,
+                cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            ReleaseCoordinator(channelId, entry);
+        }
+    }
+
+    public async ValueTask<RecordingAutomationExecutionState> ReconcileStateAsync(
+        ChannelId channelId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(channelId);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        CoordinatorEntry? entry;
+        lock (gate)
+        {
+            ThrowIfDisposed();
+            entry = TryAcquireCoordinator(channelId);
+        }
+
+        if (entry is null)
+        {
+            return RecordingAutomationExecutionState.Idle;
+        }
+
+        try
+        {
+            return await entry.Coordinator.ReconcileStateAsync(cancellationToken)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            ReleaseCoordinator(channelId, entry);
+        }
+    }
+
+    internal async ValueTask<IReadOnlyList<RecordingSinkSession>>
+        GetActiveRecordingSessionsAsync(
+            CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        CoordinatorEntry[] owned;
+        lock (gate)
+        {
+            ThrowIfDisposed();
+
+            owned = coordinators
+                .OrderBy(static pair => pair.Key.Value)
+                .Select(static pair => pair.Value)
+                .ToArray();
+
+            foreach (var entry in owned)
+            {
+                entry.ActiveOperations++;
+            }
+        }
+
+        try
+        {
+            var activeSessions = new List<RecordingSinkSession>(owned.Length);
+
+            foreach (var entry in owned)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var state = entry.Coordinator.HasPendingAutomaticStop
+                    ? entry.Coordinator.State
+                    : await entry.Coordinator.ReconcileStateAsync(
+                        cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (state.Session is not { } session)
+                {
+                    continue;
+                }
+
+                if (!state.AutomationState.IsRecording ||
+                    session.ChannelId != entry.Coordinator.ChannelId)
+                {
+                    throw new InvalidOperationException(
+                        "A retained recording session must match its active coordinator state.");
+                }
+
+                activeSessions.Add(session);
+            }
+
+            return Array.AsReadOnly(activeSessions.ToArray());
+        }
+        finally
+        {
+            foreach (var entry in owned)
+            {
+                ReleaseCoordinator(
+                    entry.Coordinator.ChannelId,
+                    entry);
+            }
+        }
     }
 
     public bool TryGetState(
@@ -150,23 +345,23 @@ public sealed class RecordingAutomationManager : IDisposable
     {
         ArgumentNullException.ThrowIfNull(channelId);
 
-        RecordingAutomationChannelCoordinator? coordinator;
+        CoordinatorEntry? entry;
 
         lock (gate)
         {
             ThrowIfDisposed();
             _ = coordinators.TryGetValue(
                 channelId,
-                out coordinator);
+                out entry);
         }
 
-        if (coordinator is null)
+        if (entry is null)
         {
             state = null;
             return false;
         }
 
-        state = coordinator.State;
+        state = entry.Coordinator.State;
         return true;
     }
 
@@ -192,12 +387,18 @@ public sealed class RecordingAutomationManager : IDisposable
 
             owned = coordinators
                 .OrderBy(static pair => pair.Key.Value)
-                .Select(static pair => pair.Value)
+                .Select(static pair => pair.Value.Coordinator)
                 .ToArray();
         }
 
         try
         {
+            await DrainAutomaticAdmissionsAsync().ConfigureAwait(false);
+            foreach (var coordinator in owned)
+            {
+                await coordinator.DrainAutomaticStopAsync().ConfigureAwait(false);
+            }
+
             var results = new List<RecordingAutomationStopResult>(
                 owned.Length);
 
@@ -239,8 +440,16 @@ public sealed class RecordingAutomationManager : IDisposable
                     "Cannot dispose the recording automation manager while a shutdown pass is in progress.");
             }
 
+            if (admissionOperations != 0 ||
+                coordinators.Values.Any(static entry => entry.Coordinator.HasPendingAutomaticStop))
+            {
+                throw new InvalidOperationException("Drain admitted recording stops before disposal.");
+            }
+
             isDisposed = true;
-            owned = [.. coordinators.Values];
+            owned = coordinators.Values
+                .Select(static entry => entry.Coordinator)
+                .ToArray();
             coordinators.Clear();
         }
 
@@ -249,6 +458,7 @@ public sealed class RecordingAutomationManager : IDisposable
             coordinator.Dispose();
         }
 
+        admissionClosing.Dispose();
         GC.SuppressFinalize(this);
     }
 
@@ -259,11 +469,12 @@ public sealed class RecordingAutomationManager : IDisposable
             this);
     }
 
-    private RecordingAutomationChannelCoordinator GetOrCreateCoordinator(
+    private CoordinatorEntry AcquireCoordinator(
         ChannelId channelId)
     {
         if (coordinators.TryGetValue(channelId, out var existing))
         {
+            existing.ActiveOperations++;
             return existing;
         }
 
@@ -273,10 +484,74 @@ public sealed class RecordingAutomationManager : IDisposable
                 "The recording automation channel limit has been reached.");
         }
 
-        var created = new RecordingAutomationChannelCoordinator(
-            channelId,
-            sink);
+        var created = new CoordinatorEntry(
+            new RecordingAutomationChannelCoordinator(
+                channelId,
+                sink));
+        created.ActiveOperations = 1;
         coordinators.Add(channelId, created);
         return created;
+    }
+
+    private CoordinatorEntry? TryAcquireCoordinator(ChannelId channelId)
+    {
+        if (!coordinators.TryGetValue(channelId, out var existing))
+        {
+            return null;
+        }
+
+        existing.ActiveOperations++;
+        return existing;
+    }
+
+    private void ReleaseCoordinator(
+        ChannelId channelId,
+        CoordinatorEntry entry)
+    {
+        var disposeCoordinator = false;
+
+        lock (gate)
+        {
+            if (entry.ActiveOperations <= 0)
+            {
+                throw new InvalidOperationException(
+                    "A recording automation coordinator operation was released more than once.");
+            }
+
+            entry.ActiveOperations--;
+
+            // The manager lock keeps acquisition atomic with this final-use
+            // check and exact-entry removal.
+            if (entry.ActiveOperations == 0 &&
+                !isDisposed &&
+                !stopAllInProgress &&
+                entry.Coordinator.IsIdleWithoutSession &&
+                coordinators.TryGetValue(channelId, out var current) &&
+                ReferenceEquals(current, entry))
+            {
+                coordinators.Remove(channelId);
+                disposeCoordinator = true;
+            }
+        }
+
+        if (disposeCoordinator)
+        {
+            entry.Coordinator.Dispose();
+        }
+    }
+
+    private sealed class CoordinatorEntry
+    {
+        public CoordinatorEntry(
+            RecordingAutomationChannelCoordinator coordinator)
+        {
+            Coordinator = coordinator;
+        }
+
+        public RecordingAutomationChannelCoordinator Coordinator { get; }
+
+        public int ActiveOperations { get; set; }
+
+        public Task? StopOwner { get; set; }
     }
 }

@@ -11,7 +11,7 @@ namespace PeerCast.Nova.Core.Recording;
 /// recording. <see cref="Dispose"/> releases the coordinator gate; it is not
 /// an asynchronous recorder-stop operation.
 /// </remarks>
-public sealed class RecordingAutomationChannelCoordinator : IDisposable
+public sealed partial class RecordingAutomationChannelCoordinator : IDisposable
 {
     private readonly IRecordingSink sink;
     private readonly SemaphoreSlim gate = new(1, 1);
@@ -57,13 +57,54 @@ public sealed class RecordingAutomationChannelCoordinator : IDisposable
     public RecordingAutomationExecutionState State =>
         Volatile.Read(ref state);
 
-    public async ValueTask<RecordingAutomationExecutionResult> EvaluateAsync(
+    internal bool IsIdleWithoutSession
+    {
+        get
+        {
+            var currentState = State;
+            return !currentState.AutomationState.IsRecording &&
+                currentState.Session is null && !HasPendingAutomaticStop;
+        }
+    }
+
+    public ValueTask<RecordingAutomationExecutionResult> EvaluateAsync(
         RecordingCandidate candidate,
         RecordingRuleSet ruleSet,
+        CancellationToken cancellationToken) =>
+        EvaluateAsync(
+            candidate,
+            ruleSet,
+            prepareStartAsync: null,
+            cancellationToken);
+
+    public ValueTask<RecordingAutomationExecutionResult> EvaluateAsync(
+        RecordingCandidate candidate,
+        RecordingRuleSet ruleSet,
+        Func<RecordingCandidate, CancellationToken, ValueTask<IAsyncDisposable?>>?
+            prepareStartAsync,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(ruleSet);
+        return EvaluateCoreAsync(candidate, () => ruleSet.Evaluate(candidate), prepareStartAsync, cancellationToken);
+    }
+
+    public ValueTask<RecordingAutomationExecutionResult> EvaluateDecisionAsync(
+        RecordingCandidate candidate,
+        RecordingRuleDecision decision,
+        Func<RecordingCandidate, CancellationToken, ValueTask<IAsyncDisposable?>>? prepareStartAsync,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(decision);
+        return EvaluateCoreAsync(candidate, () => decision, prepareStartAsync, cancellationToken);
+    }
+
+    private async ValueTask<RecordingAutomationExecutionResult> EvaluateCoreAsync(
+        RecordingCandidate candidate,
+        Func<RecordingRuleDecision> evaluate,
+        Func<RecordingCandidate, CancellationToken, ValueTask<IAsyncDisposable?>>? prepareStartAsync,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(candidate);
-        ArgumentNullException.ThrowIfNull(ruleSet);
 
         if (candidate.ChannelId != ChannelId)
         {
@@ -72,8 +113,9 @@ public sealed class RecordingAutomationChannelCoordinator : IDisposable
                 nameof(candidate));
         }
 
-        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await EnterMutationAsync(cancellationToken).ConfigureAwait(false);
         CancellationTokenSource? operationCancellation = null;
+        IAsyncDisposable? startPreparation = null;
 
         try
         {
@@ -88,21 +130,46 @@ public sealed class RecordingAutomationChannelCoordinator : IDisposable
                 ref state,
                 currentState);
 
-            var plan = RecordingAutomationPlanner.Evaluate(
+            var plan = RecordingAutomationPlanner.Plan(
                 currentState.AutomationState,
-                candidate,
-                ruleSet);
+                evaluate());
 
             RecordingAutomationExecutionResult result;
 
             try
             {
-                result = await RecordingAutomationExecutor.ExecuteAsync(
-                    currentState,
-                    plan,
-                    candidate,
-                    sink,
-                    operationCancellation.Token).ConfigureAwait(false);
+                if (plan.Action == RecordingAutomationAction.Start &&
+                    prepareStartAsync is not null)
+                {
+                    startPreparation = await prepareStartAsync(
+                        candidate,
+                        operationCancellation.Token).ConfigureAwait(false);
+                    if (startPreparation is null)
+                    {
+                        result = new RecordingAutomationExecutionResult(
+                            RecordingAutomationExecutionResultKind.StartRejected,
+                            currentState,
+                            plan);
+                    }
+                    else
+                    {
+                        result = await RecordingAutomationExecutor.ExecuteAsync(
+                            currentState,
+                            plan,
+                            candidate,
+                            sink,
+                            operationCancellation.Token).ConfigureAwait(false);
+                    }
+                }
+                else
+                {
+                    result = await RecordingAutomationExecutor.ExecuteAsync(
+                        currentState,
+                        plan,
+                        candidate,
+                        sink,
+                        operationCancellation.Token).ConfigureAwait(false);
+                }
             }
             catch (OperationCanceledException)
                 when (plan.Action == RecordingAutomationAction.Start &&
@@ -123,8 +190,18 @@ public sealed class RecordingAutomationChannelCoordinator : IDisposable
         }
         finally
         {
-            EndOperation(operationCancellation);
-            gate.Release();
+            try
+            {
+                if (startPreparation is not null)
+                {
+                    await startPreparation.DisposeAsync().ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                EndOperation(operationCancellation);
+                gate.Release();
+            }
         }
     }
 
@@ -141,7 +218,7 @@ public sealed class RecordingAutomationChannelCoordinator : IDisposable
                 nameof(candidate));
         }
 
-        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await EnterMutationAsync(cancellationToken).ConfigureAwait(false);
         CancellationTokenSource? operationCancellation = null;
 
         try
@@ -238,15 +315,69 @@ public sealed class RecordingAutomationChannelCoordinator : IDisposable
     {
         cancellationToken.ThrowIfCancellationRequested();
         CancelActiveOperation();
-        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await DrainAutomaticStopAsync().ConfigureAwait(false);
+        await EnterMutationAsync(cancellationToken).ConfigureAwait(false);
 
         try
         {
             ThrowIfDisposed();
+            return await StopCurrentSessionAsync(state, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
 
+    /// <summary>
+    /// Refreshes this channel's cached execution state against the sink's
+    /// terminal-session monitor without starting or stopping an active session.
+    /// A terminal sink session is reconciled using the same cleanup path as a
+    /// later recording evaluation.
+    /// </summary>
+    public async ValueTask<RecordingAutomationExecutionState> ReconcileStateAsync(
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await EnterMutationAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            ThrowIfDisposed();
+            var reconciled = await ReconcileTerminalSessionAsync(
+                    state,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            Volatile.Write(ref state, reconciled);
+            return reconciled;
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Stops only the expected manual session generation. The expected
+    /// identity and origin are checked under the same per-channel gate as the
+    /// recorder transition, so an automatic or replacement session cannot be
+    /// stopped by a stale manual-recording command.
+    /// </summary>
+    public async ValueTask<RecordingAutomationStopResult> StopManualAsync(
+        RecordingSessionId expectedSessionId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(expectedSessionId);
+        cancellationToken.ThrowIfCancellationRequested();
+        await EnterMutationAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            ThrowIfDisposed();
             var currentState = state;
-
-            if (currentState.Session is null)
+            var currentSession = currentState.Session;
+            if (currentSession is null)
             {
                 if (currentState.AutomationState.IsRecording)
                 {
@@ -260,59 +391,79 @@ public sealed class RecordingAutomationChannelCoordinator : IDisposable
                     currentState);
             }
 
-            if (!currentState.AutomationState.IsRecording)
+            if (currentSession.Origin != RecordingSessionOrigin.Manual ||
+                currentSession.SessionId != expectedSessionId)
             {
-                throw new InvalidOperationException(
-                    "A recorder session cannot be active while automation state is idle.");
+                return new RecordingAutomationStopResult(
+                    ChannelId,
+                    RecordingAutomationStopResultKind.Rejected,
+                    currentState);
             }
 
-            var sinkResult = await sink.StopAsync(
-                new RecordingSinkStopRequest(
-                    currentState.Session),
-                cancellationToken).ConfigureAwait(false);
-
-            ArgumentNullException.ThrowIfNull(sinkResult);
-
-            var resultKind = sinkResult.Kind switch
-            {
-                RecordingSinkStopResultKind.Stopped =>
-                    RecordingAutomationStopResultKind.Stopped,
-
-                RecordingSinkStopResultKind.NoDecodableVideoStart =>
-                    RecordingAutomationStopResultKind.NoDecodableVideoStart,
-
-                RecordingSinkStopResultKind.AlreadyStopped =>
-                    RecordingAutomationStopResultKind.AlreadyStopped,
-
-                RecordingSinkStopResultKind.Rejected =>
-                    RecordingAutomationStopResultKind.Rejected,
-
-                RecordingSinkStopResultKind.Faulted =>
-                    RecordingAutomationStopResultKind.Faulted,
-
-                _ => throw new InvalidOperationException(
-                    $"Unsupported recording sink stop result: {sinkResult.Kind}."),
-            };
-
-            var nextState = sinkResult.Kind ==
-                RecordingSinkStopResultKind.Rejected
-                ? currentState
-                : RecordingAutomationExecutionState.Idle;
-
-            Volatile.Write(
-                ref state,
-                nextState);
-
-            return new RecordingAutomationStopResult(
-                ChannelId,
-                resultKind,
-                nextState,
-                sinkResult.Fault);
+            return await StopCurrentSessionAsync(currentState, cancellationToken)
+                .ConfigureAwait(false);
         }
         finally
         {
             gate.Release();
         }
+    }
+
+    private async ValueTask<RecordingAutomationStopResult> StopCurrentSessionAsync(
+        RecordingAutomationExecutionState currentState,
+        CancellationToken cancellationToken)
+    {
+        if (currentState.Session is null)
+        {
+            if (currentState.AutomationState.IsRecording)
+            {
+                throw new InvalidOperationException(
+                    "A recording automation state cannot be active without a recorder session.");
+            }
+
+            return new RecordingAutomationStopResult(
+                ChannelId,
+                RecordingAutomationStopResultKind.NoActiveSession,
+                currentState);
+        }
+
+        if (!currentState.AutomationState.IsRecording)
+        {
+            throw new InvalidOperationException(
+                "A recorder session cannot be active while automation state is idle.");
+        }
+
+        var sinkResult = await sink.StopAsync(
+            new RecordingSinkStopRequest(currentState.Session),
+            cancellationToken).ConfigureAwait(false);
+
+        ArgumentNullException.ThrowIfNull(sinkResult);
+
+        var resultKind = sinkResult.Kind switch
+        {
+            RecordingSinkStopResultKind.Stopped =>
+                RecordingAutomationStopResultKind.Stopped,
+            RecordingSinkStopResultKind.NoDecodableVideoStart =>
+                RecordingAutomationStopResultKind.NoDecodableVideoStart,
+            RecordingSinkStopResultKind.AlreadyStopped =>
+                RecordingAutomationStopResultKind.AlreadyStopped,
+            RecordingSinkStopResultKind.Rejected =>
+                RecordingAutomationStopResultKind.Rejected,
+            RecordingSinkStopResultKind.Faulted =>
+                RecordingAutomationStopResultKind.Faulted,
+            _ => throw new InvalidOperationException(
+                $"Unsupported recording sink stop result: {sinkResult.Kind}."),
+        };
+
+        var nextState = sinkResult.Kind == RecordingSinkStopResultKind.Rejected
+            ? currentState
+            : RecordingAutomationExecutionState.Idle;
+        Volatile.Write(ref state, nextState);
+        return new RecordingAutomationStopResult(
+            ChannelId,
+            resultKind,
+            nextState,
+            sinkResult.Fault);
     }
 
     public void Dispose()
@@ -321,6 +472,11 @@ public sealed class RecordingAutomationChannelCoordinator : IDisposable
 
         try
         {
+            if (HasPendingAutomaticStop)
+            {
+                throw new InvalidOperationException("Drain the admitted stop before coordinator disposal.");
+            }
+
             isDisposed = true;
         }
         finally
