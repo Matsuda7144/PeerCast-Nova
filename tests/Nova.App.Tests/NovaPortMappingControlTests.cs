@@ -145,6 +145,192 @@ public sealed class NovaPortMappingControlTests
         Assert.Empty(Directory.GetFiles(System.IO.Path.GetDirectoryName(directory.Path)!));
     }
 
+    [Fact]
+    public async Task RecordingOwnerSaveBeforeNatTogglePreservesLatestDocument()
+    {
+        using var directory = new SettingsDirectory();
+        var root = System.IO.Path.GetDirectoryName(directory.Path)!;
+        var original = new NovaOptions
+        {
+            NodeName = "original-node",
+            ListenPort = 17444,
+            EnableDetailedDiagnostics = true,
+            RecordingOutputDirectory = System.IO.Path.Combine(root, "original-recordings"),
+        };
+        await directory.Store.SaveAsync(original);
+        var recording = new GenesisRecordingOutputDirectorySettings(directory.Store,
+            System.IO.Path.Combine(root, "default-recordings"));
+        await using var test = new NatPortMappingTestHarness(enabled: false);
+        using var control = new NovaPortMappingControl(test.Manager, directory.Store, original, false);
+        var latestDirectory = System.IO.Path.Combine(root, "latest-recordings");
+        Assert.Equal(GenesisRecordingOutputDirectorySaveResult.Saved, recording.Save(latestDirectory));
+        await directory.Store.UpdateAsync(current => current with { NodeName = "latest-node", ListenPort = 17445 });
+
+        await control.SetEnabledAsync(true);
+
+        Assert.Equal(original with
+        {
+            AutoPortMapping = true,
+            NodeName = "latest-node",
+            ListenPort = 17445,
+            RecordingOutputDirectory = latestDirectory,
+        }, directory.Store.Load());
+        Assert.Equal(original.RecordingOutputDirectory, recording.CurrentRuntimeDirectory);
+        Assert.Equal(latestDirectory, recording.Presentation.EffectiveDirectory);
+        Assert.True(test.Manager.Enabled);
+        Assert.Equal(0, test.Router.Count);
+    }
+
+    [Fact]
+    public async Task NatTogglesAroundRecordingOwnerSavePreserveLatestDirectory()
+    {
+        using var directory = new SettingsDirectory();
+        var root = System.IO.Path.GetDirectoryName(directory.Path)!;
+        var original = new NovaOptions { NodeName = "retained-node", ListenPort = 18444, EnableDetailedDiagnostics = true };
+        await directory.Store.SaveAsync(original);
+        var recording = new GenesisRecordingOutputDirectorySettings(directory.Store,
+            System.IO.Path.Combine(root, "default-recordings"));
+        await using var test = new NatPortMappingTestHarness(enabled: false);
+        using var control = new NovaPortMappingControl(test.Manager, directory.Store, original, false);
+
+        await control.SetEnabledAsync(true);
+        var latestDirectory = System.IO.Path.Combine(root, "latest-recordings");
+        Assert.Equal(GenesisRecordingOutputDirectorySaveResult.Saved, recording.Save(latestDirectory));
+        Assert.True(directory.Store.Load().AutoPortMapping);
+        await control.SetEnabledAsync(false);
+
+        Assert.Equal(original with { RecordingOutputDirectory = latestDirectory }, directory.Store.Load());
+        Assert.False(test.Manager.Enabled);
+        Assert.Equal(0, test.Router.Count);
+    }
+
+    [Fact]
+    public async Task InterleavedStoreInstancesPreserveLatestFields()
+    {
+        using var directory = new SettingsDirectory();
+        var firstStore = directory.Store;
+        var secondStore = directory.Store;
+        var original = new NovaOptions { NodeName = "interleaved-node", ListenPort = 19444, EnableDetailedDiagnostics = true };
+        await firstStore.SaveAsync(original);
+        await using var test = new NatPortMappingTestHarness(enabled: false);
+        using var control = new NovaPortMappingControl(test.Manager, firstStore, original, false);
+        var expected = original;
+
+        for (var index = 0; index < 6; index++)
+        {
+            var path = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(directory.Path)!, $"recordings-{index}");
+            await secondStore.UpdateAsync(current => current with { RecordingOutputDirectory = path });
+            var enabled = index % 2 == 0;
+            await control.SetEnabledAsync(enabled);
+            expected = expected with { RecordingOutputDirectory = path, AutoPortMapping = enabled };
+            Assert.Equal(expected, secondStore.Load());
+        }
+
+        Assert.False(test.Manager.Enabled);
+        Assert.Equal(0, test.Router.Count);
+    }
+
+    [Fact]
+    public async Task QueuedRapidOffOnPreservesOtherWriterAndFinalDesiredState()
+    {
+        using var directory = new SettingsDirectory();
+        var original = new NovaOptions { NodeName = "queued-node", ListenPort = 20444, EnableDetailedDiagnostics = true };
+        await directory.Store.SaveAsync(original);
+        await using var test = new NatPortMappingTestHarness();
+        using var owner = test.Acquire();
+        using var control = new NovaPortMappingControl(test.Manager, directory.Store, original, false);
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var path = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(directory.Path)!, "queued-recordings");
+        var otherStore = directory.Store;
+        var otherWrite = Task.Run(() => otherStore.UpdateAsync(current =>
+        {
+            entered.TrySetResult();
+            release.Task.GetAwaiter().GetResult();
+            return current with { RecordingOutputDirectory = path };
+        }));
+        Task off = Task.CompletedTask;
+        Task on = Task.CompletedTask;
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            off = control.SetEnabledAsync(false);
+            Assert.False(test.Manager.Enabled);
+            on = control.SetEnabledAsync(true);
+            Assert.True(test.Manager.Enabled);
+            Assert.False(off.IsCompleted);
+            Assert.False(on.IsCompleted);
+        }
+        finally
+        {
+            release.TrySetResult();
+            // The application likewise drains pending saves before disposing the control.
+            await Task.WhenAll(otherWrite, off, on).WaitAsync(TimeSpan.FromSeconds(10));
+        }
+
+        Assert.Equal(original with { AutoPortMapping = true, RecordingOutputDirectory = path }, directory.Store.Load());
+        Assert.True(test.Manager.Enabled);
+        Assert.Equal(0, test.Router.Count);
+    }
+
+    [Theory]
+    [InlineData("not-json")]
+    [InlineData("null")]
+    public async Task CorruptLatestDocumentFailsWithoutOverwriteOrDesiredRollback(string payload)
+    {
+        using var directory = new SettingsDirectory();
+        await using var test = new NatPortMappingTestHarness(enabled: false);
+        using var control = new NovaPortMappingControl(test.Manager, directory.Store, new(), false);
+        await File.WriteAllTextAsync(directory.Path, payload);
+
+        var failure = await Record.ExceptionAsync(() => control.SetEnabledAsync(true));
+
+        Assert.True(failure is System.Text.Json.JsonException or InvalidDataException);
+        Assert.True(test.Manager.Enabled);
+        Assert.Equal(payload, await File.ReadAllTextAsync(directory.Path));
+        Assert.Single(Directory.GetFiles(System.IO.Path.GetDirectoryName(directory.Path)!));
+        Assert.Equal(0, test.Router.Count);
+    }
+
+    [Theory]
+    [InlineData("on", true, false)]
+    [InlineData("off", false, true)]
+    public async Task RuntimeSavePreservesStartupEnvironmentPrecedence(string environment, bool startupEnabled, bool requested)
+    {
+        using var directory = new SettingsDirectory();
+        var original = new NovaOptions { AutoPortMapping = !startupEnabled, NodeName = "environment-node", ListenPort = 21444 };
+        await directory.Store.SaveAsync(original);
+        var startup = SystemNovaDailyRelayControllerFactory.ReadPortMappingSetting(environment, original);
+        Assert.Equal(startupEnabled, startup.Enabled);
+        await using var test = new NatPortMappingTestHarness(startup.Enabled);
+        using var control = new NovaPortMappingControl(test.Manager, directory.Store, original, true);
+
+        await control.SetEnabledAsync(requested);
+
+        var saved = directory.Store.Load();
+        Assert.Equal(original with { AutoPortMapping = requested }, saved);
+        Assert.Equal(requested, test.Manager.Enabled);
+        Assert.True(control.StartupEnvironmentOverride);
+        Assert.Equal(startupEnabled, SystemNovaDailyRelayControllerFactory.ReadPortMappingSetting(environment, saved).Enabled);
+        Assert.Equal(requested, SystemNovaDailyRelayControllerFactory.ReadPortMappingSetting(null, saved).Enabled);
+        Assert.Equal(0, test.Router.Count);
+    }
+
+    [Fact]
+    public async Task MissingDocumentUsesExistingDefaultsAndMutatesOnlyNatField()
+    {
+        using var directory = new SettingsDirectory();
+        await using var test = new NatPortMappingTestHarness(enabled: false);
+        using var control = new NovaPortMappingControl(test.Manager, directory.Store,
+            new NovaOptions { NodeName = "stale-construction-only", ListenPort = 22444 }, false);
+
+        await control.SetEnabledAsync(true);
+
+        Assert.Equal(new NovaOptions { AutoPortMapping = true }, directory.Store.Load());
+        Assert.True(test.Manager.Enabled);
+        Assert.Single(Directory.GetFiles(System.IO.Path.GetDirectoryName(directory.Path)!));
+    }
+
     private sealed class SettingsDirectory : IDisposable
     {
         public SettingsDirectory()

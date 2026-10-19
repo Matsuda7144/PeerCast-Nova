@@ -9,16 +9,23 @@ internal interface INovaDailyPortMappingControl
 }
 
 /// <summary>Settings/desired-state adapter. It never sends router operations.</summary>
-internal sealed class NovaPortMappingControl(
-    NatPortMappingManager manager,
-    NovaSettingsStore store,
-    NovaOptions savedSettings,
-    bool startupEnvironmentOverride) : IDisposable
+internal sealed class NovaPortMappingControl : IDisposable
 {
+    private readonly NatPortMappingManager manager;
+    private readonly NovaSettingsStore store;
     private readonly SemaphoreSlim writes = new(1, 1);
-    private NovaOptions settings = savedSettings;
 
-    public bool StartupEnvironmentOverride { get; } = startupEnvironmentOverride;
+    public NovaPortMappingControl(NatPortMappingManager manager, NovaSettingsStore store,
+        NovaOptions savedSettings, bool startupEnvironmentOverride)
+    {
+        this.manager = manager;
+        this.store = store;
+        // Preserve the construction contract without retaining a stale write snapshot.
+        _ = savedSettings;
+        StartupEnvironmentOverride = startupEnvironmentOverride;
+    }
+
+    public bool StartupEnvironmentOverride { get; }
 
     public void Dispose() => writes.Dispose();
 
@@ -32,9 +39,8 @@ internal sealed class NovaPortMappingControl(
         await writes.WaitAsync().ConfigureAwait(false);
         try
         {
-            var updated = settings with { AutoPortMapping = enabled };
-            await Task.Run(() => store.SaveAsync(updated)).ConfigureAwait(false);
-            settings = updated;
+            await Task.Run(() => store.UpdateAsync(current => current with { AutoPortMapping = enabled }))
+                .ConfigureAwait(false);
         }
         finally
         {
