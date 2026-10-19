@@ -15,6 +15,7 @@ internal static class GenesisChannelCatalogSanitizer
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         ArgumentNullException.ThrowIfNull(snapshot.Channels);
+        ArgumentNullException.ThrowIfNull(snapshot.Notices);
 
         var channels = new List<GenesisChannelItem>(
             Math.Min(snapshot.Channels.Count, MaximumChannels));
@@ -72,7 +73,43 @@ internal static class GenesisChannelCatalogSanitizer
                     channelId));
         }
 
-        return new(Array.AsReadOnly(channels.ToArray()));
+        var remainingEntries = MaximumChannels - channels.Count;
+        var notices = new List<GenesisYellowPageNotice>(
+            Math.Min(snapshot.Notices.Count, remainingEntries));
+        foreach (var notice in snapshot.Notices)
+        {
+            if (notices.Count >= remainingEntries)
+            {
+                break;
+            }
+
+            if (notice is null)
+            {
+                continue;
+            }
+
+            var name = NormalizeRequired(notice.Name, MaximumNameCharacters);
+            var description = NormalizeOptional(
+                notice.Description,
+                MaximumDescriptionCharacters);
+            var type = NormalizeOptional(notice.Type, MaximumTypeCharacters);
+            if (name is null ||
+                !string.Equals(type, "RAW", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            notices.Add(
+                string.Equals(notice.Name, name, StringComparison.Ordinal) &&
+                string.Equals(notice.Description, description, StringComparison.Ordinal) &&
+                string.Equals(notice.Type, type, StringComparison.Ordinal)
+                    ? notice
+                    : new GenesisYellowPageNotice(name, description, type));
+        }
+
+        return new(
+            Array.AsReadOnly(channels.ToArray()),
+            Array.AsReadOnly(notices.ToArray()));
     }
 
     internal static string? NormalizeYellowPage(string? value) =>

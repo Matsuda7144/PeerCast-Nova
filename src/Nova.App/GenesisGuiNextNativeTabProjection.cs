@@ -15,7 +15,8 @@ internal sealed record GenesisGuiNextNativeTabRow(
     GenesisGuiNextRecordingRuleRow? RecordingRule = null,
     GenesisAutomaticRecordingSuppressionRow? Suppression = null,
     GenesisGuiNextRecordingLibraryRow? RecordingLibrary = null,
-    GenesisGuiNextRecordingHistoryRow? RecordingHistory = null)
+    GenesisGuiNextRecordingHistoryRow? RecordingHistory = null,
+    string? StableSelectionKey = null)
 {
     public bool IsInteractive => InteractiveChannel is not null && RecordingRule is null && Suppression is null && RecordingLibrary is null && RecordingHistory is null;
 
@@ -56,7 +57,7 @@ internal static class GenesisGuiNextNativeTabProjection
         ArgumentNullException.ThrowIfNull(tabs);
         return selectedTab switch
         {
-            GenesisGuiNextTab.Channels => CreateLiveChannels(tabs.VisibleChannels),
+            GenesisGuiNextTab.Channels => ProjectChannels(tabs),
             GenesisGuiNextTab.New => CreateLiveChannels(tabs.VisibleNewChannels),
             GenesisGuiNextTab.Favorites => ProjectFavorites(tabs.VisibleFavoriteChannels),
             GenesisGuiNextTab.Playing => ProjectPlaying(tabs.Playing),
@@ -106,6 +107,40 @@ internal static class GenesisGuiNextNativeTabProjection
                 .Select(static channel =>
                     new GenesisGuiNextNativeTabRow(channel, channel))
                 .ToArray());
+    }
+
+    internal static ReadOnlyCollection<GenesisGuiNextNativeTabRow> CreateNoticeRows(
+        IReadOnlyList<GenesisYellowPageNoticeView> notices)
+    {
+        ArgumentNullException.ThrowIfNull(notices);
+        return Array.AsReadOnly(
+            notices
+                .Select(static notice =>
+                {
+                    var display = new GenesisChannelItem(
+                        notice.Notice.Name,
+                        string.Empty,
+                        Description: notice.Notice.Description,
+                        Type: notice.Notice.Type)
+                    {
+                        YellowPage = notice.YellowPageName,
+                    };
+                    return new GenesisGuiNextNativeTabRow(
+                        display,
+                        InteractiveChannel: null,
+                        StableSelectionKey: notice.StableKey);
+                })
+                .ToArray());
+    }
+
+    private static ReadOnlyCollection<GenesisGuiNextNativeTabRow> ProjectChannels(
+        GenesisGuiNextTabsViewModel tabs)
+    {
+        var rows = new List<GenesisGuiNextNativeTabRow>(
+            tabs.VisibleChannels.Count + tabs.VisibleNotices.Count);
+        rows.AddRange(CreateLiveChannels(tabs.VisibleChannels));
+        rows.AddRange(CreateNoticeRows(tabs.VisibleNotices));
+        return Array.AsReadOnly(rows.ToArray());
     }
 
     private static ReadOnlyCollection<GenesisGuiNextNativeTabRow> ProjectFavorites(

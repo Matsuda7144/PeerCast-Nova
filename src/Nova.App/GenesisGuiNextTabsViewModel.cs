@@ -50,8 +50,9 @@ internal sealed record GenesisGuiNextActiveRecording(
 
 /// <summary>
 /// Framework-neutral state for the primary GUI Next pages. It reuses the
-/// shared channel objects supplied by the presence/catalog projection and keeps
-/// favorites as stable identities rather than copying catalog rows.
+/// shared channel objects supplied by the presence/catalog projection, keeps
+/// favorites as stable identities, and retains display-only YP notices outside
+/// playable channel state.
 /// </summary>
 internal sealed partial class GenesisGuiNextTabsViewModel : INotifyPropertyChanged, IAsyncDisposable
 {
@@ -62,12 +63,16 @@ internal sealed partial class GenesisGuiNextTabsViewModel : INotifyPropertyChang
         Array.AsReadOnly(Array.Empty<GenesisChannelItem>());
     private ReadOnlyCollection<GenesisChannelItem> _newChannels =
         Array.AsReadOnly(Array.Empty<GenesisChannelItem>());
+    private ReadOnlyCollection<GenesisYellowPageNoticeView> _notices =
+        Array.AsReadOnly(Array.Empty<GenesisYellowPageNoticeView>());
     private ReadOnlyCollection<GenesisFavoriteChannelProjectionEntry> _favoriteChannels =
         Array.AsReadOnly(Array.Empty<GenesisFavoriteChannelProjectionEntry>());
     private IReadOnlyList<GenesisChannelItem> _visibleChannels =
         Array.AsReadOnly(Array.Empty<GenesisChannelItem>());
     private IReadOnlyList<GenesisChannelItem> _visibleNewChannels =
         Array.AsReadOnly(Array.Empty<GenesisChannelItem>());
+    private IReadOnlyList<GenesisYellowPageNoticeView> _visibleNotices =
+        Array.AsReadOnly(Array.Empty<GenesisYellowPageNoticeView>());
     private IReadOnlyList<GenesisFavoriteChannelProjectionEntry> _visibleFavoriteChannels =
         Array.AsReadOnly(Array.Empty<GenesisFavoriteChannelProjectionEntry>());
     private ReadOnlyCollection<GenesisGuiNextPlayingEntry> _playing =
@@ -433,12 +438,16 @@ internal sealed partial class GenesisGuiNextTabsViewModel : INotifyPropertyChang
 
     public IReadOnlyList<GenesisChannelItem> NewChannels => _newChannels;
 
+    public IReadOnlyList<GenesisYellowPageNoticeView> Notices => _notices;
+
     public IReadOnlyList<GenesisFavoriteChannelProjectionEntry> FavoriteChannels =>
         _favoriteChannels;
 
     public IReadOnlyList<GenesisChannelItem> VisibleChannels => _visibleChannels;
 
     public IReadOnlyList<GenesisChannelItem> VisibleNewChannels => _visibleNewChannels;
+
+    public IReadOnlyList<GenesisYellowPageNoticeView> VisibleNotices => _visibleNotices;
 
     public IReadOnlyList<GenesisFavoriteChannelProjectionEntry> VisibleFavoriteChannels =>
         _visibleFavoriteChannels;
@@ -461,11 +470,15 @@ internal sealed partial class GenesisGuiNextTabsViewModel : INotifyPropertyChang
 
     public int NewChannelCount => _newChannels.Count;
 
+    public int NoticeCount => _notices.Count;
+
     public int FavoriteChannelCount => _favoriteChannels.Count;
 
     public int VisibleChannelCount => _visibleChannels.Count;
 
     public int VisibleNewChannelCount => _visibleNewChannels.Count;
+
+    public int VisibleNoticeCount => _visibleNotices.Count;
 
     public int VisibleFavoriteChannelCount => _visibleFavoriteChannels.Count;
 
@@ -565,6 +578,7 @@ internal sealed partial class GenesisGuiNextTabsViewModel : INotifyPropertyChang
         ArgumentNullException.ThrowIfNull(views);
         _channels = Array.AsReadOnly(views.Channels.ToArray());
         _newChannels = Array.AsReadOnly(views.NewChannels.ToArray());
+        _notices = Array.AsReadOnly(views.Notices.ToArray());
         _presence = presence;
         RefreshFavoriteMetadata();
         RebuildYellowPageFilters();
@@ -574,6 +588,8 @@ internal sealed partial class GenesisGuiNextTabsViewModel : INotifyPropertyChang
         OnPropertyChanged(nameof(ChannelCount));
         OnPropertyChanged(nameof(NewChannels));
         OnPropertyChanged(nameof(NewChannelCount));
+        OnPropertyChanged(nameof(Notices));
+        OnPropertyChanged(nameof(NoticeCount));
         RebuildVisibleChannelViews();
     }
 
@@ -715,10 +731,12 @@ internal sealed partial class GenesisGuiNextTabsViewModel : INotifyPropertyChang
         var stableKeys = BuildSelectedYellowPageStableKeys();
         var channels = FilterChannelsByYellowPage(_channels, stableKeys);
         var newChannels = FilterChannelsByYellowPage(_newChannels, stableKeys);
+        var notices = FilterNoticesByYellowPage(_notices, _selectedYellowPageId);
         var favorites = FilterFavoritesByYellowPage(_favoriteChannels, stableKeys);
 
         _visibleChannels = GenesisChannelSearchFilter.Apply(channels, _searchText);
         _visibleNewChannels = GenesisChannelSearchFilter.Apply(newChannels, _searchText);
+        _visibleNotices = GenesisChannelSearchFilter.ApplyNotices(notices, _searchText);
         _visibleFavoriteChannels = GenesisChannelSearchFilter.ApplyFavorites(
             favorites,
             _searchText);
@@ -727,6 +745,8 @@ internal sealed partial class GenesisGuiNextTabsViewModel : INotifyPropertyChang
         OnPropertyChanged(nameof(VisibleChannelCount));
         OnPropertyChanged(nameof(VisibleNewChannels));
         OnPropertyChanged(nameof(VisibleNewChannelCount));
+        OnPropertyChanged(nameof(VisibleNotices));
+        OnPropertyChanged(nameof(VisibleNoticeCount));
         OnPropertyChanged(nameof(VisibleFavoriteChannels));
         OnPropertyChanged(nameof(VisibleFavoriteChannelCount));
     }
@@ -807,6 +827,25 @@ internal sealed partial class GenesisGuiNextTabsViewModel : INotifyPropertyChang
             channels
                 .Where(channel => stableKeys.Contains(
                     GenesisChannelIdentity.GetStableKey(channel)))
+                .ToArray());
+    }
+
+    private static ReadOnlyCollection<GenesisYellowPageNoticeView> FilterNoticesByYellowPage(
+        IReadOnlyList<GenesisYellowPageNoticeView> notices,
+        string? yellowPageId)
+    {
+        ArgumentNullException.ThrowIfNull(notices);
+        if (yellowPageId is null)
+        {
+            return Array.AsReadOnly(notices.ToArray());
+        }
+
+        return Array.AsReadOnly(
+            notices
+                .Where(notice => string.Equals(
+                    notice.YellowPageId,
+                    yellowPageId,
+                    StringComparison.Ordinal))
                 .ToArray());
     }
 

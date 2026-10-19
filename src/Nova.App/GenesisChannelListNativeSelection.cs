@@ -144,7 +144,8 @@ internal static class GenesisChannelListRenderedChannels
                 $"{recording.SessionId.Value:N}:{(int)recording.Origin}";
         }
 
-        return GenesisChannelIdentity.GetStableKey(row.DisplayChannel);
+        return row.StableSelectionKey ??
+            GenesisChannelIdentity.GetStableKey(row.DisplayChannel);
     }
 
     public static GenesisGuiNextNativeTabRow? FindRow(nint listView, int row)

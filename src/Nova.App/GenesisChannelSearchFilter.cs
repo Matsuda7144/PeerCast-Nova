@@ -2,8 +2,8 @@ namespace PeerCast.Nova.App;
 
 /// <summary>
 /// Framework-neutral text filtering for GUI Next channel views. Search terms are
-/// matched case-insensitively across stable user-visible channel metadata while
-/// preserving the input ordering and channel object identities.
+/// matched case-insensitively across stable user-visible metadata while
+/// preserving input ordering and object identities.
 /// </summary>
 internal static class GenesisChannelSearchFilter
 {
@@ -21,6 +21,23 @@ internal static class GenesisChannelSearchFilter
         return Array.AsReadOnly(
             channels
                 .Where(channel => terms.All(term => Matches(channel, term)))
+                .ToArray());
+    }
+
+    public static IReadOnlyList<GenesisYellowPageNoticeView> ApplyNotices(
+        IReadOnlyList<GenesisYellowPageNoticeView> notices,
+        string? query)
+    {
+        ArgumentNullException.ThrowIfNull(notices);
+        var terms = ParseTerms(query);
+        if (terms.Length == 0)
+        {
+            return Array.AsReadOnly(notices.ToArray());
+        }
+
+        return Array.AsReadOnly(
+            notices
+                .Where(notice => terms.All(term => Matches(notice, term)))
                 .ToArray());
     }
 
@@ -53,6 +70,12 @@ internal static class GenesisChannelSearchFilter
         Contains(channel.YellowPage, term) ||
         Contains(channel.Source, term) ||
         Contains(channel.ChannelId, term);
+
+    private static bool Matches(GenesisYellowPageNoticeView notice, string term) =>
+        Contains(notice.Notice.Name, term) ||
+        Contains(notice.Notice.Description, term) ||
+        Contains(notice.Notice.Type, term) ||
+        Contains(notice.YellowPageName, term);
 
     private static bool Matches(
         GenesisFavoriteChannelProjectionEntry favorite,

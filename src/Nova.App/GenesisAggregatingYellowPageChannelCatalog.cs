@@ -14,26 +14,50 @@ internal sealed record GenesisAggregatedChannelCatalogEntry(
     GenesisChannelItem Channel,
     IReadOnlyList<string> YellowPageIds);
 
+internal sealed record GenesisAggregatedYellowPageNotice(
+    GenesisYellowPageNotice Notice,
+    string YellowPageId,
+    string YellowPageName,
+    int SourceIndex);
+
 internal sealed class GenesisAggregatedChannelCatalogSnapshot
 {
     public GenesisAggregatedChannelCatalogSnapshot(
         IEnumerable<GenesisAggregatedChannelCatalogEntry> entries,
         IEnumerable<GenesisYellowPageCatalogReadStatus> yellowPages)
+        : this(
+            entries,
+            yellowPages,
+            Array.Empty<GenesisAggregatedYellowPageNotice>())
+    {
+    }
+
+    public GenesisAggregatedChannelCatalogSnapshot(
+        IEnumerable<GenesisAggregatedChannelCatalogEntry> entries,
+        IEnumerable<GenesisYellowPageCatalogReadStatus> yellowPages,
+        IEnumerable<GenesisAggregatedYellowPageNotice> notices)
     {
         ArgumentNullException.ThrowIfNull(entries);
         ArgumentNullException.ThrowIfNull(yellowPages);
+        ArgumentNullException.ThrowIfNull(notices);
 
         Entries = Array.AsReadOnly(entries.ToArray());
         YellowPages = Array.AsReadOnly(yellowPages.ToArray());
+        Notices = Array.AsReadOnly(notices.ToArray());
         Catalog = new GenesisChannelCatalogSnapshot(
             Array.AsReadOnly(Entries
                 .Select(static entry => entry.Channel)
+                .ToArray()),
+            Array.AsReadOnly(Notices
+                .Select(static entry => entry.Notice)
                 .ToArray()));
     }
 
     public IReadOnlyList<GenesisAggregatedChannelCatalogEntry> Entries { get; }
 
     public IReadOnlyList<GenesisYellowPageCatalogReadStatus> YellowPages { get; }
+
+    public IReadOnlyList<GenesisAggregatedYellowPageNotice> Notices { get; }
 
     public GenesisChannelCatalogSnapshot Catalog { get; }
 }
@@ -68,8 +92,9 @@ internal sealed class SystemGenesisYellowPageChannelCatalogFactory :
 /// <summary>
 /// Reads the currently enabled Yellow Pages independently, isolates a failed
 /// provider from successful providers, and deterministically de-duplicates
-/// channels by the stable Genesis channel identity while retaining the Yellow
-/// Page ids and display names that supplied each aggregated channel.
+/// playable channels by the stable Genesis channel identity. Display-only YP
+/// notices retain provider provenance and source ordering without entering the
+/// playable identity domain.
 /// </summary>
 internal sealed class GenesisAggregatingYellowPageChannelCatalog :
     IGenesisAggregatedChannelCatalog
@@ -152,7 +177,8 @@ internal sealed class GenesisAggregatingYellowPageChannelCatalog :
         {
             return new GenesisAggregatedChannelCatalogSnapshot(
                 Array.Empty<GenesisAggregatedChannelCatalogEntry>(),
-                Array.Empty<GenesisYellowPageCatalogReadStatus>());
+                Array.Empty<GenesisYellowPageCatalogReadStatus>(),
+                Array.Empty<GenesisAggregatedYellowPageNotice>());
         }
 
         var readTasks = new Task<YellowPageRead>[definitions.Count];
@@ -172,6 +198,9 @@ internal sealed class GenesisAggregatingYellowPageChannelCatalog :
         }
 
         var entries = Aggregate(reads);
+        var notices = AggregateNotices(
+            reads,
+            GenesisChannelCatalogSanitizer.MaximumChannels - entries.Count);
         var statuses = reads.Select(static read =>
             new GenesisYellowPageCatalogReadStatus(
                 read.Definition,
@@ -179,7 +208,7 @@ internal sealed class GenesisAggregatingYellowPageChannelCatalog :
                     ? GenesisYellowPageCatalogReadState.Failed
                     : GenesisYellowPageCatalogReadState.Succeeded));
 
-        return new GenesisAggregatedChannelCatalogSnapshot(entries, statuses);
+        return new GenesisAggregatedChannelCatalogSnapshot(entries, statuses, notices);
     }
 
     private async Task<YellowPageRead> ReadYellowPageAsync(
@@ -243,6 +272,42 @@ internal sealed class GenesisAggregatingYellowPageChannelCatalog :
             ordered
                 .Select(static builder => builder.Build())
                 .ToArray());
+    }
+
+    private static System.Collections.ObjectModel.ReadOnlyCollection<GenesisAggregatedYellowPageNotice>
+        AggregateNotices(
+            IReadOnlyList<YellowPageRead> reads,
+            int maximumNotices)
+    {
+        if (maximumNotices <= 0)
+        {
+            return Array.AsReadOnly(Array.Empty<GenesisAggregatedYellowPageNotice>());
+        }
+
+        var notices = new List<GenesisAggregatedYellowPageNotice>();
+        foreach (var read in reads)
+        {
+            if (read.Snapshot is null)
+            {
+                continue;
+            }
+
+            for (var index = 0; index < read.Snapshot.Notices.Count; index++)
+            {
+                if (notices.Count >= maximumNotices)
+                {
+                    return Array.AsReadOnly(notices.ToArray());
+                }
+
+                notices.Add(new GenesisAggregatedYellowPageNotice(
+                    read.Snapshot.Notices[index],
+                    read.Definition.Id,
+                    read.Definition.Name,
+                    index));
+            }
+        }
+
+        return Array.AsReadOnly(notices.ToArray());
     }
 
     private sealed record YellowPageRead(

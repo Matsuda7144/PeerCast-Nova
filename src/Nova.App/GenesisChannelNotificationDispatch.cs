@@ -113,6 +113,14 @@ internal sealed class GenesisGuiNextChannelPresencePublisher :
 
     internal GenesisGuiNextTabsViewModel Tabs => _tabs;
 
+    internal void ApplyChannelViews(
+        GenesisChannelViewProjectionSnapshot views,
+        GenesisChannelPresenceSnapshot? presence = null)
+    {
+        ArgumentNullException.ThrowIfNull(views);
+        _tabs.ApplyChannelViews(views, presence);
+    }
+
     public ValueTask PublishAsync(
         GenesisChannelPresenceSnapshot presence,
         CancellationToken cancellationToken = default)
@@ -121,7 +129,7 @@ internal sealed class GenesisGuiNextChannelPresencePublisher :
         cancellationToken.ThrowIfCancellationRequested();
         try
         {
-            _tabs.ApplyChannelViews(
+            ApplyChannelViews(
                 GenesisChannelViewProjectionSnapshot.FromPresence(presence),
                 presence);
         }

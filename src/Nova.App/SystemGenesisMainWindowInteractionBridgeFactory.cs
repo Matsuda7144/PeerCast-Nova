@@ -46,11 +46,17 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
         var visibleKeys = guiNextTabs.VisibleChannels
             .Select(static channel => GenesisChannelIdentity.GetStableKey(channel))
             .ToHashSet(StringComparer.Ordinal);
-        return GenesisGuiNextNativeTabProjection.CreateLiveChannels(
-            channels
-                .Where(channel => visibleKeys.Contains(
-                    GenesisChannelIdentity.GetStableKey(channel)))
-                .ToArray());
+        var rows = new List<GenesisGuiNextNativeTabRow>(
+            guiNextTabs.VisibleChannels.Count + guiNextTabs.VisibleNotices.Count);
+        rows.AddRange(
+            GenesisGuiNextNativeTabProjection.CreateLiveChannels(
+                channels
+                    .Where(channel => visibleKeys.Contains(
+                        GenesisChannelIdentity.GetStableKey(channel)))
+                    .ToArray()));
+        rows.AddRange(
+            GenesisGuiNextNativeTabProjection.CreateNoticeRows(guiNextTabs.VisibleNotices));
+        return Array.AsReadOnly(rows.ToArray());
     }
 
     internal static int FindSelectedRow(
@@ -294,6 +300,7 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
         private readonly GenesisSourceTextProjection _sourceTextProjection = new();
         private GenesisGuiNextNativeRowRebuildIdentity? _renderedRowIdentity;
         private object? _renderedChannelFilterRows;
+        private object? _renderedNoticeFilterRows;
         private IReadOnlyList<GenesisNativeListColumnPresentation>? _renderedColumns =
             GenesisGuiNextRecordingListPresentation.Columns(GenesisGuiNextTab.Channels,
                 GenesisGuiNextRecordingPageMode.ActiveRecordings);
@@ -487,9 +494,13 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
             var channelFilterRows = selectedTab == GenesisGuiNextTab.Channels
                 ? _guiNextTabs?.VisibleChannels
                 : null;
+            var noticeFilterRows = selectedTab == GenesisGuiNextTab.Channels
+                ? _guiNextTabs?.VisibleNotices
+                : null;
             var channelsFilterChanged =
                 selectedTab == GenesisGuiNextTab.Channels &&
-                !ReferenceEquals(_renderedChannelFilterRows, channelFilterRows);
+                (!ReferenceEquals(_renderedChannelFilterRows, channelFilterRows) ||
+                    !ReferenceEquals(_renderedNoticeFilterRows, noticeFilterRows));
             if (rowIdentity.RequiresRebuild(_renderedRowIdentity) || channelsFilterChanged)
             {
                 IReadOnlyList<GenesisGuiNextNativeTabRow> rows;
@@ -557,6 +568,7 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
                         rowValues);
                     _renderedRowIdentity = rowsReplaced ? rowIdentity : null;
                     _renderedChannelFilterRows = channelFilterRows;
+                    _renderedNoticeFilterRows = noticeFilterRows;
                     _renderedRows = rowsReplaced
                         ? rows
                         : Array.AsReadOnly(Array.Empty<GenesisGuiNextNativeTabRow>());
@@ -718,6 +730,7 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
                     nameof(GenesisGuiNextTabsViewModel.SelectedTab) or
                     nameof(GenesisGuiNextTabsViewModel.SearchText) or
                     nameof(GenesisGuiNextTabsViewModel.VisibleChannels) or
+                    nameof(GenesisGuiNextTabsViewModel.VisibleNotices) or
                     nameof(GenesisGuiNextTabsViewModel.VisibleNewChannels) or
                     nameof(GenesisGuiNextTabsViewModel.VisibleFavoriteChannels) or
                     nameof(GenesisGuiNextTabsViewModel.Playing) or

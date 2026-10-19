@@ -1,10 +1,23 @@
 namespace PeerCast.Nova.App;
 
+public sealed record GenesisYellowPageNotice(
+    string Name,
+    string? Description = null,
+    string? Type = null);
+
 public sealed record GenesisChannelCatalogSnapshot(
-    IReadOnlyList<GenesisChannelItem> Channels)
+    IReadOnlyList<GenesisChannelItem> Channels,
+    IReadOnlyList<GenesisYellowPageNotice> Notices)
 {
+    public GenesisChannelCatalogSnapshot(IReadOnlyList<GenesisChannelItem> channels)
+        : this(channels, Array.Empty<GenesisYellowPageNotice>())
+    {
+    }
+
     public static GenesisChannelCatalogSnapshot Empty { get; } =
-        new(Array.Empty<GenesisChannelItem>());
+        new(
+            Array.Empty<GenesisChannelItem>(),
+            Array.Empty<GenesisYellowPageNotice>());
 }
 
 public interface IGenesisChannelCatalog
@@ -110,7 +123,11 @@ internal sealed class GenesisChannelCatalogCoordinator
             PresenceSnapshot = presence;
             await PublishNotificationsAsync(presence, cancellationToken)
                 .ConfigureAwait(false);
-            return GenesisChannelViewProjectionSnapshot.FromPresence(presence);
+            var projection = GenesisChannelViewProjectionSnapshot.FromPresence(
+                presence,
+                detailed.Notices);
+            ApplyGuiNextViews(projection, presence);
+            return projection;
         }
 
         var snapshot = await _catalog.ReadAsync(cancellationToken)
@@ -118,7 +135,28 @@ internal sealed class GenesisChannelCatalogCoordinator
         cancellationToken.ThrowIfCancellationRequested();
         var sanitized = GenesisChannelCatalogSanitizer.Sanitize(snapshot);
         cancellationToken.ThrowIfCancellationRequested();
-        return GenesisChannelViewProjectionSnapshot.FromCatalog(sanitized);
+        var catalogProjection = GenesisChannelViewProjectionSnapshot.FromCatalog(sanitized);
+        ApplyGuiNextViews(catalogProjection, presence: null);
+        return catalogProjection;
+    }
+
+    private void ApplyGuiNextViews(
+        GenesisChannelViewProjectionSnapshot projection,
+        GenesisChannelPresenceSnapshot? presence)
+    {
+        if (_notificationPublisher is not GenesisGuiNextChannelPresencePublisher guiNextPublisher)
+        {
+            return;
+        }
+
+        try
+        {
+            guiNextPublisher.ApplyChannelViews(projection, presence);
+        }
+        catch
+        {
+            // GUI Next projection is auxiliary to the committed catalog generation.
+        }
     }
 
     private async ValueTask PublishNotificationsAsync(

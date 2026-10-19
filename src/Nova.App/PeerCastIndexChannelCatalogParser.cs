@@ -30,6 +30,7 @@ internal static class PeerCastIndexChannelCatalogParser
         ValidateFallbackTrackerUri(fallbackTrackerUri);
 
         var channels = new List<GenesisChannelItem>();
+        var notices = new List<GenesisYellowPageNotice>();
         foreach (var rawLine in indexText.Split('\n'))
         {
             var line = rawLine.TrimEnd('\r');
@@ -41,6 +42,22 @@ internal static class PeerCastIndexChannelCatalogParser
             var fields = line.Split("<>", StringSplitOptions.None);
             if (fields.Length < MinimumFieldCount)
             {
+                continue;
+            }
+
+            var name = Decode(fields[ChannelNameField]).Trim();
+            if (name.Length == 0)
+            {
+                continue;
+            }
+
+            var type = NormalizeOptionalText(fields[TypeField]);
+            if (IsNoticeRow(fields[ChannelIdField], type))
+            {
+                notices.Add(new GenesisYellowPageNotice(
+                    name,
+                    BuildDescription(fields),
+                    type));
                 continue;
             }
 
@@ -59,12 +76,6 @@ internal static class PeerCastIndexChannelCatalogParser
                 continue;
             }
 
-            var name = Decode(fields[ChannelNameField]).Trim();
-            if (name.Length == 0)
-            {
-                continue;
-            }
-
             channels.Add(new GenesisChannelItem(
                 name,
                 source,
@@ -73,11 +84,21 @@ internal static class PeerCastIndexChannelCatalogParser
                 ParseNonNegativeInteger(fields[RelayField]),
                 ParseNonNegativeInteger(fields[BitrateField]),
                 ParseBroadcastTime(fields[BroadcastTimeField]),
-                NormalizeOptionalText(fields[TypeField]),
+                type,
                 channelId));
         }
 
-        return new(Array.AsReadOnly(channels.ToArray()));
+        return new(
+            Array.AsReadOnly(channels.ToArray()),
+            Array.AsReadOnly(notices.ToArray()));
+    }
+
+    private static bool IsNoticeRow(string rawChannelId, string? type)
+    {
+        var channelId = rawChannelId.Trim();
+        return channelId.Length == ChannelIdCharacters &&
+            channelId.All(static character => character == '0') &&
+            string.Equals(type, "RAW", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? BuildSource(
