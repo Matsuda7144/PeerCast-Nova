@@ -28,6 +28,10 @@ internal enum NovaApplicationNetworkPersistenceStatus
 internal enum NovaApplicationPublicListenerAvailability
 {
     Unavailable,
+    Starting,
+    Listening,
+    Stopping,
+    Failed,
 }
 
 internal sealed record NovaApplicationNetworkInitializationResult(
@@ -66,6 +70,9 @@ internal sealed record NovaApplicationNetworkSnapshot(
     NatPortMappingDisplay? Nat,
     NovaApplicationPublicListenerAvailability PublicListenerAvailability)
 {
+    // Has its own revision: the relay progresses independently of settings.
+    public NovaPublicRelaySnapshot? PublicRelay { get; init; }
+
     public NovaApplicationNetworkFailure SafeFailure =>
         ShutdownFailure != NovaApplicationNetworkFailure.None ? ShutdownFailure :
         InitializationFailure != NovaApplicationNetworkFailure.None ? InitializationFailure :

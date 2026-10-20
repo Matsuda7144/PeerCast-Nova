@@ -7,6 +7,7 @@ internal interface INovaApplicationNetworkOwner : IAsyncDisposable
 {
     Task<NovaApplicationNetworkInitializationResult> InitializeAsync();
     Task<NovaApplicationNetworkPersistenceResult> SetAutoPortMappingAsync(bool enabled);
+    Task<NovaPublicRelayAcquireResult> AcquirePublicRelayAsync(NovaPublicRelayRequest request, CancellationToken cancellationToken = default);
     NovaApplicationNetworkSnapshot ReadSnapshot();
 }
 
@@ -38,7 +39,8 @@ internal sealed class NovaApplicationPortMappingControl(NovaPortMappingControl c
 
 /// <summary>
 /// Application lifetime for NAT desired state and field-only persistence.
-/// Construction and reads are inert. Public listener creation is not exposed.
+/// Construction and reads are inert. Public relay acquisition is explicit and
+/// separate from NAT desired state; listener details stay behind a driver.
 /// </summary>
 internal sealed class NovaApplicationNetworkOwner : INovaApplicationNetworkOwner
 {
@@ -47,11 +49,15 @@ internal sealed class NovaApplicationNetworkOwner : INovaApplicationNetworkOwner
     private readonly Func<string?> readEnvironment;
     private readonly Func<NatPortMappingOptions, INovaApplicationNatRuntime> createRuntime;
     private readonly Func<NatPortMappingManager, NovaSettingsStore, NovaOptions, bool, INovaApplicationPortMappingControl> createControl;
+    private readonly Func<NovaBorrowedNatManager, INovaPublicRelayDriver> createPublicRelayDriver;
+    private readonly Guid runtimeOwnerId = Guid.NewGuid();
     private readonly Dictionary<long, Task<NovaApplicationNetworkPersistenceResult>> saves = [];
     private Task<NovaApplicationNetworkInitializationResult>? initialization;
     private Task? disposal;
     private INovaApplicationNatRuntime? runtime;
     private INovaApplicationPortMappingControl? control;
+    private NovaSharedPublicRelayOwner? publicRelay;
+    private Task? publicRelayShutdown;
     private bool initialized;
     private bool initializing;
     private bool disposing;
@@ -70,7 +76,8 @@ internal sealed class NovaApplicationNetworkOwner : INovaApplicationNetworkOwner
         NovaSettingsStore store,
         Func<string?>? readEnvironment = null,
         Func<NatPortMappingOptions, INovaApplicationNatRuntime>? createRuntime = null,
-        Func<NatPortMappingManager, NovaSettingsStore, NovaOptions, bool, INovaApplicationPortMappingControl>? createControl = null)
+        Func<NatPortMappingManager, NovaSettingsStore, NovaOptions, bool, INovaApplicationPortMappingControl>? createControl = null,
+        Func<NovaBorrowedNatManager, INovaPublicRelayDriver>? createPublicRelayDriver = null)
     {
         ArgumentNullException.ThrowIfNull(store);
         this.store = store;
@@ -81,6 +88,18 @@ internal sealed class NovaApplicationNetworkOwner : INovaApplicationNetworkOwner
         this.createControl = createControl ??
             (static (manager, settings, saved, overridden) => new NovaApplicationPortMappingControl(
                 new NovaPortMappingControl(manager, settings, saved, overridden)));
+        this.createPublicRelayDriver = createPublicRelayDriver ?? (static borrowed => new NovaBorrowedPublicRelayDriver(borrowed));
+    }
+
+    public Task<NovaPublicRelayAcquireResult> AcquirePublicRelayAsync(NovaPublicRelayRequest request, CancellationToken cancellationToken = default)
+    {
+        lock (gate)
+        {
+            if (disposing || disposed || publicRelay is null)
+                return Task.FromResult(new NovaPublicRelayAcquireResult(null,
+                    disposing || disposed ? NovaPublicRelayFailure.Closing : NovaPublicRelayFailure.NotInitialized));
+            return publicRelay.AcquireAsync(request, cancellationToken);
+        }
     }
 
     public Task<NovaApplicationNetworkInitializationResult> InitializeAsync()
@@ -135,11 +154,21 @@ internal sealed class NovaApplicationNetworkOwner : INovaApplicationNetworkOwner
                     RegisteredInternalPorts = Array.AsReadOnly(nat.RegisteredInternalPorts.ToArray()),
                     Diagnostics = Array.AsReadOnly(nat.Diagnostics.ToArray()),
                 };
+            var relay = publicRelay?.ReadSnapshot();
+            var availability = relay?.State switch
+            {
+                NovaPublicRelayState.Starting => NovaApplicationPublicListenerAvailability.Starting,
+                NovaPublicRelayState.Listening => NovaApplicationPublicListenerAvailability.Listening,
+                NovaPublicRelayState.Stopping => NovaApplicationPublicListenerAvailability.Stopping,
+                NovaPublicRelayState.Failed => NovaApplicationPublicListenerAvailability.Failed,
+                _ => NovaApplicationPublicListenerAvailability.Unavailable,
+            };
             return new(initialized, initializing, disposing, disposed, revision,
                 nat?.Enabled, savedEnabled, environmentEnabled.HasValue, environmentEnabled,
                 environmentEnabled ?? savedEnabled, saves.Count, lastAcceptedRequestId,
                 lastPersistedRequestId, lastPersistence, initializationFailure, shutdownFailure,
-                shutdownOutcome, nat, NovaApplicationPublicListenerAvailability.Unavailable);
+                shutdownOutcome, nat, availability)
+            { PublicRelay = relay };
         }
     }
 
@@ -149,6 +178,8 @@ internal sealed class NovaApplicationNetworkOwner : INovaApplicationNetworkOwner
         {
             if (disposal is null)
             {
+                // Close public lease admission before publishing app closure.
+                publicRelayShutdown = publicRelay?.DisposeAsync().AsTask();
                 disposing = true;
                 revision++;
                 disposal = Task.Run(DisposeCoreAsync);
@@ -189,6 +220,8 @@ internal sealed class NovaApplicationNetworkOwner : INovaApplicationNetworkOwner
                 {
                     runtime = pendingRuntime;
                     control = pendingControl;
+                    publicRelay = new NovaSharedPublicRelayOwner(
+                        new NovaBorrowedNatManager(runtimeOwnerId, pendingRuntime.Manager), createPublicRelayDriver);
                     savedEnabled = saved.AutoPortMapping;
                     environmentEnabled = overridden ? options.Enabled : null;
                     initialized = true;
@@ -271,12 +304,26 @@ internal sealed class NovaApplicationNetworkOwner : INovaApplicationNetworkOwner
         if (starting is not null)
             await starting.ConfigureAwait(false);
 
+        var borrowerCleanupConfirmed = true;
+        try
+        {
+            if (publicRelayShutdown is not null)
+                await publicRelayShutdown.ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // Do not destroy the borrowed manager while a server/token may
+            // still exist. Retention is explicit failure, never clean shutdown.
+            borrowerCleanupConfirmed = false;
+            lock (gate) { shutdownFailure = NovaApplicationNetworkFailure.ShutdownCleanupUnconfirmed; }
+        }
+
         Task[] pending;
         lock (gate) { pending = saves.Values.Cast<Task>().ToArray(); }
         await Task.WhenAll(pending).ConfigureAwait(false);
         try
         {
-            if (runtime is not null)
+            if (runtime is not null && borrowerCleanupConfirmed)
                 await runtime.DisposeAsync().ConfigureAwait(false);
         }
         catch (Exception)
