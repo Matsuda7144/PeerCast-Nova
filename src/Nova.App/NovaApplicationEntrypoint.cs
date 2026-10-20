@@ -10,12 +10,32 @@ internal static class NovaApplicationEntrypoint
         TextWriter output,
         TextWriter error,
         Func<CancellationToken, ValueTask<NovaWindowsStartupResult>> runApplication,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Func<string, CancellationToken, ValueTask<NovaWindowsStartupResult>>? runValidationApplication = null)
     {
         ArgumentNullException.ThrowIfNull(args);
         ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(error);
         ArgumentNullException.ThrowIfNull(runApplication);
+
+        if (args.Length == 2 && args[0] == "--validation-profile")
+        {
+            if (runValidationApplication is null ||
+                !NovaValidationProfilePaths.IsAbsoluteRoot(args[1]))
+            {
+                await error.WriteLineAsync("An explicit absolute validation profile is required.").ConfigureAwait(false);
+                return 2;
+            }
+            try
+            {
+                var result = await runValidationApplication(args[1], cancellationToken).ConfigureAwait(false);
+                if (result is NovaWindowsStartupResult.Completed or NovaWindowsStartupResult.Cancelled) return 0;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { return 0; }
+            catch (Exception) { }
+            await error.WriteLineAsync("Validation profile startup rejected. No production fallback.").ConfigureAwait(false);
+            return 1;
+        }
 
         if (args.Length == 0)
         {
@@ -35,6 +55,8 @@ internal static class NovaApplicationEntrypoint
             await output.WriteLineAsync("  --help   Show this help without starting the application.")
                 .ConfigureAwait(false);
             await output.WriteLineAsync("  --about  Show legal and external-runtime information.")
+                .ConfigureAwait(false);
+            await output.WriteLineAsync("  --validation-profile <absolute-path>  Isolated network-settings validation; media/router operations blocked.")
                 .ConfigureAwait(false);
             return 0;
         }

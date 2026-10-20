@@ -25,14 +25,19 @@ internal sealed class GenesisRecordingHistoryStore
     private readonly string? _path;
     private readonly Func<string, byte[], CancellationToken, Task> _writeTemporary;
     private readonly Action<string, string> _replace;
+    private readonly Action? _checkAccess;
+    private readonly Action<GenesisRecordingMetadataSnapshot>? _validate;
 
     internal GenesisRecordingHistoryStore(string? path,
         Func<string, byte[], CancellationToken, Task>? writeTemporary = null,
-        Action<string, string>? replace = null)
+        Action<string, string>? replace = null, Action? checkAccess = null,
+        Action<GenesisRecordingMetadataSnapshot>? validate = null)
     {
         _path = string.IsNullOrWhiteSpace(path) ? null : Path.GetFullPath(path);
         _writeTemporary = writeTemporary ?? WriteTemporaryAsync;
         _replace = replace ?? ((temporary, destination) => File.Move(temporary, destination, overwrite: true));
+        _checkAccess = checkAccess;
+        _validate = validate;
     }
 
     internal static string? ResolvePath(string? localApplicationData) => string.IsNullOrWhiteSpace(localApplicationData)
@@ -50,7 +55,9 @@ internal sealed class GenesisRecordingHistoryStore
             var hash = Hash(bytes);
             try
             {
-                return new(GenesisRecordingHistoryLoadStatus.Available, GenesisRecordingHistoryJsonCodec.DeserializeDocument(bytes), hash, GenesisRecordingHistoryStoreFailure.None);
+                var document = GenesisRecordingHistoryJsonCodec.DeserializeDocument(bytes);
+                _validate?.Invoke(document);
+                return new(GenesisRecordingHistoryLoadStatus.Available, document, hash, GenesisRecordingHistoryStoreFailure.None);
             }
             catch (HistoryVersionException)
             {
@@ -74,6 +81,8 @@ internal sealed class GenesisRecordingHistoryStore
         try
         {
             token.ThrowIfCancellationRequested();
+            _checkAccess?.Invoke();
+            _validate?.Invoke(snapshot);
             var bytes = GenesisRecordingHistoryJsonCodec.Serialize(snapshot);
             var directory = Path.GetDirectoryName(_path)!;
             Directory.CreateDirectory(directory);
@@ -115,6 +124,7 @@ internal sealed class GenesisRecordingHistoryStore
     {
         try
         {
+            _checkAccess?.Invoke();
             using var stream = new FileStream(_path!, FileMode.Open, FileAccess.Read, FileShare.Read);
             if (stream.Length > MaximumByteCount) throw new HistorySizeException();
             var bytes = new byte[checked((int)stream.Length)];

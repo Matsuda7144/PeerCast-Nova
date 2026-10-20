@@ -26,8 +26,9 @@ internal sealed class JsonGenesisYellowPageConfigurationStore :
     };
 
     private readonly string _path;
+    private readonly Action? _checkAccess;
 
-    public JsonGenesisYellowPageConfigurationStore(string path)
+    public JsonGenesisYellowPageConfigurationStore(string path, Action? checkAccess = null)
     {
         ArgumentNullException.ThrowIfNull(path);
         if (string.IsNullOrWhiteSpace(path))
@@ -38,12 +39,14 @@ internal sealed class JsonGenesisYellowPageConfigurationStore :
         }
 
         _path = Path.GetFullPath(path);
+        _checkAccess = checkAccess;
     }
 
     public async ValueTask<IReadOnlyList<GenesisYellowPageDefinition>> LoadAsync(
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        _checkAccess?.Invoke();
         FileStream stream;
         try
         {
@@ -89,6 +92,7 @@ internal sealed class JsonGenesisYellowPageConfigurationStore :
         IReadOnlyList<GenesisYellowPageDefinition> definitions,
         CancellationToken cancellationToken = default)
     {
+        _checkAccess?.Invoke();
         ArgumentNullException.ThrowIfNull(definitions);
         cancellationToken.ThrowIfCancellationRequested();
 

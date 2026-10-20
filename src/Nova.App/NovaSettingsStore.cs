@@ -3,7 +3,8 @@ using PeerCast.Nova.Foundation.Configuration;
 
 namespace PeerCast.Nova.App;
 
-internal sealed class NovaSettingsStore(string path)
+internal sealed class NovaSettingsStore(string path, Action? checkAccess = null,
+    Action<NovaOptions>? validate = null)
 {
     private static readonly SemaphoreSlim Writes = new(1, 1);
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
@@ -11,10 +12,16 @@ internal sealed class NovaSettingsStore(string path)
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "PeerCast", "Nova", "settings.json"));
 
-    public NovaOptions Load() => File.Exists(path)
+    public NovaOptions Load()
+    {
+        checkAccess?.Invoke();
+        var value = File.Exists(path)
         ? JsonSerializer.Deserialize<NovaOptions>(File.ReadAllText(path))
             ?? throw new InvalidDataException("Nova settings contain no document.")
         : new NovaOptions();
+        validate?.Invoke(value);
+        return value;
+    }
 
     public async Task UpdateAsync(Func<NovaOptions, NovaOptions> update)
     {
@@ -45,6 +52,8 @@ internal sealed class NovaSettingsStore(string path)
 
     private async Task SaveCoreAsync(NovaOptions settings)
     {
+        checkAccess?.Invoke();
+        validate?.Invoke(settings);
         var directory = Path.GetDirectoryName(Path.GetFullPath(path))!;
         Directory.CreateDirectory(directory);
         var temporary = Path.Combine(directory, $".nova-settings-{Guid.NewGuid():N}.tmp");

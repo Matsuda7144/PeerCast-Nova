@@ -102,17 +102,20 @@ internal sealed class GenesisRecordingRuleRepository : IAsyncDisposable
         TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly string? path;
     private readonly Func<string, RecordingRuleSet, CancellationToken, ValueTask> saveAsync;
+    private readonly Action? checkAccess;
     private int activeOperations;
     private bool isShuttingDown;
 
     public GenesisRecordingRuleRepository(
         string? path,
-        Func<string, RecordingRuleSet, CancellationToken, ValueTask>? saveAsync = null)
+        Func<string, RecordingRuleSet, CancellationToken, ValueTask>? saveAsync = null,
+        Action? checkAccess = null)
     {
         this.path = string.IsNullOrWhiteSpace(path)
             ? null
             : Path.GetFullPath(path);
         this.saveAsync = saveAsync ?? RecordingRuleFileStore.SaveAsync;
+        this.checkAccess = checkAccess;
     }
 
     public static GenesisRecordingRuleRepository CreateSystem() =>
@@ -257,6 +260,7 @@ internal sealed class GenesisRecordingRuleRepository : IAsyncDisposable
                 // external writer can still race between this check and replacement.
                 try
                 {
+                    checkAccess?.Invoke();
                     await saveAsync(path, proposedRules, operation.Token)
                         .ConfigureAwait(false);
                 }
@@ -364,6 +368,7 @@ internal sealed class GenesisRecordingRuleRepository : IAsyncDisposable
         byte[] bytes;
         try
         {
+            checkAccess?.Invoke();
             await using var stream = new FileStream(
                 path,
                 FileMode.Open,

@@ -26,8 +26,9 @@ internal sealed class JsonGenesisChannelNotificationPreferenceStore :
     };
 
     private readonly string _path;
+    private readonly Action? _checkAccess;
 
-    public JsonGenesisChannelNotificationPreferenceStore(string path)
+    public JsonGenesisChannelNotificationPreferenceStore(string path, Action? checkAccess = null)
     {
         ArgumentNullException.ThrowIfNull(path);
         if (string.IsNullOrWhiteSpace(path))
@@ -38,12 +39,14 @@ internal sealed class JsonGenesisChannelNotificationPreferenceStore :
         }
 
         _path = Path.GetFullPath(path);
+        _checkAccess = checkAccess;
     }
 
     public async ValueTask<GenesisChannelNotificationPreferences> LoadAsync(
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        _checkAccess?.Invoke();
         FileStream stream;
         try
         {
@@ -81,6 +84,7 @@ internal sealed class JsonGenesisChannelNotificationPreferenceStore :
         GenesisChannelNotificationPreferences preferences,
         CancellationToken cancellationToken = default)
     {
+        _checkAccess?.Invoke();
         ArgumentNullException.ThrowIfNull(preferences);
         cancellationToken.ThrowIfCancellationRequested();
         var directory = Path.GetDirectoryName(_path);

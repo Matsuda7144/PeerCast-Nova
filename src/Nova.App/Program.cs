@@ -16,7 +16,22 @@ try
         Console.Error,
         static cancellationToken =>
             new NovaWindowsStartupComposition().RunGenesisAsync(cancellationToken),
-        cancellationSource.Token);
+        cancellationSource.Token,
+        static async (root, token) =>
+        {
+            await using var profile = await NovaValidationProfile.CreateSystemAsync(root, token);
+            return await new NovaWindowsStartupComposition(new()
+            {
+                ValidationProfile = profile,
+                ChannelCatalog = EmptyGenesisChannelCatalog.Instance,
+                Host = new()
+                {
+                    ClientWidth = 1_120,
+                    ClientHeight = 620,
+                    Title = "PeerCast Nova — 検証専用（実ルーター・録画・再生なし）"
+                },
+            }).RunGenesisAsync(token);
+        });
 }
 finally
 {

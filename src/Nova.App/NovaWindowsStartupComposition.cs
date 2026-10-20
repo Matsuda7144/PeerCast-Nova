@@ -29,6 +29,7 @@ public sealed record NovaWindowsStartupOptions
 
     internal IGenesisNetworkSettingsController NetworkSettingsController { get; init; } =
         GenesisUnavailableNetworkSettingsController.Instance;
+    internal NovaValidationProfile? ValidationProfile { get; init; }
 }
 
 /// <summary>
@@ -78,9 +79,11 @@ public sealed class NovaWindowsStartupComposition
         _options = options with { Host = options.Host with { } };
         _hostFactory = hostFactory;
         _networkOwnerFactory = networkOwnerFactory ??
-            (static () => new NovaApplicationNetworkOwner(NovaSettingsStore.CreateDefault()));
+            (() => _options.ValidationProfile is { } profile ? profile.CreateNetworkOwner() :
+                new NovaApplicationNetworkOwner(NovaSettingsStore.CreateDefault()));
         _genesisPlaybackControllerFactory = playbackControllerFactory is null
-            ? static (paths, settings) => CreateDefaultGenesisPlaybackController(paths, settings)
+            ? (paths, settings) => _options.ValidationProfile is { } profile ? profile.CreatePlaybackController(paths) :
+                CreateDefaultGenesisPlaybackController(paths, settings)
             : (_, _) => playbackControllerFactory();
     }
 
@@ -113,7 +116,8 @@ public sealed class NovaWindowsStartupComposition
                     _options.ChannelCatalog,
                     _options.ChannelAutoRefreshInterval,
                     GenesisMainWindowResizeGuard.Create,
-                    token => LoadSystemGuiNextState(token, playbackPathSource),
+                    token => _options.ValidationProfile is { } profile ? profile.GetGuiState(token) :
+                        LoadSystemGuiNextState(token, playbackPathSource),
                     CreateSystemNotificationRuntime,
                     CaptureSystemNotificationSettingsPlacement,
                     _options.NetworkSettingsController, recordingSettings),
@@ -133,10 +137,15 @@ public sealed class NovaWindowsStartupComposition
         var result = NovaWindowsStartupResult.Faulted;
         try
         {
+            _options.ValidationProfile?.CheckReady();
             networkOwner = _networkOwnerFactory() ??
                 throw new InvalidOperationException("Application network owner is unavailable.");
             var paths = new GenesisGuiNextPlaybackPathSource();
-            recordingSettings ??= GenesisRecordingOutputDirectorySettings.CreateSystem();
+            recordingSettings ??= _options.ValidationProfile is { } profile ? profile.RecordingSettings :
+                GenesisRecordingOutputDirectorySettings.CreateSystem();
+            if (_options.ValidationProfile is not null &&
+                !(await networkOwner.InitializeAsync().WaitAsync(cancellationToken).ConfigureAwait(false)).Initialized)
+                return NovaWindowsStartupResult.Faulted;
             playbackController = _genesisPlaybackControllerFactory(paths, recordingSettings);
             result = await RunGenesisAsync(
                 createSurface(paths, recordingSettings),

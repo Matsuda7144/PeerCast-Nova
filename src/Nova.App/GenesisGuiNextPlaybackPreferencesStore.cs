@@ -25,8 +25,9 @@ internal sealed class JsonGenesisGuiNextPlaybackPreferencesStore :
     };
 
     private readonly string _path;
+    private readonly Action? _checkAccess;
 
-    public JsonGenesisGuiNextPlaybackPreferencesStore(string path)
+    public JsonGenesisGuiNextPlaybackPreferencesStore(string path, Action? checkAccess = null)
     {
         ArgumentNullException.ThrowIfNull(path);
         if (string.IsNullOrWhiteSpace(path))
@@ -37,12 +38,14 @@ internal sealed class JsonGenesisGuiNextPlaybackPreferencesStore :
         }
 
         _path = Path.GetFullPath(path);
+        _checkAccess = checkAccess;
     }
 
     public async ValueTask<GenesisGuiNextPlaybackPreferences> LoadAsync(
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        _checkAccess?.Invoke();
         FileStream stream;
         try
         {
@@ -80,6 +83,7 @@ internal sealed class JsonGenesisGuiNextPlaybackPreferencesStore :
         GenesisGuiNextPlaybackPreferences preferences,
         CancellationToken cancellationToken = default)
     {
+        _checkAccess?.Invoke();
         ArgumentNullException.ThrowIfNull(preferences);
         cancellationToken.ThrowIfCancellationRequested();
         var directory = Path.GetDirectoryName(_path);

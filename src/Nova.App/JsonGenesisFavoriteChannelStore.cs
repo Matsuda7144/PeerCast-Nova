@@ -16,8 +16,9 @@ internal sealed class JsonGenesisFavoriteChannelStore : IGenesisFavoriteChannelS
     };
 
     private readonly string _path;
+    private readonly Action? _checkAccess;
 
-    public JsonGenesisFavoriteChannelStore(string path)
+    public JsonGenesisFavoriteChannelStore(string path, Action? checkAccess = null)
     {
         ArgumentNullException.ThrowIfNull(path);
         if (string.IsNullOrWhiteSpace(path))
@@ -28,12 +29,14 @@ internal sealed class JsonGenesisFavoriteChannelStore : IGenesisFavoriteChannelS
         }
 
         _path = Path.GetFullPath(path);
+        _checkAccess = checkAccess;
     }
 
     public async ValueTask<IReadOnlyList<GenesisFavoriteChannel>> LoadAsync(
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        _checkAccess?.Invoke();
         FileStream stream;
         try
         {
@@ -75,6 +78,7 @@ internal sealed class JsonGenesisFavoriteChannelStore : IGenesisFavoriteChannelS
         IReadOnlyList<GenesisFavoriteChannel> favorites,
         CancellationToken cancellationToken = default)
     {
+        _checkAccess?.Invoke();
         ArgumentNullException.ThrowIfNull(favorites);
         cancellationToken.ThrowIfCancellationRequested();
         var validated = Validate(favorites);
