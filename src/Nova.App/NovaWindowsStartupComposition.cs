@@ -42,6 +42,7 @@ public sealed class NovaWindowsStartupComposition
 {
     private readonly NovaWindowsStartupOptions _options;
     private readonly INovaWindowsStartupHostFactory _hostFactory;
+    private readonly Func<INovaApplicationNetworkOwner> _networkOwnerFactory;
     private readonly Func<
         GenesisGuiNextPlaybackPathSource,
         GenesisRecordingOutputDirectorySettings,
@@ -58,7 +59,8 @@ public sealed class NovaWindowsStartupComposition
     internal NovaWindowsStartupComposition(
         NovaWindowsStartupOptions options,
         INovaWindowsStartupHostFactory hostFactory,
-        Func<IPlaybackSessionController>? playbackControllerFactory = null)
+        Func<IPlaybackSessionController>? playbackControllerFactory = null,
+        Func<INovaApplicationNetworkOwner>? networkOwnerFactory = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(hostFactory);
@@ -75,6 +77,8 @@ public sealed class NovaWindowsStartupComposition
 
         _options = options with { Host = options.Host with { } };
         _hostFactory = hostFactory;
+        _networkOwnerFactory = networkOwnerFactory ??
+            (static () => new NovaApplicationNetworkOwner(NovaSettingsStore.CreateDefault()));
         _genesisPlaybackControllerFactory = playbackControllerFactory is null
             ? static (paths, settings) => CreateDefaultGenesisPlaybackController(paths, settings)
             : (_, _) => playbackControllerFactory();
@@ -87,7 +91,7 @@ public sealed class NovaWindowsStartupComposition
             genesisSurfaceTarget: null,
             genesisPlaybackWindowSurfaceTarget: null,
             genesisViewModel: null,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
     public async ValueTask<NovaWindowsStartupResult> RunAsync(
         INovaAboutLegalProjectionTarget? projectionTarget,
@@ -97,51 +101,81 @@ public sealed class NovaWindowsStartupComposition
             genesisSurfaceTarget: null,
             genesisPlaybackWindowSurfaceTarget: null,
             genesisViewModel: null,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
-    public async ValueTask<NovaWindowsStartupResult> RunGenesisAsync(
+    public ValueTask<NovaWindowsStartupResult> RunGenesisAsync(
+        CancellationToken cancellationToken = default) =>
+        RunOwnedGenesisAsync(
+            (playbackPathSource, recordingSettings) =>
+                new SystemGenesisInteractiveMainWindowSurfaceTarget(
+                    new SystemGenesisMainWindowSurfaceTarget(),
+                    SystemGenesisMainWindowInteractionBridgeFactory.Instance,
+                    _options.ChannelCatalog,
+                    _options.ChannelAutoRefreshInterval,
+                    GenesisMainWindowResizeGuard.Create,
+                    token => LoadSystemGuiNextState(token, playbackPathSource),
+                    CreateSystemNotificationRuntime,
+                    CaptureSystemNotificationSettingsPlacement,
+                    _options.NetworkSettingsController, recordingSettings),
+            cancellationToken: cancellationToken);
+
+    // The production root and managed composition tests use the same lifetime.
+    // Surfaces receive a borrower; only this root initializes/disposes the owner.
+    internal async ValueTask<NovaWindowsStartupResult> RunOwnedGenesisAsync(
+        Func<GenesisGuiNextPlaybackPathSource, GenesisRecordingOutputDirectorySettings,
+            IGenesisMainWindowSurfaceTarget> createSurface,
+        GenesisRecordingOutputDirectorySettings? recordingSettings = null,
         CancellationToken cancellationToken = default)
     {
-        var playbackPathSource = new GenesisGuiNextPlaybackPathSource();
-        var recordingSettings = GenesisRecordingOutputDirectorySettings.CreateSystem();
-        var playbackController = _genesisPlaybackControllerFactory(playbackPathSource, recordingSettings);
-        NovaWindowsStartupResult result;
+        ArgumentNullException.ThrowIfNull(createSurface);
+        INovaApplicationNetworkOwner? networkOwner = null;
+        IPlaybackSessionController? playbackController = null;
+        var result = NovaWindowsStartupResult.Faulted;
         try
         {
+            networkOwner = _networkOwnerFactory() ??
+                throw new InvalidOperationException("Application network owner is unavailable.");
+            var paths = new GenesisGuiNextPlaybackPathSource();
+            recordingSettings ??= GenesisRecordingOutputDirectorySettings.CreateSystem();
+            playbackController = _genesisPlaybackControllerFactory(paths, recordingSettings);
             result = await RunGenesisAsync(
-                    new SystemGenesisInteractiveMainWindowSurfaceTarget(
-                        new SystemGenesisMainWindowSurfaceTarget(),
-                        SystemGenesisMainWindowInteractionBridgeFactory.Instance,
-                        _options.ChannelCatalog,
-                        _options.ChannelAutoRefreshInterval,
-                        GenesisMainWindowResizeGuard.Create,
-                        cancellationToken => LoadSystemGuiNextState(
-                            cancellationToken,
-                            playbackPathSource),
-                        CreateSystemNotificationRuntime,
-                        CaptureSystemNotificationSettingsPlacement,
-                        _options.NetworkSettingsController, recordingSettings),
-                    playbackController,
-                    cancellationToken)
-                .ConfigureAwait(false);
+                createSurface(paths, recordingSettings),
+                playbackWindowSurfaceTarget: null,
+                playbackController,
+                networkOwner,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            result = NovaWindowsStartupResult.Cancelled;
         }
         catch
         {
             result = NovaWindowsStartupResult.Faulted;
         }
-
-        if (playbackController is IAsyncDisposable ownedController)
+        finally
         {
-            try
+            // Close network admission immediately on root shutdown, including
+            // while the independent private playback/recording owner drains.
+            Task? networkShutdown = null;
+            if (networkOwner is not null)
             {
-                await ownedController.DisposeAsync().ConfigureAwait(false);
+                try { networkShutdown = networkOwner.DisposeAsync().AsTask(); }
+                catch { result = NovaWindowsStartupResult.Faulted; }
             }
-            catch
+            if (playbackController is IAsyncDisposable ownedController)
             {
-                result = NovaWindowsStartupResult.Faulted;
+                try { await ownedController.DisposeAsync().ConfigureAwait(false); }
+                catch { result = NovaWindowsStartupResult.Faulted; }
+            }
+            if (networkShutdown is not null)
+            {
+                // Join the owner's existing task; unconfirmed cleanup stays
+                // a failure with its existing safe resource retention.
+                try { await networkShutdown.ConfigureAwait(false); }
+                catch { result = NovaWindowsStartupResult.Faulted; }
             }
         }
-
         return result;
     }
 
@@ -173,7 +207,16 @@ public sealed class NovaWindowsStartupComposition
         IGenesisMainWindowSurfaceTarget surfaceTarget,
         IGenesisPlaybackWindowSurfaceTarget? playbackWindowSurfaceTarget,
         IPlaybackSessionController playbackController,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        await RunGenesisAsync(surfaceTarget, playbackWindowSurfaceTarget, playbackController,
+            networkOwner: null, cancellationToken).ConfigureAwait(false);
+
+    private async ValueTask<NovaWindowsStartupResult> RunGenesisAsync(
+        IGenesisMainWindowSurfaceTarget surfaceTarget,
+        IGenesisPlaybackWindowSurfaceTarget? playbackWindowSurfaceTarget,
+        IPlaybackSessionController playbackController,
+        INovaApplicationNetworkOwner? networkOwner,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(surfaceTarget);
         ArgumentNullException.ThrowIfNull(playbackController);
@@ -183,8 +226,9 @@ public sealed class NovaWindowsStartupComposition
             playbackWindowSurfaceTarget,
             new GenesisMainViewModel(
                 playbackController,
-                hasPlaybackWindowSurface: playbackWindowSurfaceTarget is not null),
-            cancellationToken).ConfigureAwait(false);
+                hasPlaybackWindowSurface: playbackWindowSurfaceTarget is not null,
+                networkSettingsAdapter: networkOwner is null ? null : new GuiNextNetworkSettingsAdapter(networkOwner)),
+            networkOwner, cancellationToken).ConfigureAwait(false);
     }
 
     private async ValueTask<NovaWindowsStartupResult> RunCoreAsync(
@@ -192,7 +236,8 @@ public sealed class NovaWindowsStartupComposition
         IGenesisMainWindowSurfaceTarget? genesisSurfaceTarget,
         IGenesisPlaybackWindowSurfaceTarget? genesisPlaybackWindowSurfaceTarget,
         GenesisMainViewModel? genesisViewModel,
-        CancellationToken cancellationToken)
+        INovaApplicationNetworkOwner? networkOwner = null,
+        CancellationToken cancellationToken = default)
     {
         try
         {
@@ -201,7 +246,7 @@ public sealed class NovaWindowsStartupComposition
                 genesisSurfaceTarget,
                 genesisPlaybackWindowSurfaceTarget,
                 genesisViewModel,
-                cancellationToken).ConfigureAwait(false);
+                networkOwner, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -218,6 +263,7 @@ public sealed class NovaWindowsStartupComposition
         IGenesisMainWindowSurfaceTarget? genesisSurfaceTarget,
         IGenesisPlaybackWindowSurfaceTarget? genesisPlaybackWindowSurfaceTarget,
         GenesisMainViewModel? genesisViewModel,
+        INovaApplicationNetworkOwner? networkOwner,
         CancellationToken cancellationToken)
     {
         await using var host = _hostFactory.Create(_options.Host);
@@ -234,6 +280,12 @@ public sealed class NovaWindowsStartupComposition
             }
 
             hostStarted = true;
+            if (networkOwner is not null)
+            {
+                var initialization = await networkOwner.InitializeAsync()
+                    .WaitAsync(cancellationToken).ConfigureAwait(false);
+                if (!initialization.Initialized) return NovaWindowsStartupResult.Faulted;
+            }
             if (genesisSurfaceTarget is not null)
             {
                 if (genesisViewModel is null ||

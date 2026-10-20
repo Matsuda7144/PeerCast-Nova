@@ -49,10 +49,12 @@ public sealed partial class GenesisMainViewModel : INotifyPropertyChanged
 
     internal GenesisMainViewModel(
         IPlaybackSessionController controller,
-        bool hasPlaybackWindowSurface)
+        bool hasPlaybackWindowSurface,
+        IGuiNextNetworkSettingsAdapter? networkSettingsAdapter = null)
     {
         ArgumentNullException.ThrowIfNull(controller);
         _controller = controller;
+        NetworkSettingsAdapter = networkSettingsAdapter;
         _recordingController = controller as IGenesisManualRecordingSessionController;
         _automaticRecordingCommands = controller is GuiNextDailyPlaybackSessionController guiNext
             ? guiNext.AutomaticRecordingUserCommands : controller as IGenesisAutomaticRecordingUserCommands;
@@ -69,6 +71,9 @@ public sealed partial class GenesisMainViewModel : INotifyPropertyChanged
             notifications.SnapshotChanged += OnPlaybackSnapshotChanged;
         }
     }
+
+    // Borrowed application capability. Closing this view never disposes it.
+    internal IGuiNextNetworkSettingsAdapter? NetworkSettingsAdapter { get; }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
