@@ -76,6 +76,7 @@ internal sealed class GenesisMainWindowNativeSurface : IAsyncDisposable
     private const uint ListViewExtendedStyleFullRowSelect = 0x00000020;
     private const uint ListViewExtendedStyleDoubleBuffer = 0x00010000;
     private const uint ListViewMessageFirst = 0x1000;
+    private const uint ListViewMessageGetHeader = ListViewMessageFirst + 31;
     private const uint ListViewMessageDeleteColumn = ListViewMessageFirst + 28;
     private const uint ListViewMessageDeleteAllItems = ListViewMessageFirst + 9;
     private const uint ListViewMessageInsertItemW = ListViewMessageFirst + 77;
@@ -89,8 +90,6 @@ internal sealed class GenesisMainWindowNativeSurface : IAsyncDisposable
     private const int ListViewColumnFormatLeft = 0;
     private const int ListViewColumnFormatRight = 1;
     private const uint WindowMessageClose = 0x0010;
-    private const uint WindowMessageSetFont = 0x0030;
-    private const int DefaultGuiFont = 17;
     private const uint CommonControlsListViewClasses = 0x00000001;
     private readonly nint[] _controls;
     private int _disposed;
@@ -255,6 +254,8 @@ internal sealed class GenesisMainWindowNativeSurface : IAsyncDisposable
                 ListViewExtendedStyleFullRowSelect |
                 ListViewExtendedStyleDoubleBuffer));
         GenesisGuiNextAppShellBridge.ApplyListViewColors(channelList);
+        _ = GenesisWindowUiFont.Apply(
+            SendMessageW(channelList, ListViewMessageGetHeader, 0, 0));
 
         if (!AddColumns(channelList) || !ReplaceRows(channelList, viewModel.Channels))
         {
@@ -603,15 +604,9 @@ internal sealed class GenesisMainWindowNativeSurface : IAsyncDisposable
 
     private static void ApplyDefaultFont(IEnumerable<nint> controls)
     {
-        var font = GetStockObject(DefaultGuiFont);
-        if (font == 0)
-        {
-            return;
-        }
-
         foreach (var control in controls)
         {
-            _ = SendMessageW(control, WindowMessageSetFont, (nuint)font, 1);
+            _ = GenesisWindowUiFont.Apply(control);
         }
     }
 
@@ -690,9 +685,6 @@ internal sealed class GenesisMainWindowNativeSurface : IAsyncDisposable
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetClientRect(nint window, out WindowRectangle rectangle);
-
-    [DllImport("gdi32.dll")]
-    private static extern nint GetStockObject(int objectIndex);
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

@@ -20,9 +20,7 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
     private const uint ExtendedStyleClientEdge = 0x00000200;
     private const uint WindowMessageCommand = 0x0111;
     private const uint WindowMessageNcDestroy = 0x0082;
-    private const uint WindowMessageSetFont = 0x0030;
     private const int ButtonNotificationClicked = 0;
-    private const int DefaultGuiFont = 17;
     private const int ArrowCursor = 32512;
     private const int ColorWindow = 5;
     private const int ShowWindowNormal = 1;
@@ -290,14 +288,7 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
             instance,
             0);
 
-    private static void ApplyDefaultFont(nint control)
-    {
-        var font = GetStockObject(DefaultGuiFont);
-        if (font != 0)
-        {
-            _ = SendMessageW(control, WindowMessageSetFont, (nuint)font, 1);
-        }
-    }
+    private static void ApplyDefaultFont(nint control) => _ = GenesisWindowUiFont.Apply(control);
 
     private static nint ProcessWindowMessage(nint window, uint message, nuint wParam, nint lParam)
     {
@@ -536,9 +527,6 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
 
     [DllImport("user32.dll")]
     private static extern nuint SendMessageW(nint window, uint message, nuint wParam, nint lParam);
-
-    [DllImport("gdi32.dll")]
-    private static extern nint GetStockObject(int objectIndex);
 
     [DllImport("user32.dll")]
     private static extern nint LoadCursorW(nint instance, nint cursorName);

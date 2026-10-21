@@ -314,6 +314,7 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
             Assert.NotEqual(0, controls.Path);
             Assert.NotEqual(0, controls.Save);
             Assert.NotEqual(0, controls.Status);
+            AssertNativeControlsShareWindowFont(controls.All);
 
             Assert.True(SetWindowTextW(controls.Path, invalidPath));
             _ = SendMessageW(controls.Save, ButtonMessageClick, 0, 0);
@@ -333,6 +334,13 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
             Assert.Equal(path, persistedPath);
             Assert.Equal(path, settings.PcrPlayerExecutablePath);
             Assert.Equal(path, pathSource.Current);
+
+            await window.DisposeAsync();
+            await using var reopened = GenesisGuiNextPlaybackSettingsWindow.TryCreate(owner, settings);
+            Assert.NotNull(reopened);
+            var reopenedWindow = FindOwnedWindow(owner, "Playback / PCRPlayer");
+            Assert.NotEqual(0, reopenedWindow);
+            AssertNativeControlsShareWindowFont(FindSettingsControls(reopenedWindow).All);
         }
         finally
         {
@@ -453,6 +461,7 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
     }
 
     private const uint ButtonMessageClick = 0x00F5;
+    private const uint WindowMessageGetFont = 0x0031;
     private const uint WindowStylePopup = 0x80000000;
 
     private static nint CreateNativeWindow()
@@ -494,6 +503,7 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
         var controls = new SettingsControls();
         _ = EnumChildWindows(window, (child, _) =>
         {
+            controls.All.Add(child);
             switch (GetDlgCtrlID(child))
             {
                 case 1001:
@@ -512,6 +522,17 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
         return controls;
     }
 
+    private static void AssertNativeControlsShareWindowFont(List<nint> controls)
+    {
+        Assert.Equal(8, controls.Count);
+        var fonts = controls
+            .Select(control => SendMessageW(control, WindowMessageGetFont, 0, 0))
+            .ToArray();
+        Assert.All(fonts, font => Assert.NotEqual(0, font));
+        Assert.Single(fonts.Distinct());
+        Assert.True(new SystemUiFontNativeApi().HasJapaneseGlyphs(fonts[0]));
+    }
+
     private static string ReadWindowText(nint window)
     {
         var length = GetWindowTextLengthW(window);
@@ -527,6 +548,8 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
 
     private sealed class SettingsControls
     {
+        public List<nint> All { get; } = new();
+
         public nint Path { get; set; }
 
         public nint Save { get; set; }

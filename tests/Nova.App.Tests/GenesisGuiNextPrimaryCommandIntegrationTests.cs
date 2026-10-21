@@ -3,6 +3,62 @@ namespace PeerCast.Nova.App.Tests;
 public sealed class GenesisGuiNextPrimaryCommandIntegrationTests
 {
     [Fact]
+    public void JapaneseGuiNextControlsUseSharedFontAndOwnerDrawSelectsIt()
+    {
+        var shell = ReadSource("GenesisGuiNextAppShellBridge.cs");
+        var start = shell.IndexOf("var statusLabel = CreateWindowExW(", StringComparison.Ordinal);
+        Assert.True(start >= 0);
+        var end = shell.IndexOf("var state = new AppShellState(", start, StringComparison.Ordinal);
+        Assert.True(end > start);
+        var creation = shell[start..end];
+
+        foreach (var control in new[]
+        {
+            "statusLabel", "favoriteButton", "refreshButton", "detailsTitle",
+            "activeRecordingsModeButton", "recordingRulesModeButton",
+            "recordingLibraryModeButton", "recordingLibraryRefreshButton",
+            "detailsDescription", "detailsMetadata", "detailsIdentity",
+            "detailsRecordingStatus", "detailsRecordButton",
+            "detailsStopRecordingButton", "detailsCopyButton",
+        })
+        {
+            Assert.Contains($"ApplyDefaultFont({control});", creation, StringComparison.Ordinal);
+        }
+
+        Assert.Contains(
+            "GenesisWindowUiFont.SelectForDrawing(",
+            shell,
+            StringComparison.Ordinal);
+        Assert.Contains("GenesisWindowUiFont.Apply(control)", shell, StringComparison.Ordinal);
+
+        var surface = ReadSource("SystemGenesisMainWindowSurfaceTarget.cs");
+        Assert.Contains("ListViewMessageGetHeader", surface, StringComparison.Ordinal);
+        Assert.Contains("GenesisWindowUiFont.Apply(control)", surface, StringComparison.Ordinal);
+
+        var search = ReadSource("GenesisChannelSearchBoxBridge.cs");
+        Assert.Contains("GenesisWindowUiFont.Apply(control)", search, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PlaybackSettingsWindowUsesWindowOwnedFontForEveryNativeControl()
+    {
+        var source = ReadSource("GenesisGuiNextPlaybackSettingsWindow.cs");
+        var start = source.IndexOf("foreach (var control in new[]", StringComparison.Ordinal);
+        Assert.True(start >= 0);
+        var end = source.IndexOf("return new(path, browse, save, clear, close, status, info);", start, StringComparison.Ordinal);
+        Assert.True(end > start);
+        var creation = source[start..end];
+
+        foreach (var control in new[] { "label", "path", "browse", "info", "help", "save", "clear", "close", "status" })
+        {
+            Assert.Contains(control, creation, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("GenesisWindowUiFont.Apply(control)", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetStockObject", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ShellAndKeyboardRefreshUseTheMainWindowRefreshBoundary()
     {
         var shell = ReadSource("GenesisGuiNextAppShellBridge.cs");

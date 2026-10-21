@@ -20,10 +20,8 @@ internal sealed class GenesisChannelSearchBoxBridge : IAsyncDisposable
     private const uint ComboBoxMessageGetCurrentSelection = 0x0147;
     private const uint ComboBoxMessageResetContent = 0x014B;
     private const uint ComboBoxMessageSetCurrentSelection = 0x014E;
-    private const uint WindowMessageSetFont = 0x0030;
     private const int EditNotificationChange = 0x0300;
     private const int ComboBoxNotificationSelectionChanged = 1;
-    private const int DefaultGuiFont = 17;
     private const int LabelWidth = 52;
     private const int SearchCharacterLimit = 256;
     private const int YellowPageDropDownHeight = 240;
@@ -225,14 +223,7 @@ internal sealed class GenesisChannelSearchBoxBridge : IAsyncDisposable
         return false;
     }
 
-    private static void ApplyDefaultFont(nint control)
-    {
-        var font = GetStockObject(DefaultGuiFont);
-        if (font != 0)
-        {
-            _ = SendMessageW(control, WindowMessageSetFont, (nuint)font, 1);
-        }
-    }
+    private static void ApplyDefaultFont(nint control) => _ = GenesisWindowUiFont.Apply(control);
 
     private static string ReadWindowText(nint window)
     {
@@ -466,6 +457,4 @@ internal sealed class GenesisChannelSearchBoxBridge : IAsyncDisposable
     [DllImport("uxtheme.dll", CharSet = CharSet.Unicode)]
     private static extern int SetWindowTheme(nint window, string? subAppName, string? subIdList);
 
-    [DllImport("gdi32.dll")]
-    private static extern nint GetStockObject(int objectIndex);
 }

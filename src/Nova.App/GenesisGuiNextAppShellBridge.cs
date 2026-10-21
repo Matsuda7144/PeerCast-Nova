@@ -520,7 +520,6 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
     private const uint StaticStyleOwnerDraw = 0x0000000D;
     private const uint WindowMessageCommand = 0x0111;
     private const uint WindowMessageNcDestroy = 0x0082;
-    private const uint WindowMessageSetFont = 0x0030;
     private const uint WindowMessagePaint = 0x000F;
     private const uint WindowMessageDrawItem = 0x002B;
     private const uint WindowMessageNotify = 0x004E;
@@ -552,7 +551,6 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
     private const uint WindowMessageKeyDown = 0x0100;
     private const uint WindowMessageKeyUp = 0x0101;
     private const uint WindowMessageListViewSetItemState = ListViewMessageFirst + 43;
-    private const int DefaultGuiFont = 17;
     // Win32 COLORREF stores channels in BGR order.
     private const int BackgroundColor = 0x00412917;
     private const int UnselectedColor = 0x00412917;
@@ -1085,6 +1083,7 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
         ApplyDefaultFont(detailsRecordingStatus);
         ApplyDefaultFont(detailsRecordButton);
         ApplyDefaultFont(detailsStopRecordingButton);
+        ApplyDefaultFont(detailsCopyButton);
         _ = EnableWindow(
             refreshButton,
             GenesisChannelRefreshButtonBridge.CanRefreshForOwner(owner));
@@ -1287,14 +1286,7 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
         message == WindowMessageKeyUp ||
         message == WindowMessageListViewSetItemState;
 
-    private static void ApplyDefaultFont(nint control)
-    {
-        var font = GetStockObject(DefaultGuiFont);
-        if (font != 0)
-        {
-            _ = SendMessageW(control, WindowMessageSetFont, (nuint)font, 1);
-        }
-    }
+    private static void ApplyDefaultFont(nint control) => _ = GenesisWindowUiFont.Apply(control);
 
     private static nint CreatePlaybackButton(
         string label,
@@ -1856,6 +1848,9 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
             }
 
             var drawItem = Marshal.PtrToStructure<DrawItem>(drawItemPointer);
+            using var fontSelection = GenesisWindowUiFont.SelectForDrawing(
+                drawItem.DeviceContext,
+                drawItem.ControlWindow);
             if (IsOwnerDrawButton(drawItem.ControlType) &&
                 drawItem.ControlId is CreateRuleControlId or EditRuleControlId)
             {
@@ -3331,9 +3326,6 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool DrawFocusRect(nint deviceContext, ref Rectangle rectangle);
-
-    [DllImport("gdi32.dll")]
-    private static extern nint GetStockObject(int objectIndex);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct Point
