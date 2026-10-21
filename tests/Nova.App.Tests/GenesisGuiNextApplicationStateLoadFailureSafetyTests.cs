@@ -85,6 +85,8 @@ public sealed class GenesisGuiNextApplicationStateLoadFailureSafetyTests
     [Fact]
     public async Task ExplicitPlaybackSettingCanPersistAfterLoadFailure()
     {
+        using var directory = new TemporaryDirectory();
+        var executablePath = directory.CreateExecutableFile();
         var playbackStore = new RecordingPlaybackStore(loadThrows: true);
         var state = await GenesisGuiNextApplicationState.LoadAsync(
             new RecordingFavoriteStore(),
@@ -95,8 +97,7 @@ public sealed class GenesisGuiNextApplicationStateLoadFailureSafetyTests
 
         Assert.Equal(
             GenesisGuiNextPlaybackSettingsUpdateResult.Saved,
-            state.Playback.SetPcrPlayerExecutablePath(
-                Path.Combine(Path.GetTempPath(), "Configured", "PCRPlayer64.exe")));
+            state.Playback.SetPcrPlayerExecutablePath(executablePath));
         Assert.Equal(1, playbackStore.SaveCount);
         Assert.NotNull(playbackStore.Saved?.PcrPlayerExecutablePath);
 
@@ -339,6 +340,31 @@ public sealed class GenesisGuiNextApplicationStateLoadFailureSafetyTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class TemporaryDirectory : IDisposable
+    {
+        public string Path { get; } = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(),
+            $"NovaPlaybackLoadFailure-{Guid.NewGuid():N}");
+
+        public string CreateExecutableFile()
+        {
+            var filePath = System.IO.Path.Combine(
+                Path,
+                PcrPlayerExternalPlayerLauncher.ExecutableFileName);
+            Directory.CreateDirectory(Path);
+            File.WriteAllBytes(filePath, []);
+            return filePath;
+        }
+
+        public void Dispose()
+        {
+            if (Directory.Exists(Path))
+            {
+                Directory.Delete(Path, recursive: true);
+            }
         }
     }
 }

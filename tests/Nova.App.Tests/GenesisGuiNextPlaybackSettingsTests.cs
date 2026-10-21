@@ -39,8 +39,11 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
     [Fact]
     public async Task LoadedAndUpdatedPathFlowsThroughApplicationStateToPlaybackSource()
     {
-        const string initialPath = "C:\\Saved Player\\PCRPlayer64.exe";
-        const string updatedPath = "D:\\配信 Tools\\PCRPlayer64.exe";
+        using var directory = new TemporaryDirectory();
+        var initialPath = directory.CreateExecutableFile("Initial");
+        var updatedPath = directory.CreateExecutableFile("Updated");
+        var environmentPath = directory.CreateExecutableFile("Environment");
+        var pathPlayer = directory.CreateExecutableFile("Path");
         var store = new RecordingPlaybackPreferencesStore(new(initialPath));
         var pathSource = new GenesisGuiNextPlaybackPathSource();
         await using var state = await GenesisGuiNextApplicationState.LoadAsync(
@@ -60,12 +63,35 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
         Assert.Equal(updatedPath, pathSource.Current);
         Assert.Equal(updatedPath, store.Saved?.PcrPlayerExecutablePath);
 
+        var restartedPathSource = new GenesisGuiNextPlaybackPathSource();
+        await using var restartedState = await GenesisGuiNextApplicationState.LoadAsync(
+            new EmptyFavoriteStore(),
+            new EmptyNotificationStore(),
+            DefaultGenesisYellowPageConfigurationStore.Instance,
+            store,
+            new SilentSoundPlayer(),
+            restartedPathSource);
+        Assert.Equal(updatedPath, restartedState.Playback.PcrPlayerExecutablePath);
+        Assert.Equal(updatedPath, restartedPathSource.Current);
+
         Assert.Equal(
             GenesisGuiNextPlaybackSettingsUpdateResult.Saved,
-            state.Playback.SetPcrPlayerExecutablePath(" "));
-        Assert.Null(state.Playback.PcrPlayerExecutablePath);
-        Assert.Null(pathSource.Current);
+            restartedState.Playback.SetPcrPlayerExecutablePath(" "));
+        Assert.Null(restartedState.Playback.PcrPlayerExecutablePath);
+        Assert.Null(restartedPathSource.Current);
         Assert.Null(store.Saved?.PcrPlayerExecutablePath);
+        Assert.Equal(
+            environmentPath,
+            PcrPlayerExternalPlayerLauncher.ResolveExecutablePath(
+                restartedPathSource.Current,
+                environmentPath,
+                System.IO.Path.GetDirectoryName(pathPlayer)));
+        Assert.Equal(
+            pathPlayer,
+            PcrPlayerExternalPlayerLauncher.ResolveExecutablePath(
+                restartedPathSource.Current,
+                null,
+                System.IO.Path.GetDirectoryName(pathPlayer)));
     }
 
     [Fact]
@@ -73,7 +99,7 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
     {
         const string currentPath = "C:\\Player\\PCRPlayer64.exe";
         var source = new GenesisGuiNextPlaybackPathSource();
-        var settings = new GenesisGuiNextPlaybackSettings(new(currentPath), source);
+        var settings = new GenesisGuiNextPlaybackSettings(new(currentPath), source, static _ => null);
         settings.BindPersistence(static _ => false);
 
         Assert.Equal(
@@ -96,6 +122,161 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
     }
 
     [Fact]
+    public void ExecutablePathValidationRequiresExpectedAbsoluteExistingFile()
+    {
+        using var directory = new TemporaryDirectory();
+        var validPath = directory.CreateExecutableFile("Player");
+        var missingPath = Path.Combine(directory.Path, "Missing", PcrPlayerExternalPlayerLauncher.ExecutableFileName);
+        var directoryPath = directory.CreateExecutableDirectory("Directory.exe");
+        var wrongNamePath = Path.Combine(directory.Path, "other.exe");
+
+        Assert.Null(GenesisGuiNextPlaybackSettings.ValidateExecutablePath(validPath));
+        Assert.Equal(
+            GenesisGuiNextPlaybackSettingsUpdateResult.ExecutableNotFound,
+            GenesisGuiNextPlaybackSettings.ValidateExecutablePath(missingPath));
+        Assert.Equal(
+            GenesisGuiNextPlaybackSettingsUpdateResult.DirectorySelected,
+            GenesisGuiNextPlaybackSettings.ValidateExecutablePath(directoryPath));
+        Assert.Equal(
+            GenesisGuiNextPlaybackSettingsUpdateResult.UnsupportedExecutableName,
+            GenesisGuiNextPlaybackSettings.ValidateExecutablePath(wrongNamePath));
+        Assert.Equal(
+            GenesisGuiNextPlaybackSettingsUpdateResult.InvalidPath,
+            GenesisGuiNextPlaybackSettings.ValidateExecutablePath("PCRPlayer64.exe"));
+    }
+
+    [Fact]
+    public void WindowsPathValidationCanUseManagedFileSystemBoundary()
+    {
+        const string windowsPath = @"C:\Player Tools\PCRPlayer64.exe";
+        static bool IsWindowsAbsolute(string path) =>
+            path.Length >= 3 && char.IsAsciiLetter(path[0]) && path[1] == ':' && path[2] is '\\' or '/';
+        static string GetWindowsFileName(string path) => path[(path.LastIndexOfAny(['\\', '/']) + 1)..];
+
+        Assert.Null(GenesisGuiNextPlaybackSettings.ValidateExecutablePath(
+            windowsPath,
+            IsWindowsAbsolute,
+            GetWindowsFileName,
+            static _ => FileAttributes.Normal));
+        Assert.Equal(
+            GenesisGuiNextPlaybackSettingsUpdateResult.ExecutableNotFound,
+            GenesisGuiNextPlaybackSettings.ValidateExecutablePath(
+                windowsPath,
+                IsWindowsAbsolute,
+                GetWindowsFileName,
+                static _ => throw new FileNotFoundException()));
+        Assert.Equal(
+            GenesisGuiNextPlaybackSettingsUpdateResult.DirectorySelected,
+            GenesisGuiNextPlaybackSettings.ValidateExecutablePath(
+                windowsPath,
+                IsWindowsAbsolute,
+                GetWindowsFileName,
+                static _ => FileAttributes.Directory));
+        Assert.Equal(
+            GenesisGuiNextPlaybackSettingsUpdateResult.AccessDenied,
+            GenesisGuiNextPlaybackSettings.ValidateExecutablePath(
+                windowsPath,
+                IsWindowsAbsolute,
+                GetWindowsFileName,
+                static _ => throw new UnauthorizedAccessException()));
+        Assert.Equal(
+            GenesisGuiNextPlaybackSettingsUpdateResult.InvalidPath,
+            GenesisGuiNextPlaybackSettings.ValidateExecutablePath(
+                "relative\\PCRPlayer64.exe",
+                IsWindowsAbsolute,
+                GetWindowsFileName,
+                static _ => FileAttributes.Normal));
+    }
+
+    [Fact]
+    public async Task InvalidPathKeepsConfiguredSourceAndPersistedValueUntilCorrected()
+    {
+        using var directory = new TemporaryDirectory();
+        var oldPath = directory.CreateExecutableFile("Old");
+        var newPath = directory.CreateExecutableFile("New");
+        var source = new GenesisGuiNextPlaybackPathSource();
+        var store = new RecordingPlaybackPreferencesStore(new(oldPath));
+        var rejectNewPath = true;
+        var settings = new GenesisGuiNextPlaybackSettings(
+            new(oldPath),
+            source,
+            path => rejectNewPath && string.Equals(path, newPath, StringComparison.Ordinal)
+                ? GenesisGuiNextPlaybackSettingsUpdateResult.ExecutableNotFound
+                : null);
+        settings.BindPersistence(path =>
+        {
+            try
+            {
+                store.SaveAsync(new(path)).AsTask().GetAwaiter().GetResult();
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        });
+
+        Assert.Equal(
+            GenesisGuiNextPlaybackSettingsUpdateResult.ExecutableNotFound,
+            settings.SetPcrPlayerExecutablePath(newPath));
+        Assert.Equal(oldPath, settings.PcrPlayerExecutablePath);
+        Assert.Equal(oldPath, source.Current);
+        Assert.Equal(oldPath, (await store.LoadAsync()).PcrPlayerExecutablePath);
+        Assert.Null(store.Saved);
+
+        rejectNewPath = false;
+        Assert.Equal(
+            GenesisGuiNextPlaybackSettingsUpdateResult.Saved,
+            settings.SetPcrPlayerExecutablePath(newPath));
+        Assert.Equal(newPath, settings.PcrPlayerExecutablePath);
+        Assert.Equal(newPath, source.Current);
+        Assert.Equal(newPath, store.Saved?.PcrPlayerExecutablePath);
+
+        var failedSavePath = directory.CreateExecutableFile("FailedSave");
+        store.FailSaves = true;
+        Assert.Equal(
+            GenesisGuiNextPlaybackSettingsUpdateResult.PersistenceFailed,
+            settings.SetPcrPlayerExecutablePath(failedSavePath));
+        Assert.Equal(newPath, settings.PcrPlayerExecutablePath);
+        Assert.Equal(newPath, source.Current);
+        Assert.Equal(newPath, (await store.LoadAsync()).PcrPlayerExecutablePath);
+    }
+
+    [Fact]
+    public void ValidationAndPersistenceFailuresPreserveCurrentSettings()
+    {
+        const string currentPath = "C:\\Player\\PCRPlayer64.exe";
+        const string newPath = "D:\\Player\\PCRPlayer64.exe";
+        var source = new GenesisGuiNextPlaybackPathSource();
+        var settings = new GenesisGuiNextPlaybackSettings(
+            new(currentPath),
+            source,
+            static _ => null);
+        settings.BindPersistence(static _ => false);
+
+        Assert.Equal(
+            GenesisGuiNextPlaybackSettingsUpdateResult.PersistenceFailed,
+            settings.SetPcrPlayerExecutablePath(newPath));
+        Assert.Equal(currentPath, settings.PcrPlayerExecutablePath);
+        Assert.Equal(currentPath, source.Current);
+    }
+
+    [Fact]
+    public void SaveFeedbackExplainsValidationFailureAndClearsOnSuccess()
+    {
+        Assert.Equal(
+            "指定した実行ファイルが見つかりません。",
+            GenesisGuiNextPlaybackSettingsWindow.GetPcrPlayerSaveFeedback(
+                GenesisGuiNextPlaybackSettingsUpdateResult.ExecutableNotFound,
+                "C:\\Missing\\PCRPlayer64.exe"));
+        Assert.Equal(
+            "PCRPlayer設定を保存しました。次の再生から使用します。",
+            GenesisGuiNextPlaybackSettingsWindow.GetPcrPlayerSaveFeedback(
+                GenesisGuiNextPlaybackSettingsUpdateResult.Saved,
+                "C:\\Player\\PCRPlayer64.exe"));
+    }
+
+    [Fact]
     public async Task SaveButtonClickPersistsPathAndUpdatesPlaybackSource()
     {
         if (!OperatingSystem.IsWindows())
@@ -103,12 +284,17 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
             return;
         }
 
+        const string currentPath = "C:\\Old Player\\PCRPlayer64.exe";
+        const string invalidPath = "C:\\Missing Player\\PCRPlayer64.exe";
         const string path = "C:\\Player Tools\\PCRPlayer64.exe";
         var pathSource = new GenesisGuiNextPlaybackPathSource();
         var settings = new GenesisGuiNextPlaybackSettings(
-            GenesisGuiNextPlaybackPreferences.Default,
-            pathSource);
-        string? persistedPath = null;
+            new(currentPath),
+            pathSource,
+            value => string.Equals(value, path, StringComparison.Ordinal)
+                ? null
+                : GenesisGuiNextPlaybackSettingsUpdateResult.ExecutableNotFound);
+        string? persistedPath = currentPath;
         settings.BindPersistence(value =>
         {
             persistedPath = value;
@@ -129,6 +315,17 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
             Assert.NotEqual(0, controls.Save);
             Assert.NotEqual(0, controls.Status);
 
+            Assert.True(SetWindowTextW(controls.Path, invalidPath));
+            _ = SendMessageW(controls.Save, ButtonMessageClick, 0, 0);
+
+            Assert.Equal(
+                "指定した実行ファイルが見つかりません。",
+                ReadWindowText(controls.Status));
+            Assert.Equal(invalidPath, ReadWindowText(controls.Path));
+            Assert.Equal(currentPath, settings.PcrPlayerExecutablePath);
+            Assert.Equal(currentPath, persistedPath);
+            Assert.Equal(currentPath, pathSource.Current);
+
             Assert.True(SetWindowTextW(controls.Path, path));
             _ = SendMessageW(controls.Save, ButtonMessageClick, 0, 0);
 
@@ -146,13 +343,17 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
     private sealed class RecordingPlaybackPreferencesStore(
         GenesisGuiNextPlaybackPreferences loaded) : IGenesisGuiNextPlaybackPreferencesStore
     {
+        private GenesisGuiNextPlaybackPreferences _current = loaded;
+
         public GenesisGuiNextPlaybackPreferences? Saved { get; private set; }
+
+        public bool FailSaves { get; set; }
 
         public ValueTask<GenesisGuiNextPlaybackPreferences> LoadAsync(
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            return ValueTask.FromResult(loaded);
+            return ValueTask.FromResult(_current);
         }
 
         public ValueTask SaveAsync(
@@ -160,6 +361,12 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (FailSaves)
+            {
+                throw new IOException("Playback preference save failed.");
+            }
+
+            _current = preferences;
             Saved = preferences;
             return ValueTask.CompletedTask;
         }
@@ -215,6 +422,26 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
         public string Path { get; } = System.IO.Path.Combine(
             System.IO.Path.GetTempPath(),
             $"NovaPlaybackSettings-{Guid.NewGuid():N}");
+
+        public string CreateExecutableFile(string directoryName)
+        {
+            var filePath = System.IO.Path.Combine(
+                System.IO.Path.Combine(Path, directoryName),
+                PcrPlayerExternalPlayerLauncher.ExecutableFileName);
+            Directory.CreateDirectory(System.IO.Path.GetDirectoryName(filePath)!);
+            File.WriteAllBytes(filePath, []);
+            return filePath;
+        }
+
+        public string CreateExecutableDirectory(string directoryName)
+        {
+            var directoryPath = System.IO.Path.Combine(
+                Path,
+                directoryName,
+                PcrPlayerExternalPlayerLauncher.ExecutableFileName);
+            Directory.CreateDirectory(directoryPath);
+            return directoryPath;
+        }
 
         public void Dispose()
         {

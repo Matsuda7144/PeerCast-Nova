@@ -19,6 +19,12 @@ internal enum GenesisGuiNextPlaybackSettingsUpdateResult
 {
     Saved,
     Unchanged,
+    InvalidPath,
+    UnsupportedExecutableName,
+    ExecutableNotFound,
+    DirectorySelected,
+    AccessDenied,
+    PathCheckFailed,
     PersistenceFailed,
 }
 
@@ -26,16 +32,19 @@ internal sealed class GenesisGuiNextPlaybackSettings
 {
     private readonly object _gate = new();
     private readonly GenesisGuiNextPlaybackPathSource? _pathSource;
+    private readonly Func<string, GenesisGuiNextPlaybackSettingsUpdateResult?> _validateExecutablePath;
     private string? _pcrPlayerExecutablePath;
     private Func<string?, bool>? _persist;
 
     public GenesisGuiNextPlaybackSettings(
         GenesisGuiNextPlaybackPreferences preferences,
-        GenesisGuiNextPlaybackPathSource? pathSource = null)
+        GenesisGuiNextPlaybackPathSource? pathSource = null,
+        Func<string, GenesisGuiNextPlaybackSettingsUpdateResult?>? validateExecutablePath = null)
     {
         ArgumentNullException.ThrowIfNull(preferences);
         _pcrPlayerExecutablePath = NormalizePath(preferences.PcrPlayerExecutablePath);
         _pathSource = pathSource;
+        _validateExecutablePath = validateExecutablePath ?? ValidateExecutablePath;
         _pathSource?.Set(_pcrPlayerExecutablePath);
     }
 
@@ -63,6 +72,11 @@ internal sealed class GenesisGuiNextPlaybackSettings
         string? path)
     {
         var normalized = NormalizePath(path);
+        if (normalized is not null && _validateExecutablePath(normalized) is { } validationFailure)
+        {
+            return validationFailure;
+        }
+
         lock (_gate)
         {
             if (string.Equals(
@@ -81,6 +95,70 @@ internal sealed class GenesisGuiNextPlaybackSettings
             _pcrPlayerExecutablePath = normalized;
             _pathSource?.Set(normalized);
             return GenesisGuiNextPlaybackSettingsUpdateResult.Saved;
+        }
+    }
+
+    internal static GenesisGuiNextPlaybackSettingsUpdateResult? ValidateExecutablePath(string path) =>
+        ValidateExecutablePath(
+            path,
+            Path.IsPathFullyQualified,
+            Path.GetFileName,
+            File.GetAttributes);
+
+    internal static GenesisGuiNextPlaybackSettingsUpdateResult? ValidateExecutablePath(
+        string path,
+        Func<string, bool> isPathFullyQualified,
+        Func<string, string> getFileName,
+        Func<string, FileAttributes> getAttributes)
+    {
+        ArgumentNullException.ThrowIfNull(isPathFullyQualified);
+        ArgumentNullException.ThrowIfNull(getFileName);
+        ArgumentNullException.ThrowIfNull(getAttributes);
+
+        try
+        {
+            if (!isPathFullyQualified(path))
+            {
+                return GenesisGuiNextPlaybackSettingsUpdateResult.InvalidPath;
+            }
+
+            if (!string.Equals(
+                    getFileName(path),
+                    PcrPlayerExternalPlayerLauncher.ExecutableFileName,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return GenesisGuiNextPlaybackSettingsUpdateResult.UnsupportedExecutableName;
+            }
+
+            var attributes = getAttributes(path);
+            if ((attributes & FileAttributes.Directory) != 0)
+            {
+                return GenesisGuiNextPlaybackSettingsUpdateResult.DirectorySelected;
+            }
+
+            return null;
+        }
+        catch (FileNotFoundException)
+        {
+            return GenesisGuiNextPlaybackSettingsUpdateResult.ExecutableNotFound;
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return GenesisGuiNextPlaybackSettingsUpdateResult.ExecutableNotFound;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return GenesisGuiNextPlaybackSettingsUpdateResult.AccessDenied;
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return GenesisGuiNextPlaybackSettingsUpdateResult.InvalidPath;
+        }
+        catch (Exception exception) when (
+            exception is IOException or System.Security.SecurityException)
+        {
+            return GenesisGuiNextPlaybackSettingsUpdateResult.PathCheckFailed;
         }
     }
 

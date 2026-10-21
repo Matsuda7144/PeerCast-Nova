@@ -184,6 +184,35 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
         return !string.IsNullOrWhiteSpace(normalizedPath);
     }
 
+    internal static string GetPcrPlayerSaveFeedback(
+        GenesisGuiNextPlaybackSettingsUpdateResult result,
+        string? requestedPath) =>
+        result switch
+        {
+            GenesisGuiNextPlaybackSettingsUpdateResult.PersistenceFailed =>
+                "設定を保存できませんでした。保存場所を確認してください。",
+            GenesisGuiNextPlaybackSettingsUpdateResult.InvalidPath =>
+                "絶対パスを入力してください。",
+            GenesisGuiNextPlaybackSettingsUpdateResult.UnsupportedExecutableName =>
+                "ファイル名は PCRPlayer64.exe にしてください。",
+            GenesisGuiNextPlaybackSettingsUpdateResult.ExecutableNotFound =>
+                "指定した実行ファイルが見つかりません。",
+            GenesisGuiNextPlaybackSettingsUpdateResult.DirectorySelected =>
+                "フォルダーではなく実行ファイルを指定してください。",
+            GenesisGuiNextPlaybackSettingsUpdateResult.AccessDenied =>
+                "実行ファイルを確認できません。アクセス権を確認してください。",
+            GenesisGuiNextPlaybackSettingsUpdateResult.PathCheckFailed =>
+                "実行ファイルを確認できません。パスを確認してください。",
+            GenesisGuiNextPlaybackSettingsUpdateResult.Unchanged when
+                string.IsNullOrWhiteSpace(requestedPath) =>
+                "PCRPlayer設定は未設定です。次の再生では環境変数またはPATHを使います。",
+            GenesisGuiNextPlaybackSettingsUpdateResult.Unchanged =>
+                "PCRPlayer設定は既に保存されています。次の再生から使用します。",
+            _ when string.IsNullOrWhiteSpace(requestedPath) =>
+                "未設定に戻しました。次の再生では環境変数またはPATHを使います。",
+            _ => "PCRPlayer設定を保存しました。次の再生から使用します。",
+        };
+
     private static Controls? CreateControls(nint window, nint instance, bool recordingMode)
     {
         var label = CreateControl(window, instance, "STATIC", recordingMode ? "録画保存先 (絶対パス)" : "PCRPlayer 実行ファイル", 16, 16, 580, 20, 0);
@@ -371,20 +400,9 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
                 return;
             }
             var result = settings!.SetPcrPlayerExecutablePath(path);
-            var message = result switch
-            {
-                GenesisGuiNextPlaybackSettingsUpdateResult.PersistenceFailed =>
-                    "設定を保存できませんでした。保存場所を確認してください。",
-                GenesisGuiNextPlaybackSettingsUpdateResult.Unchanged when path is null =>
-                    "PCRPlayer設定は未設定です。次の再生では環境変数またはPATHを使います。",
-                GenesisGuiNextPlaybackSettingsUpdateResult.Unchanged =>
-                    "PCRPlayer設定は既に保存されています。次の再生から使用します。",
-                _ when string.IsNullOrWhiteSpace(path) =>
-                    "未設定に戻しました。次の再生では環境変数またはPATHを使います。",
-                _ => "PCRPlayer設定を保存しました。次の再生から使用します。",
-            };
-            SetText(controls.Status, message);
-            if (result != GenesisGuiNextPlaybackSettingsUpdateResult.PersistenceFailed)
+            SetText(controls.Status, GetPcrPlayerSaveFeedback(result, path));
+            if (result is GenesisGuiNextPlaybackSettingsUpdateResult.Saved or
+                GenesisGuiNextPlaybackSettingsUpdateResult.Unchanged)
             {
                 SetText(controls.Path, settings.PcrPlayerExecutablePath ?? string.Empty);
             }
