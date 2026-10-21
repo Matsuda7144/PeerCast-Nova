@@ -271,7 +271,8 @@ internal sealed class GenesisChannelNotificationSettingsButtonPlacement
         GenesisGuiNextPlaybackSettings playbackSettings,
         IGenesisNetworkSettingsController networkSettingsController,
         bool showButton = true,
-        GenesisRecordingOutputDirectorySettings? recordingSettings = null)
+        GenesisRecordingOutputDirectorySettings? recordingSettings = null,
+        IGuiNextNetworkSettingsAdapter? networkAdapter = null)
     {
         ArgumentNullException.ThrowIfNull(yellowPages);
         ArgumentNullException.ThrowIfNull(playbackSettings);
@@ -281,7 +282,7 @@ internal sealed class GenesisChannelNotificationSettingsButtonPlacement
             yellowPages,
             networkSettingsController,
             playbackSettings,
-            showButton, recordingSettings);
+            showButton, recordingSettings, networkAdapter);
     }
 
     private IAsyncDisposable? OpenCore(
@@ -290,7 +291,8 @@ internal sealed class GenesisChannelNotificationSettingsButtonPlacement
         IGenesisNetworkSettingsController? networkSettingsController,
         GenesisGuiNextPlaybackSettings? playbackSettings,
         bool showButton,
-        GenesisRecordingOutputDirectorySettings? recordingSettings = null)
+        GenesisRecordingOutputDirectorySettings? recordingSettings = null,
+        IGuiNextNetworkSettingsAdapter? networkAdapter = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         var parent = GetParent(_sourceEdit);
@@ -337,7 +339,7 @@ internal sealed class GenesisChannelNotificationSettingsButtonPlacement
             : new GenesisYellowPageSettingsWindowHost(_owner, yellowPages);
         var networkHost = networkSettingsController is null
             ? null
-            : new GenesisNetworkSettingsWindowHost(_owner, networkSettingsController);
+            : new GenesisNetworkSettingsWindowHost(_owner, networkSettingsController, networkAdapter);
         var playbackHost = playbackSettings is null
             ? null
             : new GenesisGuiNextPlaybackSettingsWindowHost(_owner, playbackSettings);

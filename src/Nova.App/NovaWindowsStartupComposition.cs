@@ -501,6 +501,17 @@ public sealed class NovaWindowsStartupComposition
             bool showButton = true) =>
             _placement.Open(settings, yellowPages, playbackSettings, networkSettingsController,
                 showButton, recordingSettings);
+
+        public IAsyncDisposable? Open(
+            GenesisChannelNotificationSettings settings,
+            GenesisYellowPageConfiguration yellowPages,
+            GenesisGuiNextPlaybackSettings playbackSettings,
+            IGenesisNetworkSettingsController networkSettingsController,
+            GenesisRecordingOutputDirectorySettings? recordingSettings,
+            IGuiNextNetworkSettingsAdapter? networkAdapter,
+            bool showButton = true) =>
+            _placement.Open(settings, yellowPages, playbackSettings, networkSettingsController,
+                showButton, recordingSettings, networkAdapter);
     }
 }
 

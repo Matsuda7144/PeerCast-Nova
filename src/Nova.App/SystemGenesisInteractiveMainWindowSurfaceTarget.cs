@@ -31,6 +31,16 @@ internal interface IGenesisChannelNotificationSettingsPlacement
         GenesisRecordingOutputDirectorySettings? recordingSettings,
         bool showButton = true) =>
         Open(settings, yellowPages, playbackSettings, networkSettingsController, showButton);
+
+    IAsyncDisposable? Open(
+        GenesisChannelNotificationSettings settings,
+        GenesisYellowPageConfiguration yellowPages,
+        GenesisGuiNextPlaybackSettings playbackSettings,
+        IGenesisNetworkSettingsController networkSettingsController,
+        GenesisRecordingOutputDirectorySettings? recordingSettings,
+        IGuiNextNetworkSettingsAdapter? networkAdapter,
+        bool showButton = true) =>
+        Open(settings, yellowPages, playbackSettings, networkSettingsController, recordingSettings, showButton);
 }
 
 internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
@@ -374,6 +384,7 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
                         guiNextState.Playback,
                         _networkSettingsController,
                         _recordingSettings,
+                        viewModel.NetworkSettingsAdapter,
                         showButton: false);
             }
             catch
@@ -685,6 +696,17 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
             bool showButton = true) =>
             _placement.Open(settings, yellowPages, playbackSettings, networkSettingsController,
                 showButton, recordingSettings);
+
+        public IAsyncDisposable? Open(
+            GenesisChannelNotificationSettings settings,
+            GenesisYellowPageConfiguration yellowPages,
+            GenesisGuiNextPlaybackSettings playbackSettings,
+            IGenesisNetworkSettingsController networkSettingsController,
+            GenesisRecordingOutputDirectorySettings? recordingSettings,
+            IGuiNextNetworkSettingsAdapter? networkAdapter,
+            bool showButton = true) =>
+            _placement.Open(settings, yellowPages, playbackSettings, networkSettingsController,
+                showButton, recordingSettings, networkAdapter);
     }
 
     private sealed class NoopResizeGuard : IAsyncDisposable

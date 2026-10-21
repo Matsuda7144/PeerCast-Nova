@@ -44,7 +44,7 @@ internal sealed record GenesisNetworkSettingsWindowContent(
 /// editable port or relay controls until the application controller reports the
 /// corresponding capability as real, applied state.
 /// </summary>
-internal sealed class GenesisNetworkSettingsWindow : IAsyncDisposable
+internal sealed partial class GenesisNetworkSettingsWindow : IAsyncDisposable
 {
     private const uint WindowStyleCaption = 0x00C00000;
     private const uint WindowStyleSysMenu = 0x00080000;
@@ -173,6 +173,7 @@ internal sealed class GenesisNetworkSettingsWindow : IAsyncDisposable
 
     public ValueTask DisposeAsync()
     {
+        if (_natState is not null) return _natState.DisposeAsync();
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
         {
             return ValueTask.CompletedTask;
@@ -374,6 +375,8 @@ internal sealed class GenesisNetworkSettingsWindow : IAsyncDisposable
         nuint wParam,
         nint lParam)
     {
+        if (TryProcessNatMessage(window, message, wParam, lParam, out var result)) return result;
+
         if (message == WindowMessageClose)
         {
             _ = DestroyWindow(window);
