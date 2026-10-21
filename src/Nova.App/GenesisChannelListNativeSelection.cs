@@ -124,6 +124,7 @@ internal static class GenesisChannelListRenderedChannels
 
     private static string GetSelectionKey(GenesisGuiNextNativeTabRow row)
     {
+        if (row.Log is { } log) return $"log:{log.Timestamp:O}:{log.Kind}";
         if (row.RecordingHistory is { } history) return $"recording-history:{history.SessionId:N}";
         if (row.RecordingLibrary is { } library)
         {

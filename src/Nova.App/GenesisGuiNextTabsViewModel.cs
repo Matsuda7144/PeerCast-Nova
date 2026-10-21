@@ -13,6 +13,7 @@ internal enum GenesisGuiNextTab
     Favorites,
     Playing,
     Recording,
+    Logs = 8,
 }
 
 internal sealed record GenesisGuiNextYellowPageFilterOption(

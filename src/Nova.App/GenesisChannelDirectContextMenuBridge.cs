@@ -56,7 +56,7 @@ internal static class GenesisChannelDirectContextMenuDispatch
     {
         ArgumentNullException.ThrowIfNull(synchronizeSelection);
         ArgumentNullException.ThrowIfNull(openMenu);
-        if (row is null || row.RecordingRule is not null || row.RecordingLibrary is not null || row.RecordingHistory is not null)
+        if (row is null || row.RecordingRule is not null || row.RecordingLibrary is not null || row.RecordingHistory is not null || row.Log is not null)
         {
             return false;
         }
@@ -420,7 +420,7 @@ internal sealed class GenesisChannelDirectContextMenuBridge : IAsyncDisposable
 
             var resolvedTarget = target.Value;
             var row = resolvedTarget.RenderedRow;
-            if (_interaction.IsRecordingHistoryView || row.RecordingRule is not null || row.RecordingLibrary is not null || row.RecordingHistory is not null)
+            if (_interaction.IsRecordingHistoryView || row.RecordingRule is not null || row.RecordingLibrary is not null || row.RecordingHistory is not null || row.Log is not null)
             {
                 return;
             }
@@ -492,7 +492,7 @@ internal sealed class GenesisChannelDirectContextMenuBridge : IAsyncDisposable
 
         private void OpenMenu(GenesisGuiNextNativeTabRow row)
         {
-            if (_interaction.IsRecordingHistoryView || row.RecordingRule is not null || row.RecordingLibrary is not null || row.RecordingHistory is not null)
+            if (_interaction.IsRecordingHistoryView || row.RecordingRule is not null || row.RecordingLibrary is not null || row.RecordingHistory is not null || row.Log is not null)
             {
                 return;
             }
@@ -519,7 +519,7 @@ internal sealed class GenesisChannelDirectContextMenuBridge : IAsyncDisposable
             GenesisGuiNextNativeTabRow row,
             nint owner)
         {
-            if (_interaction.IsRecordingHistoryView || row.RecordingRule is not null || row.RecordingLibrary is not null || row.RecordingHistory is not null)
+            if (_interaction.IsRecordingHistoryView || row.RecordingRule is not null || row.RecordingLibrary is not null || row.RecordingHistory is not null || row.Log is not null)
             {
                 return;
             }

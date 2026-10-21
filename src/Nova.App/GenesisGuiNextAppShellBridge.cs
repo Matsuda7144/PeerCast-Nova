@@ -345,15 +345,15 @@ internal static class GenesisGuiNextNavigationPresentation
 
     public static bool IsImplemented(int itemIndex) =>
         (itemIndex >= (int)GenesisGuiNextTab.Channels &&
-            itemIndex <= (int)GenesisGuiNextTab.Recording) ||
+            itemIndex <= (int)GenesisGuiNextTab.Recording) || itemIndex == (int)GenesisGuiNextTab.Logs ||
         TryResolvePrimaryCommand(itemIndex, out _);
 
     public static bool TryResolveExistingView(
         int itemIndex,
         out GenesisGuiNextTab selectedTab)
     {
-        if (itemIndex >= (int)GenesisGuiNextTab.Channels &&
-            itemIndex <= (int)GenesisGuiNextTab.Recording)
+        if ((itemIndex >= (int)GenesisGuiNextTab.Channels &&
+            itemIndex <= (int)GenesisGuiNextTab.Recording) || itemIndex == (int)GenesisGuiNextTab.Logs)
         {
             selectedTab = (GenesisGuiNextTab)itemIndex;
             return true;
@@ -443,7 +443,7 @@ internal static class GenesisGuiNextFavoriteButtonPresentationResolver
     {
         ArgumentNullException.ThrowIfNull(tabs);
         if (row is null || tabs.SelectedTab is GenesisGuiNextTab.Playing or
-            GenesisGuiNextTab.Recording)
+            GenesisGuiNextTab.Recording or GenesisGuiNextTab.Logs)
         {
             return new(AddLabel, IsEnabled: false);
         }
@@ -2234,9 +2234,16 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
 
             if (draw.DrawStage == CustomDrawStageItemPrePaint)
             {
+                if (_tabs.SelectedTab == GenesisGuiNextTab.Logs && draw.ItemSpec <= int.MaxValue &&
+                    GenesisChannelListRenderedChannels.FindRow(_listView, (int)draw.ItemSpec)?.Log is { } log)
+                {
+                    var colorOffset = Marshal.OffsetOf<ListViewCustomDraw>(nameof(ListViewCustomDraw.TextColor)).ToInt32();
+                    Marshal.WriteInt32(notificationPointer, colorOffset, GenesisGuiNextLogProjection.TextColor(log.Kind));
+                    result = (nint)0x00000002; // CDRF_NEWFONT, apply row COLORREF.
+                }
                 if ((draw.ItemState & CustomDrawStateSelected) != 0)
                 {
-                    result = (nint)CustomDrawNotifyPostPaint;
+                    result = (nint)((long)result | CustomDrawNotifyPostPaint);
                 }
 
                 return true;
@@ -2340,7 +2347,8 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
             var isRulesPage = IsRulesPageActive();
             var isLibraryPage = _tabs.IsRecordingLibraryPage;
             var isHistoryPage = _tabs.IsRecordingHistoryPage;
-            var hideRecordingActions = isRulesPage || isLibraryPage || isHistoryPage;
+            var isLogPage = _tabs.SelectedTab == GenesisGuiNextTab.Logs;
+            var hideRecordingActions = isRulesPage || isLibraryPage || isHistoryPage || isLogPage;
             _allowAutomaticShown = row?.Suppression is not null;
             _ = MoveWindow(_detailsRecordButton, _detailsTextWidth + 20, 8,
                 _allowAutomaticShown ? DetailsRecordButtonWidth + DetailsRecordingButtonGap + DetailsStopRecordingButtonWidth : DetailsRecordButtonWidth,
@@ -2398,7 +2406,19 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 hideRecordingActions ? ShowWindowHide : ShowWindowShowNoActivate);
             _ = ShowWindow(
                 _detailsRecordingStatus,
-                IsRecordingStatusVisible(isRulesPage) ? ShowWindowShowNoActivate : ShowWindowHide);
+                !isLogPage && IsRecordingStatusVisible(isRulesPage) ? ShowWindowShowNoActivate : ShowWindowHide);
+
+            if (isLogPage)
+            {
+                _ = SetWindowTextW(_detailsTitle, "ログ");
+                _ = SetWindowTextW(_detailsDescription, _tabs.LogRows.Count == 0
+                    ? GenesisGuiNextLogProjection.EmptyText : row?.Log?.Content ?? "ログを選択してください。");
+                _ = SetWindowTextW(_detailsMetadata, GenesisGuiNextLogProjection.ScopeText);
+                _ = SetWindowTextW(_detailsIdentity, string.Empty);
+                _ = SetWindowTextW(_detailsRecordingStatus, string.Empty);
+                _ = InvalidateRect(_detailsPane, 0, true);
+                return;
+            }
 
             if (isRecordingPage)
             {
@@ -3086,6 +3106,15 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
         public nuint ItemSpec;
         public uint ItemState;
         public nint ItemData;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ListViewCustomDraw
+    {
+        public CustomDraw Draw;
+        public int TextColor;
+        public int TextBackgroundColor;
+        public int SubItem;
     }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]

@@ -16,9 +16,10 @@ internal sealed record GenesisGuiNextNativeTabRow(
     GenesisAutomaticRecordingSuppressionRow? Suppression = null,
     GenesisGuiNextRecordingLibraryRow? RecordingLibrary = null,
     GenesisGuiNextRecordingHistoryRow? RecordingHistory = null,
-    string? StableSelectionKey = null)
+    string? StableSelectionKey = null,
+    GenesisGuiNextLogRow? Log = null)
 {
-    public bool IsInteractive => InteractiveChannel is not null && RecordingRule is null && Suppression is null && RecordingLibrary is null && RecordingHistory is null;
+    public bool IsInteractive => InteractiveChannel is not null && RecordingRule is null && Suppression is null && RecordingLibrary is null && RecordingHistory is null && Log is null;
 
     public GenesisGuiNextActiveRecording? ActiveManualRecording =>
         ActiveRecording?.Origin == PeerCast.Nova.Core.Recording.RecordingSessionOrigin.Manual
@@ -61,6 +62,8 @@ internal static class GenesisGuiNextNativeTabProjection
             GenesisGuiNextTab.New => CreateLiveChannels(tabs.VisibleNewChannels),
             GenesisGuiNextTab.Favorites => ProjectFavorites(tabs.VisibleFavoriteChannels),
             GenesisGuiNextTab.Playing => ProjectPlaying(tabs.Playing),
+            GenesisGuiNextTab.Logs => Array.AsReadOnly(tabs.LogRows.Select(static row =>
+                new GenesisGuiNextNativeTabRow(new(string.Empty, string.Empty), InteractiveChannel: null, Log: row)).ToArray()),
             GenesisGuiNextTab.Recording => tabs.RecordingPageMode switch
             {
                 GenesisGuiNextRecordingPageMode.ActiveRecordings =>

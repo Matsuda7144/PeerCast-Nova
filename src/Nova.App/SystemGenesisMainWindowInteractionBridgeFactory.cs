@@ -483,6 +483,8 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
             }
 
             var selectedTab = _guiNextTabs?.SelectedTab ?? GenesisGuiNextTab.Channels;
+            if (_guiNextTabs is not null && _channelCatalogSession is not null)
+                _guiNextTabs.UpdateLogDiagnostics(_channelCatalogSession.Diagnostics, _viewModel.IsChannelCatalogRefreshing);
             var recordingPageMode = _guiNextTabs?.RecordingPageMode ??
                 GenesisGuiNextRecordingPageMode.ActiveRecordings;
             var sourceRows = ResolveSourceRows(selectedTab, recordingPageMode);
@@ -628,6 +630,7 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
                 GenesisGuiNextTab.New => _guiNextTabs.VisibleNewChannels,
                 GenesisGuiNextTab.Favorites => _guiNextTabs.VisibleFavoriteChannels,
                 GenesisGuiNextTab.Playing => _guiNextTabs.Playing,
+                GenesisGuiNextTab.Logs => _guiNextTabs.LogRows,
                 GenesisGuiNextTab.Recording => recordingPageMode switch
                 {
                     GenesisGuiNextRecordingPageMode.Rules => _guiNextTabs.RecordingRuleRows,
@@ -728,6 +731,7 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
 
             if (eventArgs.PropertyName is
                     nameof(GenesisGuiNextTabsViewModel.SelectedTab) or
+                    nameof(GenesisGuiNextTabsViewModel.LogRows) or
                     nameof(GenesisGuiNextTabsViewModel.SearchText) or
                     nameof(GenesisGuiNextTabsViewModel.VisibleChannels) or
                     nameof(GenesisGuiNextTabsViewModel.VisibleNotices) or

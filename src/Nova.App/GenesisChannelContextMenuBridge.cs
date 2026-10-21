@@ -431,7 +431,7 @@ internal sealed class GenesisChannelContextMenuBridge : IAsyncDisposable
 
             var row = GenesisChannelContextMenuNative.GetRowAtCursor(_listView);
             var renderedRow = GenesisChannelListRenderedChannels.FindRow(_listView, row);
-            if (_interaction.IsRecordingHistoryView || renderedRow is null || renderedRow.RecordingRule is not null || renderedRow.RecordingLibrary is not null || renderedRow.RecordingHistory is not null)
+            if (_interaction.IsRecordingHistoryView || renderedRow is null || renderedRow.RecordingRule is not null || renderedRow.RecordingLibrary is not null || renderedRow.RecordingHistory is not null || renderedRow.Log is not null)
             {
                 return;
             }
@@ -507,7 +507,7 @@ internal sealed class GenesisChannelContextMenuBridge : IAsyncDisposable
 
             var resolvedTarget = target.Value;
             var renderedRow = resolvedTarget.RenderedRow;
-            if (_interaction.IsRecordingHistoryView || renderedRow.RecordingRule is not null || renderedRow.RecordingLibrary is not null || renderedRow.RecordingHistory is not null)
+            if (_interaction.IsRecordingHistoryView || renderedRow.RecordingRule is not null || renderedRow.RecordingLibrary is not null || renderedRow.RecordingHistory is not null || renderedRow.Log is not null)
             {
                 return;
             }
@@ -546,7 +546,7 @@ internal sealed class GenesisChannelContextMenuBridge : IAsyncDisposable
             GenesisChannelContextMenuCommand command,
             GenesisGuiNextNativeTabRow row)
         {
-            if (_interaction.IsRecordingHistoryView || row.RecordingRule is not null || row.RecordingLibrary is not null || row.RecordingHistory is not null)
+            if (_interaction.IsRecordingHistoryView || row.RecordingRule is not null || row.RecordingLibrary is not null || row.RecordingHistory is not null || row.Log is not null)
             {
                 return;
             }

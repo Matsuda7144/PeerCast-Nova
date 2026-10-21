@@ -75,6 +75,12 @@ internal sealed class GenesisMainWindowInteraction
         CancellationToken cancellationToken = default)
     {
         var tabs = _channelCatalogSession?.GuiNextTabs;
+        if (tabs?.SelectedTab == GenesisGuiNextTab.Logs)
+        {
+            if (!cancellationToken.IsCancellationRequested)
+                tabs.UpdateLogDiagnostics(_channelCatalogSession!.Diagnostics, _viewModel.IsChannelCatalogRefreshing);
+            return;
+        }
         if (tabs?.IsRecordingHistoryPage == true)
         {
             await tabs.RefreshRecordingHistoryAsync(cancellationToken).ConfigureAwait(false);
