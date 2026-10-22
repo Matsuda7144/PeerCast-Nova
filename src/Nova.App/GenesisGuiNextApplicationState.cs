@@ -242,6 +242,7 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
         YellowPages = yellowPages;
         Playback = playback;
         Connection = connection;
+        NetworkPolicies = GenesisGuiNextNetworkPolicies.Create(connection);
         ArgumentNullException.ThrowIfNull(recordingRuleRepository);
         _recordingRuleRepository = recordingRuleRepository;
         Tabs = new(favorites, recordingRuleRepository);
@@ -265,6 +266,8 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
     public GenesisGuiNextPlaybackSettings Playback { get; }
 
     public GenesisGuiNextConnectionSettings Connection { get; }
+
+    public GenesisGuiNextNetworkPolicies NetworkPolicies { get; }
 
     public GenesisGuiNextTabsViewModel Tabs { get; }
 
@@ -500,6 +503,7 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
             return;
         }
 
+        NetworkPolicies.Dispose();
         await Tabs.DisposeAsync().ConfigureAwait(false);
         await Connection.DisposeAsync().ConfigureAwait(false);
         await _recordingRuleRepository.DisposeAsync().ConfigureAwait(false);
