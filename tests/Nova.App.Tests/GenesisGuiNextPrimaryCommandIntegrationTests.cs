@@ -6,6 +6,8 @@ public sealed class GenesisGuiNextPrimaryCommandIntegrationTests
     public void JapaneseGuiNextControlsUseSharedFontAndOwnerDrawSelectsIt()
     {
         var shell = ReadSource("GenesisGuiNextAppShellBridge.cs");
+        Assert.Contains("ApplyDefaultFont(navigationButtons[index]);", shell, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetStockObject", shell, StringComparison.Ordinal);
         var start = shell.IndexOf("var statusLabel = CreateWindowExW(", StringComparison.Ordinal);
         Assert.True(start >= 0);
         var end = shell.IndexOf("var state = new AppShellState(", start, StringComparison.Ordinal);
@@ -34,9 +36,11 @@ public sealed class GenesisGuiNextPrimaryCommandIntegrationTests
         var surface = ReadSource("SystemGenesisMainWindowSurfaceTarget.cs");
         Assert.Contains("ListViewMessageGetHeader", surface, StringComparison.Ordinal);
         Assert.Contains("GenesisWindowUiFont.Apply(control)", surface, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetStockObject", surface, StringComparison.Ordinal);
 
         var search = ReadSource("GenesisChannelSearchBoxBridge.cs");
         Assert.Contains("GenesisWindowUiFont.Apply(control)", search, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetStockObject", search, StringComparison.Ordinal);
     }
 
     [Fact]
