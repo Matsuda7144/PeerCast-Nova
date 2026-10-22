@@ -290,6 +290,8 @@ public sealed class GenesisWindowUiFontTests
             "GenesisGuiNextAppShellBridge.cs",
             "SystemGenesisMainWindowSurfaceTarget.cs",
             "GenesisGuiNextPlaybackSettingsWindow.cs",
+            "GenesisGuiNextConnectionSettingsWindow.cs",
+            "GenesisGuiNextConnectionSettings.cs",
         };
         var sourceCharacters = string.Concat(runtimeSources.Select(ReadSource))
             .Where(static character => character > 127);

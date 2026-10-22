@@ -122,8 +122,15 @@ public sealed class NovaValidationProfileTests
         await new JsonGenesisYellowPageConfigurationStore(profile.Paths.YellowPages).SaveAsync([]);
         await new JsonGenesisGuiNextPlaybackPreferencesStore(profile.Paths.Playback)
             .SaveAsync(GenesisGuiNextPlaybackPreferences.Default);
+        var connection = profile.GetGuiState(CancellationToken.None).Connection;
+        var runtimeSettingsBefore = await File.ReadAllTextAsync(profile.Paths.Settings);
+        Assert.True((await connection.SaveAsync(GenesisGuiNextConnectionInput.From(
+            connection.Startup with { ListenPort = 17144 }))).Saved);
+        Assert.Equal(17144, (await new JsonGenesisGuiNextConnectionPreferencesStore(profile.Paths.Connection).LoadAsync()).ListenPort);
+        Assert.Equal(7144, connection.Startup.ListenPort);
+        Assert.Equal(runtimeSettingsBefore, await File.ReadAllTextAsync(profile.Paths.Settings));
         Assert.All(new[] { profile.Paths.Settings, profile.Paths.Favorites, profile.Paths.Notifications,
-            profile.Paths.YellowPages, profile.Paths.Playback, profile.Paths.History, profile.Paths.Rules,
+            profile.Paths.YellowPages, profile.Paths.Playback, profile.Paths.Connection, profile.Paths.History, profile.Paths.Rules,
             profile.Paths.Recordings, profile.Paths.Diagnostics }, path => Assert.StartsWith(temp.Root, path));
         Assert.Equal("not-a-Nova-document", await File.ReadAllTextAsync(sentinel));
         Assert.DoesNotContain(Directory.EnumerateFiles(temp.Root, "*", SearchOption.AllDirectories),
@@ -148,6 +155,7 @@ public sealed class NovaValidationProfileTests
     [InlineData("notifications")]
     [InlineData("yellow-pages")]
     [InlineData("playback")]
+    [InlineData("connection")]
     [InlineData("history")]
     [InlineData("rules")]
     public async Task CorruptIsolatedDocumentFailsBeforeNativeStartup(string document)
@@ -161,6 +169,7 @@ public sealed class NovaValidationProfileTests
             "notifications" => profile.Paths.Notifications,
             "yellow-pages" => profile.Paths.YellowPages,
             "playback" => profile.Paths.Playback,
+            "connection" => profile.Paths.Connection,
             "history" => profile.Paths.History,
             _ => profile.Paths.Rules,
         };

@@ -27,6 +27,7 @@ internal sealed class NovaValidationProfilePaths
     internal string Notifications => Resolve("preferences", "notification-preferences.json");
     internal string YellowPages => Resolve("preferences", "yellow-pages.json");
     internal string Playback => Resolve("preferences", "playback-preferences.json");
+    internal string Connection => Resolve("preferences", "connection-preferences.json");
     internal string History => Resolve("history", "recording-history.json");
     internal string Rules => Resolve("rules", "recording-rules.json");
     internal string Recordings => Resolve("recordings");
@@ -57,7 +58,7 @@ internal sealed class NovaValidationProfilePaths
     {
         Check(Root);
         foreach (var directory in Directories) _ = Resolve(directory);
-        foreach (var path in new[] { Settings, Favorites, Notifications, YellowPages, Playback, History, Rules })
+        foreach (var path in new[] { Settings, Favorites, Notifications, YellowPages, Playback, Connection, History, Rules })
             Check(path);
         Check(History + ".lock");
         _ = Resolve(Marker);

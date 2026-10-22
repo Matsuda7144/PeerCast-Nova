@@ -21,6 +21,17 @@ internal interface IGenesisChannelNotificationSettingsPlacement
         GenesisYellowPageConfiguration yellowPages,
         GenesisGuiNextPlaybackSettings playbackSettings,
         IGenesisNetworkSettingsController networkSettingsController,
+        GenesisRecordingOutputDirectorySettings? recordingSettings,
+        IGuiNextNetworkSettingsAdapter? networkAdapter,
+        GenesisGuiNextConnectionSettings connectionSettings,
+        bool showButton = true) =>
+        Open(settings, yellowPages, playbackSettings, networkSettingsController, recordingSettings, networkAdapter, showButton);
+
+    IAsyncDisposable? Open(
+        GenesisChannelNotificationSettings settings,
+        GenesisYellowPageConfiguration yellowPages,
+        GenesisGuiNextPlaybackSettings playbackSettings,
+        IGenesisNetworkSettingsController networkSettingsController,
         bool showButton = true);
 
     IAsyncDisposable? Open(
@@ -385,6 +396,7 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
                         _networkSettingsController,
                         _recordingSettings,
                         viewModel.NetworkSettingsAdapter,
+                        guiNextState.Connection,
                         showButton: false);
             }
             catch
@@ -666,6 +678,14 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
     private sealed class SystemNotificationSettingsPlacement :
         IGenesisChannelNotificationSettingsPlacement
     {
+        public IAsyncDisposable? Open(GenesisChannelNotificationSettings settings,
+            GenesisYellowPageConfiguration yellowPages, GenesisGuiNextPlaybackSettings playbackSettings,
+            IGenesisNetworkSettingsController networkSettingsController,
+            GenesisRecordingOutputDirectorySettings? recordingSettings, IGuiNextNetworkSettingsAdapter? networkAdapter,
+            GenesisGuiNextConnectionSettings connectionSettings, bool showButton = true) =>
+            _placement.Open(settings, yellowPages, playbackSettings, networkSettingsController,
+                showButton, recordingSettings, networkAdapter, connectionSettings);
+
         private readonly GenesisChannelNotificationSettingsButtonPlacement _placement;
 
         public SystemNotificationSettingsPlacement(

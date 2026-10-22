@@ -32,6 +32,7 @@ public sealed class GenesisGuiNextNetworkSettingsStartupCompositionTests
         Assert.Same(state.Notifications, placement.Settings);
         Assert.Same(state.YellowPages, placement.YellowPages);
         Assert.Same(state.Playback, placement.Playback);
+        Assert.Same(state.Connection, placement.Connection);
         Assert.Same(controller, placement.NetworkSettingsController);
         Assert.False(placement.ShowButton);
         Assert.False(placement.IsDisposed);
@@ -55,6 +56,17 @@ public sealed class GenesisGuiNextNetworkSettingsStartupCompositionTests
         public GenesisYellowPageConfiguration? YellowPages { get; private set; }
 
         public GenesisGuiNextPlaybackSettings? Playback { get; private set; }
+        public GenesisGuiNextConnectionSettings? Connection { get; private set; }
+
+        public IAsyncDisposable? Open(GenesisChannelNotificationSettings settings,
+            GenesisYellowPageConfiguration yellowPages, GenesisGuiNextPlaybackSettings playbackSettings,
+            IGenesisNetworkSettingsController networkSettingsController,
+            GenesisRecordingOutputDirectorySettings? recordingSettings, IGuiNextNetworkSettingsAdapter? networkAdapter,
+            GenesisGuiNextConnectionSettings connectionSettings, bool showButton = true)
+        {
+            Connection = connectionSettings;
+            return Open(settings, yellowPages, playbackSettings, networkSettingsController, showButton);
+        }
 
         public IGenesisNetworkSettingsController? NetworkSettingsController
         {

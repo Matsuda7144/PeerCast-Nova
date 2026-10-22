@@ -90,6 +90,7 @@ internal enum GenesisChannelNotificationSettingsCommand : uint
     NetworkRelay = 6,
     Playback = 7,
     Recording = 8,
+    Connection = 9,
 }
 
 internal static class GenesisChannelNotificationSettingsMenuInteraction
@@ -150,6 +151,18 @@ internal static class GenesisChannelNotificationSettingsMenuInteraction
         Func<CancellationToken, ValueTask>? showNetworkRelayAsync,
         Func<CancellationToken, ValueTask>? showPlaybackAsync,
         Func<CancellationToken, ValueTask>? showRecordingAsync,
+        CancellationToken cancellationToken = default) =>
+        ApplyAsync(settings, command, showYellowPagesAsync, showNetworkRelayAsync,
+            showPlaybackAsync, showRecordingAsync, showConnectionAsync: null, cancellationToken);
+
+    internal static ValueTask ApplyAsync(
+        GenesisChannelNotificationSettings settings,
+        GenesisChannelNotificationSettingsCommand command,
+        Func<CancellationToken, ValueTask>? showYellowPagesAsync,
+        Func<CancellationToken, ValueTask>? showNetworkRelayAsync,
+        Func<CancellationToken, ValueTask>? showPlaybackAsync,
+        Func<CancellationToken, ValueTask>? showRecordingAsync,
+        Func<CancellationToken, ValueTask>? showConnectionAsync,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(settings);
@@ -158,6 +171,10 @@ internal static class GenesisChannelNotificationSettingsMenuInteraction
         var current = settings.Current;
         switch (command)
         {
+            case GenesisChannelNotificationSettingsCommand.Connection:
+                return showConnectionAsync is null
+                    ? ValueTask.CompletedTask
+                    : showConnectionAsync(cancellationToken);
             case GenesisChannelNotificationSettingsCommand.NotifyNewChannels:
                 settings.SetNotifyNewChannels(!current.NotifyNewChannels);
                 return ValueTask.CompletedTask;
@@ -272,7 +289,8 @@ internal sealed class GenesisChannelNotificationSettingsButtonPlacement
         IGenesisNetworkSettingsController networkSettingsController,
         bool showButton = true,
         GenesisRecordingOutputDirectorySettings? recordingSettings = null,
-        IGuiNextNetworkSettingsAdapter? networkAdapter = null)
+        IGuiNextNetworkSettingsAdapter? networkAdapter = null,
+        GenesisGuiNextConnectionSettings? connectionSettings = null)
     {
         ArgumentNullException.ThrowIfNull(yellowPages);
         ArgumentNullException.ThrowIfNull(playbackSettings);
@@ -282,7 +300,7 @@ internal sealed class GenesisChannelNotificationSettingsButtonPlacement
             yellowPages,
             networkSettingsController,
             playbackSettings,
-            showButton, recordingSettings, networkAdapter);
+            showButton, recordingSettings, networkAdapter, connectionSettings);
     }
 
     private IAsyncDisposable? OpenCore(
@@ -292,7 +310,8 @@ internal sealed class GenesisChannelNotificationSettingsButtonPlacement
         GenesisGuiNextPlaybackSettings? playbackSettings,
         bool showButton,
         GenesisRecordingOutputDirectorySettings? recordingSettings = null,
-        IGuiNextNetworkSettingsAdapter? networkAdapter = null)
+        IGuiNextNetworkSettingsAdapter? networkAdapter = null,
+        GenesisGuiNextConnectionSettings? connectionSettings = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         var parent = GetParent(_sourceEdit);
@@ -340,6 +359,9 @@ internal sealed class GenesisChannelNotificationSettingsButtonPlacement
         var networkHost = networkSettingsController is null
             ? null
             : new GenesisNetworkSettingsWindowHost(_owner, networkSettingsController, networkAdapter);
+        var connectionHost = connectionSettings is null || networkHost is null
+            ? null
+            : new GenesisGuiNextConnectionSettingsWindowHost(_owner, connectionSettings, networkHost.ShowAsync);
         var playbackHost = playbackSettings is null
             ? null
             : new GenesisGuiNextPlaybackSettingsWindowHost(_owner, playbackSettings);
@@ -354,6 +376,8 @@ internal sealed class GenesisChannelNotificationSettingsButtonPlacement
             networkHost is null ? null : networkHost.ShowAsync;
         Func<CancellationToken, ValueTask>? showPlaybackAsync =
             playbackHost is null ? null : playbackHost.ShowAsync;
+        Func<CancellationToken, ValueTask>? showConnectionAsync =
+            connectionHost is null ? null : connectionHost.ShowAsync;
         var bridge = GenesisChannelNotificationSettingsButtonBridge.TryCreate(
             _owner,
             parent,
@@ -369,16 +393,16 @@ internal sealed class GenesisChannelNotificationSettingsButtonPlacement
             showYellowPagesAsync,
             showNetworkRelayAsync,
             showPlaybackAsync,
-            showButton, showRecordingAsync);
+            showButton, showRecordingAsync, showConnectionAsync);
         if (bridge is null)
         {
             _ = RestoreSourceEdit(sourceRectangle);
             return FailOpen();
         }
 
-        return yellowPageHost is null && networkHost is null && playbackHost is null && recordingHost is null
+        return yellowPageHost is null && networkHost is null && playbackHost is null && recordingHost is null && connectionHost is null
             ? bridge
-            : new SettingsLifetime(bridge, yellowPageHost, networkHost, playbackHost, recordingHost);
+            : new SettingsLifetime(bridge, yellowPageHost, networkHost, playbackHost, recordingHost, connectionHost);
     }
 
     private IAsyncDisposable? FailOpen()
@@ -426,6 +450,7 @@ internal sealed class GenesisChannelNotificationSettingsButtonPlacement
         private readonly GenesisNetworkSettingsWindowHost? _networkHost;
         private readonly GenesisGuiNextPlaybackSettingsWindowHost? _playbackHost;
         private readonly GenesisRecordingOutputDirectorySettingsWindowHost? _recordingHost;
+        private readonly GenesisGuiNextConnectionSettingsWindowHost? _connectionHost;
         private int _disposed;
 
         public SettingsLifetime(
@@ -433,13 +458,15 @@ internal sealed class GenesisChannelNotificationSettingsButtonPlacement
             GenesisYellowPageSettingsWindowHost? yellowPageHost,
             GenesisNetworkSettingsWindowHost? networkHost,
             GenesisGuiNextPlaybackSettingsWindowHost? playbackHost,
-            GenesisRecordingOutputDirectorySettingsWindowHost? recordingHost)
+            GenesisRecordingOutputDirectorySettingsWindowHost? recordingHost,
+            GenesisGuiNextConnectionSettingsWindowHost? connectionHost)
         {
             _bridge = bridge;
             _yellowPageHost = yellowPageHost;
             _networkHost = networkHost;
             _playbackHost = playbackHost;
             _recordingHost = recordingHost;
+            _connectionHost = connectionHost;
         }
 
         public async ValueTask DisposeAsync()
@@ -451,17 +478,25 @@ internal sealed class GenesisChannelNotificationSettingsButtonPlacement
 
             try
             {
-                if (_recordingHost is not null)
+                try
                 {
-                    await _recordingHost.DisposeAsync().ConfigureAwait(false);
+                    if (_connectionHost is not null)
+                        await _connectionHost.DisposeAsync().ConfigureAwait(false);
                 }
-                if (_networkHost is not null)
+                finally
                 {
-                    await _networkHost.DisposeAsync().ConfigureAwait(false);
-                }
-                if (_playbackHost is not null)
-                {
-                    await _playbackHost.DisposeAsync().ConfigureAwait(false);
+                    if (_recordingHost is not null)
+                    {
+                        await _recordingHost.DisposeAsync().ConfigureAwait(false);
+                    }
+                    if (_networkHost is not null)
+                    {
+                        await _networkHost.DisposeAsync().ConfigureAwait(false);
+                    }
+                    if (_playbackHost is not null)
+                    {
+                        await _playbackHost.DisposeAsync().ConfigureAwait(false);
+                    }
                 }
             }
             finally
@@ -570,7 +605,8 @@ internal sealed class GenesisChannelNotificationSettingsButtonBridge : IAsyncDis
         Func<CancellationToken, ValueTask>? showNetworkRelayAsync = null,
         Func<CancellationToken, ValueTask>? showPlaybackAsync = null,
         bool showButton = true,
-        Func<CancellationToken, ValueTask>? showRecordingAsync = null)
+        Func<CancellationToken, ValueTask>? showRecordingAsync = null,
+        Func<CancellationToken, ValueTask>? showConnectionAsync = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         var instance = GetModuleHandleW(null);
@@ -642,7 +678,7 @@ internal sealed class GenesisChannelNotificationSettingsButtonBridge : IAsyncDis
                     settings,
                     showYellowPagesAsync,
                     showNetworkRelayAsync,
-                    showPlaybackAsync, showRecordingAsync)))
+                    showPlaybackAsync, showRecordingAsync, showConnectionAsync)))
         {
             _ = DestroyWindow(container);
             _ = UnregisterClassW(className, instance);
@@ -717,6 +753,7 @@ internal sealed class GenesisChannelNotificationSettingsButtonBridge : IAsyncDis
         private readonly Func<CancellationToken, ValueTask>? _showNetworkRelayAsync;
         private readonly Func<CancellationToken, ValueTask>? _showPlaybackAsync;
         private readonly Func<CancellationToken, ValueTask>? _showRecordingAsync;
+        private readonly Func<CancellationToken, ValueTask>? _showConnectionAsync;
 
         public SettingsState(
             nint owner,
@@ -725,7 +762,8 @@ internal sealed class GenesisChannelNotificationSettingsButtonBridge : IAsyncDis
             Func<CancellationToken, ValueTask>? showYellowPagesAsync,
             Func<CancellationToken, ValueTask>? showNetworkRelayAsync,
             Func<CancellationToken, ValueTask>? showPlaybackAsync,
-            Func<CancellationToken, ValueTask>? showRecordingAsync)
+            Func<CancellationToken, ValueTask>? showRecordingAsync,
+            Func<CancellationToken, ValueTask>? showConnectionAsync)
         {
             _owner = owner;
             _button = button;
@@ -734,6 +772,7 @@ internal sealed class GenesisChannelNotificationSettingsButtonBridge : IAsyncDis
             _showNetworkRelayAsync = showNetworkRelayAsync;
             _showPlaybackAsync = showPlaybackAsync;
             _showRecordingAsync = showRecordingAsync;
+            _showConnectionAsync = showConnectionAsync;
         }
 
         public nint Owner => _owner;
@@ -808,6 +847,7 @@ internal sealed class GenesisChannelNotificationSettingsButtonBridge : IAsyncDis
                 }
 
                 if ((_showYellowPagesAsync is not null ||
+                        _showConnectionAsync is not null ||
                         _showNetworkRelayAsync is not null ||
                         _showPlaybackAsync is not null ||
                         _showRecordingAsync is not null) &&
@@ -822,6 +862,13 @@ internal sealed class GenesisChannelNotificationSettingsButtonBridge : IAsyncDis
                         GenesisChannelNotificationSettingsCommand.YellowPages,
                         "Yellow Pages...",
                         isChecked: false))
+                {
+                    return null;
+                }
+
+                if (_showConnectionAsync is not null &&
+                    !AppendSetting(menu, GenesisChannelNotificationSettingsCommand.Connection,
+                        "接続 / 帯域 / リレー数...", isChecked: false))
                 {
                     return null;
                 }
@@ -892,7 +939,8 @@ internal sealed class GenesisChannelNotificationSettingsButtonBridge : IAsyncDis
                         command,
                         _showYellowPagesAsync,
                         _showNetworkRelayAsync,
-                        _showPlaybackAsync, showRecordingAsync: _showRecordingAsync)
+                        _showPlaybackAsync, showRecordingAsync: _showRecordingAsync,
+                        showConnectionAsync: _showConnectionAsync)
                     .ConfigureAwait(false);
             }
             catch

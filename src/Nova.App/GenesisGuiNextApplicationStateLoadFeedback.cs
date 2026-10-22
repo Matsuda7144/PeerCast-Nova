@@ -40,6 +40,11 @@ internal static class GenesisGuiNextApplicationStateLoadFeedback
             sections.Add("Playback settings");
         }
 
+        if ((failures & GenesisGuiNextApplicationStateLoadFailure.ConnectionPreferences) != 0)
+        {
+            sections.Add("接続・帯域・リレー設定");
+        }
+
         if (sections.Count == 0)
         {
             return null;

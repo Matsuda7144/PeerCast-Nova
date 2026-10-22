@@ -471,6 +471,14 @@ public sealed class NovaWindowsStartupComposition
     private sealed class StartupNotificationSettingsPlacement :
         IGenesisChannelNotificationSettingsPlacement
     {
+        public IAsyncDisposable? Open(GenesisChannelNotificationSettings settings,
+            GenesisYellowPageConfiguration yellowPages, GenesisGuiNextPlaybackSettings playbackSettings,
+            IGenesisNetworkSettingsController networkSettingsController,
+            GenesisRecordingOutputDirectorySettings? recordingSettings, IGuiNextNetworkSettingsAdapter? networkAdapter,
+            GenesisGuiNextConnectionSettings connectionSettings, bool showButton = true) =>
+            _placement.Open(settings, yellowPages, playbackSettings, networkSettingsController,
+                showButton, recordingSettings, networkAdapter, connectionSettings);
+
         private readonly GenesisChannelNotificationSettingsButtonPlacement _placement;
 
         public StartupNotificationSettingsPlacement(

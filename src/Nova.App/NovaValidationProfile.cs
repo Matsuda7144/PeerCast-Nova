@@ -96,7 +96,8 @@ internal sealed class NovaValidationProfile : IAsyncDisposable
                 new JsonGenesisYellowPageConfigurationStore(paths.YellowPages, paths.CheckAll),
                 new JsonGenesisGuiNextPlaybackPreferencesStore(paths.Playback, paths.CheckAll),
                 SystemGenesisSystemNotificationSoundPlayer.Instance, null,
-                () => new GenesisRecordingRuleRepository(paths.Rules, checkAccess: paths.CheckAll), token)
+                () => new GenesisRecordingRuleRepository(paths.Rules, checkAccess: paths.CheckAll),
+                new JsonGenesisGuiNextConnectionPreferencesStore(paths.Connection, paths.CheckAll), token)
                 .ConfigureAwait(false);
             if (state.LoadFailures != GenesisGuiNextApplicationStateLoadFailure.None)
                 throw new IOException("Validation preferences or Rules are unavailable.");

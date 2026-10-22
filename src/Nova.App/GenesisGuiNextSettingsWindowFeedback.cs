@@ -8,6 +8,7 @@ internal enum GenesisGuiNextSettingsWindowKind
     NetworkRelay,
     Playback,
     Recording,
+    Connection,
 }
 
 internal sealed record GenesisGuiNextSettingsWindowFeedbackPresentation(
@@ -34,6 +35,8 @@ internal static class GenesisGuiNextSettingsWindowFeedback
                     "Playback"),
             GenesisGuiNextSettingsWindowKind.Recording =>
                 new("録画保存先の設定を開けませんでした。", "録画保存先"),
+            GenesisGuiNextSettingsWindowKind.Connection =>
+                new("接続・帯域・リレー設定を開けませんでした。", "接続 / 帯域 / リレー数"),
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
         };
 
