@@ -53,11 +53,14 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
         PcpRelayCoordinatorOptions? options = null,
         RecordingStreamSourceLeaseRegistry? recordingSourceLeaseRegistry = null,
         bool stopWhenNoConsumers = false,
-        NatPortMappingManager? portMapping = null)
+        NatPortMappingManager? portMapping = null,
+        IPcpDownstreamRelayAdmission? admission = null)
     {
         ArgumentNullException.ThrowIfNull(upstreamConnector);
         ArgumentNullException.ThrowIfNull(statusTracker);
         ArgumentNullException.ThrowIfNull(downstreamEndPoint);
+        if (admission is not null && admission.ChannelId != statusTracker.Snapshot.ChannelId)
+            throw new ArgumentException("Admission must belong to this channel.", nameof(admission));
 
         var sourceOptions = options ?? new PcpRelayCoordinatorOptions();
         ArgumentNullException.ThrowIfNull(sourceOptions.UpstreamSession);
@@ -106,7 +109,8 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
             statusTracker.Snapshot.SessionId.Value,
             copiedOptions.DownstreamTransport,
             copiedOptions.DownstreamChild,
-            portMapping);
+            portMapping,
+            admission);
     }
 
     public PcpRelayCoordinatorState State
@@ -165,6 +169,12 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
 
     public PcpDownstreamRelayServerSnapshot DownstreamSnapshot =>
         _downstreamServer.Snapshot;
+
+    /// <summary>
+    /// Non-owning identity for application admission registration. This
+    /// coordinator retains exclusive fan-out disposal ownership.
+    /// </summary>
+    public PcpRelayFanout DownstreamFanout => _fanout;
 
     public PcpRelayIngressSnapshot IngressSnapshot => _ingress.Snapshot;
 

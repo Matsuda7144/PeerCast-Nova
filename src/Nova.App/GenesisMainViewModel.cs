@@ -116,6 +116,10 @@ public sealed partial class GenesisMainViewModel : INotifyPropertyChanged
 
     internal PlaybackSessionSnapshot PlaybackSnapshot => _snapshot;
 
+    // Non-owning typed boundary for a later explicit public-relay command.
+    // The application state owns shutdown. No Play/record command activates it.
+    internal GenesisGuiNextPublicChannelComposition? PublicChannels { get; set; }
+
     internal IGenesisRecordingHistoryController? RecordingHistoryController =>
         _controller is GuiNextDailyPlaybackSessionController guiNext
             ? guiNext.RecordingHistoryController

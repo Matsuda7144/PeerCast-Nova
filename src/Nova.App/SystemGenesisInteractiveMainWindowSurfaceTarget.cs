@@ -292,6 +292,7 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
             guiNextState = null;
         }
 
+        viewModel.PublicChannels = guiNextState?.PublicChannels;
         if (guiNextState is not null)
         {
             SystemGenesisGuiNextApplicationStateLoadFeedback.Report(
@@ -358,6 +359,7 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
         }
         catch
         {
+            viewModel.PublicChannels = null;
             await DisposeRejectedOpenAsync(
                     catalogSession,
                     notificationRuntime.Lifetime,
@@ -370,6 +372,7 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
 
         if (bridgeLifetime is null)
         {
+            viewModel.PublicChannels = null;
             await DisposeRejectedOpenAsync(
                     catalogSession,
                     notificationRuntime.Lifetime,
@@ -413,7 +416,8 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
             notificationSettingsLifetime,
             notificationRuntime.Lifetime,
             guiNextState,
-            resizeGuard);
+            resizeGuard,
+            viewModel);
     }
 
     private static IAsyncDisposable? CreateNoopResizeGuard(long _) =>
@@ -624,6 +628,7 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
         private readonly IAsyncDisposable _notificationLifetime;
         private readonly GenesisGuiNextApplicationState? _guiNextState;
         private readonly IAsyncDisposable _resizeGuard;
+        private readonly GenesisMainViewModel _viewModel;
         private int _disposed;
 
         public CompositeLifetime(
@@ -633,7 +638,8 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
             IAsyncDisposable? notificationSettingsLifetime,
             IAsyncDisposable notificationLifetime,
             GenesisGuiNextApplicationState? guiNextState,
-            IAsyncDisposable resizeGuard)
+            IAsyncDisposable resizeGuard,
+            GenesisMainViewModel viewModel)
         {
             _surfaceLifetime = surfaceLifetime;
             _bridgeLifetime = bridgeLifetime;
@@ -642,6 +648,7 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
             _notificationLifetime = notificationLifetime;
             _guiNextState = guiNextState;
             _resizeGuard = resizeGuard;
+            _viewModel = viewModel;
         }
 
         public async ValueTask DisposeAsync()
@@ -651,6 +658,8 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
                 return;
             }
 
+            if (ReferenceEquals(_viewModel.PublicChannels, _guiNextState?.PublicChannels))
+                _viewModel.PublicChannels = null;
             try
             {
                 await DisposeCompositeAsync(

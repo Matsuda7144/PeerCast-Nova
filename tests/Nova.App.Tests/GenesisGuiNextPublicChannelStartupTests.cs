@@ -1,0 +1,128 @@
+using System.Net;
+using PeerCast.Nova.Network.Pcp;
+using PeerCast.Nova.Windows;
+using static PeerCast.Nova.App.Tests.PublicChannelTestFixture;
+
+namespace PeerCast.Nova.App.Tests;
+
+public sealed class GenesisGuiNextPublicChannelStartupTests
+{
+    [Theory]
+    [InlineData(true, false, false)]
+    [InlineData(false, false, false)]
+    [InlineData(true, true, false)]
+    [InlineData(true, false, true)]
+    public async Task SharedGenesisStartupPassesInertOwnerBoundaryBeforeBridgeAndOwnsShutdown(
+        bool hasState, bool rejectBridge, bool throwBridge)
+    {
+        await using var fixture = await CreateAsync(new() { ListenPort = 7144, MaxRelaysTotal = 0 });
+        await using var producer = new PcpRelayFanout();
+        GenesisMainViewModel? model = null;
+        GenesisGuiNextPublicChannelComposition.Owner? prepared = null;
+        var bridge = new Bridge(viewModel =>
+        {
+            model = viewModel;
+            if (hasState)
+            {
+                var channels = Assert.IsType<GenesisGuiNextPublicChannelComposition>(viewModel.PublicChannels);
+                Assert.Same(fixture.Channels, channels);
+                Assert.Same(fixture.State.DownstreamRelays, channels.Registry);
+                Assert.Equal(0, channels.OwnerCount);
+                prepared = channels.PrepareBroadcastAsync(new(Guid.NewGuid()), new(Guid.NewGuid()),
+                    producer, new(IPAddress.Any, 0)).AsTask().GetAwaiter().GetResult();
+                Assert.False(prepared.ActivationStarted);
+                Assert.Equal(PcpDownstreamRelayServerState.Created, prepared.DownstreamSnapshot.State);
+                Assert.Throws<InvalidOperationException>(() => prepared.LocalEndPoint);
+            }
+            else Assert.Null(viewModel.PublicChannels);
+        }, rejectBridge, throwBridge);
+        var surface = new SystemGenesisInteractiveMainWindowSurfaceTarget(new Surface(), bridge,
+            EmptyGenesisChannelCatalog.Instance, TimeSpan.FromDays(1),
+            _ => NoopLifetime.Instance, _ => hasState ? fixture.State : null,
+            static (_, _) => GenesisChannelNotificationRuntime.Empty, _ => null,
+            GenesisUnavailableNetworkSettingsController.Instance);
+        var host = new Host(() =>
+        {
+            Assert.NotNull(model);
+            if (hasState)
+            {
+                Assert.False(prepared!.ActivationStarted);
+                Assert.Equal(0, fixture.State.DownstreamRelays.ActiveRelayCount);
+            }
+        });
+        var composition = new NovaWindowsStartupComposition(new(), new HostFactory(host));
+        // Same RunGenesisAsync -> host/projection -> interactive surface path as
+        // normal startup, with only native host/surface and stores replaced.
+        var result = await composition.RunGenesisAsync(surface, new FakePlaybackSessionController());
+
+        Assert.Equal(rejectBridge || throwBridge ? NovaWindowsStartupResult.Faulted : NovaWindowsStartupResult.Completed, result);
+        Assert.Equal(1, host.StartCount);
+        Assert.True(host.Stopped);
+        Assert.True(host.Disposed);
+        Assert.NotNull(model);
+        Assert.Null(model.PublicChannels); // No stale command boundary after close/rejection.
+        if (hasState)
+        {
+            Assert.True(fixture.Channels.IsDisposed);
+            Assert.True(prepared!.IsDisposed);
+            Assert.False(prepared.ActivationStarted);
+            Assert.Equal(0, fixture.Channels.OwnerCount);
+        }
+        else Assert.False(fixture.Channels.IsDisposed);
+        Assert.Equal(1, fixture.Store.LoadCount);
+    }
+
+    private sealed class Surface : IGenesisMainWindowSurfaceTarget
+    {
+        public ValueTask<IAsyncDisposable?> OpenAsync(long windowToken, GenesisMainViewModel viewModel, CancellationToken cancellationToken) =>
+            ValueTask.FromResult<IAsyncDisposable?>(NoopLifetime.Instance);
+    }
+    private sealed class Bridge(Action<GenesisMainViewModel> opened, bool reject, bool fail) : IGenesisMainWindowInteractionBridgeFactory
+    {
+        public IAsyncDisposable? Create(long windowToken, GenesisMainViewModel viewModel)
+        {
+            opened(viewModel);
+            if (fail) throw new InvalidOperationException("Bridge creation failed.");
+            return reject ? null : NoopLifetime.Instance;
+        }
+    }
+    private sealed class NoopLifetime : IAsyncDisposable
+    {
+        public static NoopLifetime Instance { get; } = new();
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+    private sealed class HostFactory(Host host) : INovaWindowsStartupHostFactory
+    {
+        public INovaWindowsStartupHost Create(PlaybackWindowsPhysicalRunnerOptions options) => host;
+    }
+    private sealed class Host(Action wait) : INovaWindowsStartupHost, IGenesisMainWindowDispatcher
+    {
+        public long WindowToken => 42;
+        public int StartCount { get; private set; }
+        public bool Stopped { get; private set; }
+        public bool Disposed { get; private set; }
+        public ValueTask<PlaybackWindowsPhysicalRunnerResult> StartAsync(CancellationToken cancellationToken)
+        {
+            StartCount++;
+            return ValueTask.FromResult(PlaybackWindowsPhysicalRunnerResult.Started);
+        }
+        public ValueTask<PlaybackWindowsPhysicalRunnerResult> WaitForExitAsync(CancellationToken cancellationToken)
+        {
+            wait();
+            return ValueTask.FromResult(PlaybackWindowsPhysicalRunnerResult.Stopped);
+        }
+        public ValueTask<PlaybackWindowsPhysicalRunnerResult> StopAsync(CancellationToken cancellationToken)
+        {
+            Stopped = true;
+            return ValueTask.FromResult(PlaybackWindowsPhysicalRunnerResult.Stopped);
+        }
+        public ValueTask DisposeAsync()
+        {
+            Disposed = true;
+            return ValueTask.CompletedTask;
+        }
+        public async ValueTask<GenesisMainWindowDispatcherInvocation> InvokeGenesisAsync(
+            Func<long, CancellationToken, ValueTask<IAsyncDisposable?>> operation, CancellationToken cancellationToken) =>
+            new(GenesisMainWindowDispatcherResult.Completed, await operation(WindowToken, cancellationToken));
+    }
+}

@@ -244,6 +244,7 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
         Connection = connection;
         NetworkPolicies = GenesisGuiNextNetworkPolicies.Create(connection);
         DownstreamRelays = new GenesisDownstreamRelayOwnerRegistry(NetworkPolicies.Relays);
+        PublicChannels = new GenesisGuiNextPublicChannelComposition(DownstreamRelays);
         ArgumentNullException.ThrowIfNull(recordingRuleRepository);
         _recordingRuleRepository = recordingRuleRepository;
         Tabs = new(favorites, recordingRuleRepository);
@@ -271,6 +272,8 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
     public GenesisGuiNextNetworkPolicies NetworkPolicies { get; }
 
     public GenesisDownstreamRelayOwnerRegistry DownstreamRelays { get; }
+
+    public GenesisGuiNextPublicChannelComposition PublicChannels { get; }
 
     public GenesisGuiNextTabsViewModel Tabs { get; }
 
@@ -506,8 +509,14 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
             return;
         }
 
-        DownstreamRelays.Dispose();
-        NetworkPolicies.Dispose();
+        Exception? publicChannelFailure = null;
+        try { await PublicChannels.DisposeAsync().ConfigureAwait(false); }
+        catch (Exception exception) { publicChannelFailure = exception; }
+        finally
+        {
+            DownstreamRelays.Dispose();
+            NetworkPolicies.Dispose();
+        }
         await Tabs.DisposeAsync().ConfigureAwait(false);
         await Connection.DisposeAsync().ConfigureAwait(false);
         await _recordingRuleRepository.DisposeAsync().ConfigureAwait(false);
@@ -570,6 +579,8 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
                 // One failed preference save must not block finite GUI shutdown.
             }
         }
+        if (publicChannelFailure is not null)
+            throw new InvalidOperationException("Public channel shutdown failed.", publicChannelFailure);
     }
 
     private bool LoadedSuccessfully(GenesisGuiNextApplicationStateLoadFailure failure) =>
