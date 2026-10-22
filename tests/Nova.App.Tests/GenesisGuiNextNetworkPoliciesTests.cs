@@ -114,6 +114,32 @@ public sealed class GenesisGuiNextNetworkPoliciesTests
         Assert.Equal(0, state.NetworkPolicies.Relays.ReservedCount);
     }
 
+    [Fact]
+    public async Task RegistryUsesTheSameStartupPolicyAndSavedChangesOnlyAffectNextApplication()
+    {
+        var store = new MemoryStore(new() { MaxRelaysTotal = 1 });
+        await using var first = await CreateStateAsync(store);
+        using var directOwner = first.NetworkPolicies.Relays.OpenChannel(
+            new(Guid.NewGuid()), new(Guid.NewGuid()), RelayChannelKind.Viewing);
+        using var directReservation = directOwner.TryReserve(1).Reservation;
+        using var owner = first.DownstreamRelays.Register(
+            new(Guid.NewGuid()), new(Guid.NewGuid()), RelayChannelKind.Viewing);
+        Assert.False(owner.TryReserve(2, out _));
+        Assert.True((await first.Connection.SaveAsync(
+            GenesisGuiNextConnectionInput.From(new() { MaxRelaysTotal = 0 }))).Saved);
+        directReservation!.Dispose();
+        Assert.True(owner.TryReserve(2, out var reservation));
+        using (reservation)
+        {
+            Assert.Equal(1, first.DownstreamRelays.ActiveRelayCount);
+            Assert.Equal(1, first.NetworkPolicies.Relays.ReservedCount);
+        }
+        await using var restarted = await CreateStateAsync(store);
+        using var newOwner = restarted.DownstreamRelays.Register(
+            new(Guid.NewGuid()), new(Guid.NewGuid()), RelayChannelKind.Viewing);
+        Assert.False(newOwner.TryReserve(3, out _));
+    }
+
     private static ValueTask<GenesisGuiNextApplicationState> CreateStateAsync(IGenesisGuiNextConnectionPreferencesStore store) =>
         GenesisGuiNextApplicationState.LoadAsync(new FavoriteStore(), new NotificationStore(),
             DefaultGenesisYellowPageConfigurationStore.Instance, DefaultGenesisGuiNextPlaybackPreferencesStore.Instance,

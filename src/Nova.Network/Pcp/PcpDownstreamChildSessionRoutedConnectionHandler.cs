@@ -1,4 +1,5 @@
 using System.IO.Pipelines;
+using PeerCast.Nova.Core.Channels;
 using PeerCast.Nova.Network.Transport;
 
 namespace PeerCast.Nova.Network.Pcp;
@@ -14,10 +15,12 @@ internal sealed class PcpDownstreamChildSessionRoutedConnectionHandler :
 {
     private readonly Guid _localSessionId;
     private readonly PcpDownstreamChildOptions _options;
+    private readonly Func<ChannelId, PcpRelayFanout, IPcpDownstreamRelayAdmission?>? _resolveAdmission;
 
     public PcpDownstreamChildSessionRoutedConnectionHandler(
         Guid localSessionId,
-        PcpDownstreamChildOptions? options = null)
+        PcpDownstreamChildOptions? options = null,
+        Func<ChannelId, PcpRelayFanout, IPcpDownstreamRelayAdmission?>? resolveAdmission = null)
     {
         if (localSessionId == Guid.Empty)
         {
@@ -31,6 +34,7 @@ internal sealed class PcpDownstreamChildSessionRoutedConnectionHandler :
             ? new PcpDownstreamChildOptions()
             : options with { };
         _options.Validate();
+        _resolveAdmission = resolveAdmission;
     }
 
     public async ValueTask<PcpDownstreamChildResult> RunAsync(
@@ -51,7 +55,8 @@ internal sealed class PcpDownstreamChildSessionRoutedConnectionHandler :
             request,
             fanout,
             _localSessionId,
-            _options);
+            _options,
+            admission: _resolveAdmission?.Invoke(new ChannelId(request.ChannelId), fanout));
 
         return await session.RunAsync(cancellationToken).ConfigureAwait(false);
     }

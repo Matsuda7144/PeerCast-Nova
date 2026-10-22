@@ -14,6 +14,8 @@ public sealed class TcpTransportConnection : IAsyncDisposable
     private readonly TcpClient _client;
     private readonly NetworkStream _stream;
     private readonly Action? _onDisposed;
+    private readonly TaskCompletionSource _cleanupCompletion = new(
+        TaskCreationOptions.RunContinuationsAsynchronously);
     private int _disposed;
 
     internal TcpTransportConnection(TcpClient client, Action? onDisposed = null)
@@ -40,6 +42,13 @@ public sealed class TcpTransportConnection : IAsyncDisposable
     public IPEndPoint RemoteEndPoint { get; }
 
     public bool IsDisposed => Volatile.Read(ref _disposed) != 0;
+
+    /// <summary>
+    /// Observes actual transport cleanup, including the owner's disposal callback.
+    /// IsDisposed only marks the start of disposal. Duplicate disposal remains a
+    /// no-op; observers use this task rather than assuming that no-op proves cleanup.
+    /// </summary>
+    public Task CleanupCompletion => _cleanupCompletion.Task;
 
     internal NetworkStream TransportStream
     {
@@ -89,11 +98,26 @@ public sealed class TcpTransportConnection : IAsyncDisposable
             }
 
             await _stream.DisposeAsync().ConfigureAwait(false);
-            _client.Dispose();
         }
         finally
         {
-            _onDisposed?.Invoke();
+            var transportClosed = false;
+            try
+            {
+                // Also close the client when stream disposal faults.
+                _client.Dispose();
+                transportClosed = true;
+            }
+            finally
+            {
+                try { _onDisposed?.Invoke(); }
+                finally
+                {
+                    if (transportClosed) _cleanupCompletion.TrySetResult();
+                    else _cleanupCompletion.TrySetException(
+                        new IOException("TCP transport cleanup could not be confirmed."));
+                }
+            }
         }
     }
 

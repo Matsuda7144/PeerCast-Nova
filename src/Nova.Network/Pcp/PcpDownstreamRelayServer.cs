@@ -21,6 +21,7 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
     private readonly ChannelId _channelId;
     private readonly Guid _localSessionId;
     private readonly PcpDownstreamChildOptions _childOptions;
+    private readonly IPcpDownstreamRelayAdmission? _admission;
     private readonly CancellationTokenSource _stopSource = new();
     private readonly HashSet<SessionEntry> _sessions = [];
 
@@ -58,11 +59,14 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
         Guid localSessionId,
         TcpTransportOptions? transportOptions = null,
         PcpDownstreamChildOptions? childOptions = null,
-        NatPortMappingManager? portMapping = null)
+        NatPortMappingManager? portMapping = null,
+        IPcpDownstreamRelayAdmission? admission = null)
     {
         ArgumentNullException.ThrowIfNull(localEndPoint);
         ArgumentNullException.ThrowIfNull(fanout);
         ArgumentNullException.ThrowIfNull(channelId);
+        if (admission is not null && admission.ChannelId != channelId)
+            throw new ArgumentException("Admission must belong to this channel.", nameof(admission));
 
         if (localSessionId == Guid.Empty)
         {
@@ -88,6 +92,7 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
         _fanout = fanout;
         _channelId = channelId;
         _localSessionId = localSessionId;
+        _admission = admission;
     }
 
     public IPEndPoint LocalEndPoint
@@ -326,7 +331,9 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
                 _fanout,
                 _channelId,
                 _localSessionId,
-                _childOptions);
+                _childOptions,
+                packetWriter: null,
+                admission: _admission);
             result = await session.RunAsync(
                 cancellationToken).ConfigureAwait(false);
         }

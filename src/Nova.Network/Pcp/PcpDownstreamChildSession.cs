@@ -31,6 +31,9 @@ public sealed class PcpDownstreamChildSession :
     private readonly PipeReader? _borrowedPipeReader;
     private readonly PcpDownstreamRelayRequest? _preRoutedRequest;
     private readonly bool _ownsTransport;
+    private readonly IPcpDownstreamRelayAdmission? _admission;
+    private IDisposable? _admissionReservation;
+    private Task<bool> _admissionCleanup = Task.FromResult(true);
     private readonly CancellationTokenSource _lifetimeSource = new();
     private readonly TaskCompletionSource _handshakeReady = new(
         TaskCreationOptions.RunContinuationsAsynchronously);
@@ -58,7 +61,8 @@ public sealed class PcpDownstreamChildSession :
             channelId,
             localSessionId,
             options,
-            packetWriter: null)
+            packetWriter: null,
+            admission: null)
     {
     }
 
@@ -68,7 +72,8 @@ public sealed class PcpDownstreamChildSession :
         ChannelId channelId,
         Guid localSessionId,
         PcpDownstreamChildOptions? options,
-        IPcpDownstreamPacketWriter? packetWriter)
+        IPcpDownstreamPacketWriter? packetWriter,
+        IPcpDownstreamRelayAdmission? admission = null)
         : this(
             connection,
             fanout,
@@ -78,7 +83,8 @@ public sealed class PcpDownstreamChildSession :
             packetWriter,
             borrowedPipeReader: null,
             preRoutedRequest: null,
-            ownsTransport: true)
+            ownsTransport: true,
+            admission)
     {
     }
 
@@ -91,11 +97,14 @@ public sealed class PcpDownstreamChildSession :
         IPcpDownstreamPacketWriter? packetWriter,
         PipeReader? borrowedPipeReader,
         PcpDownstreamRelayRequest? preRoutedRequest,
-        bool ownsTransport)
+        bool ownsTransport,
+        IPcpDownstreamRelayAdmission? admission)
     {
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentNullException.ThrowIfNull(fanout);
         ArgumentNullException.ThrowIfNull(channelId);
+        if (admission is not null && admission.ChannelId != channelId)
+            throw new ArgumentException("Admission must belong to this channel.", nameof(admission));
 
         if (localSessionId == Guid.Empty)
         {
@@ -138,6 +147,7 @@ public sealed class PcpDownstreamChildSession :
         _borrowedPipeReader = borrowedPipeReader;
         _preRoutedRequest = preRoutedRequest;
         _ownsTransport = ownsTransport;
+        _admission = admission;
     }
 
     internal static PcpDownstreamChildSession CreateRouted(
@@ -147,7 +157,8 @@ public sealed class PcpDownstreamChildSession :
         PcpRelayFanout fanout,
         Guid localSessionId,
         PcpDownstreamChildOptions? options = null,
-        IPcpDownstreamPacketWriter? packetWriter = null)
+        IPcpDownstreamPacketWriter? packetWriter = null,
+        IPcpDownstreamRelayAdmission? admission = null)
     {
         ArgumentNullException.ThrowIfNull(reader);
         ArgumentNullException.ThrowIfNull(request);
@@ -161,8 +172,11 @@ public sealed class PcpDownstreamChildSession :
             packetWriter,
             reader,
             request,
-            ownsTransport: false);
+            ownsTransport: false,
+            admission);
     }
+
+    internal Task<bool> AdmissionCleanupCompletion => _admissionCleanup;
 
     public Task<PcpDownstreamChildResult> RunAsync(
         CancellationToken cancellationToken = default)
@@ -340,33 +354,44 @@ public sealed class PcpDownstreamChildSession :
         }
         finally
         {
-            _handshakeReady.TrySetCanceled(operationSource.Token);
-            CancelBestEffort(operationSource);
-
-            var stopped = true;
-            if (_registration is not null)
+            try
             {
-                stopped = await _registration.StopAsync(
-                    CancellationToken.None)
-                    .ConfigureAwait(false);
-            }
+                _handshakeReady.TrySetCanceled(operationSource.Token);
+                CancelBestEffort(operationSource);
 
-            if (_ownsTransport)
-            {
-                try
+                var stopped = true;
+                if (_registration is not null)
                 {
-                    await pipeReader.CompleteAsync().ConfigureAwait(false);
+                    stopped = await _registration.StopAsync(
+                        CancellationToken.None)
+                        .ConfigureAwait(false);
                 }
-                finally
+
+                if (_ownsTransport)
                 {
-                    await _connection.DisposeAsync().ConfigureAwait(false);
+                    try
+                    {
+                        await pipeReader.CompleteAsync().ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        await _connection.DisposeAsync().ConfigureAwait(false);
+                    }
+                }
+
+                if (!stopped && _registration is not null)
+                {
+                    cleanupCompleted = await _registration.StopAsync(
+                        CancellationToken.None).ConfigureAwait(false);
                 }
             }
-
-            if (!stopped && _registration is not null)
+            finally
             {
-                cleanupCompleted = await _registration.StopAsync(
-                    CancellationToken.None).ConfigureAwait(false);
+                var reservation = Interlocked.Exchange(ref _admissionReservation, null);
+                if (reservation is not null)
+                    _admissionCleanup = ReleaseAdmissionAfterCleanupAsync(
+                        reservation, _connection.CleanupCompletion,
+                        _registration?.Completion ?? Task.CompletedTask);
             }
         }
 
@@ -450,7 +475,12 @@ public sealed class PcpDownstreamChildSession :
             return PcpDownstreamChildEndReason.ProtocolRejected;
         }
 
-        if (!_fanout.TryAddChild(this, out var registration))
+        // Request format and ChannelId are already validated. A remote loopback
+        // address is still a PCP relay role, not an internal media consumer.
+        var policyAccepted = _admission is null ||
+            _admission.TryReserve(_connection.ConnectionId, out _admissionReservation, handshakeToken);
+        PcpRelayChildRegistration? registration = null;
+        if (!policyAccepted || !_fanout.TryAddChild(this, out registration))
         {
             _httpStatusCode = 503;
             await WriteControlAsync(
@@ -542,6 +572,24 @@ public sealed class PcpDownstreamChildSession :
         operationSource.Token.ThrowIfCancellationRequested();
         throw new InvalidOperationException(
             "The downstream cancellation task completed unexpectedly.");
+    }
+
+    private static async Task<bool> ReleaseAdmissionAfterCleanupAsync(
+        IDisposable reservation, Task transportCleanup, Task childCompletion)
+    {
+        try { await transportCleanup.ConfigureAwait(false); }
+        catch
+        {
+            // Keep the occupied slot if closing the actual transport is unproven.
+            return false;
+        }
+        try { await childCompletion.ConfigureAwait(false); }
+        catch
+        {
+            // A terminal worker fault still means its callback has returned.
+        }
+        reservation.Dispose();
+        return true;
     }
 
     private static async Task<PcpDownstreamChildEndReason>

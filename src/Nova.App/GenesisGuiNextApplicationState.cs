@@ -243,6 +243,7 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
         Playback = playback;
         Connection = connection;
         NetworkPolicies = GenesisGuiNextNetworkPolicies.Create(connection);
+        DownstreamRelays = new GenesisDownstreamRelayOwnerRegistry(NetworkPolicies.Relays);
         ArgumentNullException.ThrowIfNull(recordingRuleRepository);
         _recordingRuleRepository = recordingRuleRepository;
         Tabs = new(favorites, recordingRuleRepository);
@@ -268,6 +269,8 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
     public GenesisGuiNextConnectionSettings Connection { get; }
 
     public GenesisGuiNextNetworkPolicies NetworkPolicies { get; }
+
+    public GenesisDownstreamRelayOwnerRegistry DownstreamRelays { get; }
 
     public GenesisGuiNextTabsViewModel Tabs { get; }
 
@@ -503,6 +506,7 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
             return;
         }
 
+        DownstreamRelays.Dispose();
         NetworkPolicies.Dispose();
         await Tabs.DisposeAsync().ConfigureAwait(false);
         await Connection.DisposeAsync().ConfigureAwait(false);
