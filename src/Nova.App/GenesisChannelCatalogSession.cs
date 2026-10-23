@@ -21,6 +21,7 @@ internal sealed class GenesisChannelCatalogSession : IAsyncDisposable
     private readonly object _sync = new();
     private readonly GenesisChannelCatalogCoordinator _coordinator;
     private readonly GenesisMainViewModel _viewModel;
+    private readonly GenesisYellowPageRefreshDiagnosticTrace? _diagnosticTrace;
     private readonly IGenesisAutomaticRecordingCatalogObserver?
         _automaticRecordingCatalogObserver;
     private readonly CancellationTokenSource _lifetimeCancellation;
@@ -36,10 +37,12 @@ internal sealed class GenesisChannelCatalogSession : IAsyncDisposable
         GenesisChannelCatalogCoordinator coordinator,
         GenesisMainViewModel viewModel,
         GenesisGuiNextTabsViewModel? guiNextTabs,
+        GenesisYellowPageRefreshDiagnosticTrace? diagnosticTrace,
         CancellationToken cancellationToken)
     {
         _coordinator = coordinator;
         _viewModel = viewModel;
+        _diagnosticTrace = diagnosticTrace;
         _automaticRecordingCatalogObserver =
             viewModel.AutomaticRecordingCatalogObserver;
         GuiNextTabs = guiNextTabs;
@@ -57,6 +60,8 @@ internal sealed class GenesisChannelCatalogSession : IAsyncDisposable
     }
 
     internal GenesisGuiNextTabsViewModel? GuiNextTabs { get; }
+
+    internal GenesisYellowPageRefreshDiagnosticTrace? DiagnosticTrace => _diagnosticTrace;
 
     internal event EventHandler? DiagnosticsChanged;
 
@@ -96,6 +101,19 @@ internal sealed class GenesisChannelCatalogSession : IAsyncDisposable
         IGenesisChannelCatalog catalog,
         GenesisMainViewModel viewModel,
         IGenesisChannelPresenceNotificationPublisher notificationPublisher,
+        CancellationToken cancellationToken = default) =>
+        Create(
+            catalog,
+            viewModel,
+            notificationPublisher,
+            diagnosticTrace: null,
+            cancellationToken);
+
+    internal static GenesisChannelCatalogSession Create(
+        IGenesisChannelCatalog catalog,
+        GenesisMainViewModel viewModel,
+        IGenesisChannelPresenceNotificationPublisher notificationPublisher,
+        GenesisYellowPageRefreshDiagnosticTrace? diagnosticTrace,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(catalog);
@@ -106,11 +124,13 @@ internal sealed class GenesisChannelCatalogSession : IAsyncDisposable
             new GenesisChannelCatalogCoordinator(
                 catalog,
                 viewModel,
-                notificationPublisher),
+                notificationPublisher,
+                diagnosticTrace),
             viewModel,
             notificationPublisher is GenesisGuiNextChannelPresencePublisher guiNextPublisher
                 ? guiNextPublisher.Tabs
                 : null,
+            diagnosticTrace,
             cancellationToken);
     }
 
@@ -118,7 +138,9 @@ internal sealed class GenesisChannelCatalogSession : IAsyncDisposable
     {
         if (Interlocked.Exchange(ref _initialRefreshStarted, 1) == 0)
         {
-            _ = QueueRefresh(CancellationToken.None);
+            _ = QueueRefresh(
+                GenesisYellowPageRefreshTrigger.Initial,
+                cancellationToken: CancellationToken.None);
         }
     }
 
@@ -144,7 +166,17 @@ internal sealed class GenesisChannelCatalogSession : IAsyncDisposable
 
     public ValueTask<GenesisChannelCatalogRefreshResult> RefreshAsync(
         CancellationToken cancellationToken = default) =>
-        new(QueueRefresh(cancellationToken));
+        new(QueueRefresh(
+            GenesisYellowPageRefreshTrigger.Manual,
+            cancellationToken: cancellationToken));
+
+    internal ValueTask<GenesisChannelCatalogRefreshResult> RefreshAsync(
+        Guid refreshRequestId,
+        CancellationToken cancellationToken = default) =>
+        new(QueueRefresh(
+            GenesisYellowPageRefreshTrigger.Manual,
+            refreshRequestId,
+            cancellationToken));
 
     public async ValueTask DisposeAsync()
     {
@@ -191,6 +223,10 @@ internal sealed class GenesisChannelCatalogSession : IAsyncDisposable
         finally
         {
             _lifetimeCancellation.Dispose();
+            if (_diagnosticTrace is not null)
+            {
+                await _diagnosticTrace.DisposeAsync().ConfigureAwait(false);
+            }
         }
     }
 
@@ -216,25 +252,60 @@ internal sealed class GenesisChannelCatalogSession : IAsyncDisposable
                 return;
             }
 
-            _ = await QueueRefresh(CancellationToken.None).ConfigureAwait(false);
+            _ = await QueueRefresh(
+                    GenesisYellowPageRefreshTrigger.Automatic,
+                    cancellationToken: CancellationToken.None)
+                .ConfigureAwait(false);
         }
     }
 
     private Task<GenesisChannelCatalogRefreshResult> QueueRefresh(
-        CancellationToken cancellationToken)
+        GenesisYellowPageRefreshTrigger trigger,
+        Guid? requestedId = null,
+        CancellationToken cancellationToken = default)
     {
+        var requestId = requestedId is { } suppliedId && suppliedId != Guid.Empty
+            ? suppliedId
+            : Guid.NewGuid();
+        var diagnosticContext = _diagnosticTrace is null
+            ? null
+            : new GenesisYellowPageRefreshDiagnosticContext(
+                _diagnosticTrace,
+                requestId,
+                trigger);
+        _diagnosticTrace?.TryRecord(
+            "RefreshRequested",
+            diagnosticContext,
+            stage: "Request",
+            outcome: "Requested");
+
         lock (_sync)
         {
             if (Volatile.Read(ref _disposed) != 0 ||
                 _lifetimeCancellation.IsCancellationRequested ||
                 cancellationToken.IsCancellationRequested)
             {
+                _diagnosticTrace?.TryRecord(
+                    "RefreshSuppressed",
+                    diagnosticContext,
+                    stage: "Queue",
+                    outcome: "Suppressed",
+                    suppressionReason: "SessionDisposedOrCancelled");
                 return Task.FromResult(GenesisChannelCatalogRefreshResult.Cancelled);
             }
 
+            _diagnosticTrace?.TryRecord(
+                "RefreshQueued",
+                diagnosticContext,
+                stage: "Queue",
+                outcome: "Queued");
             var completion = new TaskCompletionSource<GenesisChannelCatalogRefreshResult>(
                 TaskCreationOptions.RunContinuationsAsynchronously);
-            _tail = RefreshAfterAsync(_tail, completion, cancellationToken);
+            _tail = RefreshAfterAsync(
+                _tail,
+                completion,
+                diagnosticContext,
+                cancellationToken);
             return completion.Task;
         }
     }
@@ -242,6 +313,7 @@ internal sealed class GenesisChannelCatalogSession : IAsyncDisposable
     private async Task RefreshAfterAsync(
         Task predecessor,
         TaskCompletionSource<GenesisChannelCatalogRefreshResult> completion,
+        GenesisYellowPageRefreshDiagnosticContext? diagnosticContext,
         CancellationToken requestCancellationToken)
     {
         try
@@ -259,10 +331,19 @@ internal sealed class GenesisChannelCatalogSession : IAsyncDisposable
                 _lifetimeCancellation.IsCancellationRequested ||
                 requestCancellationToken.IsCancellationRequested)
             {
+                _diagnosticTrace?.TryRecord(
+                    "RefreshSuppressed",
+                    diagnosticContext,
+                    stage: "Queue",
+                    outcome: "Suppressed",
+                    suppressionReason: "CancelledBeforeRead");
                 completion.TrySetResult(GenesisChannelCatalogRefreshResult.Cancelled);
                 return;
             }
 
+            using var diagnosticScope = diagnosticContext is null
+                ? null
+                : GenesisYellowPageRefreshDiagnosticAmbient.Push(diagnosticContext);
             RecordAttempt(DateTimeOffset.UtcNow);
             GenesisChannelCatalogRefreshResult result;
             try

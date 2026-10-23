@@ -75,7 +75,10 @@ public sealed class GenesisGuiNextPrimaryCommandIntegrationTests
         Assert.Contains("TryRefreshForOwner(_owner)", shell, StringComparison.Ordinal);
         Assert.Contains("CanRefreshForOwner(_owner)", shell, StringComparison.Ordinal);
         Assert.Contains("new GenesisMainWindowInteraction(viewModel, session)", refreshButton, StringComparison.Ordinal);
-        Assert.Contains("_interaction.RefreshCurrentViewAsync()", refreshButton, StringComparison.Ordinal);
+        Assert.Contains(
+            "_interaction.RefreshCurrentViewAsync(refreshRequestId)",
+            refreshButton,
+            StringComparison.Ordinal);
         Assert.Contains("_interaction.RefreshCurrentViewAsync()", keyboard, StringComparison.Ordinal);
         Assert.Contains("_interaction.RefreshCurrentViewAsync()", sourceKeyboard, StringComparison.Ordinal);
         Assert.Contains("_interaction.RefreshCurrentViewAsync()", contextMenu, StringComparison.Ordinal);

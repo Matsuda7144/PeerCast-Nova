@@ -398,12 +398,25 @@ internal sealed class GenesisChannelRefreshButtonBridge : IAsyncDisposable
 
         public bool RequestRefresh()
         {
-            if (!_pendingRefresh.IsCompleted || !CanRefreshCurrentView)
+            var refreshRequestId = Guid.NewGuid();
+            if (!_pendingRefresh.IsCompleted)
             {
+                _interaction.RecordRefreshSuppressed(
+                    refreshRequestId,
+                    "RefreshAlreadyPending");
                 return false;
             }
 
-            _pendingRefresh = ObserveRefreshAsync(_interaction.RefreshCurrentViewAsync());
+            if (!CanRefreshCurrentView)
+            {
+                _interaction.RecordRefreshSuppressed(
+                    refreshRequestId,
+                    "ViewCannotRefresh");
+                return false;
+            }
+
+            _pendingRefresh = ObserveRefreshAsync(
+                _interaction.RefreshCurrentViewAsync(refreshRequestId));
             return true;
         }
 
@@ -411,8 +424,7 @@ internal sealed class GenesisChannelRefreshButtonBridge : IAsyncDisposable
         {
             var notificationCode = (int)((wParam >> 16) & 0xffff);
             if (notificationCode == ButtonNotificationClicked &&
-                lParam == _button &&
-                _pendingRefresh.IsCompleted)
+                lParam == _button)
             {
                 _ = RequestRefresh();
             }

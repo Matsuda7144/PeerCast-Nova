@@ -55,6 +55,7 @@ internal sealed class GenesisChannelCatalogCoordinator
     private readonly IGenesisChannelCatalog _catalog;
     private readonly GenesisMainViewModel _viewModel;
     private readonly IGenesisChannelPresenceNotificationPublisher _notificationPublisher;
+    private readonly GenesisYellowPageRefreshDiagnosticTrace? _diagnosticTrace;
     private readonly GenesisChannelPresenceTracker _presenceTracker = new();
 
     public GenesisChannelCatalogCoordinator(
@@ -71,6 +72,15 @@ internal sealed class GenesisChannelCatalogCoordinator
         IGenesisChannelCatalog catalog,
         GenesisMainViewModel viewModel,
         IGenesisChannelPresenceNotificationPublisher notificationPublisher)
+        : this(catalog, viewModel, notificationPublisher, diagnosticTrace: null)
+    {
+    }
+
+    internal GenesisChannelCatalogCoordinator(
+        IGenesisChannelCatalog catalog,
+        GenesisMainViewModel viewModel,
+        IGenesisChannelPresenceNotificationPublisher notificationPublisher,
+        GenesisYellowPageRefreshDiagnosticTrace? diagnosticTrace)
     {
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(viewModel);
@@ -78,6 +88,7 @@ internal sealed class GenesisChannelCatalogCoordinator
         _catalog = catalog;
         _viewModel = viewModel;
         _notificationPublisher = notificationPublisher;
+        _diagnosticTrace = diagnosticTrace;
     }
 
     internal GenesisChannelPresenceSnapshot? PresenceSnapshot { get; private set; }
@@ -90,28 +101,59 @@ internal sealed class GenesisChannelCatalogCoordinator
         _viewModel.SetChannelCatalogRefreshState(isRefreshing: true, errorMessage: null);
         try
         {
-            var projection = await ReadProjectedSnapshotAsync(cancellationToken)
+            var read = await ReadProjectedSnapshotAsync(cancellationToken)
                 .ConfigureAwait(false);
+            var projection = read.Projection;
             ChannelViews = projection;
             _viewModel.ReplaceChannels(projection.Channels);
             _viewModel.SetChannelCatalogRefreshState(isRefreshing: false, errorMessage: null);
+            var context = GenesisYellowPageRefreshDiagnosticAmbient.Current;
+            if (read.RefreshAttemptId is { } attemptId && context is not null)
+            {
+                context = context.ForAttempt(attemptId, read.ConfigurationRevision);
+            }
+
+            _diagnosticTrace?.TryRecord(
+                "CatalogProjectionCompleted",
+                context,
+                stage: "GuiRows",
+                outcome: "Applied",
+                projectedRowCount: projection.Channels.Count);
+            _diagnosticTrace?.TryRecord(
+                "RefreshCompleted",
+                context,
+                stage: "Refresh",
+                outcome: "Completed",
+                projectedRowCount: projection.Channels.Count);
             return GenesisChannelCatalogRefreshResult.Completed;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             _viewModel.SetChannelCatalogRefreshState(isRefreshing: false, errorMessage: null);
+            _diagnosticTrace?.TryRecord(
+                "RefreshFailed",
+                stage: "Refresh",
+                outcome: "Cancelled",
+                exceptionType: nameof(OperationCanceledException),
+                failureStage: "Cancellation");
             return GenesisChannelCatalogRefreshResult.Cancelled;
         }
-        catch
+        catch (Exception exception)
         {
             _viewModel.SetChannelCatalogRefreshState(
                 isRefreshing: false,
                 errorMessage: RefreshFailedMessage);
+            _diagnosticTrace?.TryRecord(
+                "RefreshFailed",
+                stage: "Refresh",
+                outcome: "Failed",
+                exceptionType: exception.GetType().Name,
+                failureStage: "CatalogOrProjection");
             return GenesisChannelCatalogRefreshResult.Faulted;
         }
     }
 
-    private async ValueTask<GenesisChannelViewProjectionSnapshot> ReadProjectedSnapshotAsync(
+    private async ValueTask<CatalogProjectionRead> ReadProjectedSnapshotAsync(
         CancellationToken cancellationToken)
     {
         if (_catalog is IGenesisAggregatedChannelCatalog aggregatedCatalog)
@@ -127,9 +169,24 @@ internal sealed class GenesisChannelCatalogCoordinator
                 presence,
                 detailed.Notices);
             ApplyGuiNextViews(projection, presence);
-            return projection;
+            return new CatalogProjectionRead(
+                projection,
+                detailed.RefreshAttemptId,
+                detailed.ConfigurationRevision);
         }
 
+        var context = GenesisYellowPageRefreshDiagnosticAmbient.Current;
+        var attemptId = context?.Trace is null ? (Guid?)null : Guid.NewGuid();
+        if (attemptId is { } actualAttemptId && context is not null)
+        {
+            context = context.ForAttempt(actualAttemptId, configurationRevision: null);
+        }
+
+        _diagnosticTrace?.TryRecord(
+            "RefreshStarted",
+            context,
+            stage: "CatalogRead",
+            outcome: "Started");
         var snapshot = await _catalog.ReadAsync(cancellationToken)
             .ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
@@ -137,7 +194,10 @@ internal sealed class GenesisChannelCatalogCoordinator
         cancellationToken.ThrowIfCancellationRequested();
         var catalogProjection = GenesisChannelViewProjectionSnapshot.FromCatalog(sanitized);
         ApplyGuiNextViews(catalogProjection, presence: null);
-        return catalogProjection;
+        return new CatalogProjectionRead(
+            catalogProjection,
+            attemptId,
+            ConfigurationRevision: null);
     }
 
     private void ApplyGuiNextViews(
@@ -158,6 +218,11 @@ internal sealed class GenesisChannelCatalogCoordinator
             // GUI Next projection is auxiliary to the committed catalog generation.
         }
     }
+
+    private sealed record CatalogProjectionRead(
+        GenesisChannelViewProjectionSnapshot Projection,
+        Guid? RefreshAttemptId,
+        long? ConfigurationRevision);
 
     private async ValueTask PublishNotificationsAsync(
         GenesisChannelPresenceSnapshot presence,

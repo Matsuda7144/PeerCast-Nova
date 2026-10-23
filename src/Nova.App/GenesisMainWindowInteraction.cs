@@ -30,6 +30,18 @@ internal sealed class GenesisMainWindowInteraction
 
     internal bool IsRecordingHistoryView => _channelCatalogSession?.GuiNextTabs?.IsRecordingHistoryPage == true;
 
+    internal bool IsYellowPageCatalogView
+    {
+        get
+        {
+            var tabs = _channelCatalogSession?.GuiNextTabs;
+            return _channelCatalogSession is not null &&
+                tabs?.SelectedTab != GenesisGuiNextTab.Logs &&
+                tabs?.IsRecordingHistoryPage != true &&
+                !IsRecordingRulesView(tabs);
+        }
+    }
+
     public bool CanRefreshCurrentView
     {
         get
@@ -74,6 +86,43 @@ internal sealed class GenesisMainWindowInteraction
     public async ValueTask RefreshCurrentViewAsync(
         CancellationToken cancellationToken = default)
     {
+        await RefreshCurrentViewCoreAsync(
+                refreshRequestId: null,
+                cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    internal ValueTask RefreshCurrentViewAsync(Guid refreshRequestId) =>
+        RefreshCurrentViewCoreAsync(refreshRequestId, CancellationToken.None);
+
+    internal void RecordRefreshSuppressed(Guid refreshRequestId, string reason)
+    {
+        if (!IsYellowPageCatalogView || _channelCatalogSession?.DiagnosticTrace is not { } trace)
+        {
+            return;
+        }
+
+        var context = new GenesisYellowPageRefreshDiagnosticContext(
+            trace,
+            refreshRequestId,
+            GenesisYellowPageRefreshTrigger.Manual);
+        trace.TryRecord(
+            "RefreshRequested",
+            context,
+            stage: "UiCommand",
+            outcome: "Requested");
+        trace.TryRecord(
+            "RefreshSuppressed",
+            context,
+            stage: "UiCommand",
+            outcome: "Suppressed",
+            suppressionReason: reason);
+    }
+
+    private async ValueTask RefreshCurrentViewCoreAsync(
+        Guid? refreshRequestId,
+        CancellationToken cancellationToken)
+    {
         var tabs = _channelCatalogSession?.GuiNextTabs;
         if (tabs?.SelectedTab == GenesisGuiNextTab.Logs)
         {
@@ -93,6 +142,13 @@ internal sealed class GenesisMainWindowInteraction
                 await tabs.ReloadRecordingRulesAsync().ConfigureAwait(false);
             }
 
+            return;
+        }
+
+        if (refreshRequestId is { } requestId && _channelCatalogSession is not null)
+        {
+            _ = await _channelCatalogSession.RefreshAsync(requestId, cancellationToken)
+                .ConfigureAwait(false);
             return;
         }
 

@@ -345,11 +345,27 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
             notificationRuntime = GenesisChannelNotificationRuntime.Empty;
         }
 
-        var catalogSession = GenesisChannelCatalogSession.Create(
-            _channelCatalog,
-            viewModel,
-            notificationRuntime.Publisher,
-            cancellationToken);
+        var yellowPageDiagnosticTrace =
+            GenesisYellowPageRefreshDiagnosticTrace.FromEnvironment();
+        GenesisChannelCatalogSession catalogSession;
+        try
+        {
+            catalogSession = GenesisChannelCatalogSession.Create(
+                _channelCatalog,
+                viewModel,
+                notificationRuntime.Publisher,
+                yellowPageDiagnosticTrace,
+                cancellationToken);
+        }
+        catch
+        {
+            if (yellowPageDiagnosticTrace is not null)
+            {
+                await yellowPageDiagnosticTrace.DisposeAsync().ConfigureAwait(false);
+            }
+
+            throw;
+        }
         IAsyncDisposable? bridgeLifetime;
         try
         {

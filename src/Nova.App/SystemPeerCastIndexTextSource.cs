@@ -3,7 +3,7 @@ using System.Text;
 
 namespace PeerCast.Nova.App;
 
-internal sealed class SystemPeerCastIndexTextSource : IPeerCastIndexTextSource
+internal sealed class SystemPeerCastIndexTextSource : IPeerCastIndexDiagnosticTextSource
 {
     private const int MaximumResponseBytes = 4 * 1024 * 1024;
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(12);
@@ -18,31 +18,89 @@ internal sealed class SystemPeerCastIndexTextSource : IPeerCastIndexTextSource
         Uri indexUri,
         CancellationToken cancellationToken = default)
     {
+        var result = await ReadCoreAsync(
+                indexUri,
+                collectDiagnostics: false,
+                cancellationToken)
+            .ConfigureAwait(false);
+        return result.Text;
+    }
+
+    public ValueTask<PeerCastIndexTextReadResult> ReadWithDiagnosticsAsync(
+        Uri indexUri,
+        CancellationToken cancellationToken = default) =>
+        ReadCoreAsync(indexUri, collectDiagnostics: true, cancellationToken);
+
+    private static async ValueTask<PeerCastIndexTextReadResult> ReadCoreAsync(
+        Uri indexUri,
+        bool collectDiagnostics,
+        CancellationToken cancellationToken)
+    {
         ArgumentNullException.ThrowIfNull(indexUri);
-        ValidateIndexUri(indexUri);
-        cancellationToken.ThrowIfCancellationRequested();
+        string stage = "ValidateUri";
+        int? statusCode = null;
+        int? responseByteCount = null;
+        try
+        {
+            ValidateIndexUri(indexUri);
+            cancellationToken.ThrowIfCancellationRequested();
 
-        using var timeoutCancellation = CancellationTokenSource.CreateLinkedTokenSource(
-            cancellationToken);
-        timeoutCancellation.CancelAfter(RequestTimeout);
+            using var timeoutCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken);
+            timeoutCancellation.CancelAfter(RequestTimeout);
 
-        using var client = new System.Net.Sockets.TcpClient();
-        var port = indexUri.IsDefaultPort ? 80 : indexUri.Port;
-        await client.ConnectAsync(
-                indexUri.DnsSafeHost,
-                port,
-                timeoutCancellation.Token)
-            .ConfigureAwait(false);
+            using var client = new System.Net.Sockets.TcpClient();
+            var port = indexUri.IsDefaultPort ? 80 : indexUri.Port;
+            stage = "Connect";
+            await client.ConnectAsync(
+                    indexUri.DnsSafeHost,
+                    port,
+                    timeoutCancellation.Token)
+                .ConfigureAwait(false);
 
-        await using var stream = client.GetStream();
-        var request = BuildRequest(indexUri);
-        await stream.WriteAsync(request.AsMemory(), timeoutCancellation.Token)
-            .ConfigureAwait(false);
-        await stream.FlushAsync(timeoutCancellation.Token).ConfigureAwait(false);
+            await using var stream = client.GetStream();
+            var request = BuildRequest(indexUri);
+            stage = "WriteRequest";
+            await stream.WriteAsync(request.AsMemory(), timeoutCancellation.Token)
+                .ConfigureAwait(false);
+            await stream.FlushAsync(timeoutCancellation.Token).ConfigureAwait(false);
 
-        var response = await ReadResponseAsync(stream, timeoutCancellation.Token)
-            .ConfigureAwait(false);
-        return PeerCastHttpIndexResponse.Decode(response);
+            stage = "ReadResponse";
+            var response = await ReadResponseAsync(stream, timeoutCancellation.Token)
+                .ConfigureAwait(false);
+            stage = "DecodeResponse";
+            string text;
+            if (collectDiagnostics)
+            {
+                text = PeerCastHttpIndexResponse.Decode(
+                    response,
+                    out statusCode,
+                    out responseByteCount);
+            }
+            else
+            {
+                text = PeerCastHttpIndexResponse.Decode(response);
+            }
+
+            return new PeerCastIndexTextReadResult(
+                text,
+                statusCode,
+                responseByteCount);
+        }
+        catch (Exception exception) when (collectDiagnostics)
+        {
+            GenesisYellowPageRefreshDiagnosticAmbient.Current?.Trace.TryRecord(
+                "HttpReadFailed",
+                stage: "Http",
+                outcome: exception is not OperationCanceledException
+                    ? "Failed"
+                    : cancellationToken.IsCancellationRequested ? "Cancelled" : "Timeout",
+                httpStatusCode: statusCode,
+                responseByteCount: responseByteCount,
+                exceptionType: exception.GetType().Name,
+                failureStage: stage);
+            throw;
+        }
     }
 
     private static void ValidateIndexUri(Uri indexUri)

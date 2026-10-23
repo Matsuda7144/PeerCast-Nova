@@ -24,18 +24,24 @@ internal sealed class GenesisAggregatedChannelCatalogSnapshot
 {
     public GenesisAggregatedChannelCatalogSnapshot(
         IEnumerable<GenesisAggregatedChannelCatalogEntry> entries,
-        IEnumerable<GenesisYellowPageCatalogReadStatus> yellowPages)
+        IEnumerable<GenesisYellowPageCatalogReadStatus> yellowPages,
+        Guid? refreshAttemptId = null,
+        long? configurationRevision = null)
         : this(
             entries,
             yellowPages,
-            Array.Empty<GenesisAggregatedYellowPageNotice>())
+            Array.Empty<GenesisAggregatedYellowPageNotice>(),
+            refreshAttemptId,
+            configurationRevision)
     {
     }
 
     public GenesisAggregatedChannelCatalogSnapshot(
         IEnumerable<GenesisAggregatedChannelCatalogEntry> entries,
         IEnumerable<GenesisYellowPageCatalogReadStatus> yellowPages,
-        IEnumerable<GenesisAggregatedYellowPageNotice> notices)
+        IEnumerable<GenesisAggregatedYellowPageNotice> notices,
+        Guid? refreshAttemptId = null,
+        long? configurationRevision = null)
     {
         ArgumentNullException.ThrowIfNull(entries);
         ArgumentNullException.ThrowIfNull(yellowPages);
@@ -44,6 +50,8 @@ internal sealed class GenesisAggregatedChannelCatalogSnapshot
         Entries = Array.AsReadOnly(entries.ToArray());
         YellowPages = Array.AsReadOnly(yellowPages.ToArray());
         Notices = Array.AsReadOnly(notices.ToArray());
+        RefreshAttemptId = refreshAttemptId;
+        ConfigurationRevision = configurationRevision;
         Catalog = new GenesisChannelCatalogSnapshot(
             Array.AsReadOnly(Entries
                 .Select(static entry => entry.Channel)
@@ -58,6 +66,10 @@ internal sealed class GenesisAggregatedChannelCatalogSnapshot
     public IReadOnlyList<GenesisYellowPageCatalogReadStatus> YellowPages { get; }
 
     public IReadOnlyList<GenesisAggregatedYellowPageNotice> Notices { get; }
+
+    public Guid? RefreshAttemptId { get; }
+
+    public long? ConfigurationRevision { get; }
 
     public GenesisChannelCatalogSnapshot Catalog { get; }
 }
@@ -141,6 +153,26 @@ internal sealed class GenesisAggregatingYellowPageChannelCatalog :
         for (var attempt = 0; attempt < MaximumConfigurationReadAttempts; attempt++)
         {
             var configurationSnapshot = _configuration.CaptureEnabledReadSnapshot();
+            var requestContext = GenesisYellowPageRefreshDiagnosticAmbient.Current;
+            var attemptId = requestContext is null ? (Guid?)null : Guid.NewGuid();
+            var attemptContext = attemptId is { } actualAttemptId
+                ? requestContext!.ForAttempt(actualAttemptId, configurationSnapshot.Revision)
+                : null;
+            using var diagnosticScope = attemptContext is null
+                ? null
+                : GenesisYellowPageRefreshDiagnosticAmbient.Push(attemptContext);
+            var trace = attemptContext?.Trace;
+            trace?.TryRecord(
+                "RefreshStarted",
+                attemptContext,
+                stage: "CatalogRead",
+                outcome: "Started");
+            trace?.TryRecord(
+                "ProviderSnapshotCaptured",
+                attemptContext,
+                stage: "Configuration",
+                outcome: "Captured",
+                enabledProviderCount: configurationSnapshot.EnabledDefinitions.Count);
             try
             {
                 var detailed = await ReadConfigurationSnapshotAsync(
@@ -150,18 +182,55 @@ internal sealed class GenesisAggregatingYellowPageChannelCatalog :
                 cancellationToken.ThrowIfCancellationRequested();
                 if (_configuration.IsRevisionCurrent(configurationSnapshot.Revision))
                 {
-                    return detailed;
+                    return new GenesisAggregatedChannelCatalogSnapshot(
+                        detailed.Entries,
+                        detailed.YellowPages,
+                        detailed.Notices,
+                        attemptId,
+                        configurationSnapshot.Revision);
                 }
+
+                trace?.TryRecord(
+                    "CatalogAttemptDiscarded",
+                    attemptContext,
+                    stage: "Configuration",
+                    outcome: "RevisionChanged",
+                    suppressionReason: "ConfigurationRevisionChangedDuringRead");
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
+                trace?.TryRecord(
+                    "RefreshFailed",
+                    attemptContext,
+                    stage: "CatalogRead",
+                    outcome: "Cancelled",
+                    exceptionType: nameof(OperationCanceledException),
+                    failureStage: "Cancellation");
                 throw;
             }
-            catch when (!_configuration.IsRevisionCurrent(configurationSnapshot.Revision))
+            catch (Exception exception) when (!_configuration.IsRevisionCurrent(configurationSnapshot.Revision))
             {
+                trace?.TryRecord(
+                    "CatalogAttemptDiscarded",
+                    attemptContext,
+                    stage: "Configuration",
+                    outcome: "RevisionChanged",
+                    exceptionType: exception.GetType().Name,
+                    failureStage: "StaleAttempt");
                 // A settings mutation invalidated this provider set while it was
                 // in flight. Retry from the current enabled configuration instead
                 // of publishing stale channels or a stale provider failure.
+            }
+            catch (Exception exception)
+            {
+                trace?.TryRecord(
+                    "RefreshFailed",
+                    attemptContext,
+                    stage: "CatalogRead",
+                    outcome: "Failed",
+                    exceptionType: exception.GetType().Name,
+                    failureStage: "AggregateRead");
+                throw;
             }
         }
 
@@ -215,26 +284,67 @@ internal sealed class GenesisAggregatingYellowPageChannelCatalog :
         GenesisYellowPageDefinition definition,
         CancellationToken cancellationToken)
     {
+        var requestContext = GenesisYellowPageRefreshDiagnosticAmbient.Current;
+        var providerContext = requestContext?.ForProvider(definition.Id);
+        using var diagnosticScope = providerContext is null
+            ? null
+            : GenesisYellowPageRefreshDiagnosticAmbient.Push(providerContext);
+        var trace = providerContext?.Trace;
+        var stage = "ProviderCreate";
+        var startedAt = System.Diagnostics.Stopwatch.GetTimestamp();
+        trace?.TryRecord(
+            "ProviderReadStarted",
+            providerContext,
+            stage: "Provider",
+            outcome: "Started");
         try
         {
             var catalog = _catalogFactory.Create(definition);
             ArgumentNullException.ThrowIfNull(catalog);
+            stage = "ProviderRead";
             var snapshot = await catalog.ReadAsync(cancellationToken)
                 .ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
+            var sanitized = GenesisChannelCatalogSanitizer.Sanitize(snapshot);
+            trace?.TryRecord(
+                "ProviderReadSucceeded",
+                providerContext,
+                stage: "Provider",
+                outcome: "Succeeded",
+                parsedRowCount: sanitized.Channels.Count,
+                durationMilliseconds: ElapsedMilliseconds(startedAt));
             return new YellowPageRead(
                 definition,
-                GenesisChannelCatalogSanitizer.Sanitize(snapshot));
+                sanitized);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            trace?.TryRecord(
+                "ProviderReadFailed",
+                providerContext,
+                stage: "Provider",
+                outcome: "Cancelled",
+                exceptionType: nameof(OperationCanceledException),
+                failureStage: "Cancellation",
+                durationMilliseconds: ElapsedMilliseconds(startedAt));
             throw;
         }
-        catch
+        catch (Exception exception)
         {
+            trace?.TryRecord(
+                "ProviderReadFailed",
+                providerContext,
+                stage: "Provider",
+                outcome: "Failed",
+                exceptionType: exception.GetType().Name,
+                failureStage: stage,
+                durationMilliseconds: ElapsedMilliseconds(startedAt));
             return new YellowPageRead(definition, Snapshot: null);
         }
     }
+
+    private static long ElapsedMilliseconds(long startedAt) =>
+        (long)System.Diagnostics.Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds;
 
     private static System.Collections.ObjectModel.ReadOnlyCollection<GenesisAggregatedChannelCatalogEntry> Aggregate(
         IReadOnlyList<YellowPageRead> reads)

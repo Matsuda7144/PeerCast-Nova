@@ -10,7 +10,17 @@ internal static class PeerCastHttpIndexResponse
 
     public static string Decode(byte[] responseBytes)
     {
+        return Decode(responseBytes, out _, out _);
+    }
+
+    internal static string Decode(
+        byte[] responseBytes,
+        out int? statusCode,
+        out int? responseBodyByteCount)
+    {
         ArgumentNullException.ThrowIfNull(responseBytes);
+        statusCode = null;
+        responseBodyByteCount = null;
         if (responseBytes.Length == 0)
         {
             throw new InvalidDataException("The HTTP response is empty.");
@@ -24,7 +34,15 @@ internal static class PeerCastHttpIndexResponse
 
         var headerText = Encoding.ASCII.GetString(responseBytes, 0, headerEnd);
         var lines = headerText.Split("\r\n", StringSplitOptions.None);
-        if (lines.Length == 0 || !TryParseSuccessStatus(lines[0]))
+        if (lines.Length == 0 || !TryParseStatusCode(lines[0], out var parsedStatusCode))
+        {
+            throw new InvalidDataException("The HTTP response status is not successful.");
+        }
+
+        statusCode = parsedStatusCode;
+        var bodyOffset = checked(headerEnd + HeaderTerminator.Length);
+        responseBodyByteCount = Math.Max(0, responseBytes.Length - bodyOffset);
+        if (parsedStatusCode != 200)
         {
             throw new InvalidDataException("The HTTP response status is not successful.");
         }
@@ -34,7 +52,6 @@ internal static class PeerCastHttpIndexResponse
         EnsureSupportedTransferEncoding(lines);
         EnsureSupportedContentEncoding(lines);
 
-        var bodyOffset = checked(headerEnd + HeaderTerminator.Length);
         var availableBodyLength = responseBytes.Length - bodyOffset;
         var bodyLength = contentLength ?? availableBodyLength;
         if (bodyLength < 0 || bodyLength > availableBodyLength)
@@ -47,8 +64,9 @@ internal static class PeerCastHttpIndexResponse
             charset);
     }
 
-    private static bool TryParseSuccessStatus(string statusLine)
+    private static bool TryParseStatusCode(string statusLine, out int statusCode)
     {
+        statusCode = 0;
         var parts = statusLine.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         return parts.Length >= 2 &&
             parts[0].StartsWith("HTTP/", StringComparison.OrdinalIgnoreCase) &&
@@ -56,8 +74,7 @@ internal static class PeerCastHttpIndexResponse
                 parts[1],
                 NumberStyles.None,
                 CultureInfo.InvariantCulture,
-                out var statusCode) &&
-            statusCode == 200;
+                out statusCode);
     }
 
     private static int? ParseContentLength(string[] lines)
