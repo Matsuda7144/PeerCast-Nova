@@ -11,8 +11,7 @@ namespace PeerCast.Nova.App;
 /// <summary>
 /// GUI Next's public-channel lifetime, separate from its playback/recording
 /// loopback owners. Construction and preparation perform no network I/O.
-/// The current GUI has no activation command; a later explicit command must
-/// choose/authorize an endpoint before calling a prepared owner's RunAsync.
+/// The explicit GUI Relay command authorizes loopback/port 0 before RunAsync.
 /// </summary>
 internal sealed class GenesisGuiNextPublicChannelComposition : IAsyncDisposable
 {
@@ -53,7 +52,7 @@ internal sealed class GenesisGuiNextPublicChannelComposition : IAsyncDisposable
             options, admission: owner);
         owner.Configure(coordinator, coordinator.DownstreamFanout,
             token => coordinator.RunAsync(source.Host, source.Port, cancellationToken: token),
-            () => coordinator.LocalEndPoint, () => coordinator.DownstreamSnapshot, coordinator);
+            () => coordinator.LocalEndPoint, () => coordinator.DownstreamSnapshot, coordinator, tracker);
         return await RegisterAsync(owner, cancellationToken).ConfigureAwait(false);
     }
 
@@ -166,6 +165,7 @@ internal sealed class GenesisGuiNextPublicChannelComposition : IAsyncDisposable
         private Task? _runTask;
         private Task? _disposeTask;
         private bool _retired;
+        private readonly TaskCompletionSource _retirement = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         internal Owner(GenesisGuiNextPublicChannelComposition composition, ChannelId channelId,
             ChannelSessionId sessionId, RelayChannelKind kind, IPEndPoint endpoint)
@@ -185,15 +185,26 @@ internal sealed class GenesisGuiNextPublicChannelComposition : IAsyncDisposable
         public PcpDownstreamRelayServerSnapshot DownstreamSnapshot => _snapshot!();
         public bool ActivationStarted { get { lock (_gate) { return _runTask is not null; } } }
         public bool IsRetired { get { lock (_gate) { return _retired; } } }
+        public Task Retirement => _retirement.Task;
         public bool IsDisposed { get { lock (_gate) { return _disposeTask?.IsCompleted == true; } } }
         internal PcpRelayFanout Fanout { get; private set; } = null!;
         // Existing media attachment APIs are reused only in managed exclusion
         // tests; GUI Play/Recording continue to use their original owners.
         internal PcpRelayCoordinator? ViewingRuntime { get; private set; }
+        private ChannelStatusTracker? _upstreamTracker;
+        public ChannelStatusSnapshot? UpstreamStatus => _upstreamTracker?.Snapshot;
+        public int ReservationCount => _registration?.ReservationCount ?? 0;
+        // Disposal completion alone is insufficient: bounded runtime shutdown
+        // can finish while a real TCP/callback lease remains outstanding.
+        private bool DisposalSucceeded { get { lock (_gate) { return _disposeTask?.IsCompletedSuccessfully == true; } } }
+        public bool CleanupConfirmed => DisposalSucceeded && ReservationCount == 0 &&
+            (ViewingRuntime?.Completion is not { } completion ||
+                completion.IsCompletedSuccessfully && completion.Result.ShutdownCompleted);
 
         internal void Configure(IAsyncDisposable runtime, PcpRelayFanout fanout,
             Func<CancellationToken, Task> activate, Func<IPEndPoint> endpoint,
-            Func<PcpDownstreamRelayServerSnapshot> snapshot, PcpRelayCoordinator? viewingRuntime = null)
+            Func<PcpDownstreamRelayServerSnapshot> snapshot, PcpRelayCoordinator? viewingRuntime = null,
+            ChannelStatusTracker? upstreamTracker = null)
         {
             _runtime = runtime;
             Fanout = fanout;
@@ -201,6 +212,7 @@ internal sealed class GenesisGuiNextPublicChannelComposition : IAsyncDisposable
             _endpoint = endpoint;
             _snapshot = snapshot;
             ViewingRuntime = viewingRuntime;
+            _upstreamTracker = upstreamTracker;
         }
 
         internal void Bind(GenesisDownstreamRelayOwnerRegistry.Owner registration) => _registration = registration;
@@ -221,8 +233,7 @@ internal sealed class GenesisGuiNextPublicChannelComposition : IAsyncDisposable
         }
 
         /// <summary>
-        /// Explicit activation only. No shipped GUI command calls this yet.
-        /// Tests authorize loopback endpoints and synthetic local upstream peers.
+        /// Explicit activation only. The GUI command authorizes loopback/port 0.
         /// </summary>
         public Task RunAsync(CancellationToken cancellationToken = default)
         {
@@ -249,6 +260,7 @@ internal sealed class GenesisGuiNextPublicChannelComposition : IAsyncDisposable
             {
                 _retired = true;
                 _registration?.Dispose();
+                _retirement.TrySetResult();
             }
         }
 

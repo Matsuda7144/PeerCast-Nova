@@ -26,6 +26,8 @@ public sealed class GenesisGuiNextPublicChannelStartupTests
             {
                 var channels = Assert.IsType<GenesisGuiNextPublicChannelComposition>(viewModel.PublicChannels);
                 Assert.Same(fixture.Channels, channels);
+                Assert.Same(fixture.State.RelayActivation, viewModel.RelayActivation);
+                Assert.True(viewModel.RelaySnapshot.CleanupConfirmed);
                 Assert.Same(fixture.State.DownstreamRelays, channels.Registry);
                 Assert.Equal(0, channels.OwnerCount);
                 prepared = channels.PrepareBroadcastAsync(new(Guid.NewGuid()), new(Guid.NewGuid()),
@@ -61,6 +63,7 @@ public sealed class GenesisGuiNextPublicChannelStartupTests
         Assert.True(host.Disposed);
         Assert.NotNull(model);
         Assert.Null(model.PublicChannels); // No stale command boundary after close/rejection.
+        Assert.Null(model.RelayActivation);
         if (hasState)
         {
             Assert.True(fixture.Channels.IsDisposed);
@@ -72,12 +75,38 @@ public sealed class GenesisGuiNextPublicChannelStartupTests
         Assert.Equal(1, fixture.Store.LoadCount);
     }
 
+    [Fact]
+    public async Task WindowLifetimeCloseStopsRealRelayAndRemovesCommandBoundary()
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        await using var fixture = await CreateAsync();
+        await using var upstream = new RelayActivationTestUpstream(timeout.Token);
+        var model = new GenesisMainViewModel(new FakePlaybackSessionController());
+        var surface = new SystemGenesisInteractiveMainWindowSurfaceTarget(new Surface(), new Bridge(_ => { }, false),
+            EmptyGenesisChannelCatalog.Instance, TimeSpan.FromDays(1),
+            _ => NoopLifetime.Instance, _ => fixture.State,
+            static (_, _) => GenesisChannelNotificationRuntime.Empty, _ => null,
+            GenesisUnavailableNetworkSettingsController.Instance);
+        var lifetime = await surface.OpenAsync(42, model, timeout.Token);
+        Assert.NotNull(lifetime);
+        var start = GenesisGuiNextRelayCommandDispatch.StartAsync(model, upstream.Row);
+        await upstream.SendAsync(timeout.Token);
+        Assert.True(await start.WaitAsync(timeout.Token));
+        var owner = model.RelayActivation!.CurrentOwner!;
+        await using var peer = await Peer.ConnectAsync(owner, timeout.Token);
+        await lifetime.DisposeAsync();
+        Assert.Null(model.RelayActivation);
+        Assert.False(await GenesisGuiNextRelayCommandDispatch.StartAsync(model, upstream.Row));
+        Assert.True(owner.CleanupConfirmed);
+        Assert.Equal(0, fixture.State.DownstreamRelays.ActiveRelayCount);
+    }
+
     private sealed class Surface : IGenesisMainWindowSurfaceTarget
     {
         public ValueTask<IAsyncDisposable?> OpenAsync(long windowToken, GenesisMainViewModel viewModel, CancellationToken cancellationToken) =>
             ValueTask.FromResult<IAsyncDisposable?>(NoopLifetime.Instance);
     }
-    private sealed class Bridge(Action<GenesisMainViewModel> opened, bool reject, bool fail) : IGenesisMainWindowInteractionBridgeFactory
+    private sealed class Bridge(Action<GenesisMainViewModel> opened, bool reject, bool fail = false) : IGenesisMainWindowInteractionBridgeFactory
     {
         public IAsyncDisposable? Create(long windowToken, GenesisMainViewModel viewModel)
         {

@@ -293,6 +293,7 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
         }
 
         viewModel.PublicChannels = guiNextState?.PublicChannels;
+        viewModel.RelayActivation = guiNextState?.RelayActivation;
         if (guiNextState is not null)
         {
             SystemGenesisGuiNextApplicationStateLoadFeedback.Report(
@@ -360,6 +361,7 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
         catch
         {
             viewModel.PublicChannels = null;
+            viewModel.RelayActivation = null;
             await DisposeRejectedOpenAsync(
                     catalogSession,
                     notificationRuntime.Lifetime,
@@ -373,6 +375,7 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
         if (bridgeLifetime is null)
         {
             viewModel.PublicChannels = null;
+            viewModel.RelayActivation = null;
             await DisposeRejectedOpenAsync(
                     catalogSession,
                     notificationRuntime.Lifetime,
@@ -659,7 +662,11 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
             }
 
             if (ReferenceEquals(_viewModel.PublicChannels, _guiNextState?.PublicChannels))
+            {
+                if (_guiNextState is not null) await _guiNextState.RelayActivation.DisposeAsync().ConfigureAwait(false);
                 _viewModel.PublicChannels = null;
+                _viewModel.RelayActivation = null;
+            }
             try
             {
                 await DisposeCompositeAsync(

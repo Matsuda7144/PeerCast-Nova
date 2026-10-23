@@ -245,6 +245,7 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
         NetworkPolicies = GenesisGuiNextNetworkPolicies.Create(connection);
         DownstreamRelays = new GenesisDownstreamRelayOwnerRegistry(NetworkPolicies.Relays);
         PublicChannels = new GenesisGuiNextPublicChannelComposition(DownstreamRelays);
+        RelayActivation = new GenesisGuiNextRelayActivation(PublicChannels);
         ArgumentNullException.ThrowIfNull(recordingRuleRepository);
         _recordingRuleRepository = recordingRuleRepository;
         Tabs = new(favorites, recordingRuleRepository);
@@ -274,6 +275,7 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
     public GenesisDownstreamRelayOwnerRegistry DownstreamRelays { get; }
 
     public GenesisGuiNextPublicChannelComposition PublicChannels { get; }
+    public GenesisGuiNextRelayActivation RelayActivation { get; }
 
     public GenesisGuiNextTabsViewModel Tabs { get; }
 
@@ -510,7 +512,13 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
         }
 
         Exception? publicChannelFailure = null;
-        try { await PublicChannels.DisposeAsync().ConfigureAwait(false); }
+        try
+        {
+            await RelayActivation.DisposeAsync().ConfigureAwait(false);
+            await PublicChannels.DisposeAsync().ConfigureAwait(false);
+            if (!RelayActivation.Snapshot.CleanupConfirmed)
+                throw new InvalidOperationException("Local relay cleanup was not confirmed.");
+        }
         catch (Exception exception) { publicChannelFailure = exception; }
         finally
         {

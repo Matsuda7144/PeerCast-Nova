@@ -1,0 +1,35 @@
+namespace PeerCast.Nova.App;
+
+public sealed partial class GenesisMainViewModel
+{
+    private GenesisGuiNextRelayActivation? _relayActivation;
+    internal GenesisGuiNextRelayActivation? RelayActivation
+    {
+        get => _relayActivation;
+        set
+        {
+            if (ReferenceEquals(_relayActivation, value)) return;
+            if (_relayActivation is not null) _relayActivation.Changed -= OnRelayChanged;
+            _relayActivation = value;
+            if (value is not null) value.Changed += OnRelayChanged;
+            OnPropertyChanged(nameof(RelaySnapshot));
+        }
+    }
+    internal GenesisRelayActivationSnapshot RelaySnapshot => _relayActivation?.Snapshot ?? new();
+    private void OnRelayChanged(object? sender, EventArgs args) => OnPropertyChanged(nameof(RelaySnapshot));
+}
+
+/// <summary>Shared native-command and managed integration boundary. Never calls Play/Stop.</summary>
+internal static class GenesisGuiNextRelayCommandDispatch
+{
+    public static bool CanStart(GenesisMainViewModel model, GenesisGuiNextNativeTabRow? row) =>
+        model.RelayActivation?.CanStart == true && row?.IsInteractive == true &&
+        GenesisGuiNextRelayActivation.TryResolve(row.InteractiveChannel, out _);
+
+    public static Task<bool> StartAsync(GenesisMainViewModel model, GenesisGuiNextNativeTabRow? row,
+        CancellationToken cancellationToken = default) => model.RelayActivation is { } activation
+            ? activation.StartAsync(row?.IsInteractive == true ? row.InteractiveChannel : null, cancellationToken)
+            : Task.FromResult(false);
+
+    public static Task StopAsync(GenesisMainViewModel model) => model.RelayActivation?.StopAsync() ?? Task.CompletedTask;
+}

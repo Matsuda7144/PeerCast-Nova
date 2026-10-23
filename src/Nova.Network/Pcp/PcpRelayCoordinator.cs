@@ -194,6 +194,9 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
     /// </summary>
     public Task FirstPacketAccepted => _firstPacketAcceptedSource.Task;
 
+    /// <summary>Existing upstream handshake observation, separate from listener bind and packet ingress.</summary>
+    public Task<PcpChannelSessionNegotiationResult> UpstreamNegotiation => _upstreamSession.Negotiation;
+
     /// <summary>
     /// Attaches a playback packet consumer directly to this owner's bounded
     /// fan-out. The adapter restores this coordinator's channel/session identity

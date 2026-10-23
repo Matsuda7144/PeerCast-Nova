@@ -11,7 +11,7 @@ internal sealed class GenesisGuiNextAppShellPlacement
     internal const int StatusHeight = 28;
     internal const int StatusGap = 4;
     internal const int MinimumListHeight = 80;
-    internal const int DetailsHeight = 148;
+    internal const int DetailsHeight = 224;
     internal const int DetailsGap = 8;
     private readonly nint _owner;
     private readonly nint _listView;
@@ -492,6 +492,12 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
     internal const int RecordingHistoryModeControlId = 1128;
     internal const int RecordingHistoryRefreshControlId = 1129;
     internal const int RecordingHistoryDetailsControlId = 1130;
+    internal const int RelayStartControlId = 1131;
+    internal const int RelayStopControlId = 1132;
+    internal const int RelayStatusControlId = 1133;
+    internal const int RelayControlsTop = 148;
+    internal const int RelayStatusTop = 180;
+    internal static int RelayStatusWidth(int paneWidth) => Math.Max(1, paneWidth - 24);
     internal const uint RecordingHistoryDetailsStyle = 0x0800 | 0x0004 | 0x0040 | 0x0080 | 0x00200000 | 0x00100000;
     internal static (int Top, int Height) HistoryDetailsLayout => (40, 70);
     private const int DetailsCopyButtonWidth = 112;
@@ -1483,6 +1489,9 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
         private readonly nint _playButton;
         private readonly nint _stopButton;
         private readonly nint _detailsTitle;
+        private readonly nint _relayStart;
+        private readonly nint _relayStop;
+        private readonly nint _relayStatus;
         private readonly nint _activeRecordingsModeButton;
         private readonly nint _recordingRulesModeButton;
         private readonly nint _recordingLibraryModeButton;
@@ -1604,6 +1613,16 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
             _viewModel = viewModel;
             _interaction = interaction;
             _backgroundBrush = backgroundBrush;
+            _relayStart = CreateRecordingModeButton("Relay開始", detailsPane, RelayStartControlId, 12, GetModuleHandleW(null));
+            _relayStop = CreateRecordingModeButton("Relay停止", detailsPane, RelayStopControlId, 102, GetModuleHandleW(null));
+            _ = MoveWindow(_relayStart, 12, RelayControlsTop, 84, 26, true);
+            _ = MoveWindow(_relayStop, 102, RelayControlsTop, 84, 26, true);
+            _relayStatus = CreateWindowExW(0, "STATIC", string.Empty,
+                WindowStyleChild | WindowStyleVisible | StaticStyleOwnerDraw, 12, RelayStatusTop,
+                Math.Max(1, detailsTextWidth), 40, detailsPane, (nint)RelayStatusControlId, GetModuleHandleW(null), 0);
+            ApplyDefaultFont(_relayStart);
+            ApplyDefaultFont(_relayStop);
+            ApplyDefaultFont(_relayStatus);
         }
 
         public void Attach()
@@ -1612,7 +1631,7 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
             _viewModel.PropertyChanged += OnViewModelPropertyChanged;
         }
 
-        public bool RuleButtonsAvailable => _recordingHistoryDetails != 0 && _recordingHistoryModeButton != 0 && _recordingHistoryRefreshButton != 0 && _createRuleButton != 0 && _editRuleButton != 0 &&
+        public bool RuleButtonsAvailable => _relayStart != 0 && _relayStop != 0 && _relayStatus != 0 && _recordingHistoryDetails != 0 && _recordingHistoryModeButton != 0 && _recordingHistoryRefreshButton != 0 && _createRuleButton != 0 && _editRuleButton != 0 &&
             _toggleRuleButton != 0 && _deleteRuleButton != 0 && _moveRuleUpButton != 0 && _moveRuleDownButton != 0;
 
         public void Detach()
@@ -1648,6 +1667,18 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 return;
             }
 
+            if (lParam == _relayStop && commandId == RelayStopControlId)
+            {
+                _ = GenesisGuiNextRelayCommandDispatch.StopAsync(_viewModel);
+                return;
+            }
+            if (lParam == _relayStart && commandId == RelayStartControlId)
+            {
+                SynchronizeNativeSelection();
+                var index = SendMessageW(_listView, ListViewMessageGetNextItem, nuint.MaxValue, (nint)ListViewNextItemSelected).ToInt32();
+                _ = GenesisGuiNextRelayCommandDispatch.StartAsync(_viewModel, GenesisChannelListRenderedChannels.FindRow(_listView, index));
+                return;
+            }
             if (_tabs.IsRecordingHistoryPage && !IsHistoryNavigationCommand(commandId)) return;
 
             if ((IsRulesPageActive() || _tabs.IsRecordingLibraryPage || _tabs.IsRecordingHistoryPage) &&
@@ -1923,6 +1954,19 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 return DrawManualRecordingButton(drawItem);
             }
 
+            if (IsOwnerDrawButton(drawItem.ControlType) && drawItem.ControlId is RelayStartControlId or RelayStopControlId)
+                return DrawRecordingModeButton(drawItem, drawItem.ControlId == RelayStartControlId ? "Relay開始" : "Relay停止", false);
+            if (IsOwnerDrawStatic(drawItem.ControlType) && drawItem.ControlId == RelayStatusControlId)
+            {
+                FillRectangle(drawItem.DeviceContext, drawItem.ItemRectangle, BackgroundColor);
+                _ = SetBkMode(drawItem.DeviceContext, TransparentBackgroundMode);
+                var snapshot = _viewModel.RelaySnapshot;
+                _ = SetTextColor(drawItem.DeviceContext, snapshot.Error == GenesisRelayActivationError.None ? TextColor : WarningTextColor);
+                var rectangle = drawItem.ItemRectangle;
+                var text = _viewModel.RelayActivation is null ? "ローカルRelay: 利用できません" : snapshot.Text;
+                _ = DrawTextW(drawItem.DeviceContext, text, -1, ref rectangle, DrawTextNoPrefix | 0x0010);
+                return true;
+            }
             if (IsRecordingStatusDraw(drawItem.ControlType, drawItem.ControlId))
             {
                 return DrawManualRecordingStatus(drawItem);
@@ -2337,6 +2381,11 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
             {
                 return;
             }
+            _ = EnableWindow(_relayStart, GenesisGuiNextRelayCommandDispatch.CanStart(_viewModel, row));
+            _ = EnableWindow(_relayStop, _viewModel.RelayActivation?.CanStop == true);
+            if (GetClientRect(_detailsPane, out var relayPane))
+                _ = MoveWindow(_relayStatus, 12, RelayStatusTop, RelayStatusWidth(relayPane.Right - relayPane.Left), 40, true);
+            _ = InvalidateRect(_relayStatus, 0, true);
 
             var isRecordingPage = _tabs.SelectedTab == GenesisGuiNextTab.Recording;
             var isRulesPage = IsRulesPageActive();
@@ -3022,8 +3071,8 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
         {
             _ = sender;
             if (Volatile.Read(ref _detached) == 0 &&
-                eventArgs.PropertyName ==
-                    nameof(GenesisMainViewModel.RecordingPresentationRevision))
+                eventArgs.PropertyName is nameof(GenesisMainViewModel.RecordingPresentationRevision) or
+                    nameof(GenesisMainViewModel.RelaySnapshot))
             {
                 _ = PostMessageW(
                     _detailsPane,

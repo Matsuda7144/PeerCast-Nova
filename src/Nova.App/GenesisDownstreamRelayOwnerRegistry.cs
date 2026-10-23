@@ -85,8 +85,9 @@ internal sealed class GenesisDownstreamRelayOwnerRegistry : IDisposable
             if (_disposed || owner.Retired) return false;
             var result = owner.Scope.TryReserve(connectionId, cancellationToken);
             if (result.Reservation is null) return false;
-            var lease = new Reservation(this, result.Reservation);
+            var lease = new Reservation(this, owner, result.Reservation);
             _connections.Add(connectionId, lease);
+            owner.ActiveReservations++;
             reservation = lease;
             return true;
         }
@@ -100,6 +101,7 @@ internal sealed class GenesisDownstreamRelayOwnerRegistry : IDisposable
             if (_connections.TryGetValue(id, out var current) && ReferenceEquals(current, reservation))
             {
                 _connections.Remove(id);
+                reservation.Owner.ActiveReservations--;
                 reservation.Lease.Dispose();
             }
         }
@@ -145,6 +147,8 @@ internal sealed class GenesisDownstreamRelayOwnerRegistry : IDisposable
         }
         internal RelayAdmissionPolicy.Channel Scope { get; }
         internal bool Retired { get; set; }
+        internal int ActiveReservations { get; set; }
+        public int ReservationCount { get { lock (_registry._gate) { return ActiveReservations; } } }
         public ChannelId ChannelId => Scope.ChannelId;
         public ChannelSessionId SessionId => Scope.SessionId;
         public RelayChannelKind Kind => Scope.Kind;
@@ -159,11 +163,12 @@ internal sealed class GenesisDownstreamRelayOwnerRegistry : IDisposable
         }
     }
 
-    private sealed class Reservation(GenesisDownstreamRelayOwnerRegistry registry,
+    private sealed class Reservation(GenesisDownstreamRelayOwnerRegistry registry, Owner owner,
         RelayAdmissionPolicy.Reservation lease) : IDisposable
     {
         private int _released;
         internal RelayAdmissionPolicy.Reservation Lease { get; } = lease;
+        internal Owner Owner { get; } = owner;
         public void Dispose()
         {
             if (Interlocked.Exchange(ref _released, 1) != 0) return;
