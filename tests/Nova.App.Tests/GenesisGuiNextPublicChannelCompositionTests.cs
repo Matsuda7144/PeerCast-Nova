@@ -271,11 +271,23 @@ public sealed class GenesisGuiNextPublicChannelCompositionTests
         channel.Owner.Retire();
         channel.Owner.Retire();
         Assert.Equal(1, fixture.State.DownstreamRelays.ActiveRelayCount);
+        var completedBeforeDenied = channel.Owner.DownstreamSnapshot.CompletedConnectionCount;
         await using var denied = await Peer.ConnectAsync(channel.Owner, timeout.Token);
         Full(denied);
+        await UntilAsync(() => channel.Owner.DownstreamSnapshot.CompletedConnectionCount > completedBeforeDenied,
+            timeout.Token);
+        Assert.Equal(completedBeforeDenied + 1, channel.Owner.DownstreamSnapshot.CompletedConnectionCount);
         Assert.Equal(1, channel.Owner.DownstreamSnapshot.ActiveConnectionCount);
+        Assert.Equal(1, fixture.State.DownstreamRelays.ActiveRelayCount);
+        Assert.Equal(1, fixture.State.NetworkPolicies.Relays.ReservedCount);
         await peer.QuitAsync(timeout.Token);
-        await UntilAsync(() => fixture.State.DownstreamRelays.ActiveRelayCount == 0, timeout.Token);
+        await UntilAsync(() => channel.Owner.DownstreamSnapshot.ActiveConnectionCount == 0 &&
+            fixture.State.DownstreamRelays.ActiveRelayCount == 0 &&
+            fixture.State.NetworkPolicies.Relays.ReservedCount == 0, timeout.Token);
+        Assert.Equal(completedBeforeDenied + 2, channel.Owner.DownstreamSnapshot.CompletedConnectionCount);
+        Assert.Equal(0, channel.Owner.DownstreamSnapshot.ActiveConnectionCount);
+        Assert.Equal(0, fixture.State.DownstreamRelays.ActiveRelayCount);
+        Assert.Equal(0, fixture.State.NetworkPolicies.Relays.ReservedCount);
     }
 
     [Fact]

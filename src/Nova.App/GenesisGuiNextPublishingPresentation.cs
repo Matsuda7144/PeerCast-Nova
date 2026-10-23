@@ -16,10 +16,14 @@ internal static class GenesisGuiNextPublishingPresentation
         [snapshot.StateText, snapshot.ChannelId?.ToString("N").ToUpperInvariant() ?? "未接続",
             snapshot.SessionId?.ToString("N").ToUpperInvariant() ?? "未接続", ErrorText(snapshot)];
 
-    internal static string ErrorText(NovaObsPublishingReadOnlySnapshot snapshot) =>
-        snapshot.RejectionStage is not null && snapshot.RejectionReason is not null
+    internal static string ErrorText(NovaObsPublishingReadOnlySnapshot snapshot)
+    {
+        var source = snapshot.RejectionStage is not null && snapshot.RejectionReason is not null
             ? $"{snapshot.RejectionStage} / {snapshot.RejectionReason}"
             : snapshot.EndReason?.ToString() ?? "—";
+        return snapshot.LifecycleFailure is { } failure && failure != NovaObsPublishingLifecycleFailure.None
+            ? $"{failure} / {source}" : source;
+    }
 }
 
 internal sealed partial class GenesisGuiNextTabsViewModel

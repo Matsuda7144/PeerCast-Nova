@@ -231,7 +231,7 @@ public sealed class GuiNextPublishingCompositionTests
         }
     }
 
-    private sealed class Owner : INovaObsPublishingRuntime
+    private sealed class Owner : INovaObsPublishingLifecycleRuntime
     {
         public ObsPublishStatusSnapshot Current { get; set; } = new(
             new ChannelId(Guid.NewGuid()), new ChannelSessionId(Guid.NewGuid()), 1,
@@ -240,6 +240,8 @@ public sealed class GuiNextPublishingCompositionTests
         public int Starts { get; private set; }
         public int Reads { get; private set; }
         public int Disposals { get; private set; }
+        private readonly TaskCompletionSource<ObsPublishChannelResult> _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public Task<ObsPublishChannelResult> Completion => _completion.Task;
         public bool FailDispose { get; set; }
         public Action? OnDispose { get; set; }
         public ObsPublishStatusSnapshot Snapshot { get { Reads++; return Current; } }
@@ -250,6 +252,8 @@ public sealed class GuiNextPublishingCompositionTests
             OnDispose?.Invoke();
             if (FailDispose) throw new InvalidOperationException("Cleanup failed");
             Current = Current with { Revision = 2, State = ChannelSessionState.Stopped, EndReason = ObsPublishChannelEndReason.HostCancelled };
+            _completion.TrySetResult(new(ObsPublishChannelEndReason.HostCancelled, 0, 0, 0, 0,
+                PeerCast.Nova.Network.Pcp.PcpRelayDrainOutcome.NotRequired, false, true, null, null));
             return ValueTask.CompletedTask;
         }
     }

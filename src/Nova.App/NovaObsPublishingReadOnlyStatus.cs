@@ -27,7 +27,12 @@ internal sealed record NovaObsPublishingReadOnlySnapshot(
     NovaObsPublishingTone Tone,
     ObsPublishChannelEndReason? EndReason,
     ObsRtmpRejectionStage? RejectionStage,
-    ObsRtmpRejectionReason? RejectionReason);
+    ObsRtmpRejectionReason? RejectionReason)
+{
+    public NovaObsPublishingLifecycleState? LifecycleState { get; init; }
+    public NovaObsPublishingCompletionKind? CompletionKind { get; init; }
+    public NovaObsPublishingLifecycleFailure? LifecycleFailure { get; init; }
+}
 
 internal interface INovaObsPublishingReadOnlyStatus
 {

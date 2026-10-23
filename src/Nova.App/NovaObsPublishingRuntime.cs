@@ -12,6 +12,11 @@ internal interface INovaObsPublishingRuntime : INovaObsPublishingStatusSource, I
     void Start(CancellationToken cancellationToken);
 }
 
+internal interface INovaObsPublishingLifecycleRuntime : INovaObsPublishingRuntime
+{
+    Task<ObsPublishChannelResult> Completion { get; }
+}
+
 internal interface INovaObsPublishingRuntimeFactory
 {
     INovaObsPublishingRuntime Create();
@@ -27,7 +32,7 @@ internal sealed class SystemNovaObsPublishingRuntimeFactory : INovaObsPublishing
     public INovaObsPublishingRuntime Create() => new NovaObsPublishingRuntime(new ObsPublishChannelOptions());
 }
 
-internal sealed class NovaObsPublishingRuntime : INovaObsPublishingRuntime
+internal sealed class NovaObsPublishingRuntime : INovaObsPublishingLifecycleRuntime
 {
     private readonly ObsPublishChannelHost _host;
 
@@ -36,6 +41,8 @@ internal sealed class NovaObsPublishingRuntime : INovaObsPublishingRuntime
     public ObsPublishStatusSnapshot Snapshot => _host.PublishingStatus;
 
     public void Start(CancellationToken cancellationToken) => _host.Start(cancellationToken);
+
+    public Task<ObsPublishChannelResult> Completion => _host.Completion;
 
     public ValueTask DisposeAsync() => _host.DisposeAsync();
 }
