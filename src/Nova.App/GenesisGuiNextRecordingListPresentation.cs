@@ -9,6 +9,7 @@ internal static class GenesisGuiNextRecordingListPresentation
 
     public static IReadOnlyList<GenesisNativeListColumnPresentation> Columns(
         GenesisGuiNextTab tab, GenesisGuiNextRecordingPageMode mode) =>
+        tab == GenesisGuiNextTab.Publishing ? GenesisGuiNextPublishingPresentation.Columns :
         tab == GenesisGuiNextTab.Logs ? GenesisGuiNextLogProjection.Columns
         : tab != GenesisGuiNextTab.Recording ? ChannelColumns : mode switch
         {
@@ -19,6 +20,7 @@ internal static class GenesisGuiNextRecordingListPresentation
         };
 
     public static string[] Values(GenesisGuiNextNativeTabRow row) =>
+        row.Publishing is { } publishing ? GenesisGuiNextPublishingPresentation.Values(publishing) :
         row.Log is { } log ? GenesisGuiNextLogProjection.Values(log)
         : row.RecordingHistory is { } history ? GenesisRecordingHistoryListPresentation.CreateRowValues(history)
         : row.RecordingLibrary is { } library ? GenesisRecordingLibraryListPresentation.CreateRowValues(library)

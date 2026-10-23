@@ -44,6 +44,7 @@ public sealed class NovaWindowsStartupComposition
     private readonly NovaWindowsStartupOptions _options;
     private readonly INovaWindowsStartupHostFactory _hostFactory;
     private readonly Func<INovaApplicationNetworkOwner> _networkOwnerFactory;
+    private readonly INovaObsPublishingRuntimeFactory _publishingRuntimeFactory;
     private readonly Func<
         GenesisGuiNextPlaybackPathSource,
         GenesisRecordingOutputDirectorySettings,
@@ -61,7 +62,8 @@ public sealed class NovaWindowsStartupComposition
         NovaWindowsStartupOptions options,
         INovaWindowsStartupHostFactory hostFactory,
         Func<IPlaybackSessionController>? playbackControllerFactory = null,
-        Func<INovaApplicationNetworkOwner>? networkOwnerFactory = null)
+        Func<INovaApplicationNetworkOwner>? networkOwnerFactory = null,
+        INovaObsPublishingRuntimeFactory? publishingRuntimeFactory = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(hostFactory);
@@ -78,6 +80,7 @@ public sealed class NovaWindowsStartupComposition
 
         _options = options with { Host = options.Host with { } };
         _hostFactory = hostFactory;
+        _publishingRuntimeFactory = publishingRuntimeFactory ?? SystemNovaObsPublishingRuntimeFactory.Instance;
         _networkOwnerFactory = networkOwnerFactory ??
             (() => _options.ValidationProfile is { } profile ? profile.CreateNetworkOwner() :
                 new NovaApplicationNetworkOwner(NovaSettingsStore.CreateDefault()));
@@ -108,16 +111,21 @@ public sealed class NovaWindowsStartupComposition
 
     public ValueTask<NovaWindowsStartupResult> RunGenesisAsync(
         CancellationToken cancellationToken = default) =>
-        RunOwnedGenesisAsync(
-            (playbackPathSource, recordingSettings) =>
+        RunOwnedGenesisCoreAsync(
+            (playbackPathSource, recordingSettings, publishingStatus) =>
                 new SystemGenesisInteractiveMainWindowSurfaceTarget(
                     new SystemGenesisMainWindowSurfaceTarget(),
                     SystemGenesisMainWindowInteractionBridgeFactory.Instance,
                     _options.ChannelCatalog,
                     _options.ChannelAutoRefreshInterval,
                     GenesisMainWindowResizeGuard.Create,
-                    token => _options.ValidationProfile is { } profile ? profile.GetGuiState(token) :
-                        LoadSystemGuiNextState(token, playbackPathSource),
+                    token =>
+                    {
+                        var state = _options.ValidationProfile is { } profile ? profile.GetGuiState(token) :
+                            LoadSystemGuiNextState(token, playbackPathSource);
+                        state.Tabs.BindPublishingStatus(publishingStatus);
+                        return state;
+                    },
                     CreateSystemNotificationRuntime,
                     CaptureSystemNotificationSettingsPlacement,
                     _options.NetworkSettingsController, recordingSettings),
@@ -125,15 +133,27 @@ public sealed class NovaWindowsStartupComposition
 
     // The production root and managed composition tests use the same lifetime.
     // Surfaces receive a borrower; only this root initializes/disposes the owner.
-    internal async ValueTask<NovaWindowsStartupResult> RunOwnedGenesisAsync(
+    internal ValueTask<NovaWindowsStartupResult> RunOwnedGenesisAsync(
         Func<GenesisGuiNextPlaybackPathSource, GenesisRecordingOutputDirectorySettings,
             IGenesisMainWindowSurfaceTarget> createSurface,
         GenesisRecordingOutputDirectorySettings? recordingSettings = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(createSurface);
+        return RunOwnedGenesisCoreAsync((paths, settings, _) => createSurface(paths, settings),
+            recordingSettings, cancellationToken);
+    }
+
+    private async ValueTask<NovaWindowsStartupResult> RunOwnedGenesisCoreAsync(
+        Func<GenesisGuiNextPlaybackPathSource, GenesisRecordingOutputDirectorySettings,
+            INovaObsPublishingReadOnlyStatus, IGenesisMainWindowSurfaceTarget> createSurface,
+        GenesisRecordingOutputDirectorySettings? recordingSettings = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(createSurface);
         INovaApplicationNetworkOwner? networkOwner = null;
         IPlaybackSessionController? playbackController = null;
+        NovaGuiNextPublishingComposition? publishing = null;
         var result = NovaWindowsStartupResult.Faulted;
         try
         {
@@ -146,9 +166,10 @@ public sealed class NovaWindowsStartupComposition
             if (_options.ValidationProfile is not null &&
                 !(await networkOwner.InitializeAsync().WaitAsync(cancellationToken).ConfigureAwait(false)).Initialized)
                 return NovaWindowsStartupResult.Faulted;
+            publishing = NovaGuiNextPublishingComposition.Create(_publishingRuntimeFactory);
             playbackController = _genesisPlaybackControllerFactory(paths, recordingSettings);
             result = await RunGenesisAsync(
-                createSurface(paths, recordingSettings),
+                createSurface(paths, recordingSettings, publishing.Status),
                 playbackWindowSurfaceTarget: null,
                 playbackController,
                 networkOwner,
@@ -182,6 +203,12 @@ public sealed class NovaWindowsStartupComposition
                 // Join the owner's existing task; unconfirmed cleanup stays
                 // a failure with its existing safe resource retention.
                 try { await networkShutdown.ConfigureAwait(false); }
+                catch { result = NovaWindowsStartupResult.Faulted; }
+            }
+            // GUI and host teardown has completed before releasing this owner.
+            if (publishing is not null)
+            {
+                try { await publishing.DisposeAsync().ConfigureAwait(false); }
                 catch { result = NovaWindowsStartupResult.Faulted; }
             }
         }

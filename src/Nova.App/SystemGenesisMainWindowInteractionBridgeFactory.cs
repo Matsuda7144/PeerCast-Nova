@@ -398,7 +398,7 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
             var notificationCode = (int)((wParam >> 16) & 0xffff);
             if (lParam == _sourceEdit && notificationCode == EditNotificationChange)
             {
-                if (_interaction.IsRecordingHistoryView) return;
+                if (_interaction.IsRecordingHistoryView || _interaction.IsPublishingView) return;
                 var sourceText = ReadWindowText(_sourceEdit);
                 _sourceTextProjection.ObserveNativeEdit(sourceText);
                 _viewModel.SourceText = sourceText;
@@ -483,6 +483,7 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
             }
 
             var selectedTab = _guiNextTabs?.SelectedTab ?? GenesisGuiNextTab.Channels;
+            if (selectedTab == GenesisGuiNextTab.Publishing) _guiNextTabs?.RefreshPublishingStatus();
             if (_guiNextTabs is not null && _channelCatalogSession is not null)
                 _guiNextTabs.UpdateLogDiagnostics(_channelCatalogSession.Diagnostics, _viewModel.IsChannelCatalogRefreshing);
             var recordingPageMode = _guiNextTabs?.RecordingPageMode ??
@@ -607,8 +608,8 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
                 _ = SetWindowTextW(_sourceEdit, sourceText);
             }
 
-            _ = EnableWindow(_playButton, !_interaction.IsRecordingHistoryView && _viewModel.CanPlay);
-            _ = EnableWindow(_stopButton, !_interaction.IsRecordingHistoryView && _viewModel.CanStop);
+            _ = EnableWindow(_playButton, !_interaction.IsRecordingHistoryView && !_interaction.IsPublishingView && _viewModel.CanPlay);
+            _ = EnableWindow(_stopButton, !_interaction.IsRecordingHistoryView && !_interaction.IsPublishingView && _viewModel.CanStop);
             var statusText = CreateStatusText(
                 _viewModel,
                 _channelCatalogSession,
@@ -630,6 +631,7 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
                 GenesisGuiNextTab.New => _guiNextTabs.VisibleNewChannels,
                 GenesisGuiNextTab.Favorites => _guiNextTabs.VisibleFavoriteChannels,
                 GenesisGuiNextTab.Playing => _guiNextTabs.Playing,
+                GenesisGuiNextTab.Publishing => _guiNextTabs.PublishingRows,
                 GenesisGuiNextTab.Logs => _guiNextTabs.LogRows,
                 GenesisGuiNextTab.Recording => recordingPageMode switch
                 {
@@ -731,6 +733,7 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
 
             if (eventArgs.PropertyName is
                     nameof(GenesisGuiNextTabsViewModel.SelectedTab) or
+                    nameof(GenesisGuiNextTabsViewModel.PublishingRows) or
                     nameof(GenesisGuiNextTabsViewModel.LogRows) or
                     nameof(GenesisGuiNextTabsViewModel.SearchText) or
                     nameof(GenesisGuiNextTabsViewModel.VisibleChannels) or

@@ -345,7 +345,7 @@ internal static class GenesisGuiNextNavigationPresentation
 
     public static bool IsImplemented(int itemIndex) =>
         (itemIndex >= (int)GenesisGuiNextTab.Channels &&
-            itemIndex <= (int)GenesisGuiNextTab.Recording) || itemIndex == (int)GenesisGuiNextTab.Logs ||
+            itemIndex <= (int)GenesisGuiNextTab.Recording) || itemIndex is (int)GenesisGuiNextTab.Logs or (int)GenesisGuiNextTab.Publishing ||
         TryResolvePrimaryCommand(itemIndex, out _);
 
     public static bool TryResolveExistingView(
@@ -353,7 +353,7 @@ internal static class GenesisGuiNextNavigationPresentation
         out GenesisGuiNextTab selectedTab)
     {
         if ((itemIndex >= (int)GenesisGuiNextTab.Channels &&
-            itemIndex <= (int)GenesisGuiNextTab.Recording) || itemIndex == (int)GenesisGuiNextTab.Logs)
+            itemIndex <= (int)GenesisGuiNextTab.Recording) || itemIndex is (int)GenesisGuiNextTab.Logs or (int)GenesisGuiNextTab.Publishing)
         {
             selectedTab = (GenesisGuiNextTab)itemIndex;
             return true;
@@ -443,7 +443,7 @@ internal static class GenesisGuiNextFavoriteButtonPresentationResolver
     {
         ArgumentNullException.ThrowIfNull(tabs);
         if (row is null || tabs.SelectedTab is GenesisGuiNextTab.Playing or
-            GenesisGuiNextTab.Recording or GenesisGuiNextTab.Logs)
+            GenesisGuiNextTab.Recording or GenesisGuiNextTab.Logs or GenesisGuiNextTab.Publishing)
         {
             return new(AddLabel, IsEnabled: false);
         }
@@ -609,6 +609,10 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
         id >= NavigationControlIdBase && id < NavigationControlIdBase + GenesisGuiNextNavigationPresentation.Items.Count ||
         id is RefreshControlId or ActiveRecordingsModeControlId or RecordingRulesModeControlId or
             RecordingLibraryModeControlId or RecordingHistoryModeControlId or RecordingHistoryRefreshControlId;
+
+    internal static bool IsPublishingNavigationCommand(int id) =>
+        id >= NavigationControlIdBase && id < NavigationControlIdBase + GenesisGuiNextNavigationPresentation.Items.Count ||
+        id == RefreshControlId;
 
     internal static (int Top, int Height) RecordingStatusLayout(bool recordingPage, bool libraryPage) =>
         libraryPage ? (114, 32) : recordingPage ? (132, 14) : (122, 18);
@@ -1667,6 +1671,8 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 return;
             }
 
+            if (_tabs.SelectedTab == GenesisGuiNextTab.Publishing &&
+                !IsPublishingNavigationCommand(commandId)) return;
             if (lParam == _relayStop && commandId == RelayStopControlId)
             {
                 _ = GenesisGuiNextRelayCommandDispatch.StopAsync(_viewModel);
@@ -2392,7 +2398,8 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
             var isLibraryPage = _tabs.IsRecordingLibraryPage;
             var isHistoryPage = _tabs.IsRecordingHistoryPage;
             var isLogPage = _tabs.SelectedTab == GenesisGuiNextTab.Logs;
-            var hideRecordingActions = isRulesPage || isLibraryPage || isHistoryPage || isLogPage;
+            var isPublishingPage = _tabs.SelectedTab == GenesisGuiNextTab.Publishing;
+            var hideRecordingActions = isRulesPage || isLibraryPage || isHistoryPage || isLogPage || isPublishingPage;
             _allowAutomaticShown = row?.Suppression is not null;
             _ = MoveWindow(_detailsRecordButton, _detailsTextWidth + 20, 8,
                 _allowAutomaticShown ? DetailsRecordButtonWidth + DetailsRecordingButtonGap + DetailsStopRecordingButtonWidth : DetailsRecordButtonWidth,
@@ -2450,8 +2457,21 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 hideRecordingActions ? ShowWindowHide : ShowWindowShowNoActivate);
             _ = ShowWindow(
                 _detailsRecordingStatus,
-                !isLogPage && IsRecordingStatusVisible(isRulesPage) ? ShowWindowShowNoActivate : ShowWindowHide);
+                !isLogPage && !isPublishingPage && IsRecordingStatusVisible(isRulesPage) ? ShowWindowShowNoActivate : ShowWindowHide);
 
+            if (isPublishingPage)
+            {
+                var publishing = row?.Publishing ?? (_tabs.PublishingRows.Count > 0 ? _tabs.PublishingRows[0] : null);
+                _ = SetWindowTextW(_detailsTitle, "配信");
+                _ = SetWindowTextW(_detailsDescription, publishing is null ? "配信状態を確認できません。" :
+                    publishing.StateText + (string.IsNullOrEmpty(publishing.DiagnosticText) ? string.Empty : " · " + publishing.DiagnosticText));
+                _ = SetWindowTextW(_detailsMetadata, GenesisGuiNextPublishingPresentation.ScopeText);
+                _ = SetWindowTextW(_detailsIdentity, publishing is null ? string.Empty :
+                    "エラー分類 / 終了理由 · " + GenesisGuiNextPublishingPresentation.ErrorText(publishing));
+                _ = SetWindowTextW(_detailsRecordingStatus, string.Empty);
+                _ = InvalidateRect(_detailsPane, 0, true);
+                return;
+            }
             if (isLogPage)
             {
                 _ = SetWindowTextW(_detailsTitle, "ログ");

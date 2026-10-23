@@ -13,6 +13,7 @@ internal enum GenesisGuiNextTab
     Favorites,
     Playing,
     Recording,
+    Publishing = 6,
     Logs = 8,
 }
 

@@ -6,13 +6,13 @@ public sealed class GenesisGuiNextLogTests
     private static readonly string[] LogHeaders = ["日時", "種類", "内容"];
 
     [Fact]
-    public void NavigationKeepsBaselineOrderAndEnablesOnlyLogsAmongRemainingFutureViews()
+    public void NavigationKeepsBaselineOrderAndPreservesLogsAlongsidePublishing()
     {
         Assert.Equal("ログ", GenesisGuiNextNavigationPresentation.Items[8]);
         Assert.True(GenesisGuiNextNavigationPresentation.IsImplemented(8));
         Assert.True(GenesisGuiNextNavigationPresentation.TryResolveExistingView(8, out var tab));
         Assert.Equal(GenesisGuiNextTab.Logs, tab);
-        Assert.False(GenesisGuiNextNavigationPresentation.IsImplemented(6));
+        Assert.True(GenesisGuiNextNavigationPresentation.IsImplemented(6));
         Assert.False(GenesisGuiNextNavigationPresentation.TryResolveExistingView(7, out _));
         Assert.False(GenesisGuiNextNavigationPresentation.TryResolvePrimaryCommand(8, out _));
     }

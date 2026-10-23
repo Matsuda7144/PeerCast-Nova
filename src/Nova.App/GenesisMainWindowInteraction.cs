@@ -30,13 +30,15 @@ internal sealed class GenesisMainWindowInteraction
 
     internal bool IsRecordingHistoryView => _channelCatalogSession?.GuiNextTabs?.IsRecordingHistoryPage == true;
 
+    internal bool IsPublishingView => _channelCatalogSession?.GuiNextTabs?.SelectedTab == GenesisGuiNextTab.Publishing;
+
     internal bool IsYellowPageCatalogView
     {
         get
         {
             var tabs = _channelCatalogSession?.GuiNextTabs;
             return _channelCatalogSession is not null &&
-                tabs?.SelectedTab != GenesisGuiNextTab.Logs &&
+                tabs?.SelectedTab is not (GenesisGuiNextTab.Logs or GenesisGuiNextTab.Publishing) &&
                 tabs?.IsRecordingHistoryPage != true &&
                 !IsRecordingRulesView(tabs);
         }
@@ -61,7 +63,7 @@ internal sealed class GenesisMainWindowInteraction
         string? source,
         CancellationToken cancellationToken = default)
     {
-        if (IsRecordingHistoryView || !_viewModel.CanPlay)
+        if (IsRecordingHistoryView || IsPublishingView || !_viewModel.CanPlay)
         {
             return;
         }
@@ -71,7 +73,7 @@ internal sealed class GenesisMainWindowInteraction
     }
 
     public ValueTask StopAsync(CancellationToken cancellationToken = default) =>
-        IsRecordingHistoryView ? ValueTask.CompletedTask : _viewModel.StopAsync(cancellationToken);
+        (IsRecordingHistoryView || IsPublishingView) ? ValueTask.CompletedTask : _viewModel.StopAsync(cancellationToken);
 
     public async ValueTask RefreshChannelsAsync(
         CancellationToken cancellationToken = default)
@@ -124,6 +126,11 @@ internal sealed class GenesisMainWindowInteraction
         CancellationToken cancellationToken)
     {
         var tabs = _channelCatalogSession?.GuiNextTabs;
+        if (tabs?.SelectedTab == GenesisGuiNextTab.Publishing)
+        {
+            if (!cancellationToken.IsCancellationRequested) tabs.RefreshPublishingStatus();
+            return;
+        }
         if (tabs?.SelectedTab == GenesisGuiNextTab.Logs)
         {
             if (!cancellationToken.IsCancellationRequested)
@@ -243,7 +250,7 @@ internal sealed class GenesisMainWindowInteraction
         int index,
         CancellationToken cancellationToken = default)
     {
-        if (IsRecordingHistoryView || !_viewModel.CanPlay)
+        if (IsRecordingHistoryView || IsPublishingView || !_viewModel.CanPlay)
         {
             return false;
         }
@@ -264,7 +271,7 @@ internal sealed class GenesisMainWindowInteraction
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(channel);
-        if (IsRecordingHistoryView || !_viewModel.CanPlay)
+        if (IsRecordingHistoryView || IsPublishingView || !_viewModel.CanPlay)
         {
             return false;
         }
@@ -282,7 +289,7 @@ internal sealed class GenesisMainWindowInteraction
     public async ValueTask<bool> ActivateSelectedChannelAsync(
         CancellationToken cancellationToken = default)
     {
-        if (IsRecordingHistoryView || !_viewModel.CanPlay)
+        if (IsRecordingHistoryView || IsPublishingView || !_viewModel.CanPlay)
         {
             return false;
         }
