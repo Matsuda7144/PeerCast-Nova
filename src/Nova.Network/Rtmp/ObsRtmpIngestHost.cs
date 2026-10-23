@@ -24,6 +24,9 @@ public sealed class ObsRtmpIngestHost : IAsyncDisposable
     private TcpListener? _listener;
     private Task<ObsRtmpIngestResult>? _completion;
     private Task? _disposeTask;
+    private bool _listening;
+    private bool _publisherConnected;
+    private int? _boundPort;
 
     public ObsRtmpIngestHost(
         ChannelId channelId,
@@ -65,6 +68,14 @@ public sealed class ObsRtmpIngestHost : IAsyncDisposable
         }
     }
 
+    internal (bool Listening, bool PublisherConnected, int? Port) ReadStatus()
+    {
+        lock (_gate)
+        {
+            return (_listening, _publisherConnected, _boundPort);
+        }
+    }
+
     public void Start(CancellationToken cancellationToken = default)
     {
         lock (_gate)
@@ -79,6 +90,8 @@ public sealed class ObsRtmpIngestHost : IAsyncDisposable
             var listener = new TcpListener(IPAddress.Loopback, _options.Port);
             listener.Start(backlog: 1);
             _listener = listener;
+            _boundPort = ((IPEndPoint)listener.LocalEndpoint).Port;
+            _listening = true;
             _completion = RunAsync(listener, cancellationToken);
         }
     }
@@ -113,6 +126,7 @@ public sealed class ObsRtmpIngestHost : IAsyncDisposable
         try
         {
             using var client = await listener.AcceptTcpClientAsync(lifetime.Token).ConfigureAwait(false);
+            lock (_gate) { _publisherConnected = true; }
             client.NoDelay = true;
             reject = RejectAdditionalClientsAsync(listener, lifetime.Token);
             var protocol = new ObsRtmpProtocolSession(client.GetStream(), _options, publishing);
@@ -149,6 +163,11 @@ public sealed class ObsRtmpIngestHost : IAsyncDisposable
         }
         finally
         {
+            lock (_gate)
+            {
+                _listening = false;
+                _publisherConnected = false;
+            }
             await lifetime.CancelAsync().ConfigureAwait(false);
             listener.Stop();
             if (reject is not null)

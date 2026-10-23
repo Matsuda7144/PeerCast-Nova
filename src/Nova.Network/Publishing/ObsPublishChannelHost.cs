@@ -40,6 +40,11 @@ public sealed class ObsPublishChannelHost : IAsyncDisposable
     private long _heads;
     private long _data;
     private bool _registered;
+    private ObsPublishChannelResult? _result;
+    private string? _httpStreamUrl;
+    private readonly object _statusGate = new();
+    private ObsPublishStatusSnapshot? _lastPublishingStatus;
+    private long _publishingRevision;
 
     public ObsPublishChannelHost(
         ObsPublishChannelOptions? options = null,
@@ -93,6 +98,39 @@ public sealed class ObsPublishChannelHost : IAsyncDisposable
         get { lock (_gate) { return _registered; } }
     }
 
+    public ObsPublishStatusSnapshot PublishingStatus
+    {
+        get
+        {
+            lock (_statusGate)
+            {
+                var channel = _tracker.Snapshot;
+                var ingest = _ingest.ReadStatus();
+                var result = Volatile.Read(ref _result);
+                // A terminal result dominates a snapshot captured just before cleanup.
+                var state = result is null ? channel.State : ChannelSessionState.Stopped;
+                var active = state is not (ChannelSessionState.Stopping or ChannelSessionState.Stopped);
+                var head = state == ChannelSessionState.Receiving &&
+                    _headAvailable.Task.IsCompletedSuccessfully && _headAvailable.Task.Result;
+                var port = ingest.Port ?? (_options.Ingest.Port > 0 ? _options.Ingest.Port : (int?)null);
+                var current = new ObsPublishStatusSnapshot(ChannelId, SessionId, _publishingRevision, state,
+                    active && ingest.Listening, active && ingest.PublisherConnected, head,
+                    port is null ? null : $"rtmp://127.0.0.1:{port}/{_options.Ingest.Application}",
+                    _options.Ingest.StreamName, head ? Volatile.Read(ref _httpStreamUrl) : null,
+                    result?.EndReason, result?.Rejection?.Stage, result?.Rejection?.Reason);
+                // Serialize observed revisions across tracker, TCP and terminal facts.
+                // TCP accept/listener changes need not advance ChannelStatusTracker.
+                // These are observation revisions, not an atomic network-event log.
+                if (_lastPublishingStatus is null || current != _lastPublishingStatus)
+                {
+                    _publishingRevision = checked(_publishingRevision + 1);
+                    _lastPublishingStatus = current with { Revision = _publishingRevision };
+                }
+                return _lastPublishingStatus;
+            }
+        }
+    }
+
     public Task<ObsPublishChannelResult> Completion
     {
         get
@@ -132,6 +170,7 @@ public sealed class ObsPublishChannelHost : IAsyncDisposable
             lifetime.Token.ThrowIfCancellationRequested();
             if (_ownsHttp) _http.Start();
             _httpSource = (PcpHttpFlvPlaybackSession)_http.Create(ChannelId, SessionId);
+            Volatile.Write(ref _httpStreamUrl, _http.StreamUrlFor(ChannelId));
             _httpSink = new HttpRelayChild(_httpSource, ChannelId, SessionId);
             _httpChild = _fanout.AddChild(_httpSink);
             if (!_registry.TryRegister(ChannelId, _recording, out _registration))
@@ -232,9 +271,11 @@ public sealed class ObsPublishChannelHost : IAsyncDisposable
             catch (Exception) { clean = false; }
         }
         clean &= _relay.Snapshot.CleanupIncompleteCount == 0;
-        return new(reason, _acceptedPackets, _acceptedBytes, _heads, _data,
+        var result = new ObsPublishChannelResult(reason, _acceptedPackets, _acceptedBytes, _heads, _data,
             relayDrain, httpDrained, clean, ingestResult, relayResult)
         { Rejection = ingestResult?.Rejection };
+        Volatile.Write(ref _result, result);
+        return result;
     }
 
     private async ValueTask ConsumeAsync(PcpChannelPacket packet, CancellationToken cancellationToken)
