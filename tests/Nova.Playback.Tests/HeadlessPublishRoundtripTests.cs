@@ -116,8 +116,31 @@ public sealed class HeadlessPublishRoundtripTests(ITestOutputHelper output)
             Assert.Equal(0, registry.Count);
             Assert.Equal(0, http.ActiveSourceCount);
             using var missing = new HttpClient();
-            Assert.Equal(System.Net.HttpStatusCode.NotFound,
-                (await missing.GetAsync(host.HttpStreamUrl, token)).StatusCode);
+            System.Net.HttpStatusCode? missingStatus = null;
+            const int maximumMissingChecks = 32;
+            for (var check = 1; check <= maximumMissingChecks; check++)
+            {
+                token.ThrowIfCancellationRequested();
+                Assert.Equal(0, http.ActiveSourceCount);
+                using (var response = await missing.GetAsync(host.HttpStreamUrl, token))
+                {
+                    token.ThrowIfCancellationRequested();
+                    Assert.Equal(0, http.ActiveSourceCount);
+                    missingStatus = response.StatusCode;
+                    if (missingStatus == System.Net.HttpStatusCode.NotFound) break;
+
+                    // Only the host's global-slot rejection may precede 404.
+                    // Source readiness/client-limit errors and all other replies fail.
+                    Assert.Equal(System.Net.HttpStatusCode.ServiceUnavailable, response.StatusCode);
+                    Assert.Equal("Service Unavailable", response.ReasonPhrase);
+                    Assert.Equal("PeerCastNova", Assert.Single(response.Headers.Server).ToString());
+                }
+                // Poll only after that exact rejection, with the original deadline.
+                // Disposal/EOF/source removal do not prove the HTTP slot is released.
+                if (check < maximumMissingChecks) await Task.Delay(10, token);
+            }
+            token.ThrowIfCancellationRequested();
+            Assert.Equal(System.Net.HttpStatusCode.NotFound, missingStatus);
             using var parser = new PlaybackBoundedFlvParser();
             var bootstrap = parser.Parse(body.ToArray());
             using var bootstrapCompletion = bootstrap.Completion;

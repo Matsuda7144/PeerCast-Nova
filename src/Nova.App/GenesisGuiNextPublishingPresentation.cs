@@ -2,7 +2,9 @@ namespace PeerCast.Nova.App;
 
 internal static class GenesisGuiNextPublishingPresentation
 {
-    internal const string ScopeText = "読み取り専用 · 配信開始/停止・OBS接続・WAN・NAT操作は未対応";
+    internal const string StartLabel = "配信開始";
+    internal const string InterruptLabel = "配信中断";
+    internal const string ScopeText = "待受の開始要求 · 中断はキャンセルによる終了 · 正常停止・再開始は未対応";
     internal static readonly IReadOnlyList<GenesisNativeListColumnPresentation> Columns = Array.AsReadOnly(
         new GenesisNativeListColumnPresentation[]
         {
@@ -29,28 +31,53 @@ internal static class GenesisGuiNextPublishingPresentation
 internal sealed partial class GenesisGuiNextTabsViewModel
 {
     private INovaObsPublishingReadOnlyStatus _publishingStatus = new NovaObsPublishingReadOnlyStatus(null);
+    private INovaGuiNextPublishingCommands? _publishingCommands;
+    internal NovaGuiNextPublishingCommandState PublishingCommands { get; private set; } = NovaGuiNextPublishingCommandState.Unavailable;
     private System.Collections.ObjectModel.ReadOnlyCollection<NovaObsPublishingReadOnlySnapshot> _publishingRows = Array.AsReadOnly(Array.Empty<NovaObsPublishingReadOnlySnapshot>());
     internal IReadOnlyList<NovaObsPublishingReadOnlySnapshot> PublishingRows => _publishingRows;
 
-    internal void BindPublishingStatus(INovaObsPublishingReadOnlyStatus? status)
+    internal void BindPublishingStatus(INovaObsPublishingReadOnlyStatus? status, INovaGuiNextPublishingCommands? commands = null)
     {
         lock (_recordingRulesLifecycleGate)
         {
             if (_disposed) return;
             _publishingStatus = status ?? new NovaObsPublishingReadOnlyStatus(null);
+            _publishingCommands = commands;
         }
         RefreshPublishingStatus();
     }
 
     internal void RefreshPublishingStatus()
     {
+        bool rowsChanged;
+        bool commandsChanged;
         lock (_recordingRulesLifecycleGate)
         {
             if (_disposed) return;
             var snapshot = _publishingStatus.Read();
-            if (_publishingRows.Count == 1 && _publishingRows[0] == snapshot) return;
-            _publishingRows = Array.AsReadOnly(new[] { snapshot });
+            rowsChanged = _publishingRows.Count != 1 || _publishingRows[0] != snapshot;
+            if (rowsChanged) _publishingRows = Array.AsReadOnly(new[] { snapshot });
+            var commands = _publishingCommands?.ReadCommands() ?? NovaGuiNextPublishingCommandState.Unavailable;
+            commandsChanged = PublishingCommands != commands;
+            PublishingCommands = commands;
         }
-        OnPropertyChanged(nameof(PublishingRows));
+        if (rowsChanged) OnPropertyChanged(nameof(PublishingRows));
+        if (commandsChanged) OnPropertyChanged(nameof(PublishingCommands));
+    }
+
+    internal Task RequestPublishingStartAsync() => RequestPublishingCommandAsync(start: true);
+    internal Task RequestPublishingInterruptAsync() => RequestPublishingCommandAsync(start: false);
+
+    private async Task RequestPublishingCommandAsync(bool start)
+    {
+        Task operation;
+        lock (_recordingRulesLifecycleGate)
+        {
+            if (_disposed || SelectedTab != GenesisGuiNextTab.Publishing || _publishingCommands is null) return;
+            operation = start ? _publishingCommands.RequestStartAsync() : _publishingCommands.RequestInterruptAsync();
+        }
+        RefreshPublishingStatus();
+        try { await operation.ConfigureAwait(false); }
+        finally { RefreshPublishingStatus(); } // Disposed tabs reject late UI updates.
     }
 }

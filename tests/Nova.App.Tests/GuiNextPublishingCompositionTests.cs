@@ -83,7 +83,7 @@ public sealed class GuiNextPublishingCompositionTests
         };
         await using var composition = NovaGuiNextPublishingComposition.Create(factory);
         await using var tabs = new GenesisGuiNextTabsViewModel(new GenesisFavoriteChannelCollection());
-        tabs.BindPublishingStatus(composition.Status);
+        tabs.BindPublishingStatus(composition.Status, composition.Commands);
         tabs.SelectedTab = GenesisGuiNextTab.Publishing;
         var row = Assert.Single(GenesisGuiNextNativeTabProjection.Create(tabs));
         Assert.Equal(terminal ? NovaObsPublishingAvailability.Stopped : NovaObsPublishingAvailability.Observed,
@@ -200,7 +200,7 @@ public sealed class GuiNextPublishingCompositionTests
         var factory = new Factory();
         await using var composition = NovaGuiNextPublishingComposition.Create(factory);
         var tabs = new GenesisGuiNextTabsViewModel(new GenesisFavoriteChannelCollection());
-        tabs.BindPublishingStatus(composition.Status);
+        tabs.BindPublishingStatus(composition.Status, composition.Commands);
         var vm = new GenesisMainViewModel(new FakePlaybackSessionController());
         await using var session = GenesisChannelCatalogSession.Create(catalog, vm,
             new GenesisGuiNextChannelPresencePublisher(tabs, EmptyGenesisChannelPresenceNotificationPublisher.Instance));

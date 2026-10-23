@@ -112,7 +112,7 @@ public sealed class NovaWindowsStartupComposition
     public ValueTask<NovaWindowsStartupResult> RunGenesisAsync(
         CancellationToken cancellationToken = default) =>
         RunOwnedGenesisCoreAsync(
-            (playbackPathSource, recordingSettings, publishingStatus) =>
+            (playbackPathSource, recordingSettings, publishingStatus, publishingCommands) =>
                 new SystemGenesisInteractiveMainWindowSurfaceTarget(
                     new SystemGenesisMainWindowSurfaceTarget(),
                     SystemGenesisMainWindowInteractionBridgeFactory.Instance,
@@ -123,7 +123,7 @@ public sealed class NovaWindowsStartupComposition
                     {
                         var state = _options.ValidationProfile is { } profile ? profile.GetGuiState(token) :
                             LoadSystemGuiNextState(token, playbackPathSource);
-                        state.Tabs.BindPublishingStatus(publishingStatus);
+                        state.Tabs.BindPublishingStatus(publishingStatus, publishingCommands);
                         return state;
                     },
                     CreateSystemNotificationRuntime,
@@ -140,13 +140,13 @@ public sealed class NovaWindowsStartupComposition
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(createSurface);
-        return RunOwnedGenesisCoreAsync((paths, settings, _) => createSurface(paths, settings),
+        return RunOwnedGenesisCoreAsync((paths, settings, _, _) => createSurface(paths, settings),
             recordingSettings, cancellationToken);
     }
 
     private async ValueTask<NovaWindowsStartupResult> RunOwnedGenesisCoreAsync(
         Func<GenesisGuiNextPlaybackPathSource, GenesisRecordingOutputDirectorySettings,
-            INovaObsPublishingReadOnlyStatus, IGenesisMainWindowSurfaceTarget> createSurface,
+            INovaObsPublishingReadOnlyStatus, INovaGuiNextPublishingCommands, IGenesisMainWindowSurfaceTarget> createSurface,
         GenesisRecordingOutputDirectorySettings? recordingSettings = null,
         CancellationToken cancellationToken = default)
     {
@@ -169,7 +169,7 @@ public sealed class NovaWindowsStartupComposition
             publishing = NovaGuiNextPublishingComposition.Create(_publishingRuntimeFactory);
             playbackController = _genesisPlaybackControllerFactory(paths, recordingSettings);
             result = await RunGenesisAsync(
-                createSurface(paths, recordingSettings, publishing.Status),
+                createSurface(paths, recordingSettings, publishing.Status, publishing.Commands),
                 playbackWindowSurfaceTarget: null,
                 playbackController,
                 networkOwner,
@@ -185,6 +185,8 @@ public sealed class NovaWindowsStartupComposition
         }
         finally
         {
+            // Close publishing command admission before other owners drain.
+            publishing?.Commands.CloseAdmission();
             // Close network admission immediately on root shutdown, including
             // while the independent private playback/recording owner drains.
             Task? networkShutdown = null;

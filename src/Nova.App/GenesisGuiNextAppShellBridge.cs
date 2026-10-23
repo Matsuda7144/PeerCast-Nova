@@ -495,6 +495,8 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
     internal const int RelayStartControlId = 1131;
     internal const int RelayStopControlId = 1132;
     internal const int RelayStatusControlId = 1133;
+    internal const int PublishingStartControlId = 1134;
+    internal const int PublishingInterruptControlId = 1135;
     internal const int RelayControlsTop = 148;
     internal const int RelayStatusTop = 180;
     internal static int RelayStatusWidth(int paneWidth) => Math.Max(1, paneWidth - 24);
@@ -1519,6 +1521,8 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
         private readonly nint _detailsRecordButton;
         private readonly nint _detailsStopRecordingButton;
         private readonly nint _detailsCopyButton;
+        private readonly nint _publishingStartButton;
+        private readonly nint _publishingInterruptButton;
         private readonly nint _listView;
         private readonly GenesisGuiNextTabsViewModel _tabs;
         private readonly GenesisMainViewModel _viewModel;
@@ -1612,6 +1616,18 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
             _detailsRecordButton = detailsRecordButton;
             _detailsStopRecordingButton = detailsStopRecordingButton;
             _detailsCopyButton = detailsCopyButton;
+            _publishingStartButton = CreateRecordingModeButton(
+                GenesisGuiNextPublishingPresentation.StartLabel, detailsPane,
+                PublishingStartControlId, detailsTextWidth + 20, GetModuleHandleW(null));
+            _publishingInterruptButton = CreateRecordingModeButton(
+                GenesisGuiNextPublishingPresentation.InterruptLabel, detailsPane,
+                PublishingInterruptControlId, detailsTextWidth + 104, GetModuleHandleW(null));
+            ApplyDefaultFont(_publishingStartButton);
+            ApplyDefaultFont(_publishingInterruptButton);
+            _ = ShowWindow(_publishingStartButton, ShowWindowHide);
+            _ = ShowWindow(_publishingInterruptButton, ShowWindowHide);
+            _ = EnableWindow(_publishingStartButton, false);
+            _ = EnableWindow(_publishingInterruptButton, false);
             _listView = listView;
             _tabs = tabs;
             _viewModel = viewModel;
@@ -1635,7 +1651,7 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
             _viewModel.PropertyChanged += OnViewModelPropertyChanged;
         }
 
-        public bool RuleButtonsAvailable => _relayStart != 0 && _relayStop != 0 && _relayStatus != 0 && _recordingHistoryDetails != 0 && _recordingHistoryModeButton != 0 && _recordingHistoryRefreshButton != 0 && _createRuleButton != 0 && _editRuleButton != 0 &&
+        public bool RuleButtonsAvailable => _publishingStartButton != 0 && _publishingInterruptButton != 0 && _relayStart != 0 && _relayStop != 0 && _relayStatus != 0 && _recordingHistoryDetails != 0 && _recordingHistoryModeButton != 0 && _recordingHistoryRefreshButton != 0 && _createRuleButton != 0 && _editRuleButton != 0 &&
             _toggleRuleButton != 0 && _deleteRuleButton != 0 && _moveRuleUpButton != 0 && _moveRuleDownButton != 0;
 
         public void Detach()
@@ -1671,6 +1687,18 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 return;
             }
 
+            if (_tabs.SelectedTab == GenesisGuiNextTab.Publishing &&
+                lParam == _publishingStartButton && commandId == PublishingStartControlId)
+            {
+                _ = _tabs.RequestPublishingStartAsync();
+                return;
+            }
+            if (_tabs.SelectedTab == GenesisGuiNextTab.Publishing &&
+                lParam == _publishingInterruptButton && commandId == PublishingInterruptControlId)
+            {
+                _ = _tabs.RequestPublishingInterruptAsync();
+                return;
+            }
             if (_tabs.SelectedTab == GenesisGuiNextTab.Publishing &&
                 !IsPublishingNavigationCommand(commandId)) return;
             if (lParam == _relayStop && commandId == RelayStopControlId)
@@ -1960,6 +1988,13 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 return DrawManualRecordingButton(drawItem);
             }
 
+            if (IsOwnerDrawButton(drawItem.ControlType) &&
+                drawItem.ControlId is PublishingStartControlId or PublishingInterruptControlId)
+                return DrawRecordingModeButton(drawItem,
+                    drawItem.ControlId == PublishingStartControlId
+                        ? GenesisGuiNextPublishingPresentation.StartLabel : GenesisGuiNextPublishingPresentation.InterruptLabel,
+                    false, drawItem.ControlId == PublishingInterruptControlId);
+
             if (IsOwnerDrawButton(drawItem.ControlType) && drawItem.ControlId is RelayStartControlId or RelayStopControlId)
                 return DrawRecordingModeButton(drawItem, drawItem.ControlId == RelayStartControlId ? "Relay開始" : "Relay停止", false);
             if (IsOwnerDrawStatic(drawItem.ControlType) && drawItem.ControlId == RelayStatusControlId)
@@ -2062,7 +2097,8 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
         private static bool DrawRecordingModeButton(
             DrawItem drawItem,
             string label,
-            bool selected)
+            bool selected,
+            bool dangerous = false)
         {
             var pressed = (drawItem.ItemState & 0x0001) != 0;
             var disabled = (drawItem.ItemState & DrawItemDisabled) != 0;
@@ -2073,7 +2109,7 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
             _ = SetBkMode(drawItem.DeviceContext, TransparentBackgroundMode);
             _ = SetTextColor(
                 drawItem.DeviceContext,
-                disabled ? DisabledTextColor : TextColor);
+                disabled ? DisabledTextColor : dangerous ? StopAccentColor : TextColor);
             var labelRectangle = drawItem.ItemRectangle;
             labelRectangle.Left += 3;
             labelRectangle.Right -= 3;
@@ -2399,6 +2435,12 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
             var isHistoryPage = _tabs.IsRecordingHistoryPage;
             var isLogPage = _tabs.SelectedTab == GenesisGuiNextTab.Logs;
             var isPublishingPage = _tabs.SelectedTab == GenesisGuiNextTab.Publishing;
+            _ = ShowWindow(_publishingStartButton, isPublishingPage ? ShowWindowShowNoActivate : ShowWindowHide);
+            _ = ShowWindow(_publishingInterruptButton, isPublishingPage ? ShowWindowShowNoActivate : ShowWindowHide);
+            _ = EnableWindow(_publishingStartButton, isPublishingPage && _tabs.PublishingCommands.CanStart);
+            _ = EnableWindow(_publishingInterruptButton, isPublishingPage && _tabs.PublishingCommands.CanInterrupt);
+            _ = InvalidateRect(_publishingStartButton, 0, true);
+            _ = InvalidateRect(_publishingInterruptButton, 0, true);
             var hideRecordingActions = isRulesPage || isLibraryPage || isHistoryPage || isLogPage || isPublishingPage;
             _allowAutomaticShown = row?.Suppression is not null;
             _ = MoveWindow(_detailsRecordButton, _detailsTextWidth + 20, 8,
@@ -2467,7 +2509,9 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
                     publishing.StateText + (string.IsNullOrEmpty(publishing.DiagnosticText) ? string.Empty : " · " + publishing.DiagnosticText));
                 _ = SetWindowTextW(_detailsMetadata, GenesisGuiNextPublishingPresentation.ScopeText);
                 _ = SetWindowTextW(_detailsIdentity, publishing is null ? string.Empty :
-                    "エラー分類 / 終了理由 · " + GenesisGuiNextPublishingPresentation.ErrorText(publishing));
+                    "エラー分類 / 終了理由 · " + GenesisGuiNextPublishingPresentation.ErrorText(publishing) +
+                    (string.IsNullOrEmpty(_tabs.PublishingCommands.DiagnosticText) ? string.Empty :
+                        " · " + _tabs.PublishingCommands.DiagnosticText));
                 _ = SetWindowTextW(_detailsRecordingStatus, string.Empty);
                 _ = InvalidateRect(_detailsPane, 0, true);
                 return;
