@@ -35,6 +35,10 @@ Nova 内の managed decoder、scheduler、Windows output を使う playback の�
 
 ## 現在の再生経路
 
+通常配信の開発方針はOBSでキャプチャ・合成・H.264/AACエンコードを行い、Novaはingest / FLV / PCP publish / relay / YPを担当する構成です。[ADR-0491](docs/adr/ADR-0491-loopback-OBS-RTMP-FLV-ingest-foundation.md) と [OBS ingest foundation](docs/obs-flv-ingest-foundation.md) はloopback限定のライブラリ基盤を記録しています。アプリの配信開始操作、YP、実OBSと物理A/Vの受入は後続sliceです。
+
+[Headless publish channel foundation](docs/headless-obs-publish-channel.md) は同じchannel generationを既存relayとHTTP-FLVへ接続します。managed localhost roundtripまでが検証範囲で、実OBS相互運用は未検証です。
+
 MVP の再生要件を満たす採用済み経路は external-player handoff です。PCRPlayer と DSPlayer を含む対応 player に PCP 入力を loopback 限定の HTTP-FLV で渡します。現在の `Nova.App` で PCRPlayer を使う場合は、実行ファイルを次の順で解決します。
 
 1. `--pcrplayer-executable <path>`

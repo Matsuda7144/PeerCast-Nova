@@ -79,6 +79,17 @@ public sealed class PcpHttpFlvPlaybackHost :
 
     public int ActiveConnectionCount => _connections.Count;
 
+    public int ActiveSourceCount
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _sources.Count;
+            }
+        }
+    }
+
     public int ActiveStreamClientCount
     {
         get
@@ -616,8 +627,8 @@ internal sealed class PcpHttpFlvClientSink :
         ArgumentNullException.ThrowIfNull(bootstrap);
         await WriteAsync(bootstrap.Header, cancellationToken).ConfigureAwait(false);
         await WriteAsync(bootstrap.Metadata, cancellationToken).ConfigureAwait(false);
-        await WriteAsync(bootstrap.AudioConfiguration, cancellationToken).ConfigureAwait(false);
         await WriteAsync(bootstrap.VideoConfiguration, cancellationToken).ConfigureAwait(false);
+        await WriteAsync(bootstrap.AudioConfiguration, cancellationToken).ConfigureAwait(false);
     }
 
     public void Activate() => _activation.TrySetResult(true);

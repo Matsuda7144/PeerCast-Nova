@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using PeerCast.Nova.Core.Channels;
 
 namespace PeerCast.Nova.Core.Recording;
@@ -86,6 +87,32 @@ public sealed class RecordingStreamSourceLeaseRegistry :
         lock (gate)
         {
             return factories.Remove(channelId);
+        }
+    }
+
+    /// <summary>
+    /// Reserves an unused bounded channel slot without replacing another owner.
+    /// The returned token removes only this registration, including after reuse.
+    /// </summary>
+    public bool TryRegister(
+        ChannelId channelId,
+        IRecordingStreamSourceLeaseFactory factory,
+        [NotNullWhen(true)] out IDisposable? registration)
+    {
+        ArgumentNullException.ThrowIfNull(channelId);
+        ArgumentNullException.ThrowIfNull(factory);
+        lock (gate)
+        {
+            if (factories.ContainsKey(channelId) || factories.Count >= maximumFactoryCount)
+            {
+                registration = null;
+                return false;
+            }
+
+            var entry = new RegistrationEntry(factory);
+            factories.Add(channelId, entry);
+            registration = new Registration(this, channelId, entry);
+            return true;
         }
     }
 

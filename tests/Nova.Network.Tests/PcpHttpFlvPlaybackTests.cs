@@ -59,8 +59,8 @@ public sealed class PcpHttpFlvPlaybackTests
         byte[] expectedBootstrap = Combine(
             header,
             metadata,
-            audioConfiguration,
-            videoConfiguration);
+            videoConfiguration,
+            audioConfiguration);
         byte[] actualBootstrap = await ReadExactlyAsync(
             stream,
             expectedBootstrap.Length);

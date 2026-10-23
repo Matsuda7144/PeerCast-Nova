@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Added headless local publish channel ownership over existing OBS ingest, relay fanout/PCP TCP server, HTTP-FLV source and recording registration tokens. Added bounded drain/cancellation cleanup and managed early/late localhost RTMP-to-relay/HTTP-to-parser roundtrips. HTTP bootstrap now emits AVC before AAC for the existing managed parser. Real OBS interoperability and physical A/V remain unverified.
+
+- Added the one-generation IPv4 loopback OBS RTMP/AMF0 ingest foundation for classic AVC and AAC-LC, with bounded FLV bootstrap, initial IDR admission, awaited PCP HEAD/DATA delivery and terminal cleanup. ADR-0491 / PCN-0501 document the managed library boundary; application broadcast hosting and actual OBS/physical acceptance remain subsequent work.
+
 - Added the PR #242 headless manual/automatic recording runtime over existing PCP relay fan-out, with per-channel shared session ownership, source-start cancellation on stop, `.partial` file finalization, and a managed PCP-to-file integration test. Its design and managed-review snapshot are documented in ADR-0490 and PCN-0500. Subsequent closeout established **END-USER RECORDING ACCEPTANCE — PROVEN** and **FLV TIMESTAMP NORMALIZATION — PHYSICAL ACCEPTANCE PROVEN**; run IDs and predecessor code-head provenance are recorded in [PR #242](https://github.com/Matsuda7144/PeerCast-Nova/pull/242).
 - GUI recording controls and rule editing remain separate work in [PR #230](https://github.com/Matsuda7144/PeerCast-Nova/pull/230). Recording-start keyframe quality remains deferred.
 

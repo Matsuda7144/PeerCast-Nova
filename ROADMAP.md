@@ -15,6 +15,10 @@ The accepted playback path hands PCP input through a loopback-only HTTP-FLV endp
 
 The engineering milestones below record bounded implementation and validation slices, including additional post-MVP managed-playback work. A completed parser, decoder boundary, CI run, or controlled physical observation applies only to its stated scope. Read [PROJECT_CHARTER.md](PROJECT_CHARTER.md) for product principles and [README.md](README.md) for the current user-facing route.
 
+## OBS broadcasting foundation — Managed library implementation
+
+OBS配信基盤の新規レーンは [ADR-0491](docs/adr/ADR-0491-loopback-OBS-RTMP-FLV-ingest-foundation.md) / [PCN-0501](docs/reviews/PCN-0501-LOOPBACK-OBS-RTMP-FLV-INGEST-FOUNDATION.md) に記録しています。[headless publish channel foundation](docs/headless-obs-publish-channel.md) はloopback RTMPから既存relay/HTTP-FLVとmanaged parserまでを接続します。次は別途許可されたbounded実OBS相互運用・物理A/V受入です。
+
 ## 0.0.1-0.0.4 Network Foundation — Verified
 
 - Foundation／Core lifecycle

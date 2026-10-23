@@ -23,4 +23,7 @@
     <EmbeddedResource Include="Fixtures/fmp4-avc1-aac.mp4"
                       LogicalName="PeerCast.Nova.Playback.Tests.Fixtures.fmp4-avc1-aac.mp4" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="../Nova.Network.Tests/ObsRtmpTestClient.cs" Link="ObsRtmpTestClient.cs" />
+  </ItemGroup>
 </Project>

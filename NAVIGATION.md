@@ -11,6 +11,7 @@ The accepted playback path hands a loopback-only HTTP-FLV stream to a compatible
 - Project principles: [PROJECT_CHARTER.md](PROJECT_CHARTER.md)
 - Architecture and module boundaries: [PCN-0004](docs/architecture/PCN-0004-SYSTEM-ARCHITECTURE.md), [PCN-0005](docs/architecture/PCN-0005-SOLUTION-STRUCTURE.md), and [Control/Data Planes](docs/architecture/CONTROL-AND-DATA-PLANES.md)
 - Compatibility scope: [PCP Compatibility Plan](docs/protocol/PCP-COMPATIBILITY-PLAN.md)
+- OBS broadcast direction and loopback ingest: [ADR-0491](docs/adr/ADR-0491-loopback-OBS-RTMP-FLV-ingest-foundation.md), [PCN-0501](docs/reviews/PCN-0501-LOOPBACK-OBS-RTMP-FLV-INGEST-FOUNDATION.md), and [host contract](docs/obs-flv-ingest-foundation.md). Managed foundation; actual OBS, application broadcast hosting, YP and physical A/V remain subsequent work.
 - Current post-MVP managed boundary: [ADR-0489](docs/adr/ADR-0489-bounded-iso-bmff-regular-movie-native-decoder-discontinuity-reset.md) and [PCN-0499](docs/reviews/PCN-0499-BOUNDED-ISO-BMFF-REGULAR-MOVIE-NATIVE-DECODER-DISCONTINUITY-RESET.md)
 - Recording Core closeout: [ADR-0490](docs/adr/ADR-0490-shared-manual-and-automatic-recording-runtime.md) and [PCN-0500](docs/reviews/PCN-0500-SHARED-MANUAL-AND-AUTOMATIC-RECORDING-RUNTIME.md) preserve the earlier design and managed-review snapshot; subsequent end-user recording and FLV timestamp normalization physical acceptance are recorded in [PR #242](https://github.com/Matsuda7144/PeerCast-Nova/pull/242). GUI integration remains separate PR #230 work.
 

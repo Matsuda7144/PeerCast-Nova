@@ -17,6 +17,8 @@ internal sealed class PcpHttpFlvPlaybackSession :
     private readonly Action _onHeaderReady;
     private TaskCompletionSource<bool> _headerReady = NewHeaderReadySource();
     private Task? _disposeTask;
+    private Task<bool>? _completionTask;
+    private bool _completing;
     private bool _disposed;
     private bool _headerReadyReported;
 
@@ -71,7 +73,7 @@ internal sealed class PcpHttpFlvPlaybackSession :
         var notifyHeaderReady = false;
         lock (_gate)
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
+            ObjectDisposedException.ThrowIf(_disposed || _completing, this);
 
             if (packet.Discontinuity is not null)
             {
@@ -115,10 +117,10 @@ internal sealed class PcpHttpFlvPlaybackSession :
         TimeSpan timeout,
         CancellationToken cancellationToken)
     {
-        Task readyTask;
+        Task<bool> readyTask;
         lock (_gate)
         {
-            if (_disposed)
+            if (_disposed || _completing)
             {
                 return false;
             }
@@ -133,9 +135,8 @@ internal sealed class PcpHttpFlvPlaybackSession :
 
         try
         {
-            await readyTask.WaitAsync(timeout, cancellationToken)
+            return await readyTask.WaitAsync(timeout, cancellationToken)
                 .ConfigureAwait(false);
-            return true;
         }
         catch (TimeoutException)
         {
@@ -152,7 +153,7 @@ internal sealed class PcpHttpFlvPlaybackSession :
 
         lock (_gate)
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
+            ObjectDisposedException.ThrowIf(_disposed || _completing, this);
             if (!_bootstrap.StatusSnapshot.HeaderRetained ||
                 !_fanout.TryAddChild(sink, out registration))
             {
@@ -165,6 +166,38 @@ internal sealed class PcpHttpFlvPlaybackSession :
             // so no packet can fall between bootstrap and live delivery.
             bootstrap = _bootstrap.Snapshot();
             return true;
+        }
+    }
+
+    /// <summary>
+    /// After upstream has stopped, close admission and drain existing bounded
+    /// client queues before removing this source. Cancellation never reports
+    /// a successful drain. Fault/abort callers use DisposeAsync directly.
+    /// </summary>
+    internal Task<bool> CompleteAsync(TimeSpan timeout, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            if (_disposed)
+            {
+                return Task.FromResult(false);
+            }
+
+            _completing = true;
+            _headerReady.TrySetResult(false);
+            return _completionTask ??= CompleteCoreAsync(timeout, cancellationToken);
+        }
+    }
+
+    private async Task<bool> CompleteCoreAsync(TimeSpan timeout, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await _fanout.WaitForIdleAsync(timeout, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            await DisposeAsync().ConfigureAwait(false);
         }
     }
 

@@ -439,7 +439,7 @@ public sealed class PlaybackBoundedFlvParserTests
         return result;
     }
 
-    private static byte[] BuildAvcConfiguration()
+    internal static byte[] BuildAvcConfiguration()
     {
         var sps = BuildBaselineSps(320, 240);
         byte[] pps = [0x68, 0xCE, 0x06, 0xE2];
