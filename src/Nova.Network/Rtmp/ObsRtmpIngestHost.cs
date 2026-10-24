@@ -21,6 +21,8 @@ public sealed class ObsRtmpIngestHost : IAsyncDisposable
     private readonly ChannelSessionId _sessionId;
     private readonly IPcpChannelPacketConsumer _consumer;
     private readonly CancellationTokenSource _stop = new();
+    private readonly ObsRtmpIngressAdmission _admission = new();
+    private readonly ObsRtmpIngressObservation? _observation;
     private TcpListener? _listener;
     private Task<ObsRtmpIngestResult>? _completion;
     private Task? _disposeTask;
@@ -33,6 +35,16 @@ public sealed class ObsRtmpIngestHost : IAsyncDisposable
         ChannelSessionId sessionId,
         IPcpChannelPacketConsumer consumer,
         ObsRtmpIngestOptions? options = null)
+        : this(channelId, sessionId, consumer, options, null)
+    {
+    }
+
+    internal ObsRtmpIngestHost(
+        ChannelId channelId,
+        ChannelSessionId sessionId,
+        IPcpChannelPacketConsumer consumer,
+        ObsRtmpIngestOptions? options,
+        ObsRtmpIngressObservation? observation)
     {
         ArgumentNullException.ThrowIfNull(channelId);
         ArgumentNullException.ThrowIfNull(sessionId);
@@ -42,6 +54,7 @@ public sealed class ObsRtmpIngestHost : IAsyncDisposable
         _channelId = channelId;
         _sessionId = sessionId;
         _consumer = consumer;
+        _observation = observation;
     }
 
     public IPEndPoint LocalEndPoint
@@ -96,6 +109,53 @@ public sealed class ObsRtmpIngestHost : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Closes publisher/message admission and waits for an already admitted
+    /// message to finish. Incomplete wire messages are not admitted. Timeout or
+    /// caller cancellation ends this wait only; DisposeAsync remains the forced
+    /// cancellation path. This is not OBS EOS or a downstream drain guarantee.
+    /// </summary>
+    public Task<ObsRtmpQuiescenceResult> RequestQuiescenceAsync(
+        TimeSpan timeout, CancellationToken cancellationToken = default)
+    {
+        if (timeout <= TimeSpan.Zero || timeout > TimeSpan.FromMinutes(1))
+            throw new ArgumentOutOfRangeException(nameof(timeout));
+        lock (_gate)
+        {
+            var completion = _completion ?? throw new InvalidOperationException("RTMP ingest has not started.");
+            if (cancellationToken.IsCancellationRequested)
+                return Task.FromResult(new ObsRtmpQuiescenceResult(ObsRtmpQuiescenceOutcome.Cancelled, null));
+            if (!completion.IsCompleted)
+            {
+                _admission.Close();
+                _listener?.Stop(); // Does not close the already accepted TCP client.
+                _listening = false;
+            }
+            return WaitForQuiescenceAsync(completion, timeout, cancellationToken);
+        }
+    }
+
+    private static async Task<ObsRtmpQuiescenceResult> WaitForQuiescenceAsync(
+        Task<ObsRtmpIngestResult> completion, TimeSpan timeout, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var final = await completion.WaitAsync(timeout, cancellationToken).ConfigureAwait(false);
+            var outcome = final.EndReason switch
+            {
+                ObsRtmpIngestEndReason.Quiesced => ObsRtmpQuiescenceOutcome.Completed,
+                ObsRtmpIngestEndReason.PublisherStopped => ObsRtmpQuiescenceOutcome.AlreadyEnded,
+                ObsRtmpIngestEndReason.Cancelled => ObsRtmpQuiescenceOutcome.Cancelled,
+                ObsRtmpIngestEndReason.TimedOut => ObsRtmpQuiescenceOutcome.TimedOut,
+                _ => ObsRtmpQuiescenceOutcome.Failed,
+            };
+            return new(outcome, final);
+        }
+        catch (TimeoutException) { return new(ObsRtmpQuiescenceOutcome.TimedOut, null); }
+        catch (OperationCanceledException) { return new(ObsRtmpQuiescenceOutcome.Cancelled, null); }
+        catch (Exception) { return new(ObsRtmpQuiescenceOutcome.Failed, null); }
+    }
+
     public ValueTask DisposeAsync()
     {
         lock (_gate)
@@ -108,33 +168,55 @@ public sealed class ObsRtmpIngestHost : IAsyncDisposable
     private async Task DisposeCoreAsync()
     {
         await _stop.CancelAsync().ConfigureAwait(false);
+        _observation?.ForcedStopRequested?.Invoke();
         if (_completion is not null)
         {
             await _completion.ConfigureAwait(false);
         }
 
         _stop.Dispose();
+        _admission.Dispose();
     }
 
     private async Task<ObsRtmpIngestResult> RunAsync(TcpListener listener, CancellationToken cancellationToken)
     {
         using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _stop.Token);
+        using var reads = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token, _admission.ReadStop);
         var publishing = new ObsFlvPublishingSession(_channelId, _sessionId, _consumer, _options);
         Task? reject = null;
         ObsRtmpIngestEndReason reason;
         ObsRtmpRejectionDiagnostic? rejection = null;
+        var acceptedClient = false;
         try
         {
-            using var client = await listener.AcceptTcpClientAsync(lifetime.Token).ConfigureAwait(false);
+            var accept = listener.AcceptTcpClientAsync(reads.Token);
+            if (!accept.IsCompleted) _observation?.AcceptWaiting?.Invoke();
+            using var client = await accept.ConfigureAwait(false);
+            acceptedClient = true;
+            if (!_admission.TryAdmit()) throw new OperationCanceledException(reads.Token);
             lock (_gate) { _publisherConnected = true; }
             client.NoDelay = true;
-            reject = RejectAdditionalClientsAsync(listener, lifetime.Token);
-            var protocol = new ObsRtmpProtocolSession(client.GetStream(), _options, publishing);
+            reject = RejectAdditionalClientsAsync(listener, reads.Token);
+            var stream = client.GetStream();
+            var observedStream = _observation?.ObserveStream?.Invoke(stream) ?? stream;
+            var protocol = new ObsRtmpProtocolSession(observedStream, _options, publishing, _admission, _observation);
             reason = await protocol.RunAsync(lifetime.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
         {
             reason = ObsRtmpIngestEndReason.Cancelled;
+        }
+        catch (OperationCanceledException) when (_admission.ReadStop.IsCancellationRequested)
+        {
+            reason = ObsRtmpIngestEndReason.Quiesced;
+        }
+        catch (SocketException) when (!acceptedClient && reads.IsCancellationRequested)
+        {
+            reason = lifetime.IsCancellationRequested ? ObsRtmpIngestEndReason.Cancelled : ObsRtmpIngestEndReason.Quiesced;
+        }
+        catch (InvalidOperationException) when (!acceptedClient && reads.IsCancellationRequested)
+        {
+            reason = lifetime.IsCancellationRequested ? ObsRtmpIngestEndReason.Cancelled : ObsRtmpIngestEndReason.Quiesced;
         }
         catch (TimeoutException)
         {
@@ -160,6 +242,10 @@ public sealed class ObsRtmpIngestHost : IAsyncDisposable
         catch (SocketException)
         {
             reason = ObsRtmpIngestEndReason.TransportFailed;
+        }
+        catch (Exception)
+        {
+            reason = ObsRtmpIngestEndReason.InternalFailure;
         }
         finally
         {
@@ -192,6 +278,9 @@ public sealed class ObsRtmpIngestHost : IAsyncDisposable
         {
         }
         catch (SocketException)
+        {
+        }
+        catch (InvalidOperationException) when (cancellationToken.IsCancellationRequested)
         {
         }
     }

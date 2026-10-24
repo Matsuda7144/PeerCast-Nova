@@ -6,7 +6,9 @@ namespace PeerCast.Nova.Network.Rtmp;
 internal sealed class ObsRtmpProtocolSession(
     Stream stream,
     ObsRtmpIngestOptions options,
-    ObsFlvPublishingSession publishing)
+    ObsFlvPublishingSession publishing,
+    ObsRtmpIngressAdmission admission,
+    ObsRtmpIngressObservation? observation = null)
 {
     private bool _connected;
     private bool _created;
@@ -14,12 +16,24 @@ internal sealed class ObsRtmpProtocolSession(
 
     public async Task<ObsRtmpIngestEndReason> RunAsync(CancellationToken cancellationToken)
     {
-        await HandshakeAsync(cancellationToken).ConfigureAwait(false);
+        using var reads = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, admission.ReadStop);
+        await HandshakeAsync(reads.Token).ConfigureAwait(false);
         var reader = new RtmpChunkReader(stream, options,
             (count, token) => SendUInt32Async(3, count, token));
         while (true)
         {
-            var message = await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+            var message = await reader.ReadAsync(reads.Token).ConfigureAwait(false);
+            observation?.MessageDecoded?.Invoke(message);
+            // Reading a message does not admit it. The shared gate decides
+            // whether this complete message or the close request won the race.
+            if (!admission.TryAdmit())
+            {
+                // A forced stop that won before this boundary is cancellation,
+                // even when local admission was also closed.
+                cancellationToken.ThrowIfCancellationRequested();
+                return ObsRtmpIngestEndReason.Quiesced;
+            }
+            observation?.MessageAdmitted?.Invoke(message);
             try
             {
                 if (message.Type is >= 1 and <= 6)

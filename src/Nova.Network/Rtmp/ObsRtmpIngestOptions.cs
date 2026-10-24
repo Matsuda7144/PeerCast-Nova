@@ -61,6 +61,8 @@ public enum ObsRtmpIngestEndReason
     ProtocolRejected,
     ConsumerRejected,
     TransportFailed,
+    Quiesced,
+    InternalFailure,
 }
 
 /// <summary>Managed delivery accounting; does not establish playback acceptance.</summary>
@@ -71,3 +73,14 @@ public sealed record ObsRtmpIngestResult(
 {
     public ObsRtmpRejectionDiagnostic? Rejection { get; init; }
 }
+
+public enum ObsRtmpQuiescenceOutcome { Completed, TimedOut, Cancelled, Failed, AlreadyEnded }
+
+/// <summary>
+/// A bounded wait result. FinalResult is present only after the ingress has
+/// terminated and its accepted counters cannot change. A timed-out/cancelled
+/// wait does not abort an admitted callback; Completion remains the final barrier.
+/// </summary>
+public sealed record ObsRtmpQuiescenceResult(
+    ObsRtmpQuiescenceOutcome Outcome,
+    ObsRtmpIngestResult? FinalResult);
