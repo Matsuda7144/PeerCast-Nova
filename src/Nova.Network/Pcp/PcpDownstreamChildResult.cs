@@ -12,6 +12,7 @@ public enum PcpDownstreamChildEndReason
     SlowConsumer,
     WriteTimedOut,
     WriteFailed,
+    AdmissionClosed,
 }
 
 /// <summary>

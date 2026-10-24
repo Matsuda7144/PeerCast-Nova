@@ -23,6 +23,17 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
     private readonly PcpDownstreamChildOptions _childOptions;
     private readonly IPcpDownstreamRelayAdmission? _admission;
     private readonly CancellationTokenSource _stopSource = new();
+    private readonly CancellationTokenSource _acceptStop = new();
+    private readonly PcpRelayChildAdmission _childAdmission = new();
+    private readonly TaskCompletionSource<bool> _acceptClosed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private Task? _closeAdmissionTask;
+    private Task<PcpRelayQuiescenceResult>? _drainTask;
+    private Task? _disposal;
+    private CancellationToken _callerCancellation;
+    private int _forcedStopRequested;
+    private readonly HashSet<Task<bool>> _pendingAdmissionCleanup = [];
+    private long _admissionCleanupFailedCount;
+    private long _admissionCloseFailedCount;
     private readonly HashSet<SessionEntry> _sessions = [];
 
     private Task<PcpDownstreamRelayServerResult>? _runTask;
@@ -51,6 +62,10 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
     private long _discardedByteCount;
     private long _internalFailureCount;
     private int _disposed;
+
+    private long _admissionClosedCount;
+    internal Func<TcpTransportConnection, IPcpDownstreamPacketWriter?>? PacketWriterFactory { get; init; }
+    internal PcpRelayQuiescenceObserver? QuiescenceObserver { get; init; }
 
     public PcpDownstreamRelayServer(
         IPEndPoint localEndPoint,
@@ -154,9 +169,191 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
             }
 
             _state = PcpDownstreamRelayServerState.Running;
+            _callerCancellation = cancellationToken;
             _runTask = RunCoreAsync(cancellationToken);
             return _runTask;
         }
+    }
+
+    /// <summary>Close TCP and child registration admission without cancelling existing sessions.</summary>
+    public Task StopAcceptingAsync()
+    {
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+            if (_runTask is null) throw new InvalidOperationException("The relay server has not started.");
+            _childAdmission.Close();
+            return _closeAdmissionTask ??= Task.Run(WaitForAdmissionClosedAsync);
+        }
+    }
+
+    private async Task WaitForAdmissionClosedAsync()
+    {
+        try
+        {
+            await _acceptStop.CancelAsync().ConfigureAwait(false);
+            try
+            {
+                if (QuiescenceObserver is not null)
+                    await QuiescenceObserver.ObserveAsync(PcpRelayQuiescencePoint.BeforeListenerStop).ConfigureAwait(false);
+            }
+            finally { await _listener.StopAsync().ConfigureAwait(false); }
+            if (!await _acceptClosed.Task.ConfigureAwait(false))
+                throw new IOException("Relay admission closure failed.");
+        }
+        catch
+        {
+            lock (_gate) { _admissionCloseFailedCount = 1; }
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Caller must first prove upstream consumption has ended. Close admission,
+    /// drain only this server's children, then clean owned sessions. The first
+    /// request owns one overall deadline/token; duplicate calls share its result.
+    /// Timeout/cancellation never force-cancel a still-pending send.
+    /// </summary>
+    public Task<PcpRelayQuiescenceResult> DrainAfterUpstreamEndAsync(
+        TimeSpan timeout, CancellationToken cancellationToken = default)
+    {
+        if (timeout <= TimeSpan.Zero || timeout > TimeSpan.FromMinutes(1))
+            throw new ArgumentOutOfRangeException(nameof(timeout));
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+            if (_runTask is null) throw new InvalidOperationException("The relay server has not started.");
+            if (_drainTask is not null) return _drainTask;
+            if (cancellationToken.IsCancellationRequested)
+                return Task.FromResult(new PcpRelayQuiescenceResult(PcpRelayQuiescenceOutcome.Cancelled, false, false, Snapshot));
+            var deadline = new CancellationTokenSource(timeout);
+            _drainTask = DrainCoreAsync(deadline, cancellationToken);
+            return _drainTask;
+        }
+    }
+
+    private async Task<PcpRelayQuiescenceResult> DrainCoreAsync(
+        CancellationTokenSource deadline, CancellationToken cancellationToken)
+    {
+        // Defer work so the cached task is published before completion/reentry.
+        await Task.Yield();
+        using (deadline)
+        using (var wait = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token, cancellationToken))
+        {
+            var drained = false;
+            var cleaning = false;
+            try
+            {
+                await StopAcceptingAsync().WaitAsync(wait.Token).ConfigureAwait(false);
+                if (ForcedStopRequested) return ForcedStopResult();
+                var scope = _childAdmission.CaptureClosed();
+                using var sends = CancellationTokenSource.CreateLinkedTokenSource(wait.Token, _stopSource.Token, _callerCancellation);
+                if (!await PcpRelayFanout.WaitForIdleAsync(scope.Children, TimeSpan.FromMinutes(1), sends.Token).ConfigureAwait(false))
+                    return Result(PcpRelayQuiescenceOutcome.TimedOut, false, false);
+                var failed = scope.DeliveryFailed || scope.Children.Any(child => PcpRelayChildAdmission.DeliveryFailed(child.Snapshot));
+                if (ForcedStopRequested) return ForcedStopResult();
+                wait.Token.ThrowIfCancellationRequested();
+                if (QuiescenceObserver is not null)
+                    await QuiescenceObserver.ObserveAsync(PcpRelayQuiescencePoint.AfterInitialFailureEvaluation).AsTask().WaitAsync(wait.Token).ConfigureAwait(false);
+                drained = !failed;
+                // Only after all known pending/in-flight sends have settled.
+                cleaning = true;
+                await _stopSource.CancelAsync().WaitAsync(wait.Token).ConfigureAwait(false);
+                var final = await _runTask!.WaitAsync(wait.Token).ConfigureAwait(false);
+                await WaitForAdmissionCleanupAsync(wait.Token).ConfigureAwait(false);
+                // Fixed registrations and aggregate pruned failures are both re-evaluated after cleanup.
+                failed |= _childAdmission.CaptureClosed().DeliveryFailed ||
+                    scope.Children.Any(child => PcpRelayChildAdmission.DeliveryFailed(child.Snapshot));
+                wait.Token.ThrowIfCancellationRequested();
+                var snapshot = Snapshot;
+                var clean = snapshot.ActiveConnectionCount == 0 && snapshot.CleanupIncompleteCount == 0 && snapshot.InternalFailureCount == 0 && snapshot.AdmissionCleanupPendingCount == 0 && snapshot.AdmissionCleanupFailedCount == 0;
+                failed |= snapshot.DiscardedPacketCount != 0 || snapshot.WriteFailedCount != 0 || snapshot.WriteTimedOutCount != 0 || snapshot.SlowConsumerCount != 0 || snapshot.FanoutStoppedCount != 0;
+                drained &= !failed;
+                if (ForcedStopRequested) return ForcedStopResult();
+                if (final.EndReason == PcpDownstreamRelayServerEndReason.AcceptFailed || snapshot.AdmissionCloseFailedCount != 0)
+                    return new(clean ? PcpRelayQuiescenceOutcome.Failed : PcpRelayQuiescenceOutcome.CleanupFailed, false, clean, snapshot);
+                return new(ClassifyQuiescence(clean, ForcedStopRequested, failed), drained, clean, snapshot);
+            }
+            catch (OperationCanceledException)
+            {
+                if (ForcedStopRequested) return ForcedStopResult();
+                var snapshot = Snapshot;
+                return Result(snapshot.AdmissionCleanupFailedCount != 0 || snapshot.CleanupIncompleteCount != 0 || snapshot.InternalFailureCount != 0
+                    ? PcpRelayQuiescenceOutcome.CleanupFailed : cancellationToken.IsCancellationRequested
+                    ? PcpRelayQuiescenceOutcome.Cancelled : PcpRelayQuiescenceOutcome.TimedOut, drained, false);
+            }
+            catch (ObjectDisposedException) when (ForcedStopRequested)
+            {
+                return ForcedStopResult();
+            }
+            catch (Exception)
+            {
+                return Result(cleaning ? PcpRelayQuiescenceOutcome.CleanupFailed : PcpRelayQuiescenceOutcome.Failed, drained, false);
+            }
+        }
+    }
+
+    private PcpRelayQuiescenceResult Result(PcpRelayQuiescenceOutcome outcome, bool drained, bool cleaned) =>
+        new(outcome, drained, cleaned, Snapshot);
+
+    private bool ForcedStopRequested => Volatile.Read(ref _forcedStopRequested) != 0 || _callerCancellation.IsCancellationRequested;
+
+    private PcpRelayQuiescenceResult ForcedStopResult()
+    {
+        var snapshot = Snapshot;
+        var cleanupFailed = snapshot.CleanupIncompleteCount != 0 || snapshot.InternalFailureCount != 0 || snapshot.AdmissionCleanupFailedCount != 0;
+        return new(cleanupFailed ? PcpRelayQuiescenceOutcome.CleanupFailed : PcpRelayQuiescenceOutcome.Cancelled,
+            false, false, snapshot);
+    }
+
+    internal static PcpRelayQuiescenceOutcome ClassifyQuiescence(bool cleanupCompleted, bool cancelled, bool deliveryFailed) =>
+        !cleanupCompleted ? PcpRelayQuiescenceOutcome.CleanupFailed : cancelled ? PcpRelayQuiescenceOutcome.Cancelled :
+        deliveryFailed ? PcpRelayQuiescenceOutcome.DeliveryFailed : PcpRelayQuiescenceOutcome.Drained;
+
+    internal void TrackAdmissionCleanup(Task<bool> cleanup)
+    {
+        lock (_gate)
+        {
+            PruneAdmissionCleanupLocked();
+            _pendingAdmissionCleanup.Add(cleanup);
+            PruneAdmissionCleanupLocked();
+        }
+        // Observe late faults and prune successful histories even if no subsequent
+        // connection or status read occurs after a timed-out drain.
+        _ = cleanup.ContinueWith(_ =>
+        {
+            lock (_gate) { PruneAdmissionCleanupLocked(); }
+        }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+    }
+
+    private void PruneAdmissionCleanupLocked()
+    {
+        foreach (var task in _pendingAdmissionCleanup.Where(task => task.IsCompleted).ToArray())
+        {
+            if (!task.IsCompletedSuccessfully || !task.Result)
+            {
+                _ = task.Exception;
+                _admissionCleanupFailedCount = checked(_admissionCleanupFailedCount + 1);
+            }
+            _pendingAdmissionCleanup.Remove(task);
+        }
+    }
+
+    private async Task WaitForAdmissionCleanupAsync(CancellationToken cancellationToken)
+    {
+        Task<bool>[] pending;
+        lock (_gate)
+        {
+            PruneAdmissionCleanupLocked();
+            pending = [.. _pendingAdmissionCleanup];
+        }
+        foreach (var task in pending)
+        {
+            try { await task.WaitAsync(cancellationToken).ConfigureAwait(false); }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+            catch { /* The aggregate failure evidence owns classification. */ }
+        }
+        lock (_gate) { PruneAdmissionCleanupLocked(); }
     }
 
     public async Task StopAsync(
@@ -179,6 +376,7 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
             }
         }
 
+        Interlocked.Exchange(ref _forcedStopRequested, 1);
         CancelBestEffort(_stopSource);
 
         if (runTask is null)
@@ -199,16 +397,24 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
         ObjectDisposedException.ThrowIf(
             Volatile.Read(ref _disposed) != 0,
             this);
+        Interlocked.Exchange(ref _forcedStopRequested, 1);
         CancelBestEffort(_stopSource);
     }
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
-        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        lock (_gate)
         {
-            return;
+            if (_disposal is not null) return new(_disposal);
+            Interlocked.Exchange(ref _disposed, 1);
+            Interlocked.Exchange(ref _forcedStopRequested, 1);
+            _disposal = Task.Run(DisposeCoreAsync);
+            return new(_disposal);
         }
+    }
 
+    private async Task DisposeCoreAsync()
+    {
         Task<PcpDownstreamRelayServerResult>? runTask;
 
         CancelBestEffort(_stopSource);
@@ -233,8 +439,16 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
         }
         finally
         {
+            Task? closure;
+            lock (_gate) { closure = _closeAdmissionTask; }
+            if (closure is not null)
+            {
+                try { await closure.ConfigureAwait(false); }
+                catch { /* Closure failure remains in the fixed snapshot counter. */ }
+            }
             await _listener.DisposeAsync().ConfigureAwait(false);
             _stopSource.Dispose();
+            _acceptStop.Dispose();
         }
     }
 
@@ -246,16 +460,24 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
                 cancellationToken,
                 _stopSource.Token);
         var operationToken = operationSource.Token;
+        using var accepts = CancellationTokenSource.CreateLinkedTokenSource(operationToken, _acceptStop.Token);
         var endReason = PcpDownstreamRelayServerEndReason.Stopped;
 
         try
         {
             while (true)
             {
-                var connection = await _listener.AcceptAsync(
-                    operationToken).ConfigureAwait(false);
-                StartSession(connection, operationToken);
+                if (QuiescenceObserver is not null)
+                    await QuiescenceObserver.ObserveAsync(PcpRelayQuiescencePoint.BeforeAccept).ConfigureAwait(false);
+                var connection = await _listener.AcceptAsync(accepts.Token).ConfigureAwait(false);
+                if (!StartSession(connection, operationToken))
+                    await connection.DisposeAsync().ConfigureAwait(false);
             }
+        }
+        catch (OperationCanceledException)
+            when (_acceptStop.IsCancellationRequested && !operationSource.IsCancellationRequested)
+        {
+            endReason = PcpDownstreamRelayServerEndReason.Quiesced;
         }
         catch (OperationCanceledException)
             when (operationSource.IsCancellationRequested)
@@ -274,11 +496,35 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
             endReason = PcpDownstreamRelayServerEndReason.AcceptFailed;
         }
         catch (InvalidOperationException)
+            when (_acceptStop.IsCancellationRequested && !operationSource.IsCancellationRequested)
+        {
+            endReason = PcpDownstreamRelayServerEndReason.Quiesced;
+        }
+        catch (InvalidOperationException)
         {
             endReason = PcpDownstreamRelayServerEndReason.AcceptFailed;
         }
         finally
         {
+            var closed = false;
+            try
+            {
+                await _listener.StopAsync().ConfigureAwait(false);
+                Interlocked.Exchange(ref _publicMappingOwner, null)?.Dispose();
+                closed = true;
+            }
+            catch
+            {
+                endReason = PcpDownstreamRelayServerEndReason.AcceptFailed;
+                lock (_gate) { _admissionCloseFailedCount = 1; }
+            }
+            finally { _acceptClosed.TrySetResult(closed && endReason != PcpDownstreamRelayServerEndReason.AcceptFailed); }
+            if (closed && endReason == PcpDownstreamRelayServerEndReason.Quiesced && !operationSource.IsCancellationRequested)
+            {
+                lock (_gate) { _state = PcpDownstreamRelayServerState.Quiescent; }
+                try { await Task.Delay(Timeout.InfiniteTimeSpan, operationToken).ConfigureAwait(false); }
+                catch (OperationCanceledException) when (operationSource.IsCancellationRequested) { }
+            }
             lock (_gate)
             {
                 _state = PcpDownstreamRelayServerState.Stopping;
@@ -300,7 +546,7 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
         return new PcpDownstreamRelayServerResult(endReason, snapshot);
     }
 
-    private void StartSession(
+    private bool StartSession(
         TcpTransportConnection connection,
         CancellationToken cancellationToken)
     {
@@ -308,12 +554,15 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
 
         lock (_gate)
         {
+            if (_childAdmission.IsClosed) return false;
             _sessions.Add(entry);
             _acceptedConnectionCount = checked(
                 _acceptedConnectionCount + 1);
             _activeConnectionCount = checked(
                 _activeConnectionCount + 1);
-            entry.Task = RunSessionAsync(entry, cancellationToken);
+            // Never run external policy callbacks while holding the server lock.
+            entry.Task = Task.Run(() => RunSessionAsync(entry, cancellationToken), CancellationToken.None);
+            return true;
         }
     }
 
@@ -323,17 +572,20 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
     {
         PcpDownstreamChildResult? result = null;
         var internalFailure = false;
+        PcpDownstreamChildSession? session = null;
 
         try
         {
-            await using var session = new PcpDownstreamChildSession(
+            session = new PcpDownstreamChildSession(
                 entry.Connection,
                 _fanout,
                 _channelId,
                 _localSessionId,
                 _childOptions,
-                packetWriter: null,
-                admission: _admission);
+                packetWriter: PacketWriterFactory?.Invoke(entry.Connection),
+                admission: _admission,
+                childAdmission: _childAdmission,
+                quiescenceObserver: QuiescenceObserver);
             result = await session.RunAsync(
                 cancellationToken).ConfigureAwait(false);
         }
@@ -352,6 +604,12 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
         }
         finally
         {
+            try
+            {
+                if (session is not null) await session.DisposeAsync().ConfigureAwait(false);
+            }
+            catch { internalFailure = true; }
+            if (session is not null) TrackAdmissionCleanup(session.AdmissionCleanupCompletion);
             lock (_gate)
             {
                 _sessions.Remove(entry);
@@ -411,6 +669,9 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
 
         switch (result.EndReason)
         {
+            case PcpDownstreamChildEndReason.AdmissionClosed:
+                _admissionClosedCount = checked(_admissionClosedCount + 1);
+                break;
             case PcpDownstreamChildEndReason.Stopped:
                 _stoppedCount = checked(_stoppedCount + 1);
                 break;
@@ -452,6 +713,7 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
 
     private PcpDownstreamRelayServerSnapshot CreateSnapshotLocked()
     {
+        PruneAdmissionCleanupLocked();
         return new PcpDownstreamRelayServerSnapshot(
             _state,
             _endReason,
@@ -474,7 +736,13 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
             _deliveredByteCount,
             _discardedPacketCount,
             _discardedByteCount,
-            _internalFailureCount);
+            _internalFailureCount)
+        {
+            AdmissionClosedCount = _admissionClosedCount,
+            AdmissionCloseFailedCount = _admissionCloseFailedCount,
+            AdmissionCleanupPendingCount = _pendingAdmissionCleanup.Count,
+            AdmissionCleanupFailedCount = _admissionCleanupFailedCount
+        };
     }
 
     private static void CancelBestEffort(CancellationTokenSource source)
@@ -487,6 +755,7 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
         {
             // A cancellation callback cannot change server ownership.
         }
+        catch (ObjectDisposedException) { /* Concurrent completed Dispose owns cleanup. */ }
     }
 
     private sealed class SessionEntry

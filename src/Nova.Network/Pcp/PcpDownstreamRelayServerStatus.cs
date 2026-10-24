@@ -6,6 +6,7 @@ public enum PcpDownstreamRelayServerState
     Running,
     Stopping,
     Stopped,
+    Quiescent,
 }
 
 public enum PcpDownstreamRelayServerEndReason
@@ -13,6 +14,7 @@ public enum PcpDownstreamRelayServerEndReason
     Stopped,
     CallerCanceled,
     AcceptFailed,
+    Quiesced,
 }
 
 /// <summary>
@@ -113,7 +115,21 @@ public sealed record PcpDownstreamRelayServerSnapshot
     public long DiscardedByteCount { get; }
 
     public long InternalFailureCount { get; }
+
+    public long AdmissionClosedCount { get; init; }
+    public long AdmissionCloseFailedCount { get; init; }
+    public int AdmissionCleanupPendingCount { get; init; }
+    public long AdmissionCleanupFailedCount { get; init; }
 }
+
+public enum PcpRelayQuiescenceOutcome { Drained, TimedOut, Cancelled, DeliveryFailed, CleanupFailed, Failed }
+
+/// <summary>Local delivery/cleanup evidence only; never remote playback proof.</summary>
+public sealed record PcpRelayQuiescenceResult(
+    PcpRelayQuiescenceOutcome Outcome,
+    bool SendsDrained,
+    bool CleanupCompleted,
+    PcpDownstreamRelayServerSnapshot Snapshot);
 
 public sealed record PcpDownstreamRelayServerResult(
     PcpDownstreamRelayServerEndReason EndReason,

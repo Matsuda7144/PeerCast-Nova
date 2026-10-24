@@ -191,9 +191,25 @@ public sealed class PcpRelayFanout : IPcpChannelPacketConsumer, IAsyncDisposable
     /// consumption before calling this method so no new packets can race the
     /// idle observation.
     /// </summary>
-    public async Task<bool> WaitForIdleAsync(
+    public Task<bool> WaitForIdleAsync(
         TimeSpan timeout,
         CancellationToken cancellationToken = default)
+        => WaitForIdleCoreAsync(() =>
+        {
+            lock (_gate)
+            {
+                ObjectDisposedException.ThrowIf(_stopping, this);
+                return _knownChildren.Select(child => child.Snapshot).ToArray();
+            }
+        }, timeout, cancellationToken);
+
+    // A closed server admission scope excludes unrelated HTTP/recording children.
+    internal static Task<bool> WaitForIdleAsync(
+        IReadOnlyList<PcpRelayChildRegistration> children, TimeSpan timeout, CancellationToken cancellationToken)
+        => WaitForIdleCoreAsync(() => children.Select(child => child.Snapshot).ToArray(), timeout, cancellationToken);
+
+    private static async Task<bool> WaitForIdleCoreAsync(
+        Func<PcpRelayChildStatusSnapshot[]> read, TimeSpan timeout, CancellationToken cancellationToken)
     {
         if (timeout <= TimeSpan.Zero || timeout > TimeSpan.FromMinutes(1))
         {
@@ -213,16 +229,7 @@ public sealed class PcpRelayFanout : IPcpChannelPacketConsumer, IAsyncDisposable
         {
             while (true)
             {
-                PcpRelayChildWorker[] children;
-
-                lock (_gate)
-                {
-                    ObjectDisposedException.ThrowIf(_stopping, this);
-                    children = [.. _knownChildren];
-                }
-
-                if (children.All(
-                    child => child.Snapshot.PendingPacketCount == 0))
+                if (read().All(child => child.PendingPacketCount == 0))
                 {
                     return true;
                 }

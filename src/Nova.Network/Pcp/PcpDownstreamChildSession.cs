@@ -32,6 +32,8 @@ public sealed class PcpDownstreamChildSession :
     private readonly PcpDownstreamRelayRequest? _preRoutedRequest;
     private readonly bool _ownsTransport;
     private readonly IPcpDownstreamRelayAdmission? _admission;
+    private readonly PcpRelayChildAdmission? _childAdmission;
+    private readonly PcpRelayQuiescenceObserver? _quiescenceObserver;
     private IDisposable? _admissionReservation;
     private Task<bool> _admissionCleanup = Task.FromResult(true);
     private readonly CancellationTokenSource _lifetimeSource = new();
@@ -73,7 +75,9 @@ public sealed class PcpDownstreamChildSession :
         Guid localSessionId,
         PcpDownstreamChildOptions? options,
         IPcpDownstreamPacketWriter? packetWriter,
-        IPcpDownstreamRelayAdmission? admission = null)
+        IPcpDownstreamRelayAdmission? admission = null,
+        PcpRelayChildAdmission? childAdmission = null,
+        PcpRelayQuiescenceObserver? quiescenceObserver = null)
         : this(
             connection,
             fanout,
@@ -86,6 +90,8 @@ public sealed class PcpDownstreamChildSession :
             ownsTransport: true,
             admission)
     {
+        _childAdmission = childAdmission;
+        _quiescenceObserver = quiescenceObserver;
     }
 
     private PcpDownstreamChildSession(
@@ -477,11 +483,22 @@ public sealed class PcpDownstreamChildSession :
 
         // Request format and ChannelId are already validated. A remote loopback
         // address is still a PCP relay role, not an internal media consumer.
+        if (_childAdmission?.IsClosed == true)
+            return await RejectClosedAdmissionAsync(handshakeToken).ConfigureAwait(false);
+        if (_quiescenceObserver is not null)
+            await _quiescenceObserver.ObserveAsync(PcpRelayQuiescencePoint.BeforeReserve).ConfigureAwait(false);
         var policyAccepted = _admission is null ||
             _admission.TryReserve(_connection.ConnectionId, out _admissionReservation, handshakeToken);
+        if (policyAccepted && _quiescenceObserver is not null)
+            await _quiescenceObserver.ObserveAsync(PcpRelayQuiescencePoint.AfterReserve).ConfigureAwait(false);
         PcpRelayChildRegistration? registration = null;
-        if (!policyAccepted || !_fanout.TryAddChild(this, out registration))
+        var registered = policyAccepted && (_childAdmission is null
+            ? _fanout.TryAddChild(this, out registration)
+            : _childAdmission.TryAddChild(_fanout, this, out registration));
+        if (!registered)
         {
+            if (_childAdmission?.IsClosed == true)
+                return await RejectClosedAdmissionAsync(handshakeToken).ConfigureAwait(false);
             _httpStatusCode = 503;
             await WriteControlAsync(
                 PcpDownstreamHttpResponse.CreatePcp(
@@ -505,7 +522,7 @@ public sealed class PcpDownstreamChildSession :
             return PcpDownstreamChildEndReason.RelayFull;
         }
 
-        _registration = registration;
+        _registration = registration ?? throw new InvalidOperationException("Missing admitted relay child.");
         _httpStatusCode = 200;
 
         await WriteControlAsync(
@@ -543,7 +560,7 @@ public sealed class PcpDownstreamChildSession :
         var monitorTask = MonitorRemoteControlAsync(
             atomReader,
             operationSource.Token);
-        var completionTask = registration.Completion;
+        var completionTask = _registration.Completion;
         var cancellationTask = Task.Delay(
             Timeout.InfiniteTimeSpan,
             operationSource.Token);
@@ -555,7 +572,7 @@ public sealed class PcpDownstreamChildSession :
 
         if (completed == completionTask)
         {
-            var result = MapRegistrationEndReason(registration.Snapshot);
+            var result = MapRegistrationEndReason(_registration.Snapshot);
             CancelBestEffort(operationSource);
             await IgnoreExpectedCancellationAsync(monitorTask)
                 .ConfigureAwait(false);
@@ -574,7 +591,17 @@ public sealed class PcpDownstreamChildSession :
             "The downstream cancellation task completed unexpectedly.");
     }
 
-    private static async Task<bool> ReleaseAdmissionAfterCleanupAsync(
+    private async Task<PcpDownstreamChildEndReason> RejectClosedAdmissionAsync(CancellationToken cancellationToken)
+    {
+        _httpStatusCode = 503;
+        if (_quiescenceObserver is not null)
+            await _quiescenceObserver.ObserveAsync(PcpRelayQuiescencePoint.BeforeClosedResponse).ConfigureAwait(false);
+        await WriteControlAsync(PcpDownstreamHttpResponse.CreateRejection(503, _options.UserAgent),
+            cancellationToken).ConfigureAwait(false);
+        return PcpDownstreamChildEndReason.AdmissionClosed;
+    }
+
+    internal static async Task<bool> ReleaseAdmissionAfterCleanupAsync(
         IDisposable reservation, Task transportCleanup, Task childCompletion)
     {
         try { await transportCleanup.ConfigureAwait(false); }

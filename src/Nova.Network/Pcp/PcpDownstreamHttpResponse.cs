@@ -52,10 +52,11 @@ internal static class PcpDownstreamHttpResponse
         {
             400 => "Bad Request",
             404 => "Not Found",
+            503 => "Service Unavailable",
             _ => throw new ArgumentOutOfRangeException(
                 nameof(statusCode),
                 statusCode,
-                "A rejection response must be 400 or 404."),
+                "A rejection response must be 400, 404, or 503."),
         };
 
         return Encoding.ASCII.GetBytes(string.Concat(
