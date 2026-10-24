@@ -7,6 +7,14 @@ using PeerCast.Nova.Protocol.Pcp;
 
 namespace PeerCast.Nova.Network.Pcp;
 
+// Internal writer observation boundary, used only by deterministic managed tests.
+// Called on the worker send path, outside server/registration/fanout locks.
+internal interface IPcpDownstreamWorkerLifetimeObserver
+{
+    void ObserveWorkerLifetime(CancellationToken cancellationToken);
+}
+
+
 /// <summary>
 /// Runs one downstream PCP child from HTTP relay entry through negotiation,
 /// bounded CHAN delivery, remote control monitoring, and cleanup. Standalone
@@ -244,6 +252,8 @@ public sealed class PcpDownstreamChildSession :
     {
         ArgumentNullException.ThrowIfNull(packet);
 
+        if (_packetWriter is IPcpDownstreamWorkerLifetimeObserver observer)
+            observer.ObserveWorkerLifetime(cancellationToken);
         using var timeoutSource = new CancellationTokenSource(
             _options.WriteTimeout);
         using var linkedSource =
@@ -402,6 +412,9 @@ public sealed class PcpDownstreamChildSession :
         }
 
         var snapshot = _registration?.Snapshot;
+        // Callback success is separate from actual worker/transport termination
+        // and the existing reservation-release proof chain.
+        cleanupCompleted &= snapshot?.CleanupFailed != true;
         return new PcpDownstreamChildResult(
             endReason,
             _httpStatusCode == 0 ? null : _httpStatusCode,

@@ -242,6 +242,8 @@ public sealed class PcpHttpFlvPlaybackHost :
         }
     }
 
+    internal PcpHttpFlvStartupObserver? StartupObserver { get; init; }
+
     private async Task RunClientAsync(
         TcpTransportConnection connection,
         CancellationToken cancellationToken)
@@ -281,7 +283,7 @@ public sealed class PcpHttpFlvPlaybackHost :
 
             sink = new PcpHttpFlvClientSink(
                 connection,
-                _options.WriteTimeout);
+                _options.WriteTimeout, StartupObserver);
             if (!source.TryAddClient(sink, out registration, out var bootstrap) ||
                 registration is null ||
                 bootstrap is null)
@@ -351,14 +353,26 @@ public sealed class PcpHttpFlvPlaybackHost :
         }
         finally
         {
+            // Bootstrap/header writes have really ended before the child barrier settles.
+            sink?.EndStartup();
             disconnectSource?.Cancel();
             disconnectSource?.Dispose();
-            if (registration is not null)
+            try
             {
-                await registration.DisposeAsync().ConfigureAwait(false);
+                if (registration is not null)
+                    await registration.DisposeAsync().ConfigureAwait(false);
             }
-
-            await connection.DisposeAsync().ConfigureAwait(false);
+            finally
+            {
+                // Closing the transport may unblock an in-flight send. The
+                // client lifecycle retains CTS ownership after a bounded stop.
+                try { await connection.DisposeAsync().ConfigureAwait(false); }
+                finally
+                {
+                    if (sink is not null)
+                        await sink.DisposeAfterWorkerAsync(registration?.Completion ?? Task.CompletedTask).ConfigureAwait(false);
+                }
+            }
         }
     }
 
@@ -590,20 +604,27 @@ public sealed class PcpHttpFlvPlaybackHost :
 }
 
 internal sealed class PcpHttpFlvClientSink :
-    IPcpRelayChildSink
+    IPcpRelayChildSink, IPcpRelayChildStartupBoundary
 {
     private readonly TcpTransportConnection _connection;
     private readonly TimeSpan _writeTimeout;
-    private readonly TaskCompletionSource<bool> _activation = new(
-        TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly PcpHttpFlvStartupLifetime _startup;
+
+    public Task StartupCompletion => _startup.StartupCompletion;
+    public Task StartupCancellationCompletion => _startup.CancellationCompletion;
+    public void RequestStartupCancellation() => _startup.RequestCancellation();
+    public void EndStartup() => _startup.EndStartup();
+    public Task DisposeAfterWorkerAsync(Task workerCompletion) => _startup.DisposeAfterWorkerAsync(workerCompletion);
 
     public PcpHttpFlvClientSink(
         TcpTransportConnection connection,
-        TimeSpan writeTimeout)
+        TimeSpan writeTimeout,
+        PcpHttpFlvStartupObserver? observer = null)
     {
         ArgumentNullException.ThrowIfNull(connection);
         _connection = connection;
         _writeTimeout = writeTimeout;
+        _startup = new PcpHttpFlvStartupLifetime(observer);
     }
 
     public async ValueTask SendAsync(
@@ -611,31 +632,35 @@ internal sealed class PcpHttpFlvClientSink :
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(packet);
-        await _activation.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await _startup.StartupCompletion.WaitAsync(cancellationToken).ConfigureAwait(false);
         await WriteAsync(packet.Payload, cancellationToken).ConfigureAwait(false);
     }
 
     public Task WriteResponseHeaderAsync(
         ReadOnlyMemory<byte> bytes,
         CancellationToken cancellationToken) =>
-        WriteAsync(bytes, cancellationToken);
+        _startup.WriteAsync(token => WriteAsync(bytes, cancellationToken, token), PcpHttpFlvStartupPoint.BeforeHeaderWrite);
 
-    public async Task WriteBootstrapAsync(
+    public Task WriteBootstrapAsync(
         PcpFlvBootstrapPayloadSnapshot bootstrap,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(bootstrap);
-        await WriteAsync(bootstrap.Header, cancellationToken).ConfigureAwait(false);
-        await WriteAsync(bootstrap.Metadata, cancellationToken).ConfigureAwait(false);
-        await WriteAsync(bootstrap.VideoConfiguration, cancellationToken).ConfigureAwait(false);
-        await WriteAsync(bootstrap.AudioConfiguration, cancellationToken).ConfigureAwait(false);
+        return _startup.WriteAsync(async token =>
+        {
+            await WriteAsync(bootstrap.Header, cancellationToken, token).ConfigureAwait(false);
+            await WriteAsync(bootstrap.Metadata, cancellationToken, token).ConfigureAwait(false);
+            await WriteAsync(bootstrap.VideoConfiguration, cancellationToken, token).ConfigureAwait(false);
+            await WriteAsync(bootstrap.AudioConfiguration, cancellationToken, token).ConfigureAwait(false);
+        }, PcpHttpFlvStartupPoint.BeforeBootstrapWrite);
     }
 
-    public void Activate() => _activation.TrySetResult(true);
+    public void Activate() => _startup.Activate();
 
     private async Task WriteAsync(
         ReadOnlyMemory<byte> bytes,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        CancellationToken startupToken = default)
     {
         if (bytes.IsEmpty)
         {
@@ -645,7 +670,8 @@ internal sealed class PcpHttpFlvClientSink :
         using var timeoutSource = new CancellationTokenSource(_writeTimeout);
         using var linkedSource = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken,
-            timeoutSource.Token);
+            timeoutSource.Token,
+            startupToken);
         try
         {
             await _connection.WriteAsync(bytes, linkedSource.Token)

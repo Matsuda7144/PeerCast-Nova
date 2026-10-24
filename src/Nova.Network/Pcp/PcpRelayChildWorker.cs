@@ -8,7 +8,6 @@ internal sealed class PcpRelayChildWorker : IAsyncDisposable
     private readonly CancellationTokenSource _stopSource = new();
     private readonly IPcpRelayChildSink _sink;
     private readonly Action<PcpRelayChildWorker> _stoppedAccepting;
-    private readonly Action<PcpRelayChildWorker> _completed;
     private readonly int _maxPendingPackets;
     private readonly long _maxPendingBytes;
     private readonly TimeSpan _stopTimeout;
@@ -17,6 +16,10 @@ internal sealed class PcpRelayChildWorker : IAsyncDisposable
     private PcpRelayChildState _state = PcpRelayChildState.Accepting;
     private PcpRelayChildEndReason? _endReason;
     private int _pendingPacketCount;
+    private int _inFlightPacketCount;
+    private bool _cleanupFailed;
+    private bool _startupPending;
+    private bool _startupFailed;
     private long _pendingByteCount;
     private long _deliveredPacketCount;
     private long _deliveredByteCount;
@@ -26,15 +29,14 @@ internal sealed class PcpRelayChildWorker : IAsyncDisposable
     public PcpRelayChildWorker(
         IPcpRelayChildSink sink,
         PcpRelayFanoutOptions options,
-        Action<PcpRelayChildWorker> stoppedAccepting,
-        Action<PcpRelayChildWorker> completed)
+        Action<PcpRelayChildWorker> stoppedAccepting)
     {
         _sink = sink;
         _stoppedAccepting = stoppedAccepting;
-        _completed = completed;
         _maxPendingPackets = options.MaxPendingPacketsPerChild;
         _maxPendingBytes = options.MaxPendingBytesPerChild;
         _stopTimeout = options.ChildStopTimeout;
+        _startupPending = sink is IPcpRelayChildStartupBoundary;
         _worker = RunAsync();
     }
 
@@ -42,6 +44,10 @@ internal sealed class PcpRelayChildWorker : IAsyncDisposable
     {
         get
         {
+            // Query the optional startup owner outside the worker lock. A fault
+            // is visible even when an uncooperative initial write is still pending.
+            var startupCancellationFailed = _sink is IPcpRelayChildStartupBoundary startup &&
+                startup.StartupCancellationCompletion.IsFaulted;
             lock (_gate)
             {
                 return new PcpRelayChildStatusSnapshot(
@@ -52,7 +58,13 @@ internal sealed class PcpRelayChildWorker : IAsyncDisposable
                     _deliveredPacketCount,
                     _deliveredByteCount,
                     _discardedPacketCount,
-                    _discardedByteCount);
+                    _discardedByteCount)
+                {
+                    InFlightPacketCount = _inFlightPacketCount,
+                    CleanupFailed = _cleanupFailed || startupCancellationFailed,
+                    StartupPending = _startupPending,
+                    StartupFailed = _startupFailed
+                };
             }
         }
     }
@@ -180,6 +192,7 @@ internal sealed class PcpRelayChildWorker : IAsyncDisposable
         catch (AggregateException)
         {
             // A child-owned cancellation callback must not affect the upstream.
+            lock (_gate) { _cleanupFailed = true; }
         }
     }
 
@@ -187,6 +200,18 @@ internal sealed class PcpRelayChildWorker : IAsyncDisposable
     {
         try
         {
+            if (_sink is IPcpRelayChildStartupBoundary startup)
+            {
+                using var registration = _stopSource.Token.Register(startup.RequestStartupCancellation);
+                try { await startup.StartupCompletion.ConfigureAwait(false); }
+                catch (OperationCanceledException) when (_stopSource.IsCancellationRequested) { throw; }
+                catch (Exception)
+                {
+                    lock (_gate) { _startupFailed = true; }
+                    throw;
+                }
+                finally { lock (_gate) { _startupPending = false; } }
+            }
             while (true)
             {
                 await _available.WaitAsync(
@@ -199,6 +224,7 @@ internal sealed class PcpRelayChildWorker : IAsyncDisposable
                     packet = _pending.Count == 0
                         ? null
                         : _pending.Dequeue();
+                    _inFlightPacketCount = packet is null ? 0 : 1;
                 }
 
                 if (packet is null)
@@ -242,6 +268,13 @@ internal sealed class PcpRelayChildWorker : IAsyncDisposable
             }
 
             await cancellationTask.ConfigureAwait(false);
+            if (_sink is IPcpRelayChildStartupBoundary startupCleanup)
+            {
+                // The request callback has been unregistered. Join the actual
+                // cancellation operation, not only its nonblocking request.
+                try { await startupCleanup.StartupCancellationCompletion.ConfigureAwait(false); }
+                catch { lock (_gate) { _cleanupFailed = true; } }
+            }
             _available.Dispose();
             _stopSource.Dispose();
 
@@ -250,7 +283,6 @@ internal sealed class PcpRelayChildWorker : IAsyncDisposable
                 _state = PcpRelayChildState.Stopped;
             }
 
-            _completed(this);
         }
     }
 
@@ -259,6 +291,7 @@ internal sealed class PcpRelayChildWorker : IAsyncDisposable
         lock (_gate)
         {
             _pendingPacketCount--;
+            _inFlightPacketCount--;
             _pendingByteCount -= payloadLength;
 
             if (delivered)

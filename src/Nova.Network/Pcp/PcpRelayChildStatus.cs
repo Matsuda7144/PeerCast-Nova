@@ -47,6 +47,16 @@ public sealed record PcpRelayChildStatusSnapshot
 
     public int PendingPacketCount { get; }
 
+    public int InFlightPacketCount { get; internal init; }
+
+    public bool CleanupFailed { get; internal init; }
+
+    public bool StartupPending { get; internal init; }
+
+    public bool StartupFailed { get; internal init; }
+
+    public int QueuedPacketCount => PendingPacketCount - InFlightPacketCount;
+
     public long PendingByteCount { get; }
 
     public long DeliveredPacketCount { get; }
