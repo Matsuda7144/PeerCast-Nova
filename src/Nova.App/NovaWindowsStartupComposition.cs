@@ -186,7 +186,7 @@ public sealed class NovaWindowsStartupComposition
         finally
         {
             // Close publishing command admission before other owners drain.
-            publishing?.Commands.CloseAdmission();
+            publishing?.CloseAdmission();
             // Close network admission immediately on root shutdown, including
             // while the independent private playback/recording owner drains.
             Task? networkShutdown = null;

@@ -4,7 +4,7 @@ internal static class GenesisGuiNextPublishingPresentation
 {
     internal const string StartLabel = "配信開始";
     internal const string InterruptLabel = "配信中断";
-    internal const string ScopeText = "待受の開始要求 · 中断はキャンセルによる終了 · 正常停止・再開始は未対応";
+    internal const string ScopeText = "待受の開始要求 · 中断はキャンセルによる終了 · 中断完了後に再開始可能 · 正常停止は未対応";
     internal static readonly IReadOnlyList<GenesisNativeListColumnPresentation> Columns = Array.AsReadOnly(
         new GenesisNativeListColumnPresentation[]
         {

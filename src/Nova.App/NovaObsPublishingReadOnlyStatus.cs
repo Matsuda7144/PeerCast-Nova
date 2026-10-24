@@ -29,6 +29,8 @@ internal sealed record NovaObsPublishingReadOnlySnapshot(
     ObsRtmpRejectionStage? RejectionStage,
     ObsRtmpRejectionReason? RejectionReason)
 {
+    public long? Generation { get; init; }
+    public bool IsSourceNotStarted { get; init; }
     public NovaObsPublishingLifecycleState? LifecycleState { get; init; }
     public NovaObsPublishingCompletionKind? CompletionKind { get; init; }
     public NovaObsPublishingLifecycleFailure? LifecycleFailure { get; init; }
@@ -85,7 +87,8 @@ internal sealed class NovaObsPublishingReadOnlyStatus(INovaObsPublishingStatusSo
             _last = new(availability, status.ChannelId.Value, status.SessionId.Value,
                 notStarted ? "未起動（待受未開始）" : panel.StateText,
                 panel.DiagnosticText, panel.Tone, status.EndReason,
-                status.RejectionStage, status.RejectionReason);
+                status.RejectionStage, status.RejectionReason)
+            { IsSourceNotStarted = notStarted };
             return _last;
         }
     }

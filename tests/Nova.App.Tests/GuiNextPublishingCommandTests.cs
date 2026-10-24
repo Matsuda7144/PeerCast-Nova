@@ -29,7 +29,7 @@ public sealed class GuiNextPublishingCommandTests
     }
 
     [Fact]
-    public async Task ExplicitCommandsForwardOnceAndCannotRestartSameGeneration()
+    public async Task ExplicitCommandsForwardOnceAndRejectReusedOwnerOnRestart()
     {
         var factory = new Factory();
         await using var composition = NovaGuiNextPublishingComposition.Create(factory);
@@ -44,7 +44,9 @@ public sealed class GuiNextPublishingCommandTests
         await tabs.RequestPublishingStartAsync();
         await tabs.RequestPublishingInterruptAsync();
         await tabs.RequestPublishingInterruptAsync();
+        Assert.True(tabs.PublishingCommands.CanStart);
         await tabs.RequestPublishingStartAsync();
+        Assert.Contains("既存owner", tabs.PublishingCommands.DiagnosticText);
         Assert.Equal(1, factory.Owner.Starts);
         Assert.Equal(1, factory.Owner.Disposals);
         Assert.False(tabs.PublishingCommands.CanStart);
@@ -280,7 +282,7 @@ public sealed class GuiNextPublishingCommandTests
         Assert.DoesNotContain(GenesisGuiNextAppShellBridge.PublishingInterruptControlId, otherControlIds);
         Assert.Contains("待受の開始要求", GenesisGuiNextPublishingPresentation.ScopeText);
         Assert.Contains("キャンセル", GenesisGuiNextPublishingPresentation.ScopeText);
-        Assert.Contains("正常停止・再開始は未対応", GenesisGuiNextPublishingPresentation.ScopeText);
+        Assert.Contains("正常停止は未対応", GenesisGuiNextPublishingPresentation.ScopeText);
     }
 
     [Fact]
@@ -320,7 +322,7 @@ public sealed class GuiNextPublishingCommandTests
     {
         var factory = new Factory();
         await using var composition = NovaGuiNextPublishingComposition.Create(factory);
-        composition.Commands.CloseAdmission();
+        composition.CloseAdmission();
         await composition.Commands.RequestStartAsync();
         await composition.Commands.RequestInterruptAsync();
         Assert.False(composition.Commands.ReadCommands().CanStart);

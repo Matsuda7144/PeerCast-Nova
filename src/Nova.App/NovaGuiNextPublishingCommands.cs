@@ -2,6 +2,7 @@ namespace PeerCast.Nova.App;
 
 internal sealed record NovaGuiNextPublishingCommandState(bool CanStart, bool CanInterrupt, string DiagnosticText)
 {
+    internal bool IsPending { get; init; }
     internal static readonly NovaGuiNextPublishingCommandState Unavailable = new(false, false, "操作境界が未接続です。");
 }
 
@@ -39,7 +40,7 @@ internal sealed class NovaGuiNextPublishingCommands(INovaObsPublishingLifecycleC
             var snapshot = lifecycle.Read();
             var available = _failure.Length == 0 && snapshot.Availability != NovaObsPublishingAvailability.Unavailable &&
                 snapshot.LifecycleFailure == NovaObsPublishingLifecycleFailure.None;
-            return new(
+            return new NovaGuiNextPublishingCommandState(
                 !_closed && available && _start is null && _interrupt is null &&
                     snapshot.LifecycleState == NovaObsPublishingLifecycleState.NotStarted,
                 !_closed && _failure.Length == 0 && _interrupt is null &&
@@ -47,7 +48,10 @@ internal sealed class NovaGuiNextPublishingCommands(INovaObsPublishingLifecycleC
                         NovaObsPublishingLifecycleState.Starting or NovaObsPublishingLifecycleState.Running),
                 _failure.Length > 0 ? _failure : _interrupt is { IsCompleted: false }
                     ? "中断要求処理中（キャンセルによる終了）" : _start is { IsCompleted: false }
-                    ? "開始要求処理中（待受・OBS接続・メディア受信は未確認）" : string.Empty);
+                    ? "開始要求処理中（待受・OBS接続・メディア受信は未確認）" : string.Empty)
+            {
+                IsPending = _start is { IsCompleted: false } || _interrupt is { IsCompleted: false },
+            };
         }
     }
 
