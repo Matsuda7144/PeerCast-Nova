@@ -283,6 +283,10 @@ internal sealed class PcpRelayChildWorker : IAsyncDisposable
                 _state = PcpRelayChildState.Stopped;
             }
 
+            // Optional internal boundary after actual cleanup, outside locks.
+            if (_sink is IPcpRelayChildCompletionObserver observer)
+                await observer.ObserveCompletionAsync().ConfigureAwait(false);
+
         }
     }
 

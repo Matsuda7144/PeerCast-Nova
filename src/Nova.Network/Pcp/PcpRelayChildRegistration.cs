@@ -1,5 +1,10 @@
 namespace PeerCast.Nova.Network.Pcp;
 
+internal interface IPcpRelayChildCompletionObserver
+{
+    ValueTask ObserveCompletionAsync();
+}
+
 /// <summary>
 /// Controls one local relay child without exposing a remote identifier or
 /// endpoint through the fan-out status boundary.
