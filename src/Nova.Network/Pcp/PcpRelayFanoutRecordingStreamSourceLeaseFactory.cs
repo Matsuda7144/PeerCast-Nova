@@ -333,6 +333,8 @@ public sealed partial class PcpRelayFanoutRecordingStreamSourceLeaseFactory :
                 {
                     var child = _registration?.Snapshot;
                     var ended = _registration?.Completion.IsCompleted == true;
+                    var registrationFailed = _registration?.Completion.IsFaulted == true ||
+                        _registration?.Completion.IsCanceled == true;
                     var clean = _cleanupCompletion.Task.IsCompletedSuccessfully &&
                         _registration?.Completion.IsCompletedSuccessfully == true && child?.CleanupFailed != true;
                     return new()
@@ -348,8 +350,8 @@ public sealed partial class PcpRelayFanoutRecordingStreamSourceLeaseFactory :
                         ChildStoppedCount = ended ? 1 : 0,
                         CleanupCompletedLeaseCount = clean ? 1 : 0,
                         CleanupFailedLeaseCount = _cleanupCompletion.Task.IsFaulted ||
-                            _cleanupCompletion.Task.IsCanceled || child?.CleanupFailed == true ? 1 : 0,
-                        RegistrationCleanupFailedLeaseCount = _registrationCleanupFailed || child?.CleanupFailed == true ? 1 : 0,
+                            _cleanupCompletion.Task.IsCanceled || registrationFailed || child?.CleanupFailed == true ? 1 : 0,
+                        RegistrationCleanupFailedLeaseCount = _registrationCleanupFailed || registrationFailed || child?.CleanupFailed == true ? 1 : 0,
                         BridgeCleanupFailedLeaseCount = _bridgeCleanupFailed ? 1 : 0,
                         OwnerCleanupFailedLeaseCount = _ownerCleanupFailed ? 1 : 0,
                         PendingPacketCount = child?.PendingPacketCount ?? 0,

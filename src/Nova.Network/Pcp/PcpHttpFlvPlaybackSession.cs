@@ -266,6 +266,21 @@ internal sealed class PcpHttpFlvPlaybackSession :
         }
     }
 
+    internal Func<Task>? AfterSourceCleanup { get; set; }
+
+    internal bool CleanupCompleted
+    {
+        get
+        {
+            lock (_gate)
+            {
+                var cleanup = _fanout.CleanupCompletion;
+                return !SourceCleanupFailed && _disposeTask?.IsCompletedSuccessfully == true &&
+                    cleanup?.IsCompletedSuccessfully == true && cleanup.Result.CleanupCompleted && _sourceRemoved;
+            }
+        }
+    }
+
     private PcpHttpFlvCompletionResult CreateCompletionResult(
         PcpRelayCompletionOutcome outcome, PcpRelayFanoutCompletionResult fanout)
     {
@@ -314,6 +329,7 @@ internal sealed class PcpHttpFlvPlaybackSession :
                 _bootstrap.Reset();
                 _onDisposed(this);
                 lock (_gate) { _sourceRemoved = true; }
+                if (AfterSourceCleanup is { } observe) await observe().ConfigureAwait(false);
             }
         }
         catch

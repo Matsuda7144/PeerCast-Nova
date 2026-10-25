@@ -15,7 +15,7 @@ namespace PeerCast.Nova.Network.Publishing;
 /// cancellation/disposal; that termination is not PublisherStopped or a clean
 /// media drain. A test's wait deadline is not a production arrival deadline.
 /// </summary>
-public sealed class ObsPublishChannelHost : IAsyncDisposable
+public sealed partial class ObsPublishChannelHost : IAsyncDisposable
 {
     private readonly object _gate = new();
     private readonly ObsPublishChannelOptions _options;
@@ -51,6 +51,15 @@ public sealed class ObsPublishChannelHost : IAsyncDisposable
         ChannelId? channelId = null,
         PcpHttpFlvPlaybackHost? httpHost = null,
         RecordingStreamSourceLeaseRegistry? recordingRegistry = null)
+        : this(options, channelId, httpHost, recordingRegistry, null, null)
+    {
+    }
+
+    internal ObsPublishChannelHost(
+        ObsPublishChannelOptions? options, ChannelId? channelId,
+        PcpHttpFlvPlaybackHost? httpHost, RecordingStreamSourceLeaseRegistry? recordingRegistry,
+        Func<IAsyncDisposable?>? acquireRecordingOwner,
+        PcpRecordingSourceCleanupObserver? recordingCleanupObserver)
     {
         var supplied = options ?? new();
         ArgumentNullException.ThrowIfNull(supplied.Ingest);
@@ -76,7 +85,9 @@ public sealed class ObsPublishChannelHost : IAsyncDisposable
         _http = httpHost ?? new PcpHttpFlvPlaybackHost(_options.Http);
         _ownsHttp = httpHost is null;
         _fanout = new PcpRelayFanout(_options.Fanout, replayHeadForNewChildren: true);
-        _recording = new PcpRelayFanoutRecordingStreamSourceLeaseFactory(ChannelId, SessionId, _fanout);
+        _recording = new PcpRelayFanoutRecordingStreamSourceLeaseFactory(ChannelId, SessionId, _fanout,
+            acquireOwnerLease: acquireRecordingOwner)
+        { CleanupObserver = recordingCleanupObserver };
         _relay = new PcpDownstreamRelayServer(
             new IPEndPoint(IPAddress.Loopback, _options.RelayPort), _fanout, ChannelId, SessionId.Value);
         _ingest = new ObsRtmpIngestHost(ChannelId, SessionId, new PublishConsumer(this), _options.Ingest);
@@ -180,9 +191,11 @@ public sealed class ObsPublishChannelHost : IAsyncDisposable
             _tracker.UpdateMetadata(new ChannelMetadataSnapshot(
                 name: _options.ChannelName, contentType: "FLV", streamExtension: "flv"));
             relayTask = _relay.RunAsync(lifetime.Token);
+            _relayRunTask = relayTask;
             _ingest.Start(lifetime.Token);
             started = true;
-            var first = await Task.WhenAny(_ingest.Completion, relayTask, _httpChild.Completion).ConfigureAwait(false);
+            var first = await Task.WhenAny(_ingest.Completion, relayTask, _httpChild.Completion, _localFinishRequested.Task).ConfigureAwait(false);
+            await ObserveTerminationAsync(ObsPublishTerminationPoint.BeforeEndSelection).ConfigureAwait(false);
             if (first == _ingest.Completion)
             {
                 ingestResult = await _ingest.Completion.ConfigureAwait(false);
@@ -190,7 +203,8 @@ public sealed class ObsPublishChannelHost : IAsyncDisposable
             }
             else
             {
-                reason = lifetime.IsCancellationRequested ? ObsPublishChannelEndReason.HostCancelled :
+                reason = first == _localFinishRequested.Task ? ObsPublishChannelEndReason.LocalTerminated :
+                    lifetime.IsCancellationRequested ? ObsPublishChannelEndReason.HostCancelled :
                     first == relayTask ? ObsPublishChannelEndReason.DownstreamFailed :
                     ObsPublishChannelEndReason.ConsumerFaulted;
             }
@@ -205,76 +219,131 @@ public sealed class ObsPublishChannelHost : IAsyncDisposable
         }
         finally
         {
+            LocalFinish? local;
             lock (_gate)
             {
+                _ending = true;
+                local = _localFinish;
                 _registered = false;
                 _recording.StopAccepting();
                 _registration?.Dispose();
                 _registration = null;
             }
-            if (reason is not (ObsPublishChannelEndReason.PublisherStopped or
-                ObsPublishChannelEndReason.Disconnected or ObsPublishChannelEndReason.HostCancelled))
+            await ObserveTerminationAsync(ObsPublishTerminationPoint.RecordingAdmissionClosed).ConfigureAwait(false);
+            if (local is not null)
             {
-                _tracker.RecordFault(new ChannelFaultSnapshot(
-                    reason == ObsPublishChannelEndReason.ProtocolRejected ? ChannelFaultCategory.ProtocolViolation :
-                    reason == ObsPublishChannelEndReason.ConsumerFaulted ? ChannelFaultCategory.ConsumerFailed :
-                    ChannelFaultCategory.InternalFailure,
-                    started ? ChannelFaultStage.Receiving : ChannelFaultStage.Connecting, 1, 0));
-            }
-            _tracker.TransitionTo(ChannelSessionState.Stopping);
-            _headAvailable.TrySetResult(false);
-            try
-            {
-                if (reason != ObsPublishChannelEndReason.PublisherStopped)
-                    await lifetime.CancelAsync().ConfigureAwait(false);
-                await _ingest.DisposeAsync().ConfigureAwait(false);
-                if (started)
-                    ingestResult ??= await _ingest.Completion.ConfigureAwait(false);
-                if (reason == ObsPublishChannelEndReason.PublisherStopped)
+                var terminal = await FinishLocallyAsync(local, started, lifetime.Token).ConfigureAwait(false);
+                ingestResult = terminal.Ingress?.FinalResult;
+                reason = terminal.Outcome switch
                 {
-                    lifetime.Token.ThrowIfCancellationRequested();
-                    var drained = await _fanout.WaitForIdleAsync(_options.DrainTimeout, lifetime.Token).ConfigureAwait(false);
-                    relayDrain = drained ? PcpRelayDrainOutcome.Completed : PcpRelayDrainOutcome.TimedOut;
-                    if (drained && _httpSource is not null)
-                        httpDrained = await _httpSource.CompleteAsync(_options.DrainTimeout, lifetime.Token).ConfigureAwait(false);
+                    ObsPublishLocalTerminationOutcome.LocalCompleted => ObsPublishChannelEndReason.LocalTerminated,
+                    ObsPublishLocalTerminationOutcome.TimedOut => ObsPublishChannelEndReason.TimedOut,
+                    ObsPublishLocalTerminationOutcome.Cancelled => ObsPublishChannelEndReason.HostCancelled,
+                    ObsPublishLocalTerminationOutcome.DeliveryFailed => ObsPublishChannelEndReason.ConsumerFaulted,
+                    _ => ObsPublishChannelEndReason.InternalFailure,
+                };
+                clean = terminal.CleanupCompleted;
+                relayDrain = terminal.Relay?.Outcome == PcpRelayQuiescenceOutcome.Drained
+                    ? PcpRelayDrainOutcome.Completed : PcpRelayDrainOutcome.NotRequired;
+                httpDrained = terminal.Http?.Outcome == PcpRelayCompletionOutcome.Completed;
+                _localFinishResult = terminal;
+            }
+            else
+            {
+                if (reason is not (ObsPublishChannelEndReason.PublisherStopped or
+                    ObsPublishChannelEndReason.Disconnected or ObsPublishChannelEndReason.HostCancelled))
+                {
+                    _tracker.RecordFault(new ChannelFaultSnapshot(
+                        reason == ObsPublishChannelEndReason.ProtocolRejected ? ChannelFaultCategory.ProtocolViolation :
+                        reason == ObsPublishChannelEndReason.ConsumerFaulted ? ChannelFaultCategory.ConsumerFailed :
+                        ChannelFaultCategory.InternalFailure,
+                        started ? ChannelFaultStage.Receiving : ChannelFaultStage.Connecting, 1, 0));
                 }
+                _tracker.TransitionTo(ChannelSessionState.Stopping);
+                _headAvailable.TrySetResult(false);
+                try
+                {
+                    if (reason != ObsPublishChannelEndReason.PublisherStopped)
+                        await lifetime.CancelAsync().ConfigureAwait(false);
+                    clean &= await ReleaseOwned(ObsPublishTerminationPoint.IngressCleanup, _ingest.DisposeAsync).ConfigureAwait(false);
+                    if (started)
+                        ingestResult ??= await _ingest.Completion.ConfigureAwait(false);
+                    if (reason == ObsPublishChannelEndReason.PublisherStopped)
+                    {
+                        lifetime.Token.ThrowIfCancellationRequested();
+                        var drained = await _fanout.WaitForIdleAsync(_options.DrainTimeout, lifetime.Token).ConfigureAwait(false);
+                        relayDrain = drained ? PcpRelayDrainOutcome.Completed : PcpRelayDrainOutcome.TimedOut;
+                        if (drained && _httpSource is not null)
+                            httpDrained = await _httpSource.CompleteAsync(_options.DrainTimeout, lifetime.Token).ConfigureAwait(false);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    relayDrain = PcpRelayDrainOutcome.Canceled;
+                    reason = ObsPublishChannelEndReason.HostCancelled;
+                }
+                catch (Exception)
+                {
+                    clean = false;
+                }
+                // Every cleanup is attempted even if another resource fails.
+                async Task ReleaseAsync(ObsPublishTerminationPoint point, Func<ValueTask> release)
+                {
+                    clean &= await ReleaseOwned(point, release).ConfigureAwait(false);
+                }
+                await ReleaseAsync(ObsPublishTerminationPoint.LifetimeCancellation, () => new ValueTask(lifetime.CancelAsync())).ConfigureAwait(false);
+                await ReleaseAsync(ObsPublishTerminationPoint.RecordingNotification, () => _recording.CompleteAsync(
+                    httpDrained && relayDrain == PcpRelayDrainOutcome.Completed ? null :
+                    new IOException("Publish generation ended without a completed drain."))).ConfigureAwait(false);
+                await ReleaseAsync(ObsPublishTerminationPoint.RelayCleanup, _relay.DisposeAsync).ConfigureAwait(false);
+                await ReleaseAsync(ObsPublishTerminationPoint.FanoutCleanup, _fanout.DisposeAsync).ConfigureAwait(false);
+                if (_httpSource is not null) await ReleaseAsync(ObsPublishTerminationPoint.HttpSourceCleanup, _httpSource.DisposeAsync).ConfigureAwait(false);
+                if (_ownsHttp) await ReleaseAsync(ObsPublishTerminationPoint.HttpListenerCleanup, _http.DisposeAsync).ConfigureAwait(false);
+                _tracker.TransitionTo(ChannelSessionState.Stopped);
             }
-            catch (OperationCanceledException)
-            {
-                relayDrain = PcpRelayDrainOutcome.Canceled;
-                reason = ObsPublishChannelEndReason.HostCancelled;
-            }
-            catch (Exception)
-            {
-                clean = false;
-            }
-            // Every cleanup is attempted even if another resource fails.
-            async Task ReleaseAsync(Func<ValueTask> release)
-            {
-                try { await release().ConfigureAwait(false); }
-                catch (Exception) { clean = false; }
-            }
-            await ReleaseAsync(() => new ValueTask(lifetime.CancelAsync())).ConfigureAwait(false);
-            await ReleaseAsync(() => _recording.CompleteAsync(
-                httpDrained && relayDrain == PcpRelayDrainOutcome.Completed ? null :
-                new IOException("Publish generation ended without a completed drain."))).ConfigureAwait(false);
-            await ReleaseAsync(_relay.DisposeAsync).ConfigureAwait(false);
-            await ReleaseAsync(_fanout.DisposeAsync).ConfigureAwait(false);
-            if (_httpSource is not null) await ReleaseAsync(_httpSource.DisposeAsync).ConfigureAwait(false);
-            if (_ownsHttp) await ReleaseAsync(_http.DisposeAsync).ConfigureAwait(false);
-            _tracker.TransitionTo(ChannelSessionState.Stopped);
         }
         PcpDownstreamRelayServerResult? relayResult = null;
         if (relayTask is not null)
         {
-            try { relayResult = await relayTask.ConfigureAwait(false); }
+            try
+            {
+                if (_localFinishResult is null || relayTask.IsCompleted)
+                    relayResult = await relayTask.ConfigureAwait(false);
+                else clean = false;
+            }
             catch (Exception) { clean = false; }
         }
         clean &= _relay.Snapshot.CleanupIncompleteCount == 0;
+        if (_localFinishResult is null && _forceRequested)
+        {
+            // All independent releases were already started. A noncooperative
+            // cancellation may keep this terminal task pending, never successful.
+            if (_forcedCancellationTask is not null) clean &= await _forcedCancellationTask.ConfigureAwait(false);
+            if (_forcedNotificationTask is not null) clean &= await _forcedNotificationTask.ConfigureAwait(false);
+            clean &= _recording.Evidence.CleanupCompleted;
+        }
+        if (_localFinishResult is not null)
+        {
+            _localFinishResult = await FinalizeLocalResultAsync(_localFinishResult, clean, lifetime.Token).ConfigureAwait(false);
+            reason = _localFinishResult.Outcome switch
+            {
+                ObsPublishLocalTerminationOutcome.LocalCompleted => ObsPublishChannelEndReason.LocalTerminated,
+                ObsPublishLocalTerminationOutcome.TimedOut => ObsPublishChannelEndReason.TimedOut,
+                ObsPublishLocalTerminationOutcome.Cancelled => ObsPublishChannelEndReason.HostCancelled,
+                ObsPublishLocalTerminationOutcome.DeliveryFailed => ObsPublishChannelEndReason.ConsumerFaulted,
+                _ => ObsPublishChannelEndReason.InternalFailure,
+            };
+            clean = _localFinishResult.CleanupCompleted;
+        }
         var result = new ObsPublishChannelResult(reason, _acceptedPackets, _acceptedBytes, _heads, _data,
             relayDrain, httpDrained, clean, ingestResult, relayResult)
-        { Rejection = ingestResult?.Rejection };
+        { Rejection = ingestResult?.Rejection, LocalTermination = _localFinishResult };
         Volatile.Write(ref _result, result);
+        if (_localFinishResult is not null)
+        {
+            _localFinish!.Completion.TrySetResult(_localFinishResult);
+            _localFinish.Deadline.Dispose();
+        }
         return result;
     }
 
@@ -296,7 +365,7 @@ public sealed class ObsPublishChannelHost : IAsyncDisposable
         {
             _heads++;
             _tracker.TransitionTo(ChannelSessionState.Receiving);
-            _recording.StartAccepting();
+            lock (_gate) { if (!_ending) _recording.StartAccepting(); }
             _headAvailable.TrySetResult(true);
         }
         else _data++;
@@ -314,12 +383,40 @@ public sealed class ObsPublishChannelHost : IAsyncDisposable
 
     private async Task DisposeCoreAsync()
     {
-        await _stop.CancelAsync().ConfigureAwait(false);
-        // Starting with an already canceled lifetime executes the same full
-        // cleanup for a never-started host, without leaving an owned fanout.
-        _completion ??= RunAsync(_stop.Token);
-        await _completion.ConfigureAwait(false);
-        _stop.Dispose();
+        await Task.Yield();
+        bool committed;
+        lock (_gate)
+        {
+            committed = _localSuccessCommitted ||
+                (_completion?.IsCompletedSuccessfully == true && _result?.ShutdownCompleted == true);
+        }
+        if (!committed)
+        {
+            _ = BeginLocalCleanup(force: true);
+            // Never-started disposal must not race an as-yet-unscheduled cancel
+            // into implicit startup. No owner callback exists before Start.
+            if (_completion is null)
+            {
+                await _forcedCancellationTask!.ConfigureAwait(false);
+                _completion = RunAsync(_stop.Token);
+            }
+        }
+        try
+        {
+            if (_completion is not null) await _completion.ConfigureAwait(false);
+            if (_localCleanupTask is not null)
+            {
+                var cleanup = await ObserveLocalCleanupAsync(CancellationToken.None).ConfigureAwait(false);
+                if (!cleanup.Completed) throw new InvalidOperationException("Publishing owner cleanup is incomplete.");
+            }
+        }
+        finally
+        {
+            // The CTS remains owned until its actual callbacks have terminated,
+            // even if another cleanup stage faults first.
+            try { if (_forcedCancellationTask is not null) await _forcedCancellationTask.ConfigureAwait(false); }
+            finally { _stop.Dispose(); }
+        }
     }
 
     private static ObsPublishChannelEndReason MapReason(ObsRtmpIngestEndReason reason) => reason switch

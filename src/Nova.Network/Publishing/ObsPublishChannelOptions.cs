@@ -45,6 +45,7 @@ public enum ObsPublishChannelEndReason
     StartupFailed,
     DownstreamFailed,
     InternalFailure,
+    LocalTerminated,
 }
 
 /// <summary>Accepted callbacks and bounded drain evidence, not physical playback.</summary>
@@ -61,4 +62,5 @@ public sealed record ObsPublishChannelResult(
     PcpDownstreamRelayServerResult? Relay)
 {
     public ObsRtmpRejectionDiagnostic? Rejection { get; init; }
+    public ObsPublishLocalTerminationResult? LocalTermination { get; init; }
 }
