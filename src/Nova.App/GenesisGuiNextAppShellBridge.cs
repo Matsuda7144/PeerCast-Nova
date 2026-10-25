@@ -497,6 +497,7 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
     internal const int RelayStatusControlId = 1133;
     internal const int PublishingStartControlId = 1134;
     internal const int PublishingInterruptControlId = 1135;
+    internal const int PublishingFinishControlId = 1136;
     internal const int RelayControlsTop = 148;
     internal const int RelayStatusTop = 180;
     internal static int RelayStatusWidth(int paneWidth) => Math.Max(1, paneWidth - 24);
@@ -536,6 +537,7 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
     private const uint WindowMessageControlColorStatic = 0x0138;
     private const uint WindowMessageApplication = 0x8000;
     private const uint WindowMessageSynchronizeSelection = WindowMessageApplication + 0x716;
+    private const uint WindowMessagePublishingDispatch = WindowMessageApplication + 0x717;
     internal const uint WindowMessageSynchronizeYellowPageFilter = WindowMessageApplication + 0x719;
     private const int ButtonNotificationClicked = 0;
     private const int NotifyCustomDraw = -12;
@@ -1423,6 +1425,11 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
             state.SynchronizeYellowPageFilter();
             return 0;
         }
+        else if (message == WindowMessagePublishingDispatch)
+        {
+            state.DrainPublishingUi();
+            return 0;
+        }
         else if (message == WindowMessageSynchronizeSelection)
         {
             state.SynchronizeNativeSelection();
@@ -1523,6 +1530,8 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
         private readonly nint _detailsCopyButton;
         private readonly nint _publishingStartButton;
         private readonly nint _publishingInterruptButton;
+        private readonly nint _publishingFinishButton;
+        private readonly ConcurrentQueue<Action> _publishingUi = new();
         private readonly nint _listView;
         private readonly GenesisGuiNextTabsViewModel _tabs;
         private readonly GenesisMainViewModel _viewModel;
@@ -1621,7 +1630,13 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 PublishingStartControlId, detailsTextWidth + 20, GetModuleHandleW(null));
             _publishingInterruptButton = CreateRecordingModeButton(
                 GenesisGuiNextPublishingPresentation.InterruptLabel, detailsPane,
-                PublishingInterruptControlId, detailsTextWidth + 104, GetModuleHandleW(null));
+                PublishingInterruptControlId, detailsTextWidth + 188, GetModuleHandleW(null));
+            _publishingFinishButton = CreateRecordingModeButton(
+                GenesisGuiNextPublishingPresentation.FinishLabel, detailsPane,
+                PublishingFinishControlId, detailsTextWidth + 104, GetModuleHandleW(null));
+            ApplyDefaultFont(_publishingFinishButton);
+            _ = ShowWindow(_publishingFinishButton, ShowWindowHide);
+            _ = EnableWindow(_publishingFinishButton, false);
             ApplyDefaultFont(_publishingStartButton);
             ApplyDefaultFont(_publishingInterruptButton);
             _ = ShowWindow(_publishingStartButton, ShowWindowHide);
@@ -1647,20 +1662,36 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
 
         public void Attach()
         {
+            _tabs.SetPublishingDispatcher(PostPublishingUi);
             _tabs.PropertyChanged += OnTabsPropertyChanged;
             _viewModel.PropertyChanged += OnViewModelPropertyChanged;
         }
 
-        public bool RuleButtonsAvailable => _publishingStartButton != 0 && _publishingInterruptButton != 0 && _relayStart != 0 && _relayStop != 0 && _relayStatus != 0 && _recordingHistoryDetails != 0 && _recordingHistoryModeButton != 0 && _recordingHistoryRefreshButton != 0 && _createRuleButton != 0 && _editRuleButton != 0 &&
+        public bool RuleButtonsAvailable => _publishingStartButton != 0 && _publishingInterruptButton != 0 && _publishingFinishButton != 0 && _relayStart != 0 && _relayStop != 0 && _relayStatus != 0 && _recordingHistoryDetails != 0 && _recordingHistoryModeButton != 0 && _recordingHistoryRefreshButton != 0 && _createRuleButton != 0 && _editRuleButton != 0 &&
             _toggleRuleButton != 0 && _deleteRuleButton != 0 && _moveRuleUpButton != 0 && _moveRuleDownButton != 0;
 
         public void Detach()
         {
             if (Interlocked.Exchange(ref _detached, 1) == 0)
             {
+                _tabs.SetPublishingDispatcher(null);
+                while (_publishingUi.TryDequeue(out _)) { }
                 _tabs.PropertyChanged -= OnTabsPropertyChanged;
                 _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
             }
+        }
+
+        private void PostPublishingUi(Action action)
+        {
+            if (Volatile.Read(ref _detached) != 0) return;
+            _publishingUi.Enqueue(action);
+            _ = PostMessageW(_detailsPane, WindowMessagePublishingDispatch, 0, 0);
+        }
+
+        internal void DrainPublishingUi()
+        {
+            while (_publishingUi.TryDequeue(out var action))
+                if (Volatile.Read(ref _detached) == 0) action();
         }
 
         private async Task ObserveQuickRuleMutationAsync(Guid? selectedId, GenesisRecordingRuleQuickAction action)
@@ -1697,6 +1728,12 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 lParam == _publishingInterruptButton && commandId == PublishingInterruptControlId)
             {
                 _ = _tabs.RequestPublishingInterruptAsync();
+                return;
+            }
+            if (_tabs.SelectedTab == GenesisGuiNextTab.Publishing &&
+                lParam == _publishingFinishButton && commandId == PublishingFinishControlId)
+            {
+                _ = _tabs.RequestPublishingFinishAsync();
                 return;
             }
             if (_tabs.SelectedTab == GenesisGuiNextTab.Publishing &&
@@ -1989,10 +2026,11 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
             }
 
             if (IsOwnerDrawButton(drawItem.ControlType) &&
-                drawItem.ControlId is PublishingStartControlId or PublishingInterruptControlId)
+                drawItem.ControlId is PublishingStartControlId or PublishingInterruptControlId or PublishingFinishControlId)
                 return DrawRecordingModeButton(drawItem,
                     drawItem.ControlId == PublishingStartControlId
-                        ? GenesisGuiNextPublishingPresentation.StartLabel : GenesisGuiNextPublishingPresentation.InterruptLabel,
+                        ? GenesisGuiNextPublishingPresentation.StartLabel : drawItem.ControlId == PublishingFinishControlId
+                        ? GenesisGuiNextPublishingPresentation.FinishLabel : GenesisGuiNextPublishingPresentation.InterruptLabel,
                     false, drawItem.ControlId == PublishingInterruptControlId);
 
             if (IsOwnerDrawButton(drawItem.ControlType) && drawItem.ControlId is RelayStartControlId or RelayStopControlId)
@@ -2435,6 +2473,9 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
             var isHistoryPage = _tabs.IsRecordingHistoryPage;
             var isLogPage = _tabs.SelectedTab == GenesisGuiNextTab.Logs;
             var isPublishingPage = _tabs.SelectedTab == GenesisGuiNextTab.Publishing;
+            _ = ShowWindow(_publishingFinishButton, isPublishingPage ? ShowWindowShowNoActivate : ShowWindowHide);
+            _ = EnableWindow(_publishingFinishButton, isPublishingPage && _tabs.PublishingCommands.CanFinish);
+            _ = InvalidateRect(_publishingFinishButton, 0, true);
             _ = ShowWindow(_publishingStartButton, isPublishingPage ? ShowWindowShowNoActivate : ShowWindowHide);
             _ = ShowWindow(_publishingInterruptButton, isPublishingPage ? ShowWindowShowNoActivate : ShowWindowHide);
             _ = EnableWindow(_publishingStartButton, isPublishingPage && _tabs.PublishingCommands.CanStart);

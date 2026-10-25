@@ -83,7 +83,9 @@ public sealed class GuiNextPublishingCompositionTests
         };
         await using var composition = NovaGuiNextPublishingComposition.Create(factory);
         await using var tabs = new GenesisGuiNextTabsViewModel(new GenesisFavoriteChannelCollection());
+        tabs.SetPublishingDispatcher(action => action());
         tabs.BindPublishingStatus(composition.Status, composition.Commands);
+        await tabs.RefreshPublishingStatusAsync();
         tabs.SelectedTab = GenesisGuiNextTab.Publishing;
         var row = Assert.Single(GenesisGuiNextNativeTabProjection.Create(tabs));
         Assert.Equal(terminal ? NovaObsPublishingAvailability.Stopped : NovaObsPublishingAvailability.Observed,
@@ -168,7 +170,9 @@ public sealed class GuiNextPublishingCompositionTests
         await using var tabs = new GenesisGuiNextTabsViewModel(new GenesisFavoriteChannelCollection());
         var factory = new Factory();
         await using var composition = NovaGuiNextPublishingComposition.Create(factory);
+        tabs.SetPublishingDispatcher(action => action());
         tabs.BindPublishingStatus(composition.Status);
+        await tabs.RefreshPublishingStatusAsync();
         Assert.True(GenesisGuiNextNavigationPresentation.TryResolveExistingView(6, out var publishing));
         Assert.Equal(GenesisGuiNextTab.Publishing, publishing);
         Assert.True(GenesisGuiNextNavigationPresentation.IsImplemented(8));
@@ -200,7 +204,9 @@ public sealed class GuiNextPublishingCompositionTests
         var factory = new Factory();
         await using var composition = NovaGuiNextPublishingComposition.Create(factory);
         var tabs = new GenesisGuiNextTabsViewModel(new GenesisFavoriteChannelCollection());
+        tabs.SetPublishingDispatcher(action => action());
         tabs.BindPublishingStatus(composition.Status, composition.Commands);
+        await tabs.RefreshPublishingStatusAsync();
         var vm = new GenesisMainViewModel(new FakePlaybackSessionController());
         await using var session = GenesisChannelCatalogSession.Create(catalog, vm,
             new GenesisGuiNextChannelPresencePublisher(tabs, EmptyGenesisChannelPresenceNotificationPublisher.Instance));
@@ -213,7 +219,7 @@ public sealed class GuiNextPublishingCompositionTests
         Assert.Equal(0, catalog.Reads);
         await tabs.DisposeAsync();
         var readCount = factory.Owner.Reads;
-        tabs.RefreshPublishingStatus();
+        await tabs.RefreshPublishingStatusAsync();
         Assert.Equal(readCount, factory.Owner.Reads);
         Assert.Equal(0, factory.Owner.Starts);
     }

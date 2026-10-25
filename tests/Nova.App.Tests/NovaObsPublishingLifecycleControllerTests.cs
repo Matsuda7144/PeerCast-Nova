@@ -329,7 +329,7 @@ public sealed class NovaObsPublishingLifecycleControllerTests
         var terminal = await controller.Completion;
         Assert.DoesNotContain("DO-NOT-DISPLAY", JsonSerializer.Serialize(terminal));
         Assert.DoesNotContain("SECRET", JsonSerializer.Serialize(controller.Read()));
-        Assert.Equal("SourceFailed / ProtocolRejected", GenesisGuiNextPublishingPresentation.ErrorText(controller.Read()));
+        Assert.Equal("SourceFailed / ProtocolRejected · 終了結果: Failed · 世代cleanup証拠あり（再開始許可とは別）", GenesisGuiNextPublishingPresentation.ErrorText(controller.Read()));
     }
 
     [Fact]

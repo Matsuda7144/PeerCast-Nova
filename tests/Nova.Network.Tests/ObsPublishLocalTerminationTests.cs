@@ -201,7 +201,33 @@ public sealed class ObsPublishLocalTerminationTests
     [Fact]
     public async Task ActiveRecordingLease_IsNotDisposedToManufactureCleanupOrWriterEvidence()
     {
-        var host = ObsPublishChannelHostTests.Create();
+        var result = await ExerciseActiveRecordingDeadlineAsync(expireOwnerBeforeCommit: true);
+        Assert.True(result.DeadlineExpired); // Strict owner evidence, never source OR owner.
+    }
+
+    [Fact]
+    public async Task ActiveRecordingLease_SourceDeadlineFirstDoesNotInventOwnerExpiry()
+    {
+        var result = await ExerciseActiveRecordingDeadlineAsync(expireOwnerBeforeCommit: false);
+        Assert.False(result.DeadlineExpired);
+        Assert.True(result.RecordingSource!.DeadlineExpired);
+    }
+
+    private static async Task<ObsPublishLocalTerminationResult> ExerciseActiveRecordingDeadlineAsync(bool expireOwnerBeforeCommit)
+    {
+        var clock = new RecordingOwnerClock();
+        var beforeCommit = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var commit = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var host = new ObsPublishChannelHost(new() { Ingest = new() { Port = 0 } })
+        {
+            TerminationTimeProvider = clock,
+            TerminationObserver = point =>
+            {
+                if (point != ObsPublishTerminationPoint.BeforeCommit) return Task.CompletedTask;
+                beforeCommit.TrySetResult();
+                return commit.Task;
+            },
+        };
         host.Start();
         using var publisher = await ObsPublishChannelHostTests.PublishAsync(host);
         await ObsPublishChannelHostTests.ConfigureAsync(publisher);
@@ -209,23 +235,71 @@ public sealed class ObsPublishLocalTerminationTests
         var lease = await host.RecordingRegistry.AcquireAsync(RecordingSinkStartRequest.Manual(
             new RecordingCandidate(host.ChannelId, new ChannelMetadataSnapshot(name: "fixture", streamExtension: "flv"))), CancellationToken.None);
         Assert.NotNull(lease);
+        ObsPublishLocalTerminationResult? observed = null;
+        ObsPublishChannelResult? ownerResult = null;
         try
         {
-            var result = await host.RequestLocalTerminationAsync(TimeSpan.FromMilliseconds(200)).WaitAsync(Limit);
+            var finish = host.RequestLocalTerminationAsync(TimeSpan.FromMilliseconds(200));
+            await beforeCommit.Task.WaitAsync(Limit);
+            Assert.False(finish.IsCompleted);
+            // This joins the already completed first source request; it cannot
+            // reset its independent system deadline or start another completion.
+            var sourceTask = host.RecordingSource.CompleteWithEvidenceAsync(Limit);
+            Assert.True(sourceTask.IsCompletedSuccessfully);
+            var source = await sourceTask;
+            Assert.Equal(PcpRecordingSourceCompletionOutcome.CleanupIncomplete, source.Outcome);
+            Assert.Equal(PcpRecordingSourceCompletionPhase.LeaseCleanup, source.Phase);
+            Assert.True(source.DeadlineExpired);
+            Assert.True(source.Evidence.EofNotified);
+            Assert.False(source.Evidence.CleanupCompleted);
+            Assert.Equal(0, clock.GetTimestamp());
+            Assert.False(host.DeadlineTimerSignaled);
+            if (expireOwnerBeforeCommit) clock.Advance(TimeSpan.FromMilliseconds(201));
+            // No timer notification is fired: production must use its monotonic
+            // final-commit check. Source expiry and owner expiry stay separate.
+            commit.TrySetResult();
+            var result = observed = await finish.WaitAsync(Limit);
             Assert.Equal(ObsPublishLocalTerminationOutcome.CleanupIncomplete, result.Outcome);
             Assert.Equal(ObsPublishLocalTerminationPhase.RecordingSource, result.Phase);
-            Assert.True(result.DeadlineExpired);
+            Assert.Equal(expireOwnerBeforeCommit, result.DeadlineExpired);
             Assert.Equal(ObsPublishWriterEvidence.NotObserved, result.WriterEvidence);
             Assert.NotNull(result.RecordingSource);
+            Assert.Same(source, result.RecordingSource);
+            Assert.True(result.RecordingSource.DeadlineExpired);
             Assert.True(result.RecordingSource.Evidence.EofNotified);
             Assert.False(result.RecordingSource.Evidence.CleanupCompleted);
-            Assert.False((await host.Completion).ShutdownCompleted);
+            Assert.False(result.CleanupCompleted);
+            ownerResult = await host.Completion;
+            Assert.False(ownerResult.ShutdownCompleted);
+            Assert.False(host.DeadlineTimerSignaled);
             await lease.ReadStream.CopyToAsync(Stream.Null).WaitAsync(Limit);
         }
         finally
         {
+            commit.TrySetResult();
             await lease.DisposeAsync();
             try { await host.DisposeAsync(); } catch (InvalidOperationException) { }
+        }
+        Assert.NotNull(observed); Assert.NotNull(ownerResult);
+        Assert.Same(observed, await host.RequestLocalTerminationAsync(Limit));
+        Assert.Same(ownerResult, await host.Completion);
+        Assert.False(observed.CleanupCompleted); Assert.False(ownerResult.ShutdownCompleted);
+        Assert.Equal(ObsPublishWriterEvidence.NotObserved, observed.WriterEvidence);
+        return observed;
+    }
+
+    private sealed class RecordingOwnerClock : TimeProvider
+    {
+        private long _ticks;
+        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+        public override long GetTimestamp() => Interlocked.Read(ref _ticks);
+        internal void Advance(TimeSpan value) => Interlocked.Add(ref _ticks, value.Ticks);
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period) => new SilentTimer();
+        private sealed class SilentTimer : ITimer
+        {
+            public bool Change(TimeSpan dueTime, TimeSpan period) => true;
+            public void Dispose() { }
+            public ValueTask DisposeAsync() => ValueTask.CompletedTask;
         }
     }
 

@@ -37,6 +37,7 @@ internal sealed record NovaObsPublishingReadOnlySnapshot(
     public ObsPublishLocalTerminationOutcome? LocalTerminationOutcome { get; init; }
     public ObsPublishWriterEvidence? WriterEvidence { get; init; }
     public bool? CleanupCompleted { get; init; }
+    public bool CanRequestFinish { get; init; }
 
 }
 

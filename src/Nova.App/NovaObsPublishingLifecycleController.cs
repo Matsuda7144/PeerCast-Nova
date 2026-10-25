@@ -80,6 +80,17 @@ internal sealed partial class NovaObsPublishingLifecycleController : INovaObsPub
         set => _status.ContendedReadObserver = value;
     }
 
+    internal bool StopAdmissionObserved { get { lock (_gate) return _stopRequested; } }
+
+    internal bool CanRequestFinish
+    {
+        get
+        {
+            lock (_gate) return _started && !_closing && !_terminal.Task.IsCompleted && _disposal is null &&
+            _failure == NovaObsPublishingLifecycleFailure.None && _owner is INovaObsPublishingFinishRuntime;
+        }
+    }
+
     public Task<NovaObsPublishingLifecycleResult> Completion => _terminal.Task;
 
     public NovaObsPublishingStartResult RequestStart(CancellationToken cancellationToken = default)
@@ -312,6 +323,7 @@ internal sealed partial class NovaObsPublishingLifecycleController : INovaObsPub
                 LocalTerminationOutcome = terminal?.LocalTermination?.Outcome,
                 WriterEvidence = terminal?.LocalTermination?.WriterEvidence,
                 CleanupCompleted = terminal?.CleanupCompleted,
+                CanRequestFinish = CanRequestFinish,
             };
         }
     }

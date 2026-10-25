@@ -18,7 +18,9 @@ public sealed class GuiNextPublishingGenerationTests
         await using var tabs = new GenesisGuiNextTabsViewModel(new GenesisFavoriteChannelCollection());
         var status = composition.Status;
         var commands = composition.Commands;
+        tabs.SetPublishingDispatcher(action => action());
         tabs.BindPublishingStatus(status, commands);
+        await tabs.RefreshPublishingStatusAsync();
         tabs.SelectedTab = GenesisGuiNextTab.Publishing;
         var sessions = new HashSet<Guid>();
         for (var i = 0; i < 3; i++)
@@ -26,18 +28,20 @@ public sealed class GuiNextPublishingGenerationTests
             Assert.True(tabs.PublishingCommands.CanStart);
             Assert.Equal(Math.Max(1, i), factory.Creates);
             await tabs.RequestPublishingStartAsync();
+            await tabs.RefreshPublishingStatusAsync();
             var row = Assert.Single(tabs.PublishingRows);
             Assert.Equal(i + 1, row.Generation);
             Assert.True(sessions.Add(row.SessionId!.Value));
             Assert.Equal("OBS待機中", row.StateText);
             Assert.True(tabs.PublishingCommands.CanInterrupt);
             await tabs.RequestPublishingInterruptAsync();
+            await tabs.RefreshPublishingStatusAsync();
             Assert.Equal("停止（キャンセル）", Assert.Single(tabs.PublishingRows).StateText);
             Assert.True(tabs.PublishingCommands.CanStart);
             Assert.False(tabs.PublishingCommands.CanInterrupt);
             tabs.SelectedTab = GenesisGuiNextTab.Channels;
             tabs.SelectedTab = GenesisGuiNextTab.Publishing;
-            tabs.RefreshPublishingStatus();
+            await tabs.RefreshPublishingStatusAsync();
             Assert.Equal(i + 1, factory.Creates); // Reads/navigation never create the next generation.
         }
         Assert.Same(status, composition.Status);
@@ -266,20 +270,25 @@ public sealed class GuiNextPublishingGenerationTests
         var factory = new Factory(old, new Owner());
         await using var composition = NovaGuiNextPublishingComposition.Create(factory);
         await using var tabs = new GenesisGuiNextTabsViewModel(new GenesisFavoriteChannelCollection());
+        tabs.SetPublishingDispatcher(action => action());
         tabs.BindPublishingStatus(composition.Status, composition.Commands);
+        await tabs.RefreshPublishingStatusAsync();
         tabs.SelectedTab = GenesisGuiNextTab.Publishing;
         var retiredLifecycle = composition.Lifecycle;
         await tabs.RequestPublishingStartAsync();
+        await tabs.RefreshPublishingStatusAsync();
         await tabs.RequestPublishingInterruptAsync();
+        await tabs.RefreshPublishingStatusAsync();
         var oldSession = Assert.Single(tabs.PublishingRows).SessionId;
         await tabs.RequestPublishingStartAsync();
+        await tabs.RefreshPublishingStatusAsync();
         var rows = tabs.PublishingRows;
         var current = Assert.Single(rows);
         Assert.NotEqual(oldSession, current.SessionId);
         old.Current = old.Current with { Revision = 999, State = ChannelSessionState.Faulted, EndReason = ObsPublishChannelEndReason.StartupFailed };
         Assert.False(old.Completed.TrySetException(new InvalidOperationException("SECRET old completion")));
         await retiredLifecycle.RequestStopAsync();
-        tabs.RefreshPublishingStatus();
+        await tabs.RefreshPublishingStatusAsync();
         Assert.Same(rows, tabs.PublishingRows);
         Assert.Equal(current, composition.Status.Read());
         Assert.Equal(2, current.Generation);
@@ -664,10 +673,14 @@ public sealed class GuiNextPublishingGenerationTests
         var factory = new Factory(new Owner(), new Owner()) { BlockReplacement = true };
         await using var composition = NovaGuiNextPublishingComposition.Create(factory);
         var tabs = new GenesisGuiNextTabsViewModel(new GenesisFavoriteChannelCollection());
+        tabs.SetPublishingDispatcher(action => action());
         tabs.BindPublishingStatus(composition.Status, composition.Commands);
+        await tabs.RefreshPublishingStatusAsync();
         tabs.SelectedTab = GenesisGuiNextTab.Publishing;
         await tabs.RequestPublishingStartAsync();
+        await tabs.RefreshPublishingStatusAsync();
         await tabs.RequestPublishingInterruptAsync();
+        await tabs.RefreshPublishingStatusAsync();
         var restart = tabs.RequestPublishingStartAsync();
         await factory.CreateEntered.Task.WaitAsync(Timeout);
         await tabs.DisposeAsync();

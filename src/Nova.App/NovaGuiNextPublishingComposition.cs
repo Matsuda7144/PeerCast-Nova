@@ -55,6 +55,7 @@ internal sealed class NovaGuiNextPublishingComposition : INovaObsPublishingReadO
     }
 
     internal Action? CommandObservationReady { get; set; }
+    internal long CurrentGeneration { get { lock (_gate) return _current.Number; } }
 
     public NovaObsPublishingReadOnlySnapshot Read()
     {
@@ -71,6 +72,7 @@ internal sealed class NovaGuiNextPublishingComposition : INovaObsPublishingReadO
 
     private void CaptureIdentityLocked(Generation generation, NovaObsPublishingReadOnlySnapshot snapshot)
     {
+        generation.LastSnapshot = snapshot;
         if (!_closed && generation.SessionId is null && snapshot.SessionId is { } session)
         {
             generation.SessionId = session;
@@ -114,7 +116,7 @@ internal sealed class NovaGuiNextPublishingComposition : INovaObsPublishingReadO
         NovaGuiNextPublishingCommandState Commands, NovaGuiNextPublishingCommandState State);
 
     private NovaGuiNextPublishingCommandState DisabledCommandsLocked() =>
-        new(false, false, _failure) { IsPending = _replacement is { IsCompleted: false } || _current.Commands.HasPendingCommands };
+        new(false, false, _failure) { IsPending = _replacement is { IsCompleted: false } || _current.Commands.HasPendingCommands, Generation = _current.Number };
 
     public NovaGuiNextPublishingCommandState ReadCommands()
     {
@@ -123,12 +125,12 @@ internal sealed class NovaGuiNextPublishingComposition : INovaObsPublishingReadO
             ? observation.State : DisabledCommandsLocked();
     }
 
-    private CommandObservation? ReadCommandObservation()
+    private CommandObservation? ReadCommandObservation(long? expectedGeneration = null)
     {
         Generation generation;
         lock (_gate)
         {
-            if (_closed) return null;
+            if (_closed || (expectedGeneration is { } expected && expected != _current.Number)) return null;
             generation = _current;
         }
         var snapshot = generation.Lifecycle.Read(); // External work, without admission gates.
@@ -155,14 +157,16 @@ internal sealed class NovaGuiNextPublishingComposition : INovaObsPublishingReadO
             var state = new NovaGuiNextPublishingCommandState(_failure.Length == 0 && !replacing &&
                 ((commands.CanStart && snapshot.IsSourceNotStarted) || replaceable),
                 _failure.Length == 0 && commands.CanInterrupt, diagnostic)
-            { IsPending = replacing || commands.IsPending };
+            { IsPending = replacing || commands.IsPending, CanFinish = _failure.Length == 0 && !replacing && commands.CanFinish, Generation = generation.Number };
             return new(generation, snapshot, commands, state);
         }
     }
 
-    public Task RequestStartAsync()
+    public Task RequestStartAsync() => RequestStartForGenerationAsync(null);
+
+    internal Task RequestStartForGenerationAsync(long? expectedGeneration)
     {
-        var observation = ReadCommandObservation();
+        var observation = ReadCommandObservation(expectedGeneration);
         CommandObservationReady?.Invoke(); // Optional test barrier, outside admission locks.
         lock (_gate)
         {
@@ -176,9 +180,16 @@ internal sealed class NovaGuiNextPublishingComposition : INovaObsPublishingReadO
         }
     }
 
-    public Task RequestInterruptAsync()
+    public Task RequestInterruptAsync() => RequestInterruptForGenerationAsync(null);
+
+    internal Task RequestInterruptForGenerationAsync(long? expectedGeneration)
     {
-        var observation = ReadCommandObservation();
+        lock (_gate)
+        {
+            if (expectedGeneration is { } expected && expected != _current.Number) return Task.CompletedTask;
+            if (!_closed && _current.Commands.FinishPending) return _current.Commands.RequestInterruptAsync();
+        }
+        var observation = ReadCommandObservation(expectedGeneration);
         CommandObservationReady?.Invoke();
         lock (_gate)
         {
@@ -186,6 +197,72 @@ internal sealed class NovaGuiNextPublishingComposition : INovaObsPublishingReadO
                 !observation.State.CanInterrupt) return Task.CompletedTask;
             return _current.Commands.RequestInterruptFromSnapshotAsync(observation.Snapshot);
         }
+    }
+
+    public Task RequestFinishAsync() => RequestFinishForGenerationAsync(null);
+
+    internal Task RequestFinishForGenerationAsync(long? expectedGeneration)
+    {
+        lock (_gate)
+        {
+            if ((expectedGeneration is { } expected && expected != _current.Number) || _replacement is { IsCompleted: false })
+                return Task.CompletedTask;
+            // Reach the shared accepted task even when its CanFinish display is false.
+            if (_current.Commands.AcceptedFinish is { } accepted) return accepted;
+            if (_closed) return Task.CompletedTask;
+            return _current.Commands.RequestFinishAsync();
+        }
+    }
+
+    internal (NovaObsPublishingReadOnlySnapshot Snapshot, NovaGuiNextPublishingCommandState Commands) ReadPublishingPresentation()
+    {
+        // Closing admission is independent of terminal observation. A closed
+        // generation never needs another borrowed Snapshot callback to show its
+        // already committed result, even if the adapter is permanently blocked.
+        lock (_gate) if (_closed) return (ClosedPresentationLocked(_current), DisabledCommandsLocked());
+        var observed = ReadCommandObservation();
+        lock (_gate)
+        {
+            if (_closed) return (ClosedPresentationLocked(_current), DisabledCommandsLocked());
+            if (observed is null || !ReferenceEquals(observed.Generation, _current))
+                return (SupersededSnapshotLocked(), DisabledCommandsLocked());
+            return (observed.Snapshot with { Generation = _current.Number }, observed.State);
+        }
+    }
+
+    private static NovaObsPublishingReadOnlySnapshot ClosedPresentationLocked(Generation generation)
+    {
+        var completion = generation.Lifecycle.Completion;
+        var cached = generation.LastSnapshot;
+        var terminal = completion.IsCompletedSuccessfully ? completion.Result : null;
+        var text = terminal switch
+        {
+            { State: NovaObsPublishingLifecycleState.Failed } => "配信エラー",
+            { Kind: NovaObsPublishingCompletionKind.Cancelled } => "停止（キャンセル）",
+            { Kind: NovaObsPublishingCompletionKind.ObsNormalEos, NormalEosProven: true } => "停止（OBS正常EOS）",
+            { Kind: NovaObsPublishingCompletionKind.LocalCompleted, LocalCompletedProven: true } => "終了（Novaローカル）",
+            null => "終了確認中（cleanup未証明）",
+            _ => "終了結果確認（成功未証明）",
+        };
+        return new(terminal?.CleanupCompleted == true ? NovaObsPublishingAvailability.Stopped : NovaObsPublishingAvailability.Unavailable,
+            generation.ChannelId ?? cached?.ChannelId ?? terminal?.ChannelId,
+            generation.SessionId ?? cached?.SessionId ?? terminal?.SessionId,
+            text, terminal is null ? "終了結果とcleanup完了を確認できません。" : $"配信終了分類: {terminal.Failure}",
+            terminal is { Failure: NovaObsPublishingLifecycleFailure.None, CleanupCompleted: true }
+                ? PeerCast.Nova.Windows.NovaObsPublishingTone.Special : PeerCast.Nova.Windows.NovaObsPublishingTone.Warning,
+            terminal?.EndReason, cached?.RejectionStage, cached?.RejectionReason)
+        {
+            Generation = generation.Number,
+            LifecycleState = terminal?.State ?? (completion.IsFaulted || completion.IsCanceled
+                ? NovaObsPublishingLifecycleState.Failed : NovaObsPublishingLifecycleState.Stopping),
+            LifecycleFailure = terminal?.Failure ?? (completion.IsFaulted || completion.IsCanceled
+                ? NovaObsPublishingLifecycleFailure.CompletionFailed : null),
+            CompletionKind = terminal?.Kind ?? NovaObsPublishingCompletionKind.None,
+            CleanupCompleted = terminal?.CleanupCompleted ?? false,
+            LocalTerminationOutcome = terminal?.LocalTermination?.Outcome,
+            WriterEvidence = terminal?.LocalTermination?.WriterEvidence,
+            CanRequestFinish = false,
+        };
     }
 
     private async Task ReplaceAndStartAsync(Generation retired)
@@ -274,6 +351,7 @@ internal sealed class NovaGuiNextPublishingComposition : INovaObsPublishingReadO
             Commands = new(Lifecycle);
         }
         internal long Number { get; }
+        internal NovaObsPublishingReadOnlySnapshot? LastSnapshot { get; set; }
         internal Guid? SessionId { get; set; }
         internal Guid? ChannelId { get; set; }
         internal NovaObsPublishingLifecycleController Lifecycle { get; }

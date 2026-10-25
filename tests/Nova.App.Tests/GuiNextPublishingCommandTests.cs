@@ -13,15 +13,17 @@ public sealed class GuiNextPublishingCommandTests
     {
         var factory = new Factory();
         await using var composition = NovaGuiNextPublishingComposition.Create(factory);
-        await using var tabs = Tabs(composition);
+        await using var tabs = await Tabs(composition);
         tabs.SelectedTab = GenesisGuiNextTab.Channels;
         await tabs.RequestPublishingStartAsync();
+        await tabs.RefreshPublishingStatusAsync();
         await tabs.RequestPublishingInterruptAsync();
+        await tabs.RefreshPublishingStatusAsync();
         tabs.SelectedTab = GenesisGuiNextTab.Publishing;
-        tabs.RefreshPublishingStatus();
+        await tabs.RefreshPublishingStatusAsync();
         tabs.SelectedTab = GenesisGuiNextTab.Channels;
         tabs.SelectedTab = GenesisGuiNextTab.Publishing;
-        tabs.RefreshPublishingStatus();
+        await tabs.RefreshPublishingStatusAsync();
         Assert.True(tabs.PublishingCommands.CanStart);
         Assert.False(tabs.PublishingCommands.CanInterrupt);
         Assert.Equal(0, factory.Owner.Starts);
@@ -33,19 +35,24 @@ public sealed class GuiNextPublishingCommandTests
     {
         var factory = new Factory();
         await using var composition = NovaGuiNextPublishingComposition.Create(factory);
-        await using var tabs = Tabs(composition);
+        await using var tabs = await Tabs(composition);
         var initial = Assert.Single(tabs.PublishingRows);
         await tabs.RequestPublishingStartAsync();
+        await tabs.RefreshPublishingStatusAsync();
         Assert.False(tabs.PublishingCommands.CanStart);
         Assert.True(tabs.PublishingCommands.CanInterrupt);
         Assert.Equal("開始要求受付済み（待受未確認）", Assert.Single(tabs.PublishingRows).StateText);
         Assert.Equal(initial.SessionId, Assert.Single(tabs.PublishingRows).SessionId);
         Assert.Equal(initial.ChannelId, Assert.Single(tabs.PublishingRows).ChannelId);
         await tabs.RequestPublishingStartAsync();
+        await tabs.RefreshPublishingStatusAsync();
         await tabs.RequestPublishingInterruptAsync();
+        await tabs.RefreshPublishingStatusAsync();
         await tabs.RequestPublishingInterruptAsync();
+        await tabs.RefreshPublishingStatusAsync();
         Assert.True(tabs.PublishingCommands.CanStart);
         await tabs.RequestPublishingStartAsync();
+        await tabs.RefreshPublishingStatusAsync();
         Assert.Contains("既存owner", tabs.PublishingCommands.DiagnosticText);
         Assert.Equal(1, factory.Owner.Starts);
         Assert.Equal(1, factory.Owner.Disposals);
@@ -63,17 +70,20 @@ public sealed class GuiNextPublishingCommandTests
         var factory = new Factory();
         factory.Owner.BlockStart = true;
         await using var composition = NovaGuiNextPublishingComposition.Create(factory);
-        await using var tabs = Tabs(composition);
+        await using var tabs = await Tabs(composition);
         var changed = new List<string?>();
         tabs.PropertyChanged += (_, e) => { lock (changed) changed.Add(e.PropertyName); };
         var start = tabs.RequestPublishingStartAsync();
         await factory.Owner.StartEntered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await tabs.RefreshPublishingStatusAsync();
         Assert.False(start.IsCompleted);
         Assert.False(tabs.PublishingCommands.CanStart);
         Assert.True(tabs.PublishingCommands.CanInterrupt);
         Assert.Contains("未確認", tabs.PublishingCommands.DiagnosticText);
         await Task.WhenAll(Enumerable.Range(0, 20).Select(_ => tabs.RequestPublishingStartAsync()));
         var interrupt = tabs.RequestPublishingInterruptAsync();
+        await tabs.PublishingCommandAdmission;
+        await tabs.RefreshPublishingStatusAsync();
         Assert.False(tabs.PublishingCommands.CanInterrupt);
         Assert.Contains("キャンセル", tabs.PublishingCommands.DiagnosticText);
         Assert.Equal(0, factory.Owner.Disposals);
@@ -81,7 +91,10 @@ public sealed class GuiNextPublishingCommandTests
         await Task.WhenAll(start, interrupt).WaitAsync(TimeSpan.FromSeconds(10));
         Assert.Equal(1, factory.Owner.Starts);
         Assert.Equal(1, factory.Owner.Disposals);
-        Assert.Contains(nameof(GenesisGuiNextTabsViewModel.PublishingCommands), changed);
+        lock (changed)
+        {
+            Assert.Contains(nameof(GenesisGuiNextTabsViewModel.PublishingCommands), changed);
+        }
     }
 
     [Fact]
@@ -90,9 +103,10 @@ public sealed class GuiNextPublishingCommandTests
         var factory = new Factory();
         factory.Owner.BlockStart = true;
         var composition = NovaGuiNextPublishingComposition.Create(factory);
-        var tabs = Tabs(composition);
+        var tabs = await Tabs(composition);
         var start = tabs.RequestPublishingStartAsync();
         await factory.Owner.StartEntered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        await tabs.RefreshPublishingStatusAsync();
         await tabs.DisposeAsync();
         var rows = tabs.PublishingRows;
         var lateUpdates = 0;
@@ -101,6 +115,7 @@ public sealed class GuiNextPublishingCommandTests
         Assert.False(shutdown.IsCompleted);
         await composition.Commands.RequestStartAsync();
         await tabs.RequestPublishingInterruptAsync();
+        await tabs.RefreshPublishingStatusAsync();
         Assert.False(composition.Commands.ReadCommands().CanStart);
         Assert.False(composition.Commands.ReadCommands().CanInterrupt);
         Assert.Equal(0, factory.Owner.Disposals);
@@ -139,12 +154,16 @@ public sealed class GuiNextPublishingCommandTests
         Assert.False(tabs.PublishingCommands.CanStart);
         Assert.False(tabs.PublishingCommands.CanInterrupt);
         await tabs.RequestPublishingStartAsync();
+        await tabs.RefreshPublishingStatusAsync();
         var factory = new Factory { Fails = true };
         await using var composition = NovaGuiNextPublishingComposition.Create(factory);
+        tabs.SetPublishingDispatcher(action => action());
         tabs.BindPublishingStatus(composition.Status, composition.Commands);
+        await tabs.RefreshPublishingStatusAsync();
         Assert.False(tabs.PublishingCommands.CanStart);
         Assert.False(tabs.PublishingCommands.CanInterrupt);
         await tabs.RequestPublishingStartAsync();
+        await tabs.RefreshPublishingStatusAsync();
         Assert.Equal(0, factory.Owner.Starts);
         Assert.Equal(NovaObsPublishingAvailability.Unavailable, Assert.Single(tabs.PublishingRows).Availability);
     }
@@ -155,10 +174,11 @@ public sealed class GuiNextPublishingCommandTests
         var factory = new Factory();
         factory.Owner.FailStart = true;
         await using var composition = NovaGuiNextPublishingComposition.Create(factory);
-        await using var tabs = Tabs(composition);
+        await using var tabs = await Tabs(composition);
         await tabs.RequestPublishingStartAsync();
+        await tabs.RefreshPublishingStatusAsync();
         await composition.Lifecycle.Completion.WaitAsync(TimeSpan.FromSeconds(10));
-        tabs.RefreshPublishingStatus();
+        await tabs.RefreshPublishingStatusAsync();
         Assert.Equal(NovaObsPublishingLifecycleFailure.StartFailed, Assert.Single(tabs.PublishingRows).LifecycleFailure);
         Assert.False(tabs.PublishingCommands.CanStart);
         Assert.False(tabs.PublishingCommands.CanInterrupt);
@@ -171,9 +191,11 @@ public sealed class GuiNextPublishingCommandTests
         var factory = new Factory();
         factory.Owner.FailDispose = true;
         var composition = NovaGuiNextPublishingComposition.Create(factory);
-        await using var tabs = Tabs(composition);
+        await using var tabs = await Tabs(composition);
         await tabs.RequestPublishingStartAsync();
+        await tabs.RefreshPublishingStatusAsync();
         await tabs.RequestPublishingInterruptAsync();
+        await tabs.RefreshPublishingStatusAsync();
         var terminal = await composition.Lifecycle.Completion;
         Assert.False(terminal.CleanupCompleted);
         Assert.False(terminal.NormalEosProven);
@@ -190,17 +212,18 @@ public sealed class GuiNextPublishingCommandTests
     {
         var factory = new Factory();
         await using var composition = NovaGuiNextPublishingComposition.Create(factory);
-        await using var tabs = Tabs(composition);
+        await using var tabs = await Tabs(composition);
         await tabs.RequestPublishingStartAsync();
+        await tabs.RefreshPublishingStatusAsync();
         Assert.Equal("開始要求受付済み（待受未確認）", Assert.Single(tabs.PublishingRows).StateText);
         factory.Owner.Current = factory.Owner.Current with { Revision = 2, State = ChannelSessionState.Negotiating, ListenerReady = true };
-        tabs.RefreshPublishingStatus();
+        await tabs.RefreshPublishingStatusAsync();
         Assert.Equal("OBS待機中", Assert.Single(tabs.PublishingRows).StateText);
         factory.Owner.Current = factory.Owner.Current with { Revision = 3, PublisherConnected = true };
-        tabs.RefreshPublishingStatus();
+        await tabs.RefreshPublishingStatusAsync();
         Assert.Equal("OBS接続中", Assert.Single(tabs.PublishingRows).StateText);
         factory.Owner.Current = factory.Owner.Current with { Revision = 4, State = ChannelSessionState.Receiving, HeadAvailable = true };
-        tabs.RefreshPublishingStatus();
+        await tabs.RefreshPublishingStatusAsync();
         Assert.Equal("OBSから配信を受信中", Assert.Single(tabs.PublishingRows).StateText);
         Assert.DoesNotContain("SECRET", JsonSerializer.Serialize(tabs.PublishingRows));
         Assert.DoesNotContain("SECRET", JsonSerializer.Serialize(tabs.PublishingCommands));
@@ -211,21 +234,24 @@ public sealed class GuiNextPublishingCommandTests
     {
         var factory = new Factory();
         await using var composition = NovaGuiNextPublishingComposition.Create(factory);
-        await using var tabs = Tabs(composition);
+        await using var tabs = await Tabs(composition);
         await tabs.RequestPublishingStartAsync();
+        await tabs.RefreshPublishingStatusAsync();
         tabs.SelectedTab = GenesisGuiNextTab.Channels;
         await tabs.RequestPublishingInterruptAsync();
+        await tabs.RefreshPublishingStatusAsync();
         Assert.Equal(0, factory.Owner.Disposals);
         factory.Owner.End(ObsPublishChannelEndReason.Disconnected);
         await composition.Lifecycle.Completion.WaitAsync(TimeSpan.FromSeconds(10));
         tabs.SelectedTab = GenesisGuiNextTab.Publishing;
-        tabs.RefreshPublishingStatus();
+        await tabs.RefreshPublishingStatusAsync();
         Assert.False(tabs.PublishingCommands.CanStart);
         Assert.False(tabs.PublishingCommands.CanInterrupt);
         factory.Owner.Current = factory.Owner.Current with { Revision = 9, State = ChannelSessionState.Receiving, HeadAvailable = true, EndReason = null };
-        tabs.RefreshPublishingStatus();
+        await tabs.RefreshPublishingStatusAsync();
         Assert.Equal(NovaObsPublishingLifecycleState.Failed, Assert.Single(tabs.PublishingRows).LifecycleState);
         await tabs.RequestPublishingStartAsync();
+        await tabs.RefreshPublishingStatusAsync();
         Assert.Equal(1, factory.Owner.Starts);
     }
 
@@ -234,14 +260,16 @@ public sealed class GuiNextPublishingCommandTests
     {
         var factory = new Factory();
         await using var composition = NovaGuiNextPublishingComposition.Create(factory);
-        await using var tabs = Tabs(composition);
+        await using var tabs = await Tabs(composition);
         await tabs.RequestPublishingStartAsync();
+        await tabs.RefreshPublishingStatusAsync();
         factory.Owner.FailRead = true;
-        tabs.RefreshPublishingStatus();
+        await tabs.RefreshPublishingStatusAsync();
         Assert.Equal(NovaObsPublishingAvailability.Unavailable, Assert.Single(tabs.PublishingRows).Availability);
         Assert.False(tabs.PublishingCommands.CanStart);
         Assert.True(tabs.PublishingCommands.CanInterrupt);
         await tabs.RequestPublishingInterruptAsync();
+        await tabs.RefreshPublishingStatusAsync();
         Assert.Equal(1, factory.Owner.Disposals);
         Assert.False(tabs.PublishingCommands.CanInterrupt);
     }
@@ -282,7 +310,7 @@ public sealed class GuiNextPublishingCommandTests
         Assert.DoesNotContain(GenesisGuiNextAppShellBridge.PublishingInterruptControlId, otherControlIds);
         Assert.Contains("待受の開始要求", GenesisGuiNextPublishingPresentation.ScopeText);
         Assert.Contains("キャンセル", GenesisGuiNextPublishingPresentation.ScopeText);
-        Assert.Contains("正常停止は未対応", GenesisGuiNextPublishingPresentation.ScopeText);
+        Assert.Contains("OBS正常EOSとは別", GenesisGuiNextPublishingPresentation.ScopeText);
     }
 
     [Fact]
@@ -291,9 +319,12 @@ public sealed class GuiNextPublishingCommandTests
         var factory = new Factory();
         factory.Owner.BlockDispose = true;
         var composition = NovaGuiNextPublishingComposition.Create(factory);
-        await using var tabs = Tabs(composition);
+        await using var tabs = await Tabs(composition);
         await tabs.RequestPublishingStartAsync();
+        await tabs.RefreshPublishingStatusAsync();
         var interrupt = tabs.RequestPublishingInterruptAsync();
+        await tabs.PublishingCommandAdmission;
+        await tabs.RefreshPublishingStatusAsync();
         await factory.Owner.DisposeEntered.Task.WaitAsync(TimeSpan.FromSeconds(10));
         var previous = SynchronizationContext.Current;
         var context = new NeverPumpedContext();
@@ -342,13 +373,15 @@ public sealed class GuiNextPublishingCommandTests
         factory.Owner.LeaveCompletionPending = pendingCompletion;
         factory.Owner.ShutdownCompleted = false;
         var composition = NovaGuiNextPublishingComposition.Create(factory);
-        await using var tabs = Tabs(composition);
+        await using var tabs = await Tabs(composition);
         await Assert.ThrowsAsync<InvalidOperationException>(() => composition.DisposeAsync().AsTask());
         var terminal = await composition.Lifecycle.Completion.WaitAsync(TimeSpan.FromSeconds(10));
         Assert.False(terminal.CleanupCompleted);
         Assert.False(terminal.NormalEosProven);
-        tabs.RefreshPublishingStatus();
+        await tabs.RefreshPublishingStatusAsync();
         Assert.Equal(NovaObsPublishingLifecycleState.Failed, Assert.Single(tabs.PublishingRows).LifecycleState);
+        Assert.False(Assert.Single(tabs.PublishingRows).CleanupCompleted);
+        Assert.False(tabs.PublishingCommands.CanFinish);
         Assert.False(tabs.PublishingCommands.CanStart);
         Assert.False(tabs.PublishingCommands.CanInterrupt);
         Assert.Equal(0, factory.Owner.Starts);
@@ -361,10 +394,12 @@ public sealed class GuiNextPublishingCommandTests
         public override void Post(SendOrPostCallback d, object? state) => Interlocked.Increment(ref Posts);
     }
 
-    private static GenesisGuiNextTabsViewModel Tabs(NovaGuiNextPublishingComposition composition)
+    private static async Task<GenesisGuiNextTabsViewModel> Tabs(NovaGuiNextPublishingComposition composition)
     {
         var tabs = new GenesisGuiNextTabsViewModel(new GenesisFavoriteChannelCollection());
+        tabs.SetPublishingDispatcher(action => action());
         tabs.BindPublishingStatus(composition.Status, composition.Commands);
+        await tabs.RefreshPublishingStatusAsync();
         tabs.SelectedTab = GenesisGuiNextTab.Publishing;
         return tabs;
     }

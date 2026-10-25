@@ -355,6 +355,7 @@ internal sealed partial class GenesisGuiNextTabsViewModel : INotifyPropertyChang
 
     public async ValueTask DisposeAsync()
     {
+        ClosePublishingView();
         Task drained;
         Task libraryDrained;
         CancellationTokenSource? libraryCancellation;

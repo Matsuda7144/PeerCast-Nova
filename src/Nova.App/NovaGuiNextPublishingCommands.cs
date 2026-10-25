@@ -3,6 +3,8 @@ namespace PeerCast.Nova.App;
 internal sealed record NovaGuiNextPublishingCommandState(bool CanStart, bool CanInterrupt, string DiagnosticText)
 {
     internal bool IsPending { get; init; }
+    internal bool CanFinish { get; init; }
+    internal long? Generation { get; init; }
     internal static readonly NovaGuiNextPublishingCommandState Unavailable = new(false, false, "操作境界が未接続です。");
 }
 
@@ -11,6 +13,7 @@ internal interface INovaGuiNextPublishingCommands
     NovaGuiNextPublishingCommandState ReadCommands();
     Task RequestStartAsync();
     Task RequestInterruptAsync();
+    Task RequestFinishAsync();
 }
 
 /// <summary>
@@ -18,13 +21,18 @@ internal interface INovaGuiNextPublishingCommands
 /// borrows commands and status; only the lifecycle controller owns the runtime.
 /// Interrupt/shutdown wait for admitted Start, then use cancellation cleanup.
 /// </summary>
-internal sealed class NovaGuiNextPublishingCommands(INovaObsPublishingLifecycleController lifecycle)
+internal sealed class NovaGuiNextPublishingCommands(INovaObsPublishingLifecycleController lifecycle, TimeSpan? finishTimeout = null)
     : INovaGuiNextPublishingCommands, IAsyncDisposable
 {
     private readonly object _gate = new();
     private Task? _start;
     private Task? _interrupt;
     private Task? _disposal;
+    private Task? _finish;
+    private Task? _forcedStop;
+    private readonly TimeSpan _finishTimeout = finishTimeout ?? TimeSpan.FromSeconds(30);
+    internal Task? AcceptedFinish { get { lock (_gate) return _finish; } }
+    internal bool FinishPending { get { lock (_gate) return _finish is { IsCompleted: false }; } }
     private bool _closed;
     private string _failure = string.Empty;
 
@@ -35,11 +43,11 @@ internal sealed class NovaGuiNextPublishingCommands(INovaObsPublishingLifecycleC
 
     internal bool HasPendingCommands
     {
-        get { lock (_gate) return _start is { IsCompleted: false } || _interrupt is { IsCompleted: false }; }
+        get { lock (_gate) return _start is { IsCompleted: false } || _interrupt is { IsCompleted: false } || _finish is { IsCompleted: false }; }
     }
 
     private string DiagnosticLocked() => _failure.Length > 0 ? _failure : _interrupt is { IsCompleted: false }
-        ? "中断要求処理中（キャンセルによる終了）" : _start is { IsCompleted: false }
+        ? "中断要求処理中（キャンセルによる終了）" : _finish is { IsCompleted: false } ? "配信終了要求中（Novaローカル・期限付き）" : _start is { IsCompleted: false }
         ? "開始要求処理中（待受・OBS接続・メディア受信は未確認）" : string.Empty;
 
     public NovaGuiNextPublishingCommandState ReadCommands()
@@ -60,18 +68,18 @@ internal sealed class NovaGuiNextPublishingCommands(INovaObsPublishingLifecycleC
             var available = _failure.Length == 0 && snapshot.Availability != NovaObsPublishingAvailability.Unavailable &&
                 snapshot.LifecycleFailure == NovaObsPublishingLifecycleFailure.None;
             return new NovaGuiNextPublishingCommandState(
-                !_closed && available && _start is null && _interrupt is null &&
+                !_closed && available && _start is null && _interrupt is null && _finish is null &&
                     snapshot.LifecycleState == NovaObsPublishingLifecycleState.NotStarted,
                 !_closed && _failure.Length == 0 && _interrupt is null &&
-                    (_start is { IsCompleted: false } || snapshot.LifecycleState is
+                    (_finish is { IsCompleted: false } || _start is { IsCompleted: false } || snapshot.LifecycleState is
                         NovaObsPublishingLifecycleState.Starting or NovaObsPublishingLifecycleState.Running), DiagnosticLocked())
-            { IsPending = HasPendingCommands };
+            { IsPending = HasPendingCommands, CanFinish = !_closed && available && _finish is null && _interrupt is null && snapshot.CanRequestFinish };
         }
     }
 
     public Task RequestStartAsync()
     {
-        lock (_gate) { if (_closed || _start is not null || _interrupt is not null) return Task.CompletedTask; }
+        lock (_gate) { if (_closed || _start is not null || _interrupt is not null || _finish is not null) return Task.CompletedTask; }
         return RequestStartFromSnapshotAsync(lifecycle.Read());
     }
 
@@ -96,6 +104,7 @@ internal sealed class NovaGuiNextPublishingCommands(INovaObsPublishingLifecycleC
         {
             if (_interrupt is not null) return _interrupt;
             if (_closed) return Task.CompletedTask;
+            if (_finish is { IsCompleted: false }) return ForceStopLocked();
         }
         return RequestInterruptFromSnapshotAsync(lifecycle.Read());
     }
@@ -105,6 +114,7 @@ internal sealed class NovaGuiNextPublishingCommands(INovaObsPublishingLifecycleC
         lock (_gate)
         {
             if (_interrupt is not null) return _interrupt;
+            if (!_closed && _finish is { IsCompleted: false }) return ForceStopLocked();
             if (!ReadCommandsFromSnapshot(snapshot).CanInterrupt) return Task.CompletedTask;
             var start = _start;
             return _interrupt = Task.Run(async () =>
@@ -116,6 +126,34 @@ internal sealed class NovaGuiNextPublishingCommands(INovaObsPublishingLifecycleC
         }
     }
 
+    public Task RequestFinishAsync()
+    {
+        lock (_gate)
+        {
+            if (_finish is not null) return _finish;
+            if (_closed || _interrupt is not null || lifecycle is not NovaObsPublishingLifecycleController owned || !owned.CanRequestFinish)
+                return Task.CompletedTask;
+            // Sealed application admission reads only internal state, never Snapshot.
+            // Its existing monotonic deadline begins here, before worker scheduling.
+            _finish = owned.RequestFinishAsync(_finishTimeout);
+            ObserveCommandFault(_finish);
+            return _finish;
+        }
+    }
+
+    private Task ForceStopLocked()
+    {
+        _forcedStop ??= lifecycle.RequestStopAsync();
+        ObserveCommandFault(_forcedStop);
+        return _interrupt ??= _forcedStop;
+    }
+
+    private void ObserveCommandFault(Task task) => _ = task.ContinueWith(t =>
+    {
+        _ = t.Exception;
+        lock (_gate) _failure = "配信操作の完了を確認できません。";
+    }, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
+
     public ValueTask DisposeAsync()
     {
         lock (_gate)
@@ -123,10 +161,13 @@ internal sealed class NovaGuiNextPublishingCommands(INovaObsPublishingLifecycleC
             _closed = true;
             var start = _start;
             var interrupt = _interrupt;
+            var finish = _finish;
+            if (finish is { IsCompleted: false }) _ = ForceStopLocked();
             return new(_disposal ??= Task.Run(async () =>
             {
                 if (start is not null) await JoinCommandOrTerminalAsync(start).ConfigureAwait(false);
                 if (interrupt is not null) await JoinCommandOrTerminalAsync(interrupt).ConfigureAwait(false);
+                if (finish is not null) await JoinCommandOrTerminalAsync(finish).ConfigureAwait(false);
                 await lifecycle.DisposeAsync().ConfigureAwait(false);
             }));
         }
