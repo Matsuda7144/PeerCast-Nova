@@ -7,8 +7,8 @@ namespace PeerCast.Nova.App;
 
 internal enum NovaObsPublishingLifecycleState { NotStarted, Starting, Running, Stopping, Stopped, Failed }
 internal enum NovaObsPublishingStartResult { Accepted, AlreadyStarted, CancelledBeforeAdmission, ClosedGeneration, Unavailable, Failed }
-internal enum NovaObsPublishingCompletionKind { None, Cancelled, ObsNormalEos, Disconnected, IncompleteEos, Failed }
-internal enum NovaObsPublishingLifecycleFailure { None, OwnerUnavailable, LifecycleUnavailable, StartFailed, CompletionFailed, CleanupFailed, NormalEosUnproven, SourceFailed }
+internal enum NovaObsPublishingCompletionKind { None, Cancelled, ObsNormalEos, Disconnected, IncompleteEos, Failed, LocalCompleted, TimedOut, DeliveryFailed, CleanupIncomplete }
+internal enum NovaObsPublishingLifecycleFailure { None, OwnerUnavailable, LifecycleUnavailable, StartFailed, CompletionFailed, CleanupFailed, NormalEosUnproven, SourceFailed, FinishUnavailable, FinishFailed, FinishTimedOut, IdentityUnproven }
 
 internal sealed record NovaObsPublishingLifecycleResult(
     NovaObsPublishingLifecycleState State,
@@ -16,13 +16,24 @@ internal sealed record NovaObsPublishingLifecycleResult(
     NovaObsPublishingLifecycleFailure Failure,
     ObsPublishChannelEndReason? EndReason,
     bool CleanupCompleted,
-    bool NormalEosProven);
+    bool NormalEosProven)
+{
+    public ObsPublishLocalTerminationResult? LocalTermination { get; init; }
+    public bool FinishRequested { get; init; }
+    public bool OwnerCompletionObserved { get; init; }
+    public bool IdentityMatched { get; init; }
+    public Guid? ChannelId { get; init; }
+    public Guid? SessionId { get; init; }
+    public bool LocalCompletedProven { get; init; }
+    public bool FinishDeadlineExpired { get; init; }
+}
 
 internal interface INovaObsPublishingLifecycleController : INovaObsPublishingReadOnlyStatus, IAsyncDisposable
 {
     NovaObsPublishingStartResult RequestStart(CancellationToken cancellationToken = default);
-    // Existing foundation supports cancellation cleanup, not a normal-EOS request.
+    // Stop is forced cleanup; Finish is local termination, never OBS EOS.
     Task<NovaObsPublishingLifecycleResult> RequestStopAsync();
+    Task<NovaObsPublishingLifecycleResult> RequestFinishAsync(TimeSpan timeout, CancellationToken cancellationToken = default);
     Task<NovaObsPublishingLifecycleResult> Completion { get; }
 }
 
@@ -31,7 +42,7 @@ internal interface INovaObsPublishingLifecycleController : INovaObsPublishingRea
 /// synchronous Start settles. Completion, cancellation and cleanup are distinct
 /// facts; the GUI sees only the existing bounded status shape. No restart/polling.
 /// </summary>
-internal sealed class NovaObsPublishingLifecycleController : INovaObsPublishingLifecycleController
+internal sealed partial class NovaObsPublishingLifecycleController : INovaObsPublishingLifecycleController
 {
     private readonly object _gate = new();
     private readonly INovaObsPublishingRuntime? _owner;
@@ -44,9 +55,16 @@ internal sealed class NovaObsPublishingLifecycleController : INovaObsPublishingL
     private TaskCompletionSource? _startFinished;
     private Task? _observation;
     private ObsPublishChannelResult? _cleanupResult;
+    private Task<ObsPublishChannelResult>? _postDisposeCompletion;
+    internal Task<ObsPublishChannelResult>? PostDisposeCompletion => _postDisposeCompletion;
     private Task? _stopWorker;
     private Task<bool>? _cleanup;
     private Task? _disposal;
+    private Task<ObsPublishChannelResult>? _ownerCompletion;
+    private bool _stopRequested;
+    private NovaObsPublishingLifecycleFailure _cleanupFailure;
+    internal int LateFaultCount => Volatile.Read(ref _lateFaultCount);
+    private int _lateFaultCount;
 
     internal NovaObsPublishingLifecycleController(INovaObsPublishingRuntime? owner)
     {
@@ -54,6 +72,12 @@ internal sealed class NovaObsPublishingLifecycleController : INovaObsPublishingL
         _status = new(owner);
         _state = owner is null ? NovaObsPublishingLifecycleState.Failed : NovaObsPublishingLifecycleState.NotStarted;
         _failure = owner is null ? NovaObsPublishingLifecycleFailure.OwnerUnavailable : NovaObsPublishingLifecycleFailure.None;
+    }
+
+    internal Action? StatusReadContentionObserver
+    {
+        get => _status.ContendedReadObserver;
+        set => _status.ContendedReadObserver = value;
     }
 
     public Task<NovaObsPublishingLifecycleResult> Completion => _terminal.Task;
@@ -88,14 +112,17 @@ internal sealed class NovaObsPublishingLifecycleController : INovaObsPublishingL
         }
         catch
         {
-            lock (_gate) { _failure = NovaObsPublishingLifecycleFailure.StartFailed; _closing = true; }
+            lock (_gate) { if (!_terminal.Task.IsCompleted) _failure = NovaObsPublishingLifecycleFailure.StartFailed; _closing = true; }
         }
         lock (_gate)
         {
+            _ownerCompletion = completion;
             if (!_closing) _state = NovaObsPublishingLifecycleState.Running;
             if (completion is not null)
             {
-                _observation = ObserveCompletionAsync(completion);
+                ObserveLateFault(completion);
+                _observation = Task.Run(() => ObserveCompletionAsync(completion), CancellationToken.None);
+                ObserveLateFault(_observation);
             }
             _startFinished!.TrySetResult();
         }
@@ -111,7 +138,8 @@ internal sealed class NovaObsPublishingLifecycleController : INovaObsPublishingL
             if (_terminal.Task.IsCompleted) return _terminal.Task;
             _closing = true;
             _state = NovaObsPublishingLifecycleState.Stopping;
-            _stopWorker ??= StopCoreAsync();
+            _stopRequested = true;
+            EnsureStopWorkerLocked();
             return _terminal.Task;
         }
     }
@@ -120,6 +148,7 @@ internal sealed class NovaObsPublishingLifecycleController : INovaObsPublishingL
     {
         if (_startFinished is not null) await _startFinished.Task.ConfigureAwait(false);
         var cleaned = await CleanupOnceAsync().ConfigureAwait(false);
+        lock (_gate) { if (_finishRequest is not null) return; }
         if (cleaned && _observation is not null)
         {
             await _observation.ConfigureAwait(false);
@@ -138,7 +167,11 @@ internal sealed class NovaObsPublishingLifecycleController : INovaObsPublishingL
             if (result is null) throw new InvalidOperationException("Missing publishing result.");
         }
         catch { lock (_gate) { if (!_terminal.Task.IsCompleted) _failure = NovaObsPublishingLifecycleFailure.CompletionFailed; } }
-        lock (_gate) { if (!_terminal.Task.IsCompleted) { _closing = true; _state = NovaObsPublishingLifecycleState.Stopping; } }
+        lock (_gate)
+        {
+            if (_finishRequest is not null) return;
+            if (!_terminal.Task.IsCompleted) { _closing = true; _state = NovaObsPublishingLifecycleState.Stopping; }
+        }
         var cleaned = await CleanupOnceAsync().ConfigureAwait(false);
         Finish(result, cleaned);
     }
@@ -152,7 +185,8 @@ internal sealed class NovaObsPublishingLifecycleController : INovaObsPublishingL
             // reenter observation; it must share this same cleanup task.
             var pending = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             _cleanup = pending.Task;
-            _ = CleanupCoreAsync(pending);
+            var worker = Task.Run(() => CleanupCoreAsync(pending));
+            ObserveLateFault(worker);
             return _cleanup;
         }
     }
@@ -165,7 +199,7 @@ internal sealed class NovaObsPublishingLifecycleController : INovaObsPublishingL
         }
         catch
         {
-            lock (_gate) _failure = NovaObsPublishingLifecycleFailure.CleanupFailed;
+            RecordCleanupFailure(NovaObsPublishingLifecycleFailure.CleanupFailed);
             pending.TrySetResult(false);
             return;
         }
@@ -177,27 +211,28 @@ internal sealed class NovaObsPublishingLifecycleController : INovaObsPublishingL
         {
             if (_owner is not INovaObsPublishingLifecycleRuntime runtime)
             {
-                lock (_gate) _failure = NovaObsPublishingLifecycleFailure.LifecycleUnavailable;
+                RecordCleanupFailure(NovaObsPublishingLifecycleFailure.LifecycleUnavailable);
                 pending.TrySetResult(false);
                 return;
             }
             // The production host rejects Completion access before Start or
             // Dispose. Read only after disposal; never await a broken pending task.
             var completion = runtime.Completion;
+            if (completion is not null)
+            {
+                lock (_gate) { _postDisposeCompletion = completion; }
+                ObserveLateFault(completion);
+            }
             if (completion is null || !completion.IsCompletedSuccessfully)
                 throw new InvalidOperationException("Publishing completion is unavailable.");
             var result = await completion.ConfigureAwait(false);
             if (result is null) throw new InvalidOperationException("Publishing result is unavailable.");
-            _cleanupResult = result;
+            lock (_gate) { _cleanupResult = result; }
             pending.TrySetResult(result.ShutdownCompleted);
         }
         catch
         {
-            lock (_gate)
-            {
-                if (_failure == NovaObsPublishingLifecycleFailure.None)
-                    _failure = NovaObsPublishingLifecycleFailure.CompletionFailed;
-            }
+            RecordCleanupFailure(NovaObsPublishingLifecycleFailure.CompletionFailed);
             pending.TrySetResult(false);
         }
     }
@@ -244,9 +279,10 @@ internal sealed class NovaObsPublishingLifecycleController : INovaObsPublishingL
 
     public NovaObsPublishingReadOnlySnapshot Read()
     {
+        var snapshot = _status.Read();
+        Volatile.Read(ref _generationProof)?.Observe(snapshot);
         lock (_gate)
         {
-            var snapshot = _status.Read();
             var terminal = _terminal.Task.IsCompletedSuccessfully ? _terminal.Task.Result : null;
             var text = _state switch
             {
@@ -254,6 +290,7 @@ internal sealed class NovaObsPublishingLifecycleController : INovaObsPublishingL
                 NovaObsPublishingLifecycleState.Stopping => "終了中",
                 NovaObsPublishingLifecycleState.Failed when _owner is not null => "配信エラー",
                 NovaObsPublishingLifecycleState.Stopped when terminal?.Kind == NovaObsPublishingCompletionKind.Cancelled => "停止（キャンセル）",
+                NovaObsPublishingLifecycleState.Stopped when terminal?.Kind == NovaObsPublishingCompletionKind.LocalCompleted => "終了（Novaローカル）",
                 NovaObsPublishingLifecycleState.Stopped => "停止（OBS正常EOS）",
                 NovaObsPublishingLifecycleState.Running when snapshot.Availability == NovaObsPublishingAvailability.NotStarted => "開始要求受付済み（待受未確認）",
                 _ => snapshot.StateText,
@@ -272,6 +309,9 @@ internal sealed class NovaObsPublishingLifecycleController : INovaObsPublishingL
                 LifecycleState = _state,
                 CompletionKind = terminal?.Kind ?? NovaObsPublishingCompletionKind.None,
                 LifecycleFailure = _failure,
+                LocalTerminationOutcome = terminal?.LocalTermination?.Outcome,
+                WriterEvidence = terminal?.LocalTermination?.WriterEvidence,
+                CleanupCompleted = terminal?.CleanupCompleted,
             };
         }
     }
@@ -284,12 +324,25 @@ internal sealed class NovaObsPublishingLifecycleController : INovaObsPublishingL
         NovaObsPublishingLifecycleFailure.CompletionFailed => "配信終了結果を取得できませんでした。",
         NovaObsPublishingLifecycleFailure.CleanupFailed => "配信リソースの解放完了を確認できません。",
         NovaObsPublishingLifecycleFailure.NormalEosUnproven => "OBS停止後の正常EOS・ドレイン完了が未証明です。",
+        NovaObsPublishingLifecycleFailure.FinishUnavailable => "Novaローカル終了の境界が接続されていません。",
+        NovaObsPublishingLifecycleFailure.FinishTimedOut => "Novaローカル終了の期限内完了を確認できません。",
+        NovaObsPublishingLifecycleFailure.IdentityUnproven => "配信終了結果のgeneration識別情報を確認できません。",
+        NovaObsPublishingLifecycleFailure.FinishFailed => "Novaローカル終了を確認できません。",
         _ => "配信接続が正常EOS以外で終了しました。",
     };
 
     public ValueTask DisposeAsync()
     {
-        lock (_gate) { _disposal ??= DisposeCoreAsync(); return new(_disposal); }
+        lock (_gate)
+        {
+            if (_disposal is null)
+            {
+                if (!_terminal.Task.IsCompleted) { _stopRequested = true; _closing = true; EnsureStopWorkerLocked(); }
+                _disposal = Task.Run(DisposeCoreAsync);
+                ObserveLateFault(_disposal);
+            }
+            return new(_disposal);
+        }
     }
 
     private async Task DisposeCoreAsync()

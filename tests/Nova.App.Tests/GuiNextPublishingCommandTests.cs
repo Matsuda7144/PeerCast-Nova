@@ -384,6 +384,8 @@ public sealed class GuiNextPublishingCommandTests
         public NovaObsPublishingStartResult RequestStart(CancellationToken cancellationToken = default) =>
             failStart ? throw new InvalidOperationException("SECRET start") : inner.RequestStart(cancellationToken);
         public Task<NovaObsPublishingLifecycleResult> RequestStopAsync() => throw new InvalidOperationException("SECRET stop");
+        public Task<NovaObsPublishingLifecycleResult> RequestFinishAsync(TimeSpan timeout, CancellationToken cancellationToken = default) =>
+            inner.RequestFinishAsync(timeout, cancellationToken);
         public ValueTask DisposeAsync() => inner.DisposeAsync();
     }
 

@@ -34,6 +34,10 @@ internal sealed record NovaObsPublishingReadOnlySnapshot(
     public NovaObsPublishingLifecycleState? LifecycleState { get; init; }
     public NovaObsPublishingCompletionKind? CompletionKind { get; init; }
     public NovaObsPublishingLifecycleFailure? LifecycleFailure { get; init; }
+    public ObsPublishLocalTerminationOutcome? LocalTerminationOutcome { get; init; }
+    public ObsPublishWriterEvidence? WriterEvidence { get; init; }
+    public bool? CleanupCompleted { get; init; }
+
 }
 
 internal interface INovaObsPublishingReadOnlyStatus
@@ -54,9 +58,16 @@ internal sealed class NovaObsPublishingReadOnlyStatus(INovaObsPublishingStatusSo
     private Guid? _sessionId;
     private NovaObsPublishingReadOnlySnapshot? _last;
 
+    internal Action? ContendedReadObserver { get; set; }
+
     public NovaObsPublishingReadOnlySnapshot Read()
     {
-        lock (_gate)
+        if (!Monitor.TryEnter(_gate))
+        {
+            ContendedReadObserver?.Invoke(); // No adapter or admission lock held here.
+            Monitor.Enter(_gate);
+        }
+        try
         {
             if (source is null) return Unavailable("配信ownerが接続されていません。");
             ObsPublishStatusSnapshot status;
@@ -91,6 +102,7 @@ internal sealed class NovaObsPublishingReadOnlyStatus(INovaObsPublishingStatusSo
             { IsSourceNotStarted = notStarted };
             return _last;
         }
+        finally { Monitor.Exit(_gate); }
     }
 
     private static NovaObsPublishingReadOnlySnapshot Unavailable(string diagnostic) =>
