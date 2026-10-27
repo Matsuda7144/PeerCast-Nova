@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
-using System.Text;
 
 namespace PeerCast.Nova.App;
 
@@ -36,6 +35,8 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
     private const int StatusControlId = 1006;
     private const int WindowWidth = 650;
     private const int WindowHeight = 245;
+    internal const int BrowseFileCapacity = 32768;
+    internal const string BrowseFailureText = "実行ファイルを確認できません。パスを確認してください。";
     private static readonly ConcurrentDictionary<nint, WindowState> StatesByWindow = new();
     private static readonly WindowProcedure WindowProcedureDelegate = ProcessWindowMessage;
 
@@ -180,6 +181,87 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
     {
         normalizedPath = GenesisGuiNextPlaybackSettings.NormalizePath(selectedPath);
         return !string.IsNullOrWhiteSpace(normalizedPath);
+    }
+
+    internal delegate bool ShowOpenFileDialog(ref OpenFileName dialog);
+
+    internal readonly record struct BrowseResult(string? SelectedPath, bool Failed);
+
+    internal static BrowseResult BrowseForExecutable(
+        nint owner,
+        string? currentPath,
+        ShowOpenFileDialog showDialog,
+        Func<uint> getExtendedError,
+        Action<nint> releaseBuffer,
+        Action<string> reportFailure)
+    {
+        nint fileBuffer = 0;
+        try
+        {
+            var characters = new char[BrowseFileCapacity];
+            var current = GenesisGuiNextPlaybackSettings.NormalizePath(currentPath);
+            if (current is not null && current.Length < characters.Length &&
+                !current.Any(static character => character < ' ' || character is '"' or '<' or '>' or '|' or '?' or '*'))
+            {
+                current.CopyTo(0, characters, 0, current.Length);
+            }
+
+            fileBuffer = Marshal.AllocHGlobal(checked(characters.Length * sizeof(char)));
+            Marshal.Copy(characters, 0, fileBuffer, characters.Length);
+            var dialog = new OpenFileName
+            {
+                StructSize = (uint)Marshal.SizeOf<OpenFileName>(),
+                Owner = owner,
+                Filter = "Executable files (*.exe)\0*.exe\0All files (*.*)\0*.*\0\0",
+                File = fileBuffer,
+                MaximumFile = BrowseFileCapacity,
+                Title = "PCRPlayer executable",
+                Flags = FileMustExist | PathMustExist | NoChangeDirectory,
+                DefaultExtension = "exe",
+            };
+            if (!showDialog(ref dialog))
+            {
+                // Read the common-dialog error before cleanup or another native call.
+                var error = getExtendedError();
+                if (error == 0) return default;
+                ReportBrowseFailure($"CommonDialogError=0x{error:X8}", reportFailure);
+                return new(null, true);
+            }
+
+            // Read only our owned allocation, even if the returned struct was changed.
+            Marshal.Copy(fileBuffer, characters, 0, characters.Length);
+            var terminator = Array.IndexOf(characters, '\0');
+            if (terminator <= 0 ||
+                !TryResolveBrowsePath(new string(characters, 0, terminator), out var selectedPath))
+            {
+                ReportBrowseFailure("InvalidSelectionBuffer", reportFailure);
+                return new(null, true);
+            }
+            return new(selectedPath, false);
+        }
+        catch (Exception exception) when (exception is ArgumentException or
+            MarshalDirectiveException or TypeLoadException or NotSupportedException or
+            System.ComponentModel.Win32Exception or COMException)
+        {
+            ReportBrowseFailure(exception.GetType().Name, reportFailure);
+            return new(null, true);
+        }
+        finally
+        {
+            if (fileBuffer != 0) releaseBuffer(fileBuffer);
+        }
+    }
+
+    private static void ReportBrowseFailure(string diagnostic, Action<string> reportFailure)
+    {
+        try
+        {
+            reportFailure($"PCRPlayer browse failed: {diagnostic}.");
+        }
+        catch (Exception exception) when (exception is IOException or ObjectDisposedException)
+        {
+            // A closed diagnostic stream must not turn a recoverable dialog failure fatal.
+        }
     }
 
     internal static string GetPcrPlayerSaveFeedback(
@@ -354,28 +436,16 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
 
         private void Browse()
         {
-            var fileBuffer = new StringBuilder(32768);
-            var current = GenesisGuiNextPlaybackSettings.NormalizePath(GetText(controls.Path));
-            if (!string.IsNullOrWhiteSpace(current))
+            var result = BrowseForExecutable(window, GetText(controls.Path),
+                GetOpenFileNameW, CommDlgExtendedError, Marshal.FreeHGlobal, Console.Error.WriteLine);
+            if (result.SelectedPath is { } selectedPath)
             {
-                fileBuffer.Append(current);
+                SetText(controls.Path, selectedPath);
+                SetText(controls.Status, string.Empty);
             }
-
-            var dialog = new OpenFileName
+            else if (result.Failed)
             {
-                StructSize = Marshal.SizeOf<OpenFileName>(),
-                Owner = window,
-                Filter = "Executable files (*.exe)\0*.exe\0All files (*.*)\0*.*\0\0",
-                File = fileBuffer,
-                MaximumFile = fileBuffer.Capacity,
-                Title = "PCRPlayer executable",
-                Flags = FileMustExist | PathMustExist | NoChangeDirectory,
-                DefaultExtension = "exe",
-            };
-            if (GetOpenFileNameW(ref dialog))
-            {
-                _ = TryResolveBrowsePath(dialog.File?.ToString(), out var selectedPath);
-                SetText(controls.Path, selectedPath ?? string.Empty);
+                SetText(controls.Status, BrowseFailureText);
             }
         }
 
@@ -418,31 +488,31 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
     private sealed record Controls(nint Path, nint Browse, nint Save, nint Clear, nint Close, nint Status, nint Info);
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct OpenFileName
+    internal struct OpenFileName
     {
-        public int StructSize;
+        public uint StructSize;
         public nint Owner;
         public nint Instance;
         [MarshalAs(UnmanagedType.LPWStr)] public string? Filter;
         public nint CustomFilter;
-        public int MaximumCustomFilter;
-        public int FilterIndex;
-        [MarshalAs(UnmanagedType.LPWStr)] public StringBuilder? File;
-        public int MaximumFile;
+        public uint MaximumCustomFilter;
+        public uint FilterIndex;
+        public nint File;
+        public uint MaximumFile;
         public nint FileTitle;
-        public int MaximumFileTitle;
+        public uint MaximumFileTitle;
         public nint InitialDirectory;
         [MarshalAs(UnmanagedType.LPWStr)] public string? Title;
-        public int Flags;
-        public short FileOffset;
-        public short FileExtension;
+        public uint Flags;
+        public ushort FileOffset;
+        public ushort FileExtension;
         [MarshalAs(UnmanagedType.LPWStr)] public string? DefaultExtension;
         public nint CustomData;
         public nint Hook;
         public nint TemplateName;
         public nint Reserved;
-        public int ReservedValue;
-        public int ExtendedFlags;
+        public uint ReservedValue;
+        public uint ExtendedFlags;
     }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
@@ -538,4 +608,7 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
     [DllImport("comdlg32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetOpenFileNameW(ref OpenFileName openFileName);
+
+    [DllImport("comdlg32.dll", ExactSpelling = true)]
+    private static extern uint CommDlgExtendedError();
 }

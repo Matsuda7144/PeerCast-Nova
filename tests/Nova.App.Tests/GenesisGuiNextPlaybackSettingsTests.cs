@@ -122,6 +122,282 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
     }
 
     [Fact]
+    public void OpenFileNameLayoutMatchesWin32PointerAndWordAlignment()
+    {
+        Assert.Equal(IntPtr.Size == 8 ? 152 : 88,
+            Marshal.SizeOf<GenesisGuiNextPlaybackSettingsWindow.OpenFileName>());
+        AssertOffset(nameof(GenesisGuiNextPlaybackSettingsWindow.OpenFileName.Owner), 8, 4);
+        AssertOffset(nameof(GenesisGuiNextPlaybackSettingsWindow.OpenFileName.File), 48, 28);
+        AssertOffset(nameof(GenesisGuiNextPlaybackSettingsWindow.OpenFileName.MaximumFile), 56, 32);
+        AssertOffset(nameof(GenesisGuiNextPlaybackSettingsWindow.OpenFileName.FileOffset), 100, 56);
+        AssertOffset(nameof(GenesisGuiNextPlaybackSettingsWindow.OpenFileName.DefaultExtension), 104, 60);
+        AssertOffset(nameof(GenesisGuiNextPlaybackSettingsWindow.OpenFileName.Reserved), 136, 76);
+        AssertOffset(nameof(GenesisGuiNextPlaybackSettingsWindow.OpenFileName.ExtendedFlags), 148, 84);
+
+        static void AssertOffset(string field, int x64, int x86) =>
+            Assert.Equal((nint)(IntPtr.Size == 8 ? x64 : x86),
+                Marshal.OffsetOf<GenesisGuiNextPlaybackSettingsWindow.OpenFileName>(field));
+    }
+
+    [Fact]
+    public void BrowseMarshalsRealStructureAndReadsUnicodeSelectionWithoutOpeningDialog()
+    {
+        const string initial = @"C:\Player Tools\配信\PCRPlayer64.exe";
+        const string selected = @"D:\新しい Player\PCRPlayer64.exe";
+        var harness = new BrowseHarness();
+        harness.ShowDialog = (ref GenesisGuiNextPlaybackSettingsWindow.OpenFileName dialog) =>
+        {
+            Assert.Equal((nint)123, dialog.Owner);
+            Assert.Equal((uint)Marshal.SizeOf<GenesisGuiNextPlaybackSettingsWindow.OpenFileName>(), dialog.StructSize);
+            Assert.Equal((uint)GenesisGuiNextPlaybackSettingsWindow.BrowseFileCapacity, dialog.MaximumFile);
+            Assert.Equal(0x1808u, dialog.Flags);
+            Assert.Equal("exe", dialog.DefaultExtension);
+            Assert.Equal(0, dialog.InitialDirectory);
+            Assert.Equal(initial, Marshal.PtrToStringUni(dialog.File));
+            Assert.Equal(0, Marshal.ReadInt16(dialog.File, initial.Length * sizeof(char)));
+            Assert.Equal(0, Marshal.ReadInt16(dialog.File,
+                (GenesisGuiNextPlaybackSettingsWindow.BrowseFileCapacity - 1) * sizeof(char)));
+
+            var native = Marshal.AllocHGlobal((int)dialog.StructSize);
+            try
+            {
+                Marshal.StructureToPtr(dialog, native, false);
+                try
+                {
+                    var copy = Marshal.PtrToStructure<GenesisGuiNextPlaybackSettingsWindow.OpenFileName>(native);
+                    Assert.Equal(dialog.File, copy.File);
+                    Assert.Equal(dialog.Owner, copy.Owner);
+                    Assert.Equal(dialog.MaximumFile, copy.MaximumFile);
+                    Assert.Equal(dialog.Title, copy.Title);
+                    Assert.Equal(dialog.DefaultExtension, copy.DefaultExtension);
+                    var filter = new char[dialog.Filter!.Length];
+                    var offset = Marshal.OffsetOf<GenesisGuiNextPlaybackSettingsWindow.OpenFileName>(
+                        nameof(GenesisGuiNextPlaybackSettingsWindow.OpenFileName.Filter));
+                    Marshal.Copy(Marshal.ReadIntPtr(native, (int)offset), filter, 0, filter.Length);
+                    Assert.Equal("Executable files (*.exe)\0*.exe\0All files (*.*)\0*.*\0\0", new string(filter));
+                }
+                finally
+                {
+                    Marshal.DestroyStructure<GenesisGuiNextPlaybackSettingsWindow.OpenFileName>(native);
+                }
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(native);
+            }
+
+            WriteSelection(dialog.File, selected);
+            // A changed return pointer must not redirect our bounded buffer read/free.
+            dialog.File = 0;
+            return true;
+        };
+        harness.GetExtendedError = () => throw new InvalidOperationException("Not called on success.");
+
+        var result = harness.Browse($"  \"{initial}\"  ");
+
+        Assert.Equal(selected, result.SelectedPath);
+        Assert.False(result.Failed);
+        Assert.Equal(1, harness.FreeCount);
+        Assert.Empty(harness.Diagnostics);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(" ")]
+    [InlineData("C:\\bad\0name\\PCRPlayer64.exe")]
+    [InlineData("C:\\bad\nname\\PCRPlayer64.exe")]
+    [InlineData("C:\\bad*name\\PCRPlayer64.exe")]
+    [InlineData("C:\\bad\"name\\PCRPlayer64.exe")]
+    public void BrowseLeavesUnsafeInitialNamesEmpty(string? initial)
+    {
+        var harness = new BrowseHarness
+        {
+            ShowDialog = (ref GenesisGuiNextPlaybackSettingsWindow.OpenFileName dialog) =>
+            {
+                Assert.Equal(0, Marshal.ReadInt16(dialog.File));
+                return false;
+            },
+        };
+
+        var result = harness.Browse(initial);
+
+        Assert.Null(result.SelectedPath);
+        Assert.False(result.Failed);
+        Assert.Equal(1, harness.FreeCount);
+        Assert.Empty(harness.Diagnostics);
+    }
+
+    [Theory]
+    [InlineData(32767, true)]
+    [InlineData(32768, false)]
+    [InlineData(32769, false)]
+    public void BrowseInitialNameMustLeaveRoomForTerminator(int length, bool seeded)
+    {
+        var initial = @"C:\" + new string('p', length - 19) + @"\PCRPlayer64.exe";
+        Assert.Equal(length, initial.Length);
+        var harness = new BrowseHarness
+        {
+            ShowDialog = (ref GenesisGuiNextPlaybackSettingsWindow.OpenFileName dialog) =>
+            {
+                Assert.Equal(seeded ? initial : string.Empty, Marshal.PtrToStringUni(dialog.File));
+                Assert.Equal(0, Marshal.ReadInt16(dialog.File,
+                    (GenesisGuiNextPlaybackSettingsWindow.BrowseFileCapacity - 1) * sizeof(char)));
+                return false;
+            },
+        };
+
+        Assert.False(harness.Browse(initial).Failed);
+        Assert.Equal(1, harness.FreeCount);
+    }
+
+    [Theory]
+    [InlineData(0u, false)]
+    [InlineData(0x3003u, true)]
+    public void BrowseCancellationAndFailureReturnNoReplacementAndReadErrorBeforeFree(uint error, bool failed)
+    {
+        var harness = new BrowseHarness();
+        var errorReads = 0;
+        harness.ShowDialog = (ref GenesisGuiNextPlaybackSettingsWindow.OpenFileName dialog) =>
+        {
+            WriteSelection(dialog.File, @"D:\discarded\PCRPlayer64.exe");
+            return false;
+        };
+        harness.GetExtendedError = () =>
+        {
+            Assert.Equal(0, harness.FreeCount);
+            errorReads++;
+            return error;
+        };
+
+        var result = harness.Browse(@"C:\private\PCRPlayer64.exe");
+
+        Assert.Null(result.SelectedPath);
+        Assert.Equal(failed, result.Failed);
+        Assert.Equal(1, errorReads);
+        Assert.Equal(1, harness.FreeCount);
+        if (failed)
+            Assert.Equal("PCRPlayer browse failed: CommonDialogError=0x00003003.", Assert.Single(harness.Diagnostics));
+        else
+            Assert.Empty(harness.Diagnostics);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void BrowseRejectsEmptyOrUnterminatedSuccessBuffer(bool unterminated)
+    {
+        var harness = new BrowseHarness
+        {
+            ShowDialog = (ref GenesisGuiNextPlaybackSettingsWindow.OpenFileName dialog) =>
+            {
+                var characters = new char[GenesisGuiNextPlaybackSettingsWindow.BrowseFileCapacity];
+                if (unterminated) Array.Fill(characters, 'x');
+                Marshal.Copy(characters, 0, dialog.File, characters.Length);
+                return true;
+            },
+        };
+
+        var result = harness.Browse(null);
+
+        Assert.Null(result.SelectedPath);
+        Assert.True(result.Failed);
+        Assert.Equal(1, harness.FreeCount);
+        Assert.Equal("PCRPlayer browse failed: InvalidSelectionBuffer.", Assert.Single(harness.Diagnostics));
+    }
+
+    [Fact]
+    public void BrowseReadsTerminatorAtLastCharacterWithinCapacity()
+    {
+        var selected = new string('x', GenesisGuiNextPlaybackSettingsWindow.BrowseFileCapacity - 1);
+        var harness = new BrowseHarness
+        {
+            ShowDialog = (ref GenesisGuiNextPlaybackSettingsWindow.OpenFileName dialog) =>
+            {
+                WriteSelection(dialog.File, selected);
+                return true;
+            },
+        };
+
+        Assert.Equal(selected, harness.Browse(null).SelectedPath);
+        Assert.Equal(1, harness.FreeCount);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void BrowseContainsRecoverableInteropExceptionsWithoutLoggingPrivateDetails(bool marshalFailure)
+    {
+        var harness = new BrowseHarness
+        {
+            ShowDialog = (ref GenesisGuiNextPlaybackSettingsWindow.OpenFileName _) =>
+                throw (marshalFailure ? new MarshalDirectiveException(@"C:\private\path") :
+                    new ArgumentException(@"C:\private\path")),
+        };
+
+        var result = harness.Browse(@"C:\private\PCRPlayer64.exe");
+
+        Assert.Null(result.SelectedPath);
+        Assert.True(result.Failed);
+        Assert.Equal(1, harness.FreeCount);
+        Assert.Equal($"PCRPlayer browse failed: {(marshalFailure ? nameof(MarshalDirectiveException) : nameof(ArgumentException))}.",
+            Assert.Single(harness.Diagnostics));
+    }
+
+    [Fact]
+    public void BrowseDoesNotHideFatalFailuresAndStillFreesBuffer()
+    {
+        var harness = new BrowseHarness
+        {
+#pragma warning disable CA2201 // Simulate a fatal runtime failure without exhausting process memory.
+            ShowDialog = (ref GenesisGuiNextPlaybackSettingsWindow.OpenFileName _) => throw new OutOfMemoryException(),
+#pragma warning restore CA2201
+        };
+
+        Assert.Throws<OutOfMemoryException>(() => harness.Browse(null));
+        Assert.Equal(1, harness.FreeCount);
+        Assert.Empty(harness.Diagnostics);
+    }
+
+    [Fact]
+    public void BrowseFailureSurvivesClosedDiagnosticStream()
+    {
+        var harness = new BrowseHarness
+        {
+            GetExtendedError = () => 1,
+            ReportFailure = _ => throw new IOException("Closed stderr."),
+        };
+
+        Assert.True(harness.Browse(null).Failed);
+        Assert.Equal(1, harness.FreeCount);
+    }
+
+    private static void WriteSelection(nint buffer, string selected)
+    {
+        var characters = (selected + '\0').ToCharArray();
+        Assert.True(characters.Length <= GenesisGuiNextPlaybackSettingsWindow.BrowseFileCapacity);
+        Marshal.Copy(characters, 0, buffer, characters.Length);
+    }
+
+    private sealed class BrowseHarness
+    {
+        public GenesisGuiNextPlaybackSettingsWindow.ShowOpenFileDialog ShowDialog { get; set; } =
+            (ref GenesisGuiNextPlaybackSettingsWindow.OpenFileName _) => false;
+        public Func<uint> GetExtendedError { get; set; } = () => 0;
+        public Action<string>? ReportFailure { get; set; }
+        public List<string> Diagnostics { get; } = [];
+        public int FreeCount { get; private set; }
+
+        public GenesisGuiNextPlaybackSettingsWindow.BrowseResult Browse(string? currentPath) =>
+            GenesisGuiNextPlaybackSettingsWindow.BrowseForExecutable(123, currentPath,
+                ShowDialog, GetExtendedError, buffer =>
+                {
+                    Assert.NotEqual(0, buffer);
+                    FreeCount++;
+                    Marshal.FreeHGlobal(buffer);
+                }, ReportFailure ?? Diagnostics.Add);
+    }
+
+    [Fact]
     public void ExecutablePathValidationRequiresExpectedAbsoluteExistingFile()
     {
         using var directory = new TemporaryDirectory();
