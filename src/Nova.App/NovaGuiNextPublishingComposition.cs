@@ -6,7 +6,7 @@ namespace PeerCast.Nova.App;
 /// generation has its own lifecycle, status adapter and command tasks.
 /// </summary>
 internal sealed class NovaGuiNextPublishingComposition : INovaObsPublishingReadOnlyStatus,
-    INovaGuiNextPublishingCommands, IAsyncDisposable
+    INovaGuiNextPublishingCommands, INovaObsPublishingConnectionInfo, IAsyncDisposable
 {
     private readonly object _gate = new();
     private readonly INovaObsPublishingRuntimeFactory _factory;
@@ -56,6 +56,30 @@ internal sealed class NovaGuiNextPublishingComposition : INovaObsPublishingReadO
 
     internal Action? CommandObservationReady { get; set; }
     internal long CurrentGeneration { get { lock (_gate) return _current.Number; } }
+
+    public NovaObsPublishingConnectionInfo? ReadConnectionInfo(NovaObsPublishingReadOnlySnapshot status)
+    {
+        Generation generation;
+        lock (_gate)
+        {
+            if (_closed || status.Generation != _current.Number) return null;
+            generation = _current;
+        }
+        var info = generation.Connection.Read(generation.Number, status); // Borrowed callback, outside admission locks.
+        lock (_gate)
+        {
+            if (_closed || !ReferenceEquals(generation, _current) || !generation.Lifecycle.CanDiscloseConnection(status.LifecycleState))
+            { generation.Connection.Invalidate(); return null; }
+            generation.ConnectionLifecycleState = status.LifecycleState;
+            return info;
+        }
+    }
+
+    public bool IsConnectionInfoCurrent(NovaObsPublishingConnectionIdentity identity)
+    {
+        lock (_gate) return !_closed && identity.Generation == _current.Number &&
+            _current.Lifecycle.CanDiscloseConnection(_current.ConnectionLifecycleState) && _current.Connection.IsCurrent(identity);
+    }
 
     public NovaObsPublishingReadOnlySnapshot Read()
     {
@@ -349,6 +373,7 @@ internal sealed class NovaGuiNextPublishingComposition : INovaObsPublishingReadO
             Number = number;
             Lifecycle = new NovaObsPublishingLifecycleController(owner) { FinishTimeProvider = finishTimeProvider };
             Commands = new(Lifecycle);
+            Connection = new(owner);
         }
         internal long Number { get; }
         internal NovaObsPublishingReadOnlySnapshot? LastSnapshot { get; set; }
@@ -356,5 +381,7 @@ internal sealed class NovaGuiNextPublishingComposition : INovaObsPublishingReadO
         internal Guid? ChannelId { get; set; }
         internal NovaObsPublishingLifecycleController Lifecycle { get; }
         internal NovaGuiNextPublishingCommands Commands { get; }
+        internal NovaObsPublishingConnectionReader Connection { get; }
+        internal NovaObsPublishingLifecycleState? ConnectionLifecycleState { get; set; }
     }
 }

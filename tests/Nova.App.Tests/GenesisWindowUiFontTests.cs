@@ -295,6 +295,9 @@ public sealed class GenesisWindowUiFontTests
             "GenesisGuiNextRelayActivation.cs",
             "GenesisGuiNextPublishingPresentation.cs",
             "GenesisGuiNextPublishingRefresh.cs",
+            "GenesisGuiNextPublishingConnection.cs",
+            "GenesisGuiNextPublishingNativeGuide.cs",
+            "NovaObsPublishingConnectionInfo.cs",
             "NovaGuiNextPublishingCommands.cs",
             "NovaGuiNextPublishingComposition.cs",
         };

@@ -229,6 +229,7 @@ internal sealed partial class GenesisGuiNextTabsViewModel : INotifyPropertyChang
             }
 
             _selectedTab = value;
+            if (value != GenesisGuiNextTab.Publishing) MaskPublishingKey();
             OnPropertyChanged();
             OnPropertyChanged(nameof(CanRefreshRecordingLibrary));
             RecordingHistoryPageChanged();

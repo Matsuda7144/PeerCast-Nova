@@ -463,7 +463,7 @@ internal readonly record struct GenesisGuiNextListViewAccentRectangle(
     int Right,
     int Bottom);
 
-internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
+internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
 {
     internal const int FavoriteButtonWidth = 132;
     internal const int FavoriteButtonGap = 8;
@@ -1435,6 +1435,10 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
             state.SynchronizeNativeSelection();
             return 0;
         }
+        else if (message is 0x0005 or 0x02E3) // WM_SIZE / WM_DPICHANGED_AFTERPARENT
+        {
+            state.SynchronizeNativeSelection();
+        }
 
         return DefWindowProcW(window, message, wParam, lParam);
     }
@@ -1488,7 +1492,7 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
         }
     }
 
-    private sealed class AppShellState
+    private sealed partial class AppShellState
     {
         private readonly nint _owner;
         private readonly nint _sidebar;
@@ -1643,6 +1647,7 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
             _ = ShowWindow(_publishingInterruptButton, ShowWindowHide);
             _ = EnableWindow(_publishingStartButton, false);
             _ = EnableWindow(_publishingInterruptButton, false);
+            CreatePublishingGuide(GetModuleHandleW(null));
             _listView = listView;
             _tabs = tabs;
             _viewModel = viewModel;
@@ -1667,7 +1672,7 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
             _viewModel.PropertyChanged += OnViewModelPropertyChanged;
         }
 
-        public bool RuleButtonsAvailable => _publishingStartButton != 0 && _publishingInterruptButton != 0 && _publishingFinishButton != 0 && _relayStart != 0 && _relayStop != 0 && _relayStatus != 0 && _recordingHistoryDetails != 0 && _recordingHistoryModeButton != 0 && _recordingHistoryRefreshButton != 0 && _createRuleButton != 0 && _editRuleButton != 0 &&
+        public bool RuleButtonsAvailable => PublishingGuideAvailable && _publishingStartButton != 0 && _publishingInterruptButton != 0 && _publishingFinishButton != 0 && _relayStart != 0 && _relayStop != 0 && _relayStatus != 0 && _recordingHistoryDetails != 0 && _recordingHistoryModeButton != 0 && _recordingHistoryRefreshButton != 0 && _createRuleButton != 0 && _editRuleButton != 0 &&
             _toggleRuleButton != 0 && _deleteRuleButton != 0 && _moveRuleUpButton != 0 && _moveRuleDownButton != 0;
 
         public void Detach()
@@ -1736,6 +1741,7 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 _ = _tabs.RequestPublishingFinishAsync();
                 return;
             }
+            if (ProcessPublishingGuideCommand(commandId, lParam)) return;
             if (_tabs.SelectedTab == GenesisGuiNextTab.Publishing &&
                 !IsPublishingNavigationCommand(commandId)) return;
             if (lParam == _relayStop && commandId == RelayStopControlId)
@@ -2033,6 +2039,7 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
                         ? GenesisGuiNextPublishingPresentation.FinishLabel : GenesisGuiNextPublishingPresentation.InterruptLabel,
                     false, drawItem.ControlId == PublishingInterruptControlId);
 
+            if (DrawPublishingGuide(drawItem)) return true;
             if (IsOwnerDrawButton(drawItem.ControlType) && drawItem.ControlId is RelayStartControlId or RelayStopControlId)
                 return DrawRecordingModeButton(drawItem, drawItem.ControlId == RelayStartControlId ? "Relay開始" : "Relay停止", false);
             if (IsOwnerDrawStatic(drawItem.ControlType) && drawItem.ControlId == RelayStatusControlId)
@@ -2461,8 +2468,11 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
             {
                 return;
             }
-            _ = EnableWindow(_relayStart, GenesisGuiNextRelayCommandDispatch.CanStart(_viewModel, row));
-            _ = EnableWindow(_relayStop, _viewModel.RelayActivation?.CanStop == true);
+            var showRelay = GenesisGuiNextPublishingGuideLayout.ShowRelayControls(_tabs.SelectedTab);
+            foreach (var control in new[] { _relayStart, _relayStop, _relayStatus })
+                _ = ShowWindow(control, showRelay ? ShowWindowShowNoActivate : ShowWindowHide);
+            _ = EnableWindow(_relayStart, showRelay && GenesisGuiNextRelayCommandDispatch.CanStart(_viewModel, row));
+            _ = EnableWindow(_relayStop, showRelay && _viewModel.RelayActivation?.CanStop == true);
             if (GetClientRect(_detailsPane, out var relayPane))
                 _ = MoveWindow(_relayStatus, 12, RelayStatusTop, RelayStatusWidth(relayPane.Right - relayPane.Left), 40, true);
             _ = InvalidateRect(_relayStatus, 0, true);
@@ -2542,17 +2552,19 @@ internal sealed class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 _detailsRecordingStatus,
                 !isLogPage && !isPublishingPage && IsRecordingStatusVisible(isRulesPage) ? ShowWindowShowNoActivate : ShowWindowHide);
 
+            SynchronizePublishingGuide(isPublishingPage);
             if (isPublishingPage)
             {
                 var publishing = row?.Publishing ?? (_tabs.PublishingRows.Count > 0 ? _tabs.PublishingRows[0] : null);
-                _ = SetWindowTextW(_detailsTitle, "配信");
+                _ = SetWindowTextW(_detailsTitle, "OBS 接続設定");
                 _ = SetWindowTextW(_detailsDescription, publishing is null ? "配信状態を確認できません。" :
                     publishing.StateText + (string.IsNullOrEmpty(publishing.DiagnosticText) ? string.Empty : " · " + publishing.DiagnosticText));
-                _ = SetWindowTextW(_detailsMetadata, GenesisGuiNextPublishingPresentation.ScopeText);
+                _ = SetWindowTextW(_detailsMetadata, NovaObsPublishingConnectionPresentation.Instructions);
                 _ = SetWindowTextW(_detailsIdentity, publishing is null ? string.Empty :
                     "エラー分類 / 終了理由 · " + GenesisGuiNextPublishingPresentation.ErrorText(publishing) +
                     (string.IsNullOrEmpty(_tabs.PublishingCommands.DiagnosticText) ? string.Empty :
-                        " · " + _tabs.PublishingCommands.DiagnosticText));
+                        " · " + _tabs.PublishingCommands.DiagnosticText) +
+                    (string.IsNullOrEmpty(_tabs.PublishingConnectionFeedback) ? string.Empty : " · " + _tabs.PublishingConnectionFeedback));
                 _ = SetWindowTextW(_detailsRecordingStatus, string.Empty);
                 _ = InvalidateRect(_detailsPane, 0, true);
                 return;

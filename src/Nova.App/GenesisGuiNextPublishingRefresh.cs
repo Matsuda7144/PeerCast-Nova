@@ -31,11 +31,14 @@ internal sealed partial class GenesisGuiNextTabsViewModel
             lock (_recordingRulesLifecycleGate)
             {
                 _publishingDispatch = dispatch;
+                _publishingWindowLifetime++;
+                ResetPublishingConnectionLocked();
                 publication = _publishingPublication;
                 _publishingPublication = null;
             }
         }
         if (dispatch is not null && publication is not null) dispatch(publication);
+        if (dispatch is not null) RefreshPublishingStatus();
     }
 
     internal void BindPublishingStatus(INovaObsPublishingReadOnlyStatus? status, INovaGuiNextPublishingCommands? commands = null)
@@ -49,8 +52,10 @@ internal sealed partial class GenesisGuiNextTabsViewModel
                 _publishingStatus = status ?? new NovaObsPublishingReadOnlyStatus(null);
                 _publishingCommands = commands;
                 _publishingBinding = new(_publishingVersion, _publishingStatus, commands, _publishingBinding is null);
+                ResetPublishingConnectionLocked();
             }
         }
+        NotifyPublishingConnection();
         RefreshPublishingStatus();
     }
 
@@ -75,7 +80,7 @@ internal sealed partial class GenesisGuiNextTabsViewModel
         {
             INovaObsPublishingReadOnlyStatus source;
             INovaGuiNextPublishingCommands? boundary;
-            long version, serial;
+            long version, serial, windowLifetime;
             PublishingBinding? binding;
             lock (_recordingRulesLifecycleGate)
             {
@@ -83,6 +88,7 @@ internal sealed partial class GenesisGuiNextTabsViewModel
                 _publishingRequested = false;
                 source = _publishingStatus; boundary = _publishingCommands;
                 version = _publishingVersion; serial = ++_publishingReadSerial;
+                windowLifetime = _publishingWindowLifetime;
                 binding = _publishingBinding;
             }
             NovaObsPublishingReadOnlySnapshot snapshot;
@@ -105,7 +111,11 @@ internal sealed partial class GenesisGuiNextTabsViewModel
             }
             catch { (snapshot, commands) = UnavailablePublishing(); consistent = false; }
             var captured = snapshot; var capturedCommands = commands;
-            Action publish = () => PublishPublishing(version, serial, source, captured, capturedCommands, binding, consistent);
+            NovaObsPublishingConnectionInfo? connection = null;
+            try { connection = (source as INovaObsPublishingConnectionInfo)?.ReadConnectionInfo(snapshot); }
+            catch { /* Explicit disclosure fails closed without exception text. */ }
+            var presentation = NovaObsPublishingConnectionPresentation.From(snapshot, connection);
+            Action publish = () => PublishPublishing(version, serial, source, captured, capturedCommands, binding, consistent, presentation, windowLifetime);
             Action<Action>? dispatch;
             lock (_recordingRulesLifecycleGate)
             {
@@ -122,25 +132,41 @@ internal sealed partial class GenesisGuiNextTabsViewModel
             PeerCast.Nova.Windows.NovaObsPublishingTone.Warning, null, null, null), NovaGuiNextPublishingCommandState.Unavailable);
 
     private void PublishPublishing(long version, long serial, INovaObsPublishingReadOnlyStatus source,
-        NovaObsPublishingReadOnlySnapshot snapshot, NovaGuiNextPublishingCommandState commands, PublishingBinding? binding, bool consistent)
+        NovaObsPublishingReadOnlySnapshot snapshot, NovaGuiNextPublishingCommandState commands, PublishingBinding? binding, bool consistent,
+        NovaObsPublishingConnectionPresentation connection, long windowLifetime)
     {
         // UI serialization only. No external Read, command or callback under the
         // ViewModel admission gate. Dispose serializes with notifications here.
         lock (_publishingUiGate)
         {
             if (source is NovaGuiNextPublishingComposition composition && snapshot.Generation != composition.CurrentGeneration) return;
+            // This interface performs bounded owned-state validation, never a
+            // borrowed Snapshot read. Check after entering UI serialization.
+            try
+            {
+                if (connection.Identity is { } identity &&
+                    (source is not INovaObsPublishingConnectionInfo reader || !reader.IsConnectionInfoCurrent(identity)))
+                    connection = NovaObsPublishingConnectionPresentation.Checking;
+            }
+            catch { connection = NovaObsPublishingConnectionPresentation.Checking; }
             bool rowsChanged, commandsChanged;
             lock (_recordingRulesLifecycleGate)
             {
                 if (_disposed || _publishingClosed || version != _publishingVersion || serial < _publishingPublishedSerial) return;
+                if (windowLifetime != _publishingWindowLifetime || _publishingDispatch is null)
+                    connection = NovaObsPublishingConnectionPresentation.Checking;
                 _publishingPublishedSerial = serial;
                 rowsChanged = _publishingRows.Count != 1 || _publishingRows[0] != snapshot;
                 commandsChanged = PublishingCommands != commands;
                 if (rowsChanged) _publishingRows = Array.AsReadOnly(new[] { snapshot });
                 PublishingCommands = commands;
+                UpdatePublishingConnectionLocked(connection);
                 _publishingPublishedBinding = consistent ? binding : null;
             }
             if (rowsChanged) OnPropertyChanged(nameof(PublishingRows));
+            lock (_recordingRulesLifecycleGate)
+                if (_disposed || _publishingClosed || version != _publishingVersion) return;
+            OnPropertyChanged(nameof(PublishingConnection));
             // A subscriber can synchronously dispose/rebind during the first event.
             lock (_recordingRulesLifecycleGate)
                 if (_disposed || _publishingClosed || version != _publishingVersion) return;
@@ -154,6 +180,8 @@ internal sealed partial class GenesisGuiNextTabsViewModel
             lock (_recordingRulesLifecycleGate)
             {
                 _publishingClosed = true; _publishingVersion++;
+                _publishingWindowLifetime++;
+                ResetPublishingConnectionLocked();
                 _publishingDispatch = null; _publishingPublication = null;
             }
         // Noncooperative reads remain owned and fault observed; shutdown never

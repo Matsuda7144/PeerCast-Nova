@@ -16,8 +16,21 @@ internal static class GenesisGuiNextPublishingPresentation
         });
 
     internal static string[] Values(NovaObsPublishingReadOnlySnapshot snapshot) =>
-        [snapshot.StateText, snapshot.ChannelId?.ToString("N").ToUpperInvariant() ?? "未接続",
+        [StateText(snapshot), snapshot.ChannelId?.ToString("N").ToUpperInvariant() ?? "未接続",
             snapshot.SessionId?.ToString("N").ToUpperInvariant() ?? "未接続", ErrorText(snapshot)];
+
+    internal static string StateText(NovaObsPublishingReadOnlySnapshot snapshot) =>
+        snapshot.CompletionKind is { } kind && kind != NovaObsPublishingCompletionKind.None ||
+        snapshot.LifecycleState is NovaObsPublishingLifecycleState.Stopping or NovaObsPublishingLifecycleState.Failed
+            ? NovaObsPublishingConnectionPresentation.From(snapshot, null).StateText
+            : snapshot.StateText switch
+            {
+                "OBSから配信を受信中" => "メディア初期化受信済み",
+                "OBS接続中" => "入力接続あり・メディア待ち",
+                "OBS待機中" => "待受準備完了（このPCのみ）",
+                "未起動（待受未開始）" => "停止中（未開始）",
+                _ => snapshot.StateText,
+            };
 
     internal static string ErrorText(NovaObsPublishingReadOnlySnapshot snapshot)
     {

@@ -93,6 +93,15 @@ internal sealed partial class NovaObsPublishingLifecycleController : INovaObsPub
 
     public Task<NovaObsPublishingLifecycleResult> Completion => _terminal.Task;
 
+    // No borrowed callbacks: used immediately before explicit UI disclosure/copy.
+    internal bool CanDiscloseConnection(NovaObsPublishingLifecycleState? expected)
+    {
+        lock (_gate) return expected == _state && _owner is not null && !_closing && !_stopRequested && _disposal is null &&
+            !_terminal.Task.IsCompleted && _ownerCompletion?.IsCompleted != true &&
+            _failure == NovaObsPublishingLifecycleFailure.None &&
+            _state is NovaObsPublishingLifecycleState.NotStarted or NovaObsPublishingLifecycleState.Starting or NovaObsPublishingLifecycleState.Running;
+    }
+
     public NovaObsPublishingStartResult RequestStart(CancellationToken cancellationToken = default)
     {
         lock (_gate)

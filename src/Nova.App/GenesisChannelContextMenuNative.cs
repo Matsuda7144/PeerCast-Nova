@@ -202,9 +202,9 @@ internal static class GenesisChannelContextMenuNative
         return selectedRow >= 0 ? selectedRow : requestedRow;
     }
 
-    public static bool CopySourceToClipboard(nint owner, string source)
+    public static bool CopySourceToClipboard(nint owner, string source, Func<bool>? canCopy = null)
     {
-        if (owner == 0 || string.IsNullOrWhiteSpace(source))
+        if (owner == 0 || string.IsNullOrWhiteSpace(source) || (canCopy is not null && !canCopy()))
         {
             return false;
         }
@@ -242,11 +242,12 @@ internal static class GenesisChannelContextMenuNative
 
             try
             {
-                if (!EmptyClipboard())
+                if ((canCopy is not null && !canCopy()) || !EmptyClipboard())
                 {
                     return false;
                 }
 
+                if (canCopy is not null && !canCopy()) return false;
                 transferred = SetClipboardData(ClipboardFormatUnicodeText, memory) != 0;
                 return transferred;
             }

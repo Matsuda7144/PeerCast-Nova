@@ -184,7 +184,7 @@ public sealed class GuiNextPublishingCompositionTests
         Assert.False(GenesisGuiNextFavoriteButtonPresentationResolver.Resolve(tabs, row).IsEnabled);
         Assert.Equal(4, GenesisGuiNextRecordingListPresentation.Columns(publishing, tabs.RecordingPageMode).Count);
         var values = GenesisGuiNextRecordingListPresentation.Values(row);
-        Assert.Equal("未起動（待受未開始）", values[0]);
+        Assert.Equal("停止中（未開始）", values[0]);
         Assert.Equal(factory.Owner.Current.ChannelId.ToString(), values[1]);
         Assert.DoesNotContain("DO-NOT-DISPLAY", string.Join('|', values));
         Assert.False(GenesisChannelDirectContextMenuDispatch.TryOpen(row,
