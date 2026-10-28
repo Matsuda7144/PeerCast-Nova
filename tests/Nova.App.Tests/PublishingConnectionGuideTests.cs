@@ -175,6 +175,26 @@ public sealed class PublishingConnectionGuideTests
         Assert.NotNull(reader.Read(1, status));
     }
 
+    [Fact]
+    public async Task StableConnectionPollStillReadsButDoesNotNotifyAndChangesDoNotify()
+    {
+        await using var h = new Harness(); await h.Refresh();
+        var reads = 0; var notices = 0;
+        h.Owner.ReadSnapshot = () => { Interlocked.Increment(ref reads); return h.Owner.Current; };
+        h.Tabs.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(GenesisGuiNextTabsViewModel.PublishingConnection)) notices++; };
+        await h.Refresh(); await h.Refresh();
+        Assert.True(reads >= 2); Assert.Equal(0, notices);
+        await h.Act(h.Tabs.TogglePublishingKeyAsync());
+        Assert.True(h.Tabs.PublishingKeyRevealed); Assert.True(notices > 0);
+        notices = 0;
+        await h.Refresh(); Assert.Equal(0, notices);
+        h.Owner.Current = h.Owner.Current with { Revision = 5 };
+        await h.Refresh();
+        Assert.False(h.Tabs.PublishingKeyRevealed); Assert.True(notices > 0);
+        Assert.Equal(NovaObsPublishingConnectionPresentation.Mask, h.Tabs.PublishingKeyDisplay);
+        h.Owner.ReadSnapshot = null;
+    }
+
     private sealed class Harness : IAsyncDisposable
     {
         internal readonly Owner Owner = new();

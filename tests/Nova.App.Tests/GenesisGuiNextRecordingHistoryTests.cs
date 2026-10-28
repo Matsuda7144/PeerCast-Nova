@@ -570,7 +570,7 @@ public sealed class GenesisGuiNextRecordingHistoryTests
         Assert.Contains("ApplyDefaultFont(_recordingHistoryModeButton)", shell);
         Assert.Contains("ApplyDefaultFont(_recordingHistoryRefreshButton)", shell);
         Assert.Contains("CreateWindowExW(0, \"EDIT\"", shell);
-        Assert.Contains("_ = SetWindowTextW(_detailsRecordingStatus, _historyStatusPresentation.Text);", shell);
+        Assert.Contains("_ = PresentText(_detailsRecordingStatus, _historyStatusPresentation.Text);", shell);
         Assert.Contains("_historyStatusPresentation.Text, -1, ref rectangle", shell);
         Assert.Contains("string.Equals(detailsText, _historyDetailsText, StringComparison.Ordinal)", shell);
         Assert.Contains("DrawItemTypeStatic = 5", shell);

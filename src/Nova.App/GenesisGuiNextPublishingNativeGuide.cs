@@ -69,17 +69,17 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private void SynchronizePublishingGuide(bool visible)
         {
             foreach (var control in PublishingGuideControls())
-                _ = ShowWindow(control, visible ? ShowWindowShowNoActivate : ShowWindowHide);
+                _ = PresentVisible(control, visible ? ShowWindowShowNoActivate : ShowWindowHide);
             if (!visible)
             {
-                _ = SetWindowTextW(_publishingKeyValue, NovaObsPublishingConnectionPresentation.Mask);
-                _ = SetWindowTextW(_publishingServerValue, string.Empty);
+                _ = PresentText(_publishingKeyValue, NovaObsPublishingConnectionPresentation.Mask);
+                _ = PresentText(_publishingServerValue, string.Empty);
                 return;
             }
             var width = GetClientRect(_detailsPane, out var rectangle) ? rectangle.Right - rectangle.Left : _detailsTextWidth;
             var layout = GenesisGuiNextPublishingGuideLayout.ForWidth(width);
             void Place(nint control, GenesisGuiNextPublishingGuideRectangle bounds) =>
-                _ = MoveWindow(control, bounds.Left, bounds.Top, bounds.Width, bounds.Height, true);
+                _ = PresentBounds(control, bounds.Left, bounds.Top, bounds.Width, bounds.Height, true);
             Place(_detailsTitle, layout.Title);
             Place(_publishingStartButton, layout.Start);
             Place(_publishingFinishButton, layout.Finish);
@@ -93,18 +93,18 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             Place(_publishingKeyReveal, layout.Reveal);
             Place(_publishingKeyCopy, layout.KeyCopy);
             Place(_publishingInstructions, layout.Instructions);
-            _ = ShowWindow(_detailsDescription, ShowWindowHide);
-            _ = ShowWindow(_detailsMetadata, ShowWindowHide);
+            _ = PresentVisible(_detailsDescription, ShowWindowHide);
+            _ = PresentVisible(_detailsMetadata, ShowWindowHide);
             Place(_detailsIdentity, layout.Feedback);
             var presentation = _tabs.PublishingConnection;
-            _ = SetWindowTextW(_publishingServerValue, presentation.ServerText);
-            _ = SetWindowTextW(_publishingKeyValue, _tabs.PublishingKeyDisplay);
-            _ = SetWindowTextW(_publishingKeyReveal, _tabs.PublishingKeyRevealed ? "隠す" : "表示");
-            _ = EnableWindow(_publishingServerCopy, presentation.CanCopyServer);
-            _ = EnableWindow(_publishingKeyReveal, presentation.CanUseKey);
-            _ = EnableWindow(_publishingKeyCopy, presentation.CanUseKey);
+            _ = PresentText(_publishingServerValue, presentation.ServerText);
+            _ = PresentText(_publishingKeyValue, _tabs.PublishingKeyDisplay);
+            _ = PresentText(_publishingKeyReveal, _tabs.PublishingKeyRevealed ? "隠す" : "表示");
+            _ = PresentEnabled(_publishingServerCopy, presentation.CanCopyServer);
+            _ = PresentEnabled(_publishingKeyReveal, presentation.CanUseKey);
+            _ = PresentEnabled(_publishingKeyCopy, presentation.CanUseKey);
             foreach (var control in new[] { _publishingConnectionState, _publishingServerCopy, _publishingKeyReveal, _publishingKeyCopy })
-                _ = InvalidateRect(control, 0, true);
+                _ = PresentInvalidation(control, 0, true);
         }
 
         private bool DrawPublishingGuide(DrawItem drawItem)

@@ -149,7 +149,7 @@ internal sealed partial class GenesisGuiNextTabsViewModel
                     connection = NovaObsPublishingConnectionPresentation.Checking;
             }
             catch { connection = NovaObsPublishingConnectionPresentation.Checking; }
-            bool rowsChanged, commandsChanged;
+            bool rowsChanged, commandsChanged, connectionChanged;
             lock (_recordingRulesLifecycleGate)
             {
                 if (_disposed || _publishingClosed || version != _publishingVersion || serial < _publishingPublishedSerial) return;
@@ -160,13 +160,15 @@ internal sealed partial class GenesisGuiNextTabsViewModel
                 commandsChanged = PublishingCommands != commands;
                 if (rowsChanged) _publishingRows = Array.AsReadOnly(new[] { snapshot });
                 PublishingCommands = commands;
+                var previousConnection = (_publishingConnection, PublishingKeyDisplay, PublishingKeyRevealed, _publishingConnectionFeedback);
                 UpdatePublishingConnectionLocked(connection);
+                connectionChanged = previousConnection != (_publishingConnection, PublishingKeyDisplay, PublishingKeyRevealed, _publishingConnectionFeedback);
                 _publishingPublishedBinding = consistent ? binding : null;
             }
             if (rowsChanged) OnPropertyChanged(nameof(PublishingRows));
             lock (_recordingRulesLifecycleGate)
                 if (_disposed || _publishingClosed || version != _publishingVersion) return;
-            OnPropertyChanged(nameof(PublishingConnection));
+            if (connectionChanged) OnPropertyChanged(nameof(PublishingConnection));
             // A subscriber can synchronously dispose/rebind during the first event.
             lock (_recordingRulesLifecycleGate)
                 if (_disposed || _publishingClosed || version != _publishingVersion) return;

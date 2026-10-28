@@ -13,8 +13,8 @@ public sealed class GenesisRecordingRuleQuickMutationNativeContractTests
         Assert.Contains("_tabs.QuickMutateRecordingRuleAsync(selectedId, action", source);
         Assert.Contains("MessageBoxW(_owner, confirmation.Message, \"録画ルール\", 0x24) == 6", source);
         Assert.Contains("DrawRecordingModeButton(drawItem, label, false)", source);
-        Assert.Contains("ShowWindow(_toggleRuleButton, isRulesPage", source);
-        Assert.Contains("ShowWindow(_deleteRuleButton, isRulesPage", source);
+        Assert.Contains("PresentVisible(_toggleRuleButton, isRulesPage", source);
+        Assert.Contains("PresentVisible(_deleteRuleButton, isRulesPage", source);
     }
 
     [Fact]
@@ -41,11 +41,11 @@ public sealed class GenesisRecordingRuleQuickMutationNativeContractTests
         foreach (var direction in new[] { "Up", "Down" })
         {
             Assert.Contains($"_tabs.CanMoveRecordingRule(row?.RecordingRule?.RuleId, GenesisRecordingRuleQuickAction.Move{direction})", source);
-            Assert.Contains($"ShowWindow(_moveRule{direction}Button, isRulesPage", source);
+            Assert.Contains($"PresentVisible(_moveRule{direction}Button, isRulesPage", source);
             Assert.Contains($"MoveRule{direction}ControlId => GenesisRecordingRuleQuickAction.Move{direction}", source);
             Assert.Contains($"MoveRule{direction}ControlId => \"{(direction == "Up" ? "上へ" : "下へ")}\"", source);
         }
-        Assert.Contains("SetWindowTextW(_detailsIdentity, GenesisRecordingRuleMutationController.PersistedOrderHelp)", source);
+        Assert.Contains("PresentText(_detailsIdentity, GenesisRecordingRuleMutationController.PersistedOrderHelp)", source);
         Assert.Contains("同じ優先度", GenesisRecordingRuleMutationController.PersistedOrderHelp);
         Assert.Contains("次回", GenesisRecordingRuleMutationController.PersistedOrderHelp);
         var mutation = Source("GenesisRecordingRuleMutationController.cs");

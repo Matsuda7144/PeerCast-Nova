@@ -1437,6 +1437,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
         }
         else if (message is 0x0005 or 0x02E3) // WM_SIZE / WM_DPICHANGED_AFTERPARENT
         {
+            state.ResetDetailsPresentation();
             state.SynchronizeNativeSelection();
         }
 
@@ -1501,6 +1502,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
         private readonly int _detailsTextWidth;
         private readonly GenesisChannelSearchBoxBridge _searchBox;
         private readonly nint _favoriteButton;
+        private readonly GenesisNativePresentationUpdates _favoriteUpdates = new();
+        private readonly GenesisNativePresentationUpdates _detailsUpdates = new();
         private readonly nint _refreshButton;
         private readonly nint[] _navigationButtons;
         private readonly nint _playButton;
@@ -1679,6 +1682,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
         {
             if (Interlocked.Exchange(ref _detached, 1) == 0)
             {
+                _detailsUpdates.Close();
+                _favoriteUpdates.Close();
                 _tabs.SetPublishingDispatcher(null);
                 while (_publishingUi.TryDequeue(out _)) { }
                 _tabs.PropertyChanged -= OnTabsPropertyChanged;
@@ -1855,6 +1860,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                     ? _tabs.CreateRecordingRule() : _tabs.EditRecordingRule(selectedId);
                 if (draft is not null && !GenesisRecordingRuleEditorWindow.ShowModal(_owner, _tabs.RuleEditor, draft))
                 {
+                    _detailsUpdates.Reset();
                     _ = SetWindowTextW(_detailsDescription, "録画ルールの編集画面を開けませんでした。");
                 }
                 return;
@@ -2456,11 +2462,22 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             var presentation = GenesisGuiNextFavoriteButtonPresentationResolver.Resolve(
                 _tabs,
                 renderedRow);
-            _ = SetWindowTextW(_favoriteButton, presentation.Label);
-            _ = EnableWindow(_favoriteButton, presentation.IsEnabled);
+            using (var update = _favoriteUpdates.Begin(0, _ => { }))
+            {
+                _favoriteUpdates.Set(_favoriteButton, "text", presentation.Label,
+                    () => IsWindow(_favoriteButton) && SetWindowTextW(_favoriteButton, presentation.Label));
+                _favoriteUpdates.Set(_favoriteButton, "enabled", presentation.IsEnabled, () =>
+                {
+                    if (!IsWindow(_favoriteButton)) return false;
+                    _ = EnableWindow(_favoriteButton, presentation.IsEnabled);
+                    return true;
+                });
+            }
             SynchronizeDetailsPresentation(renderedRow);
             SynchronizePlaybackButtonPresentation();
         }
+
+        public void ResetDetailsPresentation() => _detailsUpdates.Reset();
 
         private void SynchronizeDetailsPresentation(GenesisGuiNextNativeTabRow? row)
         {
@@ -2468,14 +2485,19 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             {
                 return;
             }
+            using var update = _detailsUpdates.Begin(
+                (_tabs.SelectedTab, _tabs.RecordingPageMode, _viewModel.RelaySnapshot,
+                    GetCurrentRecordingPresentation(), _tabs.RecordingHistoryStatus,
+                    _tabs.PublishingConnection.StateText, _tabs.PublishingConnection.Tone, _tabs.PublishingKeyRevealed),
+                control => { if (IsWindow(control)) _ = InvalidateRect(control, 0, true); });
             var showRelay = GenesisGuiNextPublishingGuideLayout.ShowRelayControls(_tabs.SelectedTab);
             foreach (var control in new[] { _relayStart, _relayStop, _relayStatus })
-                _ = ShowWindow(control, showRelay ? ShowWindowShowNoActivate : ShowWindowHide);
-            _ = EnableWindow(_relayStart, showRelay && GenesisGuiNextRelayCommandDispatch.CanStart(_viewModel, row));
-            _ = EnableWindow(_relayStop, showRelay && _viewModel.RelayActivation?.CanStop == true);
+                _ = PresentVisible(control, showRelay ? ShowWindowShowNoActivate : ShowWindowHide);
+            _ = PresentEnabled(_relayStart, showRelay && GenesisGuiNextRelayCommandDispatch.CanStart(_viewModel, row));
+            _ = PresentEnabled(_relayStop, showRelay && _viewModel.RelayActivation?.CanStop == true);
             if (GetClientRect(_detailsPane, out var relayPane))
-                _ = MoveWindow(_relayStatus, 12, RelayStatusTop, RelayStatusWidth(relayPane.Right - relayPane.Left), 40, true);
-            _ = InvalidateRect(_relayStatus, 0, true);
+                _ = PresentBounds(_relayStatus, 12, RelayStatusTop, RelayStatusWidth(relayPane.Right - relayPane.Left), 40, true);
+            _ = PresentInvalidation(_relayStatus, 0, true);
 
             var isRecordingPage = _tabs.SelectedTab == GenesisGuiNextTab.Recording;
             var isRulesPage = IsRulesPageActive();
@@ -2483,72 +2505,72 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             var isHistoryPage = _tabs.IsRecordingHistoryPage;
             var isLogPage = _tabs.SelectedTab == GenesisGuiNextTab.Logs;
             var isPublishingPage = _tabs.SelectedTab == GenesisGuiNextTab.Publishing;
-            _ = ShowWindow(_publishingFinishButton, isPublishingPage ? ShowWindowShowNoActivate : ShowWindowHide);
-            _ = EnableWindow(_publishingFinishButton, isPublishingPage && _tabs.PublishingCommands.CanFinish);
-            _ = InvalidateRect(_publishingFinishButton, 0, true);
-            _ = ShowWindow(_publishingStartButton, isPublishingPage ? ShowWindowShowNoActivate : ShowWindowHide);
-            _ = ShowWindow(_publishingInterruptButton, isPublishingPage ? ShowWindowShowNoActivate : ShowWindowHide);
-            _ = EnableWindow(_publishingStartButton, isPublishingPage && _tabs.PublishingCommands.CanStart);
-            _ = EnableWindow(_publishingInterruptButton, isPublishingPage && _tabs.PublishingCommands.CanInterrupt);
-            _ = InvalidateRect(_publishingStartButton, 0, true);
-            _ = InvalidateRect(_publishingInterruptButton, 0, true);
+            _ = PresentVisible(_publishingFinishButton, isPublishingPage ? ShowWindowShowNoActivate : ShowWindowHide);
+            _ = PresentEnabled(_publishingFinishButton, isPublishingPage && _tabs.PublishingCommands.CanFinish);
+            _ = PresentInvalidation(_publishingFinishButton, 0, true);
+            _ = PresentVisible(_publishingStartButton, isPublishingPage ? ShowWindowShowNoActivate : ShowWindowHide);
+            _ = PresentVisible(_publishingInterruptButton, isPublishingPage ? ShowWindowShowNoActivate : ShowWindowHide);
+            _ = PresentEnabled(_publishingStartButton, isPublishingPage && _tabs.PublishingCommands.CanStart);
+            _ = PresentEnabled(_publishingInterruptButton, isPublishingPage && _tabs.PublishingCommands.CanInterrupt);
+            _ = PresentInvalidation(_publishingStartButton, 0, true);
+            _ = PresentInvalidation(_publishingInterruptButton, 0, true);
             var hideRecordingActions = isRulesPage || isLibraryPage || isHistoryPage || isLogPage || isPublishingPage;
             _allowAutomaticShown = row?.Suppression is not null;
-            _ = MoveWindow(_detailsRecordButton, _detailsTextWidth + 20, 8,
+            _ = PresentBounds(_detailsRecordButton, _detailsTextWidth + 20, 8,
                 _allowAutomaticShown ? DetailsRecordButtonWidth + DetailsRecordingButtonGap + DetailsStopRecordingButtonWidth : DetailsRecordButtonWidth,
                 DetailsCopyButtonHeight, true);
-            _ = SetWindowTextW(_detailsRecordButton, _allowAutomaticShown ? GenesisGuiNextRecordingCommandDispatch.AllowAutomaticLabel : "録画");
-            _ = ShowWindow(_createRuleButton, isRulesPage ? ShowWindowShowNoActivate : ShowWindowHide);
-            _ = ShowWindow(_editRuleButton, isRulesPage ? ShowWindowShowNoActivate : ShowWindowHide);
-            _ = ShowWindow(_toggleRuleButton, isRulesPage ? ShowWindowShowNoActivate : ShowWindowHide);
-            _ = ShowWindow(_deleteRuleButton, isRulesPage ? ShowWindowShowNoActivate : ShowWindowHide);
-            _ = ShowWindow(_moveRuleUpButton, isRulesPage ? ShowWindowShowNoActivate : ShowWindowHide);
-            _ = ShowWindow(_moveRuleDownButton, isRulesPage ? ShowWindowShowNoActivate : ShowWindowHide);
-            _ = EnableWindow(_createRuleButton, _tabs.CanCreateRecordingRule);
-            _ = EnableWindow(_editRuleButton, _tabs.CanEditRecordingRule(row?.RecordingRule?.RuleId));
+            _ = PresentText(_detailsRecordButton, _allowAutomaticShown ? GenesisGuiNextRecordingCommandDispatch.AllowAutomaticLabel : "録画");
+            _ = PresentVisible(_createRuleButton, isRulesPage ? ShowWindowShowNoActivate : ShowWindowHide);
+            _ = PresentVisible(_editRuleButton, isRulesPage ? ShowWindowShowNoActivate : ShowWindowHide);
+            _ = PresentVisible(_toggleRuleButton, isRulesPage ? ShowWindowShowNoActivate : ShowWindowHide);
+            _ = PresentVisible(_deleteRuleButton, isRulesPage ? ShowWindowShowNoActivate : ShowWindowHide);
+            _ = PresentVisible(_moveRuleUpButton, isRulesPage ? ShowWindowShowNoActivate : ShowWindowHide);
+            _ = PresentVisible(_moveRuleDownButton, isRulesPage ? ShowWindowShowNoActivate : ShowWindowHide);
+            _ = PresentEnabled(_createRuleButton, _tabs.CanCreateRecordingRule);
+            _ = PresentEnabled(_editRuleButton, _tabs.CanEditRecordingRule(row?.RecordingRule?.RuleId));
             _toggleRuleLabel = _tabs.RecordingRuleToggleLabel(row?.RecordingRule?.RuleId);
-            _ = SetWindowTextW(_toggleRuleButton, _toggleRuleLabel);
-            _ = EnableWindow(_toggleRuleButton, _tabs.CanQuickMutateRecordingRule(row?.RecordingRule?.RuleId));
-            _ = EnableWindow(_deleteRuleButton, _tabs.CanQuickMutateRecordingRule(row?.RecordingRule?.RuleId));
-            _ = EnableWindow(_moveRuleUpButton, _tabs.CanMoveRecordingRule(row?.RecordingRule?.RuleId, GenesisRecordingRuleQuickAction.MoveUp));
-            _ = EnableWindow(_moveRuleDownButton, _tabs.CanMoveRecordingRule(row?.RecordingRule?.RuleId, GenesisRecordingRuleQuickAction.MoveDown));
-            _ = InvalidateRect(_createRuleButton, 0, true);
-            _ = InvalidateRect(_editRuleButton, 0, true);
-            _ = InvalidateRect(_toggleRuleButton, 0, true);
-            _ = InvalidateRect(_deleteRuleButton, 0, true);
-            _ = InvalidateRect(_moveRuleUpButton, 0, true);
-            _ = InvalidateRect(_moveRuleDownButton, 0, true);
-            _ = ShowWindow(
+            _ = PresentText(_toggleRuleButton, _toggleRuleLabel);
+            _ = PresentEnabled(_toggleRuleButton, _tabs.CanQuickMutateRecordingRule(row?.RecordingRule?.RuleId));
+            _ = PresentEnabled(_deleteRuleButton, _tabs.CanQuickMutateRecordingRule(row?.RecordingRule?.RuleId));
+            _ = PresentEnabled(_moveRuleUpButton, _tabs.CanMoveRecordingRule(row?.RecordingRule?.RuleId, GenesisRecordingRuleQuickAction.MoveUp));
+            _ = PresentEnabled(_moveRuleDownButton, _tabs.CanMoveRecordingRule(row?.RecordingRule?.RuleId, GenesisRecordingRuleQuickAction.MoveDown));
+            _ = PresentInvalidation(_createRuleButton, 0, true);
+            _ = PresentInvalidation(_editRuleButton, 0, true);
+            _ = PresentInvalidation(_toggleRuleButton, 0, true);
+            _ = PresentInvalidation(_deleteRuleButton, 0, true);
+            _ = PresentInvalidation(_moveRuleUpButton, 0, true);
+            _ = PresentInvalidation(_moveRuleDownButton, 0, true);
+            _ = PresentVisible(
                 _activeRecordingsModeButton,
                 isRecordingPage ? ShowWindowShowNoActivate : ShowWindowHide);
-            _ = ShowWindow(
+            _ = PresentVisible(
                 _recordingRulesModeButton,
                 isRecordingPage ? ShowWindowShowNoActivate : ShowWindowHide);
-            _ = ShowWindow(_recordingLibraryModeButton,
+            _ = PresentVisible(_recordingLibraryModeButton,
                 isRecordingPage ? ShowWindowShowNoActivate : ShowWindowHide);
-            _ = ShowWindow(_recordingLibraryRefreshButton,
+            _ = PresentVisible(_recordingLibraryRefreshButton,
                 isLibraryPage ? ShowWindowShowNoActivate : ShowWindowHide);
-            _ = EnableWindow(_recordingLibraryRefreshButton, _tabs.CanRefreshRecordingLibrary);
-            _ = InvalidateRect(_recordingLibraryRefreshButton, 0, true);
-            _ = ShowWindow(_recordingHistoryModeButton, isRecordingPage ? ShowWindowShowNoActivate : ShowWindowHide);
-            _ = ShowWindow(_recordingHistoryRefreshButton, isHistoryPage ? ShowWindowShowNoActivate : ShowWindowHide);
-            _ = EnableWindow(_recordingHistoryRefreshButton, _tabs.CanRefreshRecordingHistory);
-            _ = InvalidateRect(_recordingHistoryModeButton, 0, true);
-            _ = InvalidateRect(_recordingHistoryRefreshButton, 0, true);
-            _ = ShowWindow(_recordingHistoryDetails, isHistoryPage ? ShowWindowShowNoActivate : ShowWindowHide);
+            _ = PresentEnabled(_recordingLibraryRefreshButton, _tabs.CanRefreshRecordingLibrary);
+            _ = PresentInvalidation(_recordingLibraryRefreshButton, 0, true);
+            _ = PresentVisible(_recordingHistoryModeButton, isRecordingPage ? ShowWindowShowNoActivate : ShowWindowHide);
+            _ = PresentVisible(_recordingHistoryRefreshButton, isHistoryPage ? ShowWindowShowNoActivate : ShowWindowHide);
+            _ = PresentEnabled(_recordingHistoryRefreshButton, _tabs.CanRefreshRecordingHistory);
+            _ = PresentInvalidation(_recordingHistoryModeButton, 0, true);
+            _ = PresentInvalidation(_recordingHistoryRefreshButton, 0, true);
+            _ = PresentVisible(_recordingHistoryDetails, isHistoryPage ? ShowWindowShowNoActivate : ShowWindowHide);
             foreach (var textControl in new[] { _detailsTitle, _detailsDescription, _detailsMetadata, _detailsIdentity })
-                _ = ShowWindow(textControl, isHistoryPage ? ShowWindowHide : ShowWindowShowNoActivate);
+                _ = PresentVisible(textControl, isHistoryPage ? ShowWindowHide : ShowWindowShowNoActivate);
             MoveDetailsTextControls(isRecordingPage, isLibraryPage || isHistoryPage);
-            _ = ShowWindow(
+            _ = PresentVisible(
                 _detailsRecordButton,
                 hideRecordingActions ? ShowWindowHide : ShowWindowShowNoActivate);
-            _ = ShowWindow(
+            _ = PresentVisible(
                 _detailsStopRecordingButton,
                 hideRecordingActions || _allowAutomaticShown ? ShowWindowHide : ShowWindowShowNoActivate);
-            _ = ShowWindow(
+            _ = PresentVisible(
                 _detailsCopyButton,
                 hideRecordingActions ? ShowWindowHide : ShowWindowShowNoActivate);
-            _ = ShowWindow(
+            _ = PresentVisible(
                 _detailsRecordingStatus,
                 !isLogPage && !isPublishingPage && IsRecordingStatusVisible(isRulesPage) ? ShowWindowShowNoActivate : ShowWindowHide);
 
@@ -2556,87 +2578,87 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             if (isPublishingPage)
             {
                 var publishing = row?.Publishing ?? (_tabs.PublishingRows.Count > 0 ? _tabs.PublishingRows[0] : null);
-                _ = SetWindowTextW(_detailsTitle, "OBS 接続設定");
-                _ = SetWindowTextW(_detailsDescription, publishing is null ? "配信状態を確認できません。" :
+                _ = PresentText(_detailsTitle, "OBS 接続設定");
+                _ = PresentText(_detailsDescription, publishing is null ? "配信状態を確認できません。" :
                     publishing.StateText + (string.IsNullOrEmpty(publishing.DiagnosticText) ? string.Empty : " · " + publishing.DiagnosticText));
-                _ = SetWindowTextW(_detailsMetadata, NovaObsPublishingConnectionPresentation.Instructions);
-                _ = SetWindowTextW(_detailsIdentity, publishing is null ? string.Empty :
+                _ = PresentText(_detailsMetadata, NovaObsPublishingConnectionPresentation.Instructions);
+                _ = PresentText(_detailsIdentity, publishing is null ? string.Empty :
                     "エラー分類 / 終了理由 · " + GenesisGuiNextPublishingPresentation.ErrorText(publishing) +
                     (string.IsNullOrEmpty(_tabs.PublishingCommands.DiagnosticText) ? string.Empty :
                         " · " + _tabs.PublishingCommands.DiagnosticText) +
                     (string.IsNullOrEmpty(_tabs.PublishingConnectionFeedback) ? string.Empty : " · " + _tabs.PublishingConnectionFeedback));
-                _ = SetWindowTextW(_detailsRecordingStatus, string.Empty);
-                _ = InvalidateRect(_detailsPane, 0, true);
+                _ = PresentText(_detailsRecordingStatus, string.Empty);
+                _ = PresentInvalidation(_detailsPane, 0, true);
                 return;
             }
             if (isLogPage)
             {
-                _ = SetWindowTextW(_detailsTitle, "ログ");
-                _ = SetWindowTextW(_detailsDescription, _tabs.LogRows.Count == 0
+                _ = PresentText(_detailsTitle, "ログ");
+                _ = PresentText(_detailsDescription, _tabs.LogRows.Count == 0
                     ? GenesisGuiNextLogProjection.EmptyText : row?.Log?.Content ?? "ログを選択してください。");
-                _ = SetWindowTextW(_detailsMetadata, GenesisGuiNextLogProjection.ScopeText);
-                _ = SetWindowTextW(_detailsIdentity, string.Empty);
-                _ = SetWindowTextW(_detailsRecordingStatus, string.Empty);
-                _ = InvalidateRect(_detailsPane, 0, true);
+                _ = PresentText(_detailsMetadata, GenesisGuiNextLogProjection.ScopeText);
+                _ = PresentText(_detailsIdentity, string.Empty);
+                _ = PresentText(_detailsRecordingStatus, string.Empty);
+                _ = PresentInvalidation(_detailsPane, 0, true);
                 return;
             }
 
             if (isRecordingPage)
             {
-                _ = InvalidateRect(_activeRecordingsModeButton, 0, true);
-                _ = InvalidateRect(_recordingRulesModeButton, 0, true);
-                _ = InvalidateRect(_recordingLibraryModeButton, 0, true);
+                _ = PresentInvalidation(_activeRecordingsModeButton, 0, true);
+                _ = PresentInvalidation(_recordingRulesModeButton, 0, true);
+                _ = PresentInvalidation(_recordingLibraryModeButton, 0, true);
             }
 
             if (isHistoryPage)
             {
                 _historyStatusPresentation = _tabs.RecordingHistoryStatus;
-                _ = SetWindowTextW(_detailsRecordingStatus, _historyStatusPresentation.Text);
+                _ = PresentText(_detailsRecordingStatus, _historyStatusPresentation.Text);
                 var detailsText = _tabs.RecordingHistoryDetails(row?.RecordingHistory);
                 if (!string.Equals(detailsText, _historyDetailsText, StringComparison.Ordinal))
                 {
                     // Identical observations must not reset the read-only edit's scroll/caret.
                     _historyDetailsText = detailsText;
-                    _ = SetWindowTextW(_recordingHistoryDetails, detailsText);
+                    _ = PresentText(_recordingHistoryDetails, detailsText);
                 }
-                _ = EnableWindow(_detailsCopyButton, false);
-                _ = EnableWindow(_detailsRecordButton, false);
-                _ = EnableWindow(_detailsStopRecordingButton, false);
-                _ = InvalidateRect(_detailsRecordingStatus, 0, true);
-                _ = InvalidateRect(_detailsPane, 0, true);
+                _ = PresentEnabled(_detailsCopyButton, false);
+                _ = PresentEnabled(_detailsRecordButton, false);
+                _ = PresentEnabled(_detailsStopRecordingButton, false);
+                _ = PresentInvalidation(_detailsRecordingStatus, 0, true);
+                _ = PresentInvalidation(_detailsPane, 0, true);
                 return;
             }
             if (isLibraryPage)
             {
                 var libraryDetails = row?.RecordingLibrary?.Details;
-                _ = SetWindowTextW(_detailsTitle, libraryDetails?.Title ?? "録画ライブラリ");
-                _ = SetWindowTextW(_detailsDescription, libraryDetails?.Description ?? string.Empty);
-                _ = SetWindowTextW(_detailsMetadata, libraryDetails?.Metadata ?? string.Empty);
-                _ = SetWindowTextW(_detailsIdentity, libraryDetails?.Identity ?? string.Empty);
-                _ = SetWindowTextW(_detailsRecordingStatus, _tabs.RecordingLibraryStatusText);
-                _ = EnableWindow(_detailsCopyButton, false);
-                _ = EnableWindow(_detailsRecordButton, false);
-                _ = EnableWindow(_detailsStopRecordingButton, false);
-                _ = InvalidateRect(_detailsRecordingStatus, 0, true);
-                _ = InvalidateRect(_detailsPane, 0, true);
+                _ = PresentText(_detailsTitle, libraryDetails?.Title ?? "録画ライブラリ");
+                _ = PresentText(_detailsDescription, libraryDetails?.Description ?? string.Empty);
+                _ = PresentText(_detailsMetadata, libraryDetails?.Metadata ?? string.Empty);
+                _ = PresentText(_detailsIdentity, libraryDetails?.Identity ?? string.Empty);
+                _ = PresentText(_detailsRecordingStatus, _tabs.RecordingLibraryStatusText);
+                _ = PresentEnabled(_detailsCopyButton, false);
+                _ = PresentEnabled(_detailsRecordButton, false);
+                _ = PresentEnabled(_detailsStopRecordingButton, false);
+                _ = PresentInvalidation(_detailsRecordingStatus, 0, true);
+                _ = PresentInvalidation(_detailsPane, 0, true);
                 return;
             }
 
             if (isRulesPage)
             {
-                _ = SetWindowTextW(_detailsTitle, "録画ルール");
-                _ = SetWindowTextW(_detailsDescription, _tabs.RecordingRulesStatusText);
-                _ = SetWindowTextW(_detailsMetadata, string.Empty);
+                _ = PresentText(_detailsTitle, "録画ルール");
+                _ = PresentText(_detailsDescription, _tabs.RecordingRulesStatusText);
+                _ = PresentText(_detailsMetadata, string.Empty);
                 if (row?.RecordingRule is { } ruleRow &&
                     _tabs.RecordingRulesSnapshot?.Rules?.Rules.FirstOrDefault(rule => rule.Id == ruleRow.RuleId) is { } storedRule &&
                     !GenesisRecordingRuleEditor.CanEdit(storedRule))
-                    _ = SetWindowTextW(_detailsMetadata, GenesisRecordingRuleEditor.UnsupportedMessage);
-                _ = SetWindowTextW(_detailsIdentity, GenesisRecordingRuleMutationController.PersistedOrderHelp);
-                _ = SetWindowTextW(_detailsRecordingStatus, string.Empty);
-                _ = EnableWindow(_detailsCopyButton, false);
-                _ = EnableWindow(_detailsRecordButton, false);
-                _ = EnableWindow(_detailsStopRecordingButton, false);
-                _ = InvalidateRect(_detailsPane, 0, true);
+                    _ = PresentText(_detailsMetadata, GenesisRecordingRuleEditor.UnsupportedMessage);
+                _ = PresentText(_detailsIdentity, GenesisRecordingRuleMutationController.PersistedOrderHelp);
+                _ = PresentText(_detailsRecordingStatus, string.Empty);
+                _ = PresentEnabled(_detailsCopyButton, false);
+                _ = PresentEnabled(_detailsRecordButton, false);
+                _ = PresentEnabled(_detailsStopRecordingButton, false);
+                _ = PresentInvalidation(_detailsPane, 0, true);
                 return;
             }
 
@@ -2646,59 +2668,59 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                     row,
                     _viewModel.AutomaticRecordingCommandMessage) is { } completionMessage)
             {
-                _ = SetWindowTextW(
+                _ = PresentText(
                     _detailsTitle,
                     GenesisGuiNextNativeTabProjection.GetRecordingEmptyStateText(
                         _tabs.ActiveRecordingsAvailable,
                         _tabs.ActiveRecordingCount));
-                _ = SetWindowTextW(_detailsDescription, completionMessage);
-                _ = SetWindowTextW(_detailsMetadata, string.Empty);
-                _ = SetWindowTextW(_detailsIdentity, string.Empty);
-                _ = SetWindowTextW(_detailsRecordingStatus, string.Empty);
-                _ = EnableWindow(_detailsCopyButton, false);
-                _ = EnableWindow(_detailsRecordButton, false);
-                _ = EnableWindow(_detailsStopRecordingButton, false);
-                _ = InvalidateRect(_detailsRecordingStatus, 0, true);
-                _ = InvalidateRect(_detailsPane, 0, true);
+                _ = PresentText(_detailsDescription, completionMessage);
+                _ = PresentText(_detailsMetadata, string.Empty);
+                _ = PresentText(_detailsIdentity, string.Empty);
+                _ = PresentText(_detailsRecordingStatus, string.Empty);
+                _ = PresentEnabled(_detailsCopyButton, false);
+                _ = PresentEnabled(_detailsRecordButton, false);
+                _ = PresentEnabled(_detailsStopRecordingButton, false);
+                _ = PresentInvalidation(_detailsRecordingStatus, 0, true);
+                _ = PresentInvalidation(_detailsPane, 0, true);
                 return;
             }
 
-            _ = ShowWindow(_detailsStopRecordingButton, _allowAutomaticShown ? ShowWindowHide : ShowWindowShowNoActivate);
+            _ = PresentVisible(_detailsStopRecordingButton, _allowAutomaticShown ? ShowWindowHide : ShowWindowShowNoActivate);
             if (row?.Suppression is { } suppressed)
             {
-                _ = SetWindowTextW(_detailsTitle, "自動録画を抑止中");
-                _ = SetWindowTextW(_detailsDescription, suppressed.StatusText);
-                _ = SetWindowTextW(_detailsMetadata, "同じルールによる自動録画を、この起動中だけ抑止します。手動録画や別ルールによる録画は対象外です。");
-                _ = SetWindowTextW(_detailsIdentity, $"ChannelId: {suppressed.ChannelId.Value:N} / 停止時の対象ルール: {suppressed.RuleId:D}");
-                _ = SetWindowTextW(_detailsRecordingStatus, "自動録画を抑止中");
-                _ = EnableWindow(_detailsCopyButton, false);
-                _ = EnableWindow(_detailsRecordButton, (_allowAutomaticOperation is null || _allowAutomaticOperation.IsCompleted) && _viewModel.CanAllowAutomatic(suppressed));
-                _ = EnableWindow(_detailsStopRecordingButton, false);
-                _ = InvalidateRect(_detailsPane, 0, true);
+                _ = PresentText(_detailsTitle, "自動録画を抑止中");
+                _ = PresentText(_detailsDescription, suppressed.StatusText);
+                _ = PresentText(_detailsMetadata, "同じルールによる自動録画を、この起動中だけ抑止します。手動録画や別ルールによる録画は対象外です。");
+                _ = PresentText(_detailsIdentity, $"ChannelId: {suppressed.ChannelId.Value:N} / 停止時の対象ルール: {suppressed.RuleId:D}");
+                _ = PresentText(_detailsRecordingStatus, "自動録画を抑止中");
+                _ = PresentEnabled(_detailsCopyButton, false);
+                _ = PresentEnabled(_detailsRecordButton, (_allowAutomaticOperation is null || _allowAutomaticOperation.IsCompleted) && _viewModel.CanAllowAutomatic(suppressed));
+                _ = PresentEnabled(_detailsStopRecordingButton, false);
+                _ = PresentInvalidation(_detailsPane, 0, true);
                 return;
             }
 
             var details = GenesisGuiNextChannelDetailsProjection.FromChannel(
                 row?.DisplayChannel);
-            _ = SetWindowTextW(
+            _ = PresentText(
                 _detailsTitle,
                 details.IsEmpty ? details.EmptyStateText : details.Name);
-            _ = SetWindowTextW(
+            _ = PresentText(
                 _detailsDescription,
                 string.IsNullOrWhiteSpace(details.Description)
                     ? string.Empty
                     : $"詳細: {details.Description}");
-            _ = SetWindowTextW(_detailsMetadata, details.MetadataText);
-            _ = SetWindowTextW(_detailsIdentity, details.IdentityText);
-            _ = EnableWindow(_detailsCopyButton, !details.IsEmpty);
+            _ = PresentText(_detailsMetadata, details.MetadataText);
+            _ = PresentText(_detailsIdentity, details.IdentityText);
+            _ = PresentEnabled(_detailsCopyButton, !details.IsEmpty);
             var recording = row?.ActiveRecording is { } activeRecording
                 ? _viewModel.GetActiveRecordingPresentation(activeRecording)
                 : _viewModel.GetManualRecordingPresentation(row?.InteractiveChannel);
-            _ = SetWindowTextW(_detailsRecordingStatus, recording.DisplayText);
-            _ = EnableWindow(_detailsRecordButton, recording.CanRecord);
-            _ = EnableWindow(_detailsStopRecordingButton, recording.CanStop);
-            _ = InvalidateRect(_detailsRecordingStatus, 0, true);
-            _ = InvalidateRect(_detailsPane, 0, true);
+            _ = PresentText(_detailsRecordingStatus, recording.DisplayText);
+            _ = PresentEnabled(_detailsRecordButton, recording.CanRecord);
+            _ = PresentEnabled(_detailsStopRecordingButton, recording.CanStop);
+            _ = PresentInvalidation(_detailsRecordingStatus, 0, true);
+            _ = PresentInvalidation(_detailsPane, 0, true);
         }
 
         private void MoveDetailsTextControls(bool recordingPage, bool libraryPage)
@@ -2724,18 +2746,18 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             var fullWidth = GetClientRect(_detailsPane, out var clientRectangle)
                 ? Math.Max(1, clientRectangle.Right - clientRectangle.Left - 24)
                 : Math.Max(1, _detailsTextWidth);
-            _ = MoveWindow(
+            _ = PresentBounds(
                 _detailsTitle,
                 12,
                 titleTop,
                 libraryPage ? fullWidth : _detailsTextWidth,
                 titleHeight,
                 true);
-            _ = MoveWindow(_detailsDescription, 12, descriptionTop, fullWidth, descriptionHeight, true);
-            _ = MoveWindow(_detailsMetadata, 12, metadataTop, fullWidth, metadataHeight, true);
-            _ = MoveWindow(_detailsIdentity, 12, identityTop, fullWidth, identityHeight, true);
-            _ = MoveWindow(_detailsRecordingStatus, 12, statusTop, fullWidth, statusHeight, true);
-            _ = MoveWindow(_recordingHistoryDetails, 12, HistoryDetailsLayout.Top, fullWidth, HistoryDetailsLayout.Height, true);
+            _ = PresentBounds(_detailsDescription, 12, descriptionTop, fullWidth, descriptionHeight, true);
+            _ = PresentBounds(_detailsMetadata, 12, metadataTop, fullWidth, metadataHeight, true);
+            _ = PresentBounds(_detailsIdentity, 12, identityTop, fullWidth, identityHeight, true);
+            _ = PresentBounds(_detailsRecordingStatus, 12, statusTop, fullWidth, statusHeight, true);
+            _ = PresentBounds(_recordingHistoryDetails, 12, HistoryDetailsLayout.Top, fullWidth, HistoryDetailsLayout.Height, true);
         }
 
         private bool IsRulesPageActive() =>
