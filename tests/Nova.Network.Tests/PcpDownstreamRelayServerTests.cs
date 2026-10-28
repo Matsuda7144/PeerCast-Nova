@@ -331,6 +331,11 @@ public sealed partial class PcpDownstreamRelayServerTests
         public PcpRelayHandshakeResult Handshake { get; }
 
         public byte[]? LastPayload { get; private set; }
+        internal async Task<PcpAtom> ReadAtomAsync(CancellationToken token)
+        {
+            await using var reader = new PcpAtomPipeMessageReader(_pipeReader);
+            return await reader.ReadNextAsync(token);
+        }
 
         public async Task ReadChannelPayloadAsync(
             CancellationToken cancellationToken)

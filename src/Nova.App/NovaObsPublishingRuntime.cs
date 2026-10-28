@@ -50,6 +50,7 @@ internal sealed class NovaObsPublishingGenerationProof(Guid channelId, Guid sess
 internal interface INovaObsPublishingRuntimeFactory
 {
     INovaObsPublishingRuntime Create();
+    INovaObsPublishingRuntime Create(PublishingSettingsSnapshot settings) => Create();
 }
 
 /// <summary>Application-owned resources, outside the observational projection/window.</summary>
@@ -60,6 +61,7 @@ internal sealed class SystemNovaObsPublishingRuntimeFactory : INovaObsPublishing
     private SystemNovaObsPublishingRuntimeFactory() { }
 
     public INovaObsPublishingRuntime Create() => new NovaObsPublishingRuntime(new ObsPublishChannelOptions());
+    public INovaObsPublishingRuntime Create(PublishingSettingsSnapshot settings) => new NovaObsPublishingRuntime(settings.Values.ToOptions());
 }
 
 internal sealed class NovaObsPublishingRuntime : INovaObsPublishingGenerationRuntime

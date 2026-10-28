@@ -81,6 +81,15 @@ internal sealed partial class NovaObsPublishingLifecycleController : INovaObsPub
     }
 
     internal bool StopAdmissionObserved { get { lock (_gate) return _stopRequested; } }
+    internal bool CanRetireBeforeStart
+    {
+        get
+        {
+            lock (_gate) return _owner is INovaObsPublishingLifecycleRuntime && !_started && !_closing &&
+            !_stopRequested && _disposal is null && !_terminal.Task.IsCompleted &&
+            _state == NovaObsPublishingLifecycleState.NotStarted && _failure == NovaObsPublishingLifecycleFailure.None;
+        }
+    }
 
     internal bool CanRequestFinish
     {

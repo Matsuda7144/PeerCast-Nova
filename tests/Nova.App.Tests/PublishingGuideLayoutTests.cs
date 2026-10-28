@@ -74,7 +74,7 @@ public sealed class PublishingGuideLayoutTests
     }
 
     private static GenesisGuiNextPublishingGuideRectangle[] Rectangles(GenesisGuiNextPublishingGuideLayout layout) =>
-        [layout.Title, layout.Start, layout.Finish, layout.Interrupt, layout.State,
+        [layout.Title, layout.Start, layout.Finish, layout.Interrupt, layout.State, layout.Settings,
             GenesisGuiNextPublishingGuideLayout.ServerLabel, layout.Server, layout.ServerCopy, GenesisGuiNextPublishingGuideLayout.KeyLabel,
             layout.Key, layout.Reveal, layout.KeyCopy, layout.Instructions, layout.Feedback];
 }

@@ -27,7 +27,16 @@ public sealed class HeadlessPublishRoundtripTests(ITestOutputHelper output)
         http.Start();
         var registry = new RecordingStreamSourceLeaseRegistry();
         await using var host = new ObsPublishChannelHost(
-            new ObsPublishChannelOptions { Ingest = new() { Port = 0 } },
+            new ObsPublishChannelOptions
+            {
+                Ingest = new() { Port = 0 },
+                ChannelName = "配信テスト 🎥",
+                Genre = "音楽",
+                Description = "概要",
+                Comment = "コメント",
+                ContactUrl = "https://example.invalid/",
+                BitrateKbps = 1234,
+            },
             httpHost: http, recordingRegistry: registry);
         host.Start(token);
         Assert.True(host.IsRegistered);
@@ -90,6 +99,20 @@ public sealed class HeadlessPublishRoundtripTests(ITestOutputHelper output)
             await stream.ReadExactlyAsync(receivedHead, token);
             Assert.Equal(expectedHead, receivedHead);
             await using var atoms = new PcpAtomPipeMessageReader(relayReader, maxBufferedBytes: 1024 * 1024);
+            var initial = await atoms.ReadNextAsync(token);
+            Assert.Equal(host.ChannelId.Value,
+                PcpWireValueCodec.DecodeGuid(initial.FindFirst(PcpKnownAtomNames.ChannelId)!.Content.Span));
+            Assert.Null(initial.FindFirst(PcpKnownAtomNames.ChannelPacket));
+            var initialInfo = initial.FindFirst(PcpKnownAtomNames.ChannelInfo)!;
+            string Text(PcpAtomName field) => PcpWireValueCodec.DecodeNullTerminatedUtf8(initialInfo.FindFirst(field)!.Content.Span);
+            Assert.Equal(host.InitialMetadata.Name, Text(PcpKnownAtomNames.Name));
+            Assert.Equal(host.InitialMetadata.Genre, Text(PcpKnownAtomNames.Genre));
+            Assert.Equal(host.InitialMetadata.Description, Text(PcpKnownAtomNames.Description));
+            Assert.Equal(host.InitialMetadata.Comment, Text(PcpKnownAtomNames.Comment));
+            Assert.Equal(host.InitialMetadata.ContactUrl, Text(PcpKnownAtomNames.Url));
+            Assert.Equal("FLV", Text(PcpKnownAtomNames.Type));
+            Assert.Equal("flv", Text(PcpKnownAtomNames.StreamExtension));
+            Assert.Equal(1234u, PcpWireValueCodec.DecodeUInt32(initialInfo.FindFirst(PcpKnownAtomNames.Bitrate)!.Content.Span));
             await AssertRelayAsync(0x64616568, expectedHead);
             const uint timestamp = 0x01000040;
             await publisher.SendAsync(9, 1, timestamp, video, id: 4);

@@ -10,20 +10,27 @@ public sealed record ObsPublishChannelOptions
     public PcpRelayFanoutOptions Fanout { get; init; } = new();
     public int RelayPort { get; init; }
     public string ChannelName { get; init; } = "Local publish";
+    public string Genre { get; init; } = string.Empty;
+    public string Description { get; init; } = string.Empty;
+    public string Comment { get; init; } = string.Empty;
+    public string ContactUrl { get; init; } = string.Empty;
+    public int? BitrateKbps { get; init; }
     public TimeSpan DrainTimeout { get; init; } = TimeSpan.FromSeconds(2);
+
+    public PeerCast.Nova.Core.Channels.ChannelMetadataSnapshot CreateMetadata() => ObsPublishChannelMetadata.Create(this);
 
     internal void Validate()
     {
         ArgumentNullException.ThrowIfNull(Ingest);
         ArgumentNullException.ThrowIfNull(Http);
         ArgumentNullException.ThrowIfNull(Fanout);
+        _ = CreateMetadata();
         Ingest.Validate();
         Http.Validate();
         Fanout.Validate();
         ArgumentOutOfRangeException.ThrowIfNegative(RelayPort);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(RelayPort, 65535);
-        ArgumentException.ThrowIfNullOrWhiteSpace(ChannelName);
-        if (ChannelName.Length > 256 || DrainTimeout <= TimeSpan.Zero ||
+        if (DrainTimeout <= TimeSpan.Zero ||
             DrainTimeout > TimeSpan.FromMinutes(1) ||
             Fanout.MaxPendingPacketsPerChild < 2 ||
             Fanout.MaxPendingBytesPerChild < 2L * Ingest.MaximumPacketBytes)

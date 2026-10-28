@@ -1685,6 +1685,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 _detailsUpdates.Close();
                 _favoriteUpdates.Close();
                 _tabs.SetPublishingDispatcher(null);
+                _publishingSettingsWindow?.Dispose();
+                _publishingSettingsWindow = null;
                 while (_publishingUi.TryDequeue(out _)) { }
                 _tabs.PropertyChanged -= OnTabsPropertyChanged;
                 _viewModel.PropertyChanged -= OnViewModelPropertyChanged;

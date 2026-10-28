@@ -45,6 +45,7 @@ public sealed class NovaWindowsStartupComposition
     private readonly INovaWindowsStartupHostFactory _hostFactory;
     private readonly Func<INovaApplicationNetworkOwner> _networkOwnerFactory;
     private readonly INovaObsPublishingRuntimeFactory _publishingRuntimeFactory;
+    private readonly IPublishingPreferencesStore? _publishingPreferencesStore;
     private readonly Func<
         GenesisGuiNextPlaybackPathSource,
         GenesisRecordingOutputDirectorySettings,
@@ -63,7 +64,8 @@ public sealed class NovaWindowsStartupComposition
         INovaWindowsStartupHostFactory hostFactory,
         Func<IPlaybackSessionController>? playbackControllerFactory = null,
         Func<INovaApplicationNetworkOwner>? networkOwnerFactory = null,
-        INovaObsPublishingRuntimeFactory? publishingRuntimeFactory = null)
+        INovaObsPublishingRuntimeFactory? publishingRuntimeFactory = null,
+        IPublishingPreferencesStore? publishingPreferencesStore = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(hostFactory);
@@ -81,6 +83,8 @@ public sealed class NovaWindowsStartupComposition
         _options = options with { Host = options.Host with { } };
         _hostFactory = hostFactory;
         _publishingRuntimeFactory = publishingRuntimeFactory ?? SystemNovaObsPublishingRuntimeFactory.Instance;
+        _publishingPreferencesStore = publishingPreferencesStore ??
+            (publishingRuntimeFactory is null ? JsonPublishingPreferencesStore.CreateDefault() : null);
         _networkOwnerFactory = networkOwnerFactory ??
             (() => _options.ValidationProfile is { } profile ? profile.CreateNetworkOwner() :
                 new NovaApplicationNetworkOwner(NovaSettingsStore.CreateDefault()));
@@ -154,6 +158,7 @@ public sealed class NovaWindowsStartupComposition
         INovaApplicationNetworkOwner? networkOwner = null;
         IPlaybackSessionController? playbackController = null;
         NovaGuiNextPublishingComposition? publishing = null;
+        PublishingSettingsController? publishingSettings = null;
         var result = NovaWindowsStartupResult.Faulted;
         try
         {
@@ -166,7 +171,12 @@ public sealed class NovaWindowsStartupComposition
             if (_options.ValidationProfile is not null &&
                 !(await networkOwner.InitializeAsync().WaitAsync(cancellationToken).ConfigureAwait(false)).Initialized)
                 return NovaWindowsStartupResult.Faulted;
-            publishing = NovaGuiNextPublishingComposition.Create(_publishingRuntimeFactory);
+            if (_publishingPreferencesStore is not null)
+            {
+                publishingSettings = new(_publishingPreferencesStore);
+                await publishingSettings.LoadAsync(cancellationToken).ConfigureAwait(false);
+            }
+            publishing = NovaGuiNextPublishingComposition.Create(_publishingRuntimeFactory, settings: publishingSettings);
             playbackController = _genesisPlaybackControllerFactory(paths, recordingSettings);
             result = await RunGenesisAsync(
                 createSurface(paths, recordingSettings, publishing.Status, publishing.Commands),
@@ -211,6 +221,11 @@ public sealed class NovaWindowsStartupComposition
             if (publishing is not null)
             {
                 try { await publishing.DisposeAsync().ConfigureAwait(false); }
+                catch { result = NovaWindowsStartupResult.Faulted; }
+            }
+            if (publishingSettings is not null)
+            {
+                try { await publishingSettings.DisposeAsync().ConfigureAwait(false); }
                 catch { result = NovaWindowsStartupResult.Faulted; }
             }
         }

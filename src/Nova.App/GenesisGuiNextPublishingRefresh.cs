@@ -4,6 +4,8 @@ internal sealed partial class GenesisGuiNextTabsViewModel
 {
     private INovaObsPublishingReadOnlyStatus _publishingStatus = new NovaObsPublishingReadOnlyStatus(null);
     private INovaGuiNextPublishingCommands? _publishingCommands;
+    private PublishingSettingsController? _publishingSettings;
+    internal PublishingSettingsController? PublishingSettings { get { lock (_recordingRulesLifecycleGate) return _publishingSettings; } }
     private readonly object _publishingUiGate = new();
     private Action<Action>? _publishingDispatch;
     private Action? _publishingPublication;
@@ -17,7 +19,19 @@ internal sealed partial class GenesisGuiNextTabsViewModel
     private PublishingBinding? _publishingBinding, _publishingPublishedBinding;
     // Deterministic worker-admission observation; never called under either gate.
     internal Func<Task>? PublishingCommandWorkerStarting { get; set; }
-    internal NovaGuiNextPublishingCommandState PublishingCommands { get; private set; } = NovaGuiNextPublishingCommandState.Unavailable;
+    private NovaGuiNextPublishingCommandState _publishingCommandState = NovaGuiNextPublishingCommandState.Unavailable;
+    internal NovaGuiNextPublishingCommandState PublishingCommands
+    {
+        get
+        {
+            var state = _publishingCommandState;
+            var settings = PublishingSettings;
+            if (settings?.CanStart != false) return state;
+            var reason = settings.LoadFailed ? PublishingSettingsController.LoadWarning : PublishingSettingsController.SaveOrCancel;
+            return state with { CanStart = false, DiagnosticText = string.IsNullOrEmpty(state.DiagnosticText) ? reason : state.DiagnosticText };
+        }
+        private set => _publishingCommandState = value;
+    }
     private System.Collections.ObjectModel.ReadOnlyCollection<NovaObsPublishingReadOnlySnapshot> _publishingRows = Array.AsReadOnly(Array.Empty<NovaObsPublishingReadOnlySnapshot>());
     internal IReadOnlyList<NovaObsPublishingReadOnlySnapshot> PublishingRows => _publishingRows;
 
@@ -50,6 +64,9 @@ internal sealed partial class GenesisGuiNextTabsViewModel
                 if (_disposed || _publishingClosed) return;
                 _publishingVersion++;
                 _publishingStatus = status ?? new NovaObsPublishingReadOnlyStatus(null);
+                if (_publishingSettings is not null) _publishingSettings.Changed -= PublishingSettingsChanged;
+                _publishingSettings = (status as NovaGuiNextPublishingComposition)?.Settings;
+                if (_publishingSettings is not null) _publishingSettings.Changed += PublishingSettingsChanged;
                 _publishingCommands = commands;
                 _publishingBinding = new(_publishingVersion, _publishingStatus, commands, _publishingBinding is null);
                 ResetPublishingConnectionLocked();
@@ -60,6 +77,18 @@ internal sealed partial class GenesisGuiNextTabsViewModel
     }
 
     internal void RefreshPublishingStatus() => _ = RefreshPublishingStatusAsync();
+
+    private void PublishingSettingsChanged()
+    {
+        Action<Action>? dispatch;
+        lock (_publishingUiGate) { dispatch = _publishingDispatch; }
+        dispatch?.Invoke(() =>
+        {
+            lock (_recordingRulesLifecycleGate) { if (_disposed || _publishingClosed) return; }
+            OnPropertyChanged(nameof(PublishingCommands));
+        });
+        RefreshPublishingStatus(); // Dirty/pending settings can disable cached Start even if a source read is blocked.
+    }
 
     internal Task RefreshPublishingStatusAsync()
     {
@@ -182,6 +211,8 @@ internal sealed partial class GenesisGuiNextTabsViewModel
             lock (_recordingRulesLifecycleGate)
             {
                 _publishingClosed = true; _publishingVersion++;
+                if (_publishingSettings is not null) _publishingSettings.Changed -= PublishingSettingsChanged;
+                _publishingSettings = null;
                 _publishingWindowLifetime++;
                 ResetPublishingConnectionLocked();
                 _publishingDispatch = null; _publishingPublication = null;

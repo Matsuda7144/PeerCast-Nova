@@ -40,6 +40,7 @@ public sealed class PcpDownstreamChildSession :
     private readonly PcpDownstreamRelayRequest? _preRoutedRequest;
     private readonly bool _ownsTransport;
     private readonly IPcpDownstreamRelayAdmission? _admission;
+    private readonly ReadOnlyMemory<byte> _initialMetadata;
     private readonly PcpRelayChildAdmission? _childAdmission;
     private readonly PcpRelayQuiescenceObserver? _quiescenceObserver;
     private IDisposable? _admissionReservation;
@@ -85,7 +86,8 @@ public sealed class PcpDownstreamChildSession :
         IPcpDownstreamPacketWriter? packetWriter,
         IPcpDownstreamRelayAdmission? admission = null,
         PcpRelayChildAdmission? childAdmission = null,
-        PcpRelayQuiescenceObserver? quiescenceObserver = null)
+        PcpRelayQuiescenceObserver? quiescenceObserver = null,
+        ReadOnlyMemory<byte> initialMetadata = default)
         : this(
             connection,
             fanout,
@@ -100,6 +102,7 @@ public sealed class PcpDownstreamChildSession :
     {
         _childAdmission = childAdmission;
         _quiescenceObserver = quiescenceObserver;
+        _initialMetadata = initialMetadata;
     }
 
     private PcpDownstreamChildSession(
@@ -566,6 +569,11 @@ public sealed class PcpDownstreamChildSession :
             EncodeHandshakeReply(accepted: true),
             handshakeToken).ConfigureAwait(false);
 
+        // Media workers wait on _handshakeReady. Complete the immutable
+        // generation's control information first, using existing write deadlines.
+        if (!_initialMetadata.IsEmpty)
+            await WriteControlAsync(_initialMetadata, handshakeToken, _packetWriter).ConfigureAwait(false);
+
         Interlocked.Exchange(ref _handshakeAccepted, 1);
         _handshakeReady.TrySetResult();
         handshakeTimeoutSource.CancelAfter(Timeout.InfiniteTimeSpan);
@@ -722,7 +730,8 @@ public sealed class PcpDownstreamChildSession :
 
     private async ValueTask WriteControlAsync(
         ReadOnlyMemory<byte> bytes,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IPcpDownstreamPacketWriter? writer = null)
     {
         using var timeoutSource = new CancellationTokenSource(
             _options.WriteTimeout);
@@ -733,9 +742,10 @@ public sealed class PcpDownstreamChildSession :
 
         try
         {
-            await _connection.WriteAsync(
-                bytes,
-                linkedSource.Token).ConfigureAwait(false);
+            if (writer is null)
+                await _connection.WriteAsync(bytes, linkedSource.Token).ConfigureAwait(false);
+            else
+                await writer.WriteAsync(bytes, linkedSource.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException exception)
             when (timeoutSource.IsCancellationRequested &&

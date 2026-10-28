@@ -11,8 +11,10 @@ internal sealed class NovaGuiNextPublishingComposition : INovaObsPublishingReadO
     private readonly object _gate = new();
     private readonly INovaObsPublishingRuntimeFactory _factory;
     private readonly TimeProvider _finishTimeProvider;
+    internal PublishingSettingsController? Settings { get; }
     private readonly System.Runtime.CompilerServices.ConditionalWeakTable<INovaObsPublishingRuntime, object> _seenOwners = new();
     private readonly HashSet<Guid> _seenSessions = [];
+    private readonly HashSet<Guid> _seenChannels = [];
     private Generation _current;
     private Generation? _discarded;
     private Task? _replacement;
@@ -20,14 +22,16 @@ internal sealed class NovaGuiNextPublishingComposition : INovaObsPublishingReadO
     private bool _closed;
     private string _failure = string.Empty;
 
-    private NovaGuiNextPublishingComposition(INovaObsPublishingRuntimeFactory factory, TimeProvider finishTimeProvider)
+    private NovaGuiNextPublishingComposition(INovaObsPublishingRuntimeFactory factory, TimeProvider finishTimeProvider, PublishingSettingsController? settings)
     {
         _factory = factory;
         _finishTimeProvider = finishTimeProvider;
+        Settings = settings;
+        var preparedSettings = settings?.Saved;
         INovaObsPublishingRuntime? owner;
-        try { owner = factory.Create(); }
+        try { owner = preparedSettings is null ? factory.Create() : factory.Create(preparedSettings); }
         catch { owner = null; } // Startup remains available; no raw exception text.
-        _current = new(1, owner, _finishTimeProvider);
+        _current = new(1, owner, _finishTimeProvider, preparedSettings);
         if (owner is not null) _seenOwners.Add(owner, new());
     }
 
@@ -48,10 +52,11 @@ internal sealed class NovaGuiNextPublishingComposition : INovaObsPublishingReadO
         }
     }
 
-    internal static NovaGuiNextPublishingComposition Create(INovaObsPublishingRuntimeFactory factory, TimeProvider? finishTimeProvider = null)
+    internal static NovaGuiNextPublishingComposition Create(INovaObsPublishingRuntimeFactory factory, TimeProvider? finishTimeProvider = null,
+        PublishingSettingsController? settings = null)
     {
         ArgumentNullException.ThrowIfNull(factory);
-        return new(factory, finishTimeProvider ?? TimeProvider.System);
+        return new(factory, finishTimeProvider ?? TimeProvider.System, settings);
     }
 
     internal Action? CommandObservationReady { get; set; }
@@ -102,6 +107,7 @@ internal sealed class NovaGuiNextPublishingComposition : INovaObsPublishingReadO
             generation.SessionId = session;
             generation.ChannelId = snapshot.ChannelId;
             _seenSessions.Add(session);
+            if (snapshot.ChannelId is { } channel) _seenChannels.Add(channel);
         }
     }
 
@@ -167,6 +173,9 @@ internal sealed class NovaGuiNextPublishingComposition : INovaObsPublishingReadO
             var replaceable = !commands.IsPending && snapshot.Availability != NovaObsPublishingAvailability.Unavailable &&
                 HasProvenTerminalCleanup(generation);
             var diagnostic = _failure.Length > 0 ? _failure : commands.DiagnosticText;
+            var settingsReady = Settings?.CanStart ?? true;
+            if (!settingsReady && diagnostic.Length == 0)
+                diagnostic = Settings!.LoadFailed ? PublishingSettingsController.LoadWarning : PublishingSettingsController.SaveOrCancel;
             if (diagnostic.Length == 0)
             {
                 if (replacing) diagnostic = "新しいgenerationを準備中（待受未確認）";
@@ -178,7 +187,7 @@ internal sealed class NovaGuiNextPublishingComposition : INovaObsPublishingReadO
                     (snapshot.EndReason is not null && !generation.Lifecycle.Completion.IsCompleted))
                     diagnostic = "再開始不可：終了結果とcleanup完了の確認待ちです。";
             }
-            var state = new NovaGuiNextPublishingCommandState(_failure.Length == 0 && !replacing &&
+            var state = new NovaGuiNextPublishingCommandState(_failure.Length == 0 && !replacing && settingsReady &&
                 ((commands.CanStart && snapshot.IsSourceNotStarted) || replaceable),
                 _failure.Length == 0 && commands.CanInterrupt, diagnostic)
             { IsPending = replacing || commands.IsPending, CanFinish = _failure.Length == 0 && !replacing && commands.CanFinish, Generation = generation.Number };
@@ -196,11 +205,25 @@ internal sealed class NovaGuiNextPublishingComposition : INovaObsPublishingReadO
         {
             if (observation is null || _closed || _failure.Length != 0 || !ReferenceEquals(observation.Generation, _current) ||
                 _replacement is { IsCompleted: false } || !observation.State.CanStart) return Task.CompletedTask;
-            if (observation.Commands.CanStart) return _current.Commands.RequestStartFromSnapshotAsync(observation.Snapshot);
+            PublishingSettingsSnapshot? settings = null;
+            if (Settings is not null)
+            {
+                if (!Settings.TryCaptureForStart(out var captured)) return Task.CompletedTask;
+                settings = captured;
+            }
+            var notStarted = observation.Commands.CanStart && _current.Commands.ReadCommandsFromSnapshot(observation.Snapshot).CanStart &&
+                _current.Lifecycle.CanRetireBeforeStart && observation.Snapshot.IsSourceNotStarted &&
+                observation.Snapshot.LifecycleState == NovaObsPublishingLifecycleState.NotStarted;
+            if (notStarted && _current.PreparedSettings?.SettingsRevision == settings?.SettingsRevision)
+            {
+                if (settings is not null) Settings!.MarkApplied(settings);
+                return _current.Commands.RequestStartFromSnapshotAsync(observation.Snapshot);
+            }
             // Reconcile task and proof state again: observation is not admission.
-            if (_current.Commands.HasPendingCommands || !HasProvenTerminalCleanup(_current)) return Task.CompletedTask;
+            if (_current.Commands.HasPendingCommands || (!notStarted && !HasProvenTerminalCleanup(_current))) return Task.CompletedTask;
             var retired = _current;
-            return _replacement = Task.Run(() => ReplaceAndStartAsync(retired));
+            retired.Commands.CloseAdmission();
+            return _replacement = Task.Run(() => ReplaceAndStartAsync(retired, settings, notStarted));
         }
     }
 
@@ -289,17 +312,28 @@ internal sealed class NovaGuiNextPublishingComposition : INovaObsPublishingReadO
         };
     }
 
-    private async Task ReplaceAndStartAsync(Generation retired)
+    private async Task ReplaceAndStartAsync(Generation retired, PublishingSettingsSnapshot? settings, bool notStarted)
     {
         try { await retired.Commands.DisposeAsync().ConfigureAwait(false); }
         catch { SetFailure("再開始不可：前generationのcleanup完了が未証明です。"); return; }
+        if (notStarted && !(HasProvenTerminalCleanup(retired) &&
+            retired.Lifecycle.PostDisposeCompletion is { IsCompletedSuccessfully: true } completed &&
+            completed.Result is
+            {
+                ShutdownCompleted: true, AcceptedPacketCount: 0, AcceptedByteCount: 0,
+                HeadCount: 0, EndReason: PeerCast.Nova.Network.Publishing.ObsPublishChannelEndReason.HostCancelled
+            }))
+        {
+            SetFailure("開始不可：未開始ownerの実cleanup完了を確認できません。");
+            return;
+        }
 
         // This check is factory admission's linearization point. _replacement
         // was published before scheduling us; shutdown joins that task even if
         // Close wins after admission and before the factory actually executes.
         lock (_gate) { if (_closed) return; }
         INovaObsPublishingRuntime? owner;
-        try { owner = _factory.Create(); }
+        try { owner = settings is null ? _factory.Create() : _factory.Create(settings); }
         catch { SetFailure("再開始不可：新しい配信ownerを作成できません。"); return; }
         bool closed;
         lock (_gate)
@@ -312,20 +346,23 @@ internal sealed class NovaGuiNextPublishingComposition : INovaObsPublishingReadO
             if (owner is not null) _seenOwners.Add(owner, new());
             closed = _closed;
         }
-        var candidate = new Generation(retired.Number + 1, owner, _finishTimeProvider);
+        var candidate = new Generation(retired.Number + 1, owner, _finishTimeProvider, settings);
         var snapshot = closed ? null : candidate.Lifecycle.Read();
         Task? start = null;
         lock (_gate)
         {
             var valid = owner is INovaObsPublishingLifecycleRuntime && snapshot is not null &&
                 snapshot.Availability == NovaObsPublishingAvailability.NotStarted && snapshot.IsSourceNotStarted &&
-                snapshot.SessionId is { } session && !_seenSessions.Contains(session);
+                snapshot.SessionId is { } session && !_seenSessions.Contains(session) &&
+                snapshot.ChannelId is { } channel && !_seenChannels.Contains(channel);
             if (!_closed && valid)
             {
                 candidate.SessionId = snapshot!.SessionId;
                 candidate.ChannelId = snapshot.ChannelId;
                 _seenSessions.Add(snapshot.SessionId!.Value);
+                _seenChannels.Add(snapshot.ChannelId!.Value);
                 _current = candidate;
+                if (settings is not null) Settings!.MarkApplied(settings);
                 // Admission and publication are atomic with application shutdown.
                 start = candidate.Commands.RequestStartFromSnapshotAsync(snapshot!);
             }
@@ -368,14 +405,16 @@ internal sealed class NovaGuiNextPublishingComposition : INovaObsPublishingReadO
 
     private sealed class Generation
     {
-        internal Generation(long number, INovaObsPublishingRuntime? owner, TimeProvider finishTimeProvider)
+        internal Generation(long number, INovaObsPublishingRuntime? owner, TimeProvider finishTimeProvider, PublishingSettingsSnapshot? preparedSettings)
         {
             Number = number;
+            PreparedSettings = preparedSettings;
             Lifecycle = new NovaObsPublishingLifecycleController(owner) { FinishTimeProvider = finishTimeProvider };
             Commands = new(Lifecycle);
             Connection = new(owner);
         }
         internal long Number { get; }
+        internal PublishingSettingsSnapshot? PreparedSettings { get; }
         internal NovaObsPublishingReadOnlySnapshot? LastSnapshot { get; set; }
         internal Guid? SessionId { get; set; }
         internal Guid? ChannelId { get; set; }

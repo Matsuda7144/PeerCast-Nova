@@ -6,7 +6,7 @@ using PeerCast.Nova.Network.Rtmp;
 
 namespace PeerCast.Nova.App.Tests;
 
-public sealed class GuiNextPublishingGenerationTests
+public sealed partial class GuiNextPublishingGenerationTests
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(10);
 
@@ -730,6 +730,12 @@ public sealed class GuiNextPublishingGenerationTests
 
     private sealed class Factory(params Owner[] owners) : INovaObsPublishingRuntimeFactory
     {
+        internal List<PublishingSettingsSnapshot> SettingsSnapshots { get; } = [];
+        public INovaObsPublishingRuntime Create(PublishingSettingsSnapshot settings)
+        {
+            SettingsSnapshots.Add(settings);
+            return Create();
+        }
         internal Owner[] Owners { get; } = owners;
         internal int Creates;
         internal bool BlockReplacement;

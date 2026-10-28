@@ -8,15 +8,18 @@ internal sealed partial class GenesisGuiNextAppShellBridge
     internal const int PublishingKeyRevealControlId = 1171;
     internal const int PublishingKeyCopyControlId = 1172;
     private const int PublishingConnectionStateControlId = 1173;
+    internal const int PublishingSettingsControlId = 1174;
 
     private sealed partial class AppShellState
     {
         private nint _publishingServerLabel, _publishingServerValue, _publishingKeyLabel, _publishingKeyValue;
         private nint _publishingServerCopy, _publishingKeyReveal, _publishingKeyCopy, _publishingConnectionState, _publishingInstructions;
+        private nint _publishingSettingsButton;
+        private GenesisGuiNextPublishingSettingsWindowHost? _publishingSettingsWindow;
 
         private bool PublishingGuideAvailable => new[] { _publishingServerLabel, _publishingServerValue,
             _publishingKeyLabel, _publishingKeyValue, _publishingServerCopy, _publishingKeyReveal,
-            _publishingKeyCopy, _publishingConnectionState, _publishingInstructions }.All(handle => handle != 0);
+            _publishingKeyCopy, _publishingConnectionState, _publishingInstructions, _publishingSettingsButton }.All(handle => handle != 0);
 
         private void CreatePublishingGuide(nint instance)
         {
@@ -37,6 +40,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 (nint)PublishingConnectionStateControlId, instance, 0);
             _publishingKeyReveal = CreateRecordingModeButton("表示", _detailsPane, PublishingKeyRevealControlId, 0, instance);
             _publishingKeyCopy = CreateRecordingModeButton("コピー", _detailsPane, PublishingKeyCopyControlId, 0, instance);
+            _publishingSettingsButton = CreateRecordingModeButton("配信設定…", _detailsPane, PublishingSettingsControlId, 0, instance);
             // Keep wrapped instructions readable at narrow widths without growing
             // into lifecycle feedback. This read-only field never contains a key.
             _publishingInstructions = CreateWindowExW(0, "EDIT", NovaObsPublishingConnectionPresentation.Instructions,
@@ -51,11 +55,20 @@ internal sealed partial class GenesisGuiNextAppShellBridge
 
         private nint[] PublishingGuideControls() => [_publishingServerLabel, _publishingServerValue,
             _publishingKeyLabel, _publishingKeyValue, _publishingServerCopy, _publishingKeyReveal,
-            _publishingKeyCopy, _publishingConnectionState, _publishingInstructions];
+            _publishingKeyCopy, _publishingConnectionState, _publishingInstructions, _publishingSettingsButton];
 
         private bool ProcessPublishingGuideCommand(int commandId, nint control)
         {
             if (_tabs.SelectedTab != GenesisGuiNextTab.Publishing) return false;
+            if (commandId == PublishingSettingsControlId && control == _publishingSettingsButton)
+            {
+                if (_tabs.PublishingSettings is { } settings)
+                {
+                    _publishingSettingsWindow ??= new(_owner, settings, () => _tabs.PublishingCommands.CanInterrupt || _tabs.PublishingCommands.CanFinish);
+                    SystemGenesisGuiNextSettingsWindowFeedback.ReportIfFailed(_owner, _publishingSettingsWindow.Show(), GenesisGuiNextSettingsWindowKind.Publishing);
+                }
+                return true;
+            }
             if (commandId == PublishingKeyRevealControlId && control == _publishingKeyReveal)
             { _ = _tabs.TogglePublishingKeyAsync(); return true; }
             var key = commandId == PublishingKeyCopyControlId && control == _publishingKeyCopy;
@@ -85,6 +98,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             Place(_publishingFinishButton, layout.Finish);
             Place(_publishingInterruptButton, layout.Interrupt);
             Place(_publishingConnectionState, layout.State);
+            Place(_publishingSettingsButton, layout.Settings);
+            _ = PresentEnabled(_publishingSettingsButton, _tabs.PublishingSettings is not null);
             Place(_publishingServerLabel, GenesisGuiNextPublishingGuideLayout.ServerLabel);
             Place(_publishingServerValue, layout.Server);
             Place(_publishingServerCopy, layout.ServerCopy);
@@ -110,8 +125,9 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private bool DrawPublishingGuide(DrawItem drawItem)
         {
             if (IsOwnerDrawButton(drawItem.ControlType) && drawItem.ControlId is
-                PublishingServerCopyControlId or PublishingKeyCopyControlId or PublishingKeyRevealControlId)
+                PublishingServerCopyControlId or PublishingKeyCopyControlId or PublishingKeyRevealControlId or PublishingSettingsControlId)
                 return DrawRecordingModeButton(drawItem,
+                    drawItem.ControlId == PublishingSettingsControlId ? "配信設定…" :
                     drawItem.ControlId == PublishingKeyRevealControlId ? _tabs.PublishingKeyRevealed ? "隠す" : "表示" : "コピー", false);
             if (!IsOwnerDrawStatic(drawItem.ControlType) || drawItem.ControlId != PublishingConnectionStateControlId) return false;
             FillRectangle(drawItem.DeviceContext, drawItem.ItemRectangle, BackgroundColor);
@@ -124,7 +140,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 _ => AccentColor,
             });
             var rectangle = drawItem.ItemRectangle;
-            _ = DrawTextW(drawItem.DeviceContext, _tabs.PublishingConnection.StateText, -1, ref rectangle, DrawTextNoPrefix | 0x0010);
+            _ = DrawTextW(drawItem.DeviceContext, _tabs.PublishingConnection.StateText, -1, ref rectangle,
+                DrawTextNoPrefix | DrawTextSingleLine | DrawTextVerticalCenter | 0x8000);
             return true;
         }
     }
@@ -143,7 +160,8 @@ internal readonly record struct GenesisGuiNextPublishingGuideLayout(int ContentW
     internal GenesisGuiNextPublishingGuideRectangle Start => new(ContentWidth - 240, 8, 78, 26);
     internal GenesisGuiNextPublishingGuideRectangle Finish => new(ContentWidth - 156, 8, 78, 26);
     internal GenesisGuiNextPublishingGuideRectangle Interrupt => new(ContentWidth - 72, 8, 78, 26);
-    internal GenesisGuiNextPublishingGuideRectangle State => new(12, 36, ContentWidth, 22);
+    internal GenesisGuiNextPublishingGuideRectangle State => new(12, 36, Math.Max(1, ContentWidth - 120), 22);
+    internal GenesisGuiNextPublishingGuideRectangle Settings => new(ContentWidth - 100, 36, 112, 22);
     internal static GenesisGuiNextPublishingGuideRectangle ServerLabel => new(12, 62, 76, 24);
     internal GenesisGuiNextPublishingGuideRectangle Server => new(94, 60, ServerWidth, 24);
     internal GenesisGuiNextPublishingGuideRectangle ServerCopy => new(CopyLeft, 60, 72, 26);

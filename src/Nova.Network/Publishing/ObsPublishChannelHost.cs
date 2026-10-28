@@ -78,6 +78,7 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
             Fanout = supplied.Fanout with { },
         };
         _options.Validate();
+        InitialMetadata = _options.CreateMetadata();
         ChannelId = channelId ?? new ChannelId(Guid.NewGuid());
         SessionId = new ChannelSessionId(Guid.NewGuid());
         _tracker = new ChannelStatusTracker(ChannelId, SessionId);
@@ -89,12 +90,14 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
             acquireOwnerLease: acquireRecordingOwner)
         { CleanupObserver = recordingCleanupObserver };
         _relay = new PcpDownstreamRelayServer(
-            new IPEndPoint(IPAddress.Loopback, _options.RelayPort), _fanout, ChannelId, SessionId.Value);
+            new IPEndPoint(IPAddress.Loopback, _options.RelayPort), _fanout, ChannelId, SessionId.Value,
+            initialMetadata: InitialMetadata);
         _ingest = new ObsRtmpIngestHost(ChannelId, SessionId, new PublishConsumer(this), _options.Ingest);
     }
 
     public ChannelId ChannelId { get; }
     public ChannelSessionId SessionId { get; }
+    public ChannelMetadataSnapshot InitialMetadata { get; }
     public ChannelStatusSnapshot Snapshot => _tracker.Snapshot;
     public Task<bool> HeadAvailable => _headAvailable.Task;
     public IPEndPoint IngestEndPoint => _ingest.LocalEndPoint;
@@ -188,8 +191,7 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
                 throw new InvalidOperationException("The channel is already registered or the registry is full.");
             lock (_gate) { _registered = true; }
             _tracker.TransitionTo(ChannelSessionState.Negotiating);
-            _tracker.UpdateMetadata(new ChannelMetadataSnapshot(
-                name: _options.ChannelName, contentType: "FLV", streamExtension: "flv"));
+            _tracker.UpdateMetadata(InitialMetadata);
             relayTask = _relay.RunAsync(lifetime.Token);
             _relayRunTask = relayTask;
             _ingest.Start(lifetime.Token);

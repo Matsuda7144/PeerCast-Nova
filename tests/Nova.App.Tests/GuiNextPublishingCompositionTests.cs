@@ -7,6 +7,23 @@ namespace PeerCast.Nova.App.Tests;
 public sealed class GuiNextPublishingCompositionTests
 {
     [Fact]
+    public async Task RootLoadsPublishingSettingsBeforeCreatingInitialOwner()
+    {
+        var snapshot = PublishingSettingsSnapshot.Default with
+        {
+            SettingsRevision = 17,
+            Values = PublishingChannelPreferences.Default with { ChannelName = "root restored" }
+        };
+        var factory = new Factory();
+        var startup = new NovaWindowsStartupComposition(new(), new RejectedHostFactory(),
+            () => new FakePlaybackSessionController(), publishingRuntimeFactory: factory,
+            publishingPreferencesStore: new PublishingSettingsTests.MemoryStore { Snapshot = snapshot });
+        Assert.Equal(NovaWindowsStartupResult.PlatformUnsupported, await startup.RunGenesisAsync());
+        Assert.Same(snapshot, factory.PreparedSettings);
+        Assert.Equal(0, factory.Owner.Starts);
+        Assert.Equal(1, factory.Owner.Disposals);
+    }
+    [Fact]
     public void PublishingCommandsPermitOnlyNavigationAndStatusRefresh()
     {
         Assert.True(GenesisGuiNextAppShellBridge.IsPublishingNavigationCommand(GenesisGuiNextAppShellBridge.RefreshControlId));
@@ -226,6 +243,12 @@ public sealed class GuiNextPublishingCompositionTests
 
     private sealed class Factory : INovaObsPublishingRuntimeFactory
     {
+        internal PublishingSettingsSnapshot? PreparedSettings { get; private set; }
+        public INovaObsPublishingRuntime Create(PublishingSettingsSnapshot settings)
+        {
+            PreparedSettings = settings;
+            return Create();
+        }
         public Owner Owner { get; } = new();
         public int Creates { get; private set; }
         public bool Fails { get; init; }

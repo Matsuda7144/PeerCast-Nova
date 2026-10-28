@@ -3,7 +3,7 @@ using PeerCast.Nova.Network.Transport;
 namespace PeerCast.Nova.Network.Pcp;
 
 /// <summary>
-/// Internal byte-write boundary for deterministic timeout validation. The
+/// Internal byte-write boundary for media and opt-in initial metadata timeout validation. The
 /// buffer remains valid only until the returned operation completes.
 /// </summary>
 internal interface IPcpDownstreamPacketWriter

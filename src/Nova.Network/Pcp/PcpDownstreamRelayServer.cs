@@ -22,6 +22,7 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
     private readonly Guid _localSessionId;
     private readonly PcpDownstreamChildOptions _childOptions;
     private readonly IPcpDownstreamRelayAdmission? _admission;
+    private readonly ReadOnlyMemory<byte> _initialMetadata;
     private readonly CancellationTokenSource _stopSource = new();
     private readonly CancellationTokenSource _acceptStop = new();
     private readonly PcpRelayChildAdmission _childAdmission = new();
@@ -75,7 +76,8 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
         TcpTransportOptions? transportOptions = null,
         PcpDownstreamChildOptions? childOptions = null,
         NatPortMappingManager? portMapping = null,
-        IPcpDownstreamRelayAdmission? admission = null)
+        IPcpDownstreamRelayAdmission? admission = null,
+        ChannelMetadataSnapshot? initialMetadata = null)
     {
         ArgumentNullException.ThrowIfNull(localEndPoint);
         ArgumentNullException.ThrowIfNull(fanout);
@@ -99,6 +101,7 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
             ? new PcpDownstreamChildOptions()
             : childOptions with { };
         _childOptions.Validate();
+        _initialMetadata = initialMetadata is null ? default : PcpInitialChannelMetadata.Encode(channelId.Value, initialMetadata);
 
         _listener = new TcpTransportListener(
             localEndPoint,
@@ -585,7 +588,8 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
                 packetWriter: PacketWriterFactory?.Invoke(entry.Connection),
                 admission: _admission,
                 childAdmission: _childAdmission,
-                quiescenceObserver: QuiescenceObserver);
+                quiescenceObserver: QuiescenceObserver,
+                initialMetadata: _initialMetadata);
             result = await session.RunAsync(
                 cancellationToken).ConfigureAwait(false);
         }

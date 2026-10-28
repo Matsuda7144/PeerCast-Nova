@@ -9,7 +9,7 @@ using PeerCast.Nova.Protocol.Pcp;
 
 namespace PeerCast.Nova.Network.Tests;
 
-public sealed class PcpDownstreamChildSessionTests
+public sealed partial class PcpDownstreamChildSessionTests
 {
     private static readonly TimeSpan TestTimeout = TimeSpan.FromSeconds(10);
 
