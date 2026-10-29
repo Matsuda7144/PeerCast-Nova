@@ -4,7 +4,7 @@ namespace PeerCast.Nova.Network.Publishing;
 
 /// <summary>
 /// An application-lifetime broadcast identity and a single generation slot.
-/// Not constructed or connected by production composition in this foundation.
+/// Borrowed by the application-owned integration; construction performs no communication.
 /// </summary>
 internal sealed class PcpAnnounceOwner : IAsyncDisposable
 {
@@ -23,7 +23,7 @@ internal sealed class PcpAnnounceOwner : IAsyncDisposable
         _connector = connector ?? new PcpAnnounceLoopbackConnector(); _options = options ?? new(); _options.Validate(); _time = timeProvider ?? TimeProvider.System;
     }
     internal PcpAnnounceWorker Start(long generation, Guid channelId, Guid publishingSessionId, Guid relaySessionId,
-        PcpAnnounceEndpoint tracker, PcpAnnounceDocument document, PcpAnnounceAccess? access = null, CancellationToken cancellationToken = default)
+        PcpAnnounceEndpoint tracker, PcpAnnounceDocument document, PcpAnnounceAccess? access = null, PublishingAnnounceCapability? capability = null, CancellationToken cancellationToken = default)
     {
         lock (_gate)
         {
@@ -33,7 +33,7 @@ internal sealed class PcpAnnounceOwner : IAsyncDisposable
             if (_current is { } previous && (generation <= previous.Identity.Generation || !previous.CleanupProven))
                 throw new InvalidOperationException("The previous announcement generation has not proved cleanup.");
             var identity = new PcpAnnounceIdentity(generation, channelId, publishingSessionId, relaySessionId, BroadcastId);
-            _current = new(identity, tracker, document, access ?? PcpAnnounceAccess.Disabled, _connector, _options, _time);
+            _current = new(identity, tracker, document, access ?? PcpAnnounceAccess.Disabled, _connector, _options, _time, capability);
             _current.Start(cancellationToken);
             return _current;
         }

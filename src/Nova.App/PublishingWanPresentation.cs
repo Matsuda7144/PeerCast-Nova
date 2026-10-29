@@ -16,9 +16,9 @@ internal static class PublishingWanPresentation
             _ => "WAN PCP: Listener起動失敗。IP/ポート・競合・利用権限を確認してください。",
         };
         if (!status.ListenerReady || !PublishingIpv4.IsBindAddress(status.BindAddress) || status.BindPort is not (>= 1 and <= 65535))
-            return "WAN PCP: 設定済み／未待受・停止中。外部到達性未確認。YP掲載OFF。";
+            return "WAN PCP: 設定済み／未待受・停止中。外部到達性未確認。YP: separate status。";
         var declared = PublishingIpv4.IsPublicAddress(status.AdvertisedAddress) && status.AdvertisedPort is >= 1 and <= 65535
             ? $"公開設定: {status.AdvertisedAddress}:{status.AdvertisedPort}（未確認）" : "公開IPv4/外部ポート: 未設定";
-        return $"WAN PCP: Listener稼働中 {status.BindAddress}:{status.BindPort}\r\n{declared}\r\n外部到達性未確認 · 帯域制限未適用 · YP掲載OFF";
+        return $"WAN PCP: Listener稼働中 {status.BindAddress}:{status.BindPort}\r\n{declared}\r\n外部到達性未確認 · 帯域制限未適用 · YP: separate status";
     }
 }

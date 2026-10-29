@@ -32,7 +32,7 @@ internal static class AnnounceTestData
         PcpAnnounceEndpoint? endpoint = null, CancellationToken cancellationToken = default)
     {
         var session = Guid.NewGuid();
-        return owner.Start(generation, Guid.NewGuid(), session, session, endpoint ?? Endpoint, Document(), access ?? Access, cancellationToken);
+        return owner.Start(generation, Guid.NewGuid(), session, session, endpoint ?? Endpoint, Document(), access ?? Access, cancellationToken: cancellationToken);
     }
 }
 
@@ -62,6 +62,12 @@ internal sealed class AnnounceFakeConnection : IPcpAnnounceConnection
     internal TaskCompletionSource CloseObserved { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     internal bool DelayClose { get; set; }
     internal bool ThrowOnWrite { get; set; }
+    internal bool IgnoreIdleReadCancellation { get; set; }
+    internal TaskCompletionSource IdleReadStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    internal TaskCompletionSource IdleReadFinished { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    internal TaskCompletionSource<PcpAtom> ReadRelease { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private int _readCount, _pendingReads;
+    internal int PendingReads => Volatile.Read(ref _pendingReads);
     internal bool Aborted { get; private set; }
     internal bool Closed { get; private set; }
     internal int MaxActiveWrites { get; private set; }
@@ -90,7 +96,21 @@ internal sealed class AnnounceFakeConnection : IPcpAnnounceConnection
     public async Task<PcpAtom> ReadAsync(CancellationToken cancellationToken)
     {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _abort.Token);
-        return await _incoming.Reader.ReadAsync(linked.Token);
+        Interlocked.Increment(ref _pendingReads);
+        try
+        {
+            if (Interlocked.Increment(ref _readCount) > 1)
+            {
+                IdleReadStarted.TrySetResult();
+                if (IgnoreIdleReadCancellation) return await ReadRelease.Task;
+            }
+            return await _incoming.Reader.ReadAsync(linked.Token);
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _pendingReads);
+            if (Volatile.Read(ref _readCount) > 1) IdleReadFinished.TrySetResult();
+        }
     }
     public void Abort() { Aborted = true; _abort.Cancel(); }
     public async Task CloseAsync()

@@ -28,7 +28,7 @@ internal sealed class PcpAnnounceLoopbackConnector : IPcpAnnounceConnector
         return new Connection(connection);
     }
 
-    private sealed class Connection : IPcpAnnounceConnection
+    internal sealed class Connection : IPcpAnnounceConnection
     {
         private readonly TcpTransportConnection _transport;
         private readonly PipeReader _pipe;

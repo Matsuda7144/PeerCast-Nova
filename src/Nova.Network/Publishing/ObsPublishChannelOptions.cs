@@ -10,6 +10,7 @@ public sealed record ObsPublishChannelOptions
     public PcpRelayFanoutOptions Fanout { get; init; } = new();
     public int RelayPort { get; init; }
     public ObsPublishLanOptions Lan { get; init; } = new();
+    public PublishingAnnounceOptions Announce { get; init; } = new();
     public ObsPublishWanOptions Wan { get; init; } = new();
     public PublishingRelayMode RelayMode => Wan.Enabled ? PublishingRelayMode.Wan : Lan.Enabled ? PublishingRelayMode.Lan : PublishingRelayMode.Loopback;
     public string ChannelName { get; init; } = "Local publish";
@@ -31,6 +32,7 @@ public sealed record ObsPublishChannelOptions
         Lan.Validate();
         ArgumentNullException.ThrowIfNull(Wan);
         Wan.Validate();
+        Announce.Validate();
         if (Lan.Enabled && Wan.Enabled) throw new ObsPublishWanException(ObsPublishWanFailure.InvalidSettings);
         _ = CreateMetadata();
         Ingest.Validate();

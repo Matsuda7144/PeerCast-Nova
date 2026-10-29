@@ -29,7 +29,7 @@ internal sealed record PcpAnnounceEndpoint
     internal int Port => Uri.Port < 0 ? 7144 : Uri.Port;
 }
 
-/// <summary>No production Ready factory exists in this slice. Tests can authorize only a numeric loopback destination.</summary>
+/// <summary>Fixture access remains IPv4 loopback-only; production access requires an explicitly pinned public tracker.</summary>
 internal sealed class PcpAnnounceAccess
 {
     private readonly IPEndPoint? _loopback;
@@ -42,6 +42,12 @@ internal sealed class PcpAnnounceAccess
         if (endpoint.AddressFamily != AddressFamily.InterNetwork || !IPAddress.IsLoopback(endpoint.Address) || endpoint.Port == 0)
             throw new ArgumentException("Only an IPv4 localhost fixture is permitted.", nameof(endpoint));
         return new(true, new IPEndPoint(new IPAddress(endpoint.Address.GetAddressBytes()), endpoint.Port));
+    }
+    internal static PcpAnnounceAccess ForProduction(IPEndPoint endpoint)
+    {
+        if (!PublishingIpv4.IsPublicAddress(endpoint.Address.ToString()) || endpoint.Port is < 1 or > 65535)
+            throw new ArgumentException("Explicit public tracker required.", nameof(endpoint));
+        return new(true, new IPEndPoint(endpoint.Address, endpoint.Port));
     }
     internal IPEndPoint? Resolve(PcpAnnounceEndpoint endpoint) =>
         _loopback is not null && endpoint.Port == _loopback.Port &&

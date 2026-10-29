@@ -272,6 +272,7 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
 
     public GenesisGuiNextNetworkPolicies NetworkPolicies { get; }
 
+    internal PeerCast.Nova.Network.Publishing.PublishingAnnounceOwner AnnounceOwner { get; } = new();
     public GenesisDownstreamRelayOwnerRegistry DownstreamRelays { get; }
 
     public GenesisGuiNextPublicChannelComposition PublicChannels { get; }
@@ -522,6 +523,7 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
         catch (Exception exception) { publicChannelFailure = exception; }
         finally
         {
+            await AnnounceOwner.DisposeAsync().ConfigureAwait(false);
             DownstreamRelays.Dispose();
             NetworkPolicies.Dispose();
         }

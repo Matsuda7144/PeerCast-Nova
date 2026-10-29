@@ -65,7 +65,7 @@ public sealed class PublishingWanTests
             var loaded = await new JsonPublishingPreferencesStore(path).LoadAsync();
             Assert.Equal(Wan, loaded.Values.Wan);
             using var json = JsonDocument.Parse(await File.ReadAllTextAsync(path));
-            Assert.Equal(3, json.RootElement.GetProperty("SchemaVersion").GetInt32());
+            Assert.Equal(4, json.RootElement.GetProperty("SchemaVersion").GetInt32());
             Assert.Equal(2, json.RootElement.GetProperty("RelayMode").GetInt32());
             Assert.False(loaded.Values.ToOptions().Lan.Enabled);
             // Save has no listener/transport dependency. Production announcement isolation is checked separately.
@@ -119,7 +119,7 @@ public sealed class PublishingWanTests
         Assert.Contains($"{Wan.Address}:{Wan.Port}", text);
         Assert.Contains($"{Wan.AdvertisedAddress}:{Wan.AdvertisedPort}", text);
         Assert.Contains("外部到達性未確認", text);
-        Assert.Contains("YP掲載OFF", text);
+        Assert.Contains("YP: separate status", text);
         Assert.DoesNotContain("pcp://", text);
         Assert.DoesNotContain(Wan.Address, PublishingWanPresentation.Format(status with { ListenerReady = false }));
         Assert.DoesNotContain(Wan.Address, PublishingWanPresentation.Format(status with { CleanupIncomplete = true }));

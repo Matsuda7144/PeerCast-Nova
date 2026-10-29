@@ -17,6 +17,10 @@ namespace PeerCast.Nova.Network.Publishing;
 /// </summary>
 public sealed partial class ObsPublishChannelHost : IAsyncDisposable
 {
+    private readonly PublishingAnnounceOwner? _announceOwner;
+    private PublishingAnnounceSession? _announce;
+    private bool _announceFailed;
+    public PublishingAnnounceStatus AnnounceStatus => _announce?.Status ?? new(_announceFailed ? "Failed" : _options.Announce.Enabled ? "WaitingForListener" : "Disabled", false, false, false, true);
     private readonly object _gate = new();
     private readonly ObsPublishChannelOptions _options;
     private readonly PcpHttpFlvPlaybackHost _http;
@@ -63,8 +67,8 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
         RecordingStreamSourceLeaseRegistry? recordingRegistry = null,
         IObsPublishLanInterfaces? interfaces = null,
         Func<ChannelId, ChannelSessionId, PcpRelayFanout, IPcpDownstreamRelayRegistration>? registerRelay = null,
-        IObsPublishInterfaceChanges? interfaceChanges = null)
-        : this(options, channelId, httpHost, recordingRegistry, null, null, interfaces, registerRelay, interfaceChanges)
+        IObsPublishInterfaceChanges? interfaceChanges = null, PublishingAnnounceOwner? announceOwner = null)
+        : this(options, channelId, httpHost, recordingRegistry, null, null, interfaces, registerRelay, interfaceChanges, announceOwner: announceOwner)
     {
     }
 
@@ -77,8 +81,9 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
         Func<ChannelId, ChannelSessionId, PcpRelayFanout, IPcpDownstreamRelayRegistration>? registerRelay = null,
         IObsPublishInterfaceChanges? interfaceChanges = null,
         Func<IPEndPoint, IPEndPoint>? bindForTests = null,
-        PcpWanIngressOptions? wanIngressForTests = null)
+        PcpWanIngressOptions? wanIngressForTests = null, PublishingAnnounceOwner? announceOwner = null)
     {
+        _announceOwner = announceOwner;
         _interfaceChanges = interfaceChanges ?? SystemObsPublishInterfaceChanges.Instance;
         _interfaces = interfaces ?? SystemObsPublishLanInterfaces.Instance;
         _registerRelay = registerRelay;
@@ -159,7 +164,7 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
                     port is null ? null : $"rtmp://127.0.0.1:{port}/{_options.Ingest.Application}",
                     _options.Ingest.StreamName, head ? Volatile.Read(ref _httpStreamUrl) : null,
                     result?.EndReason, result?.Rejection?.Stage, result?.Rejection?.Reason)
-                { LanRelay = ReadLanStatus(active), WanRelay = ReadWanStatus(active) };
+                { LanRelay = ReadLanStatus(active), WanRelay = ReadWanStatus(active), Announce = AnnounceStatus with { InboundPingObserved = _relay.Snapshot.WanIngress?.PingResponses > 0 } };
                 // Serialize observed revisions across tracker, TCP and terminal facts.
                 // TCP accept/listener changes need not advance ChannelStatusTracker.
                 // These are observation revisions, not an atomic network-event log.
@@ -236,6 +241,17 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
             if (_wanBinding is not null) _wanNetwork = new(_wanBinding, _interfaces, _interfaceChanges);
             _ingest.Start(lifetime.Token);
             started = true;
+            if (_options.Announce.Enabled && _announceOwner is not null && _options.Wan.Enabled && ReadWanStatus(true)?.ListenerReady == true &&
+                _options.Wan.AdvertisedAddress.Length != 0 && _options.Wan.AdvertisedPort > 0)
+            {
+                try
+                {
+                    _announce = _announceOwner.Start(_options.Announce, ChannelId, SessionId, InitialMetadata, RelayEndPoint,
+                    new IPEndPoint(IPAddress.Parse(_options.Wan.AdvertisedAddress), _options.Wan.AdvertisedPort),
+                    () => !lifetime.IsCancellationRequested && CanAcceptWan && ReadWanStatus(true)?.ListenerReady == true);
+                }
+                catch { _announceFailed = true; /* Announce failure does not stop ingest or relay. */ }
+            }
             Task[] endings = [_ingest.Completion, relayTask, _httpChild.Completion, _localFinishRequested.Task];
             var first = await Task.WhenAny(_wanNetwork is null ? endings : endings.Append(_wanNetwork.Invalidated)).ConfigureAwait(false);
             if (_wanNetwork?.Invalidated.IsCompleted == true) _wanFailure = ObsPublishWanFailure.NetworkChanged;
@@ -288,6 +304,8 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
                 _registration?.Dispose();
                 _registration = null;
             }
+            if (_announce is not null)
+                clean &= await _announce.StopAsync(reason == ObsPublishChannelEndReason.PublisherStopped ? PcpAnnounceStopReason.ObsNormalEos : PcpAnnounceStopReason.Finish).ConfigureAwait(false);
             try { _relayRegistration?.Dispose(); } // Retire without freeing live reservations.
             catch { clean = false; }
             await ObserveTerminationAsync(ObsPublishTerminationPoint.RecordingAdmissionClosed).ConfigureAwait(false);

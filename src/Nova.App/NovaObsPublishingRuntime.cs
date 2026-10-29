@@ -78,7 +78,7 @@ internal sealed class SystemNovaObsPublishingRuntimeFactory : INovaObsPublishing
         catch { throw new ObsPublishLanException(ObsPublishLanFailure.AdmissionUnavailable); }
     }
     private NovaObsPublishingRuntime Create(ObsPublishChannelOptions options) =>
-        NovaObsPublishingRuntime.ForOwner(new ObsPublishChannelHost(options, interfaces: _interfaces, registerRelay: Register));
+        NovaObsPublishingRuntime.ForOwner(new ObsPublishChannelHost(options, interfaces: _interfaces, registerRelay: Register, announceOwner: _state?.AnnounceOwner));
 
     public INovaObsPublishingRuntime Create() => Create(new ObsPublishChannelOptions());
     public INovaObsPublishingRuntime Create(PublishingSettingsSnapshot settings) => Create(settings.Values.ToOptions());

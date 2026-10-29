@@ -103,8 +103,9 @@ internal sealed class NovaObsPublishingReadOnlyStatus(INovaObsPublishingStatusSo
                 status.RejectionStage, status.RejectionReason)
             {
                 IsSourceNotStarted = notStarted,
-                LanRelayText = status.WanRelay is { Enabled: true } wan
-                ? PublishingWanPresentation.Format(wan) : PublishingLanPresentation.Format(status.LanRelay, status.ChannelId.Value)
+                LanRelayText = (status.WanRelay is { Enabled: true } wan
+                ? PublishingWanPresentation.Format(wan) : PublishingLanPresentation.Format(status.LanRelay, status.ChannelId.Value)) +
+                    (status.Announce is { } yp ? $"\r\nYP: {yp.State} · listing/removal unconfirmed · independent reachability unverified" : "")
             };
             return _last;
         }

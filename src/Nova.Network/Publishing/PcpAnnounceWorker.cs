@@ -3,12 +3,14 @@ using PeerCast.Nova.Protocol.Pcp;
 
 namespace PeerCast.Nova.Network.Publishing;
 
-/// <summary>One immutable generation, one connection, one serialized writer. Never registered in production composition.</summary>
+/// <summary>One immutable generation, one connection, one serialized writer. Publication is mediated by a connection-scoped capability in production.</summary>
 internal sealed class PcpAnnounceWorker : IAsyncDisposable
 {
     private readonly object _gate = new();
     private readonly HashSet<Task> _pending = [];
     private readonly PcpAnnounceIdentity _identity;
+    private readonly PublishingAnnounceCapability? _capability;
+    internal PublishingTrackerReport? TrackerReport { get; private set; }
     private readonly PcpAnnounceEndpoint _endpoint;
     private readonly PcpAnnounceAccess _access;
     private readonly IPcpAnnounceConnector _connector;
@@ -31,11 +33,15 @@ internal sealed class PcpAnnounceWorker : IAsyncDisposable
 
     internal PcpAnnounceWorker(PcpAnnounceIdentity identity, PcpAnnounceEndpoint endpoint,
         PcpAnnounceDocument document, PcpAnnounceAccess access, IPcpAnnounceConnector connector,
-        PcpAnnounceOptions? options = null, TimeProvider? timeProvider = null)
+        PcpAnnounceOptions? options = null, TimeProvider? timeProvider = null, PublishingAnnounceCapability? capability = null)
     {
+        _capability = capability;
+        if (capability is not null && capability.Identity != identity) throw new ArgumentException("Capability identity mismatch.", nameof(capability));
         _identity = identity; _endpoint = endpoint; _initial = document; _latest = document; _access = access; _connector = connector;
         _options = options ?? new(); _options.Validate(); _time = timeProvider ?? TimeProvider.System;
     }
+    internal bool Announced => Volatile.Read(ref _announced);
+    internal bool StopNoticeSent => Volatile.Read(ref _stopNotice);
     internal PcpAnnounceIdentity Identity => _identity;
     internal PcpAnnounceState State { get { lock (_gate) return _state; } }
     internal PcpOlehInfo? TrackerObservation { get; private set; }
@@ -101,6 +107,7 @@ internal sealed class PcpAnnounceWorker : IAsyncDisposable
         try
         {
             if (_stop.Task.IsCompleted) return Result(true);
+            if (_capability is not null && !_capability.IsValid) throw new InvalidDataException("Publication capability expired.");
             SetState(PcpAnnounceState.Connecting);
             await BoundedAsync(ConnectAsync(destination), _options.ConnectTimeout).ConfigureAwait(false);
             SetState(PcpAnnounceState.Handshaking);
@@ -125,6 +132,7 @@ internal sealed class PcpAnnounceWorker : IAsyncDisposable
         finally
         {
             lock (_gate) _closing = true;
+            _capability?.Invalidate();
             // No queued update can run after this point. Notification writes share the same writer.
             if (handshaken && _stop.Task.IsCompleted && !_deadlineExceeded)
             {
@@ -175,11 +183,16 @@ internal sealed class PcpAnnounceWorker : IAsyncDisposable
         var preamble = new byte[PcpPreamble.Size];
         PcpPreamble.Write(preamble);
         var helo = PcpAnnounceDocument.EncodeAtom(PcpAnnounceCodec.CreateHelo(
-            "PeerCastNova/YPFoundation", _identity.SenderSessionId, _identity.BroadcastId, CurrentDocument().Port));
+            "PeerCastNova/YPFoundation", _identity.SenderSessionId, _identity.BroadcastId, CurrentDocument().Port, requestPing: _capability is not null));
         await _connection!.WriteAsync(preamble.Concat(helo).ToArray(), _ioStop.Token).ConfigureAwait(false);
         var atom = await _connection.ReadAsync(_ioStop.Token).ConfigureAwait(false);
         ThrowIfQuit(atom);
         TrackerObservation = PcpAnnounceCodec.ParseOleh(atom);
+        if (_capability is not null)
+        {
+            TrackerReport = _capability.Evaluate(TrackerObservation, _time.GetUtcNow());
+            if (!TrackerReport.CanAnnounce(_capability)) throw new InvalidDataException("Tracker did not report the requested public endpoint open.");
+        }
     }
 
     private async Task UpdatesAsync()
@@ -187,7 +200,7 @@ internal sealed class PcpAnnounceWorker : IAsyncDisposable
         using var timer = new PeriodicTimer(PcpAnnounceOptions.UpdateInterval, _time);
         var tick = Track(timer.WaitForNextTickAsync(_ioStop.Token).AsTask());
         var changed = Track(_updates.Reader.ReadAsync(_ioStop.Token).AsTask());
-        var received = Track(_connection!.ReadAsync(_ioStop.Token));
+        var received = Track(ReadControlAsync());
         var receiveWindow = _time.GetTimestamp();
         var count = 0;
         while (!_stop.Task.IsCompleted)
@@ -198,10 +211,16 @@ internal sealed class PcpAnnounceWorker : IAsyncDisposable
             {
                 var atom = await received.ConfigureAwait(false);
                 ThrowIfQuit(atom);
+                if (_capability is not null && atom.Name == PcpKnownAtomNames.Oleh)
+                {
+                    var current = PcpAnnounceCodec.ParseOleh(atom);
+                    if (TrackerObservation?.SessionId != current.SessionId || !_capability.Evaluate(current, _time.GetUtcNow()).CanAnnounce(_capability))
+                        throw new InvalidDataException("Tracker observation changed.");
+                }
                 if (_time.GetElapsedTime(receiveWindow) >= TimeSpan.FromSeconds(1)) { receiveWindow = _time.GetTimestamp(); count = 0; }
                 if (++count > 32) throw new InvalidDataException("Tracker control rate exceeded.");
                 // Bounded root/control atoms are not commands to connect elsewhere or change public capability.
-                received = Track(_connection.ReadAsync(_ioStop.Token));
+                received = Track(ReadControlAsync());
                 await Task.Yield();
             }
             if (changed.IsCompleted || tick.IsCompleted)
@@ -215,8 +234,17 @@ internal sealed class PcpAnnounceWorker : IAsyncDisposable
         }
     }
 
-    private async Task WriteAsync(byte[] bytes) =>
+    private async Task<PcpAtom> ReadControlAsync()
+    {
+        var read = Track(_connection!.ReadAsync(_ioStop.Token));
+        return await read.ConfigureAwait(false);
+    }
+    private async Task WriteAsync(byte[] bytes)
+    {
+        if (!_closing && _capability is not null && TrackerReport?.CanAnnounce(_capability) != true)
+            throw new InvalidDataException("Publication capability expired.");
         await BoundedAsync(_connection!.WriteAsync(bytes, _ioStop.Token), _options.WriteTimeout).ConfigureAwait(false);
+    }
 
     private async Task BoundedAsync(Task task, TimeSpan timeout)
     {

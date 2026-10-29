@@ -264,7 +264,7 @@ public sealed partial class ObsPublishChannelHost
             await fanout && fanoutProof?.IsCompletedSuccessfully == true && fanoutProof.Result.CleanupCompleted,
             await source && (_httpSource is null || _httpSource.CleanupCompleted), _ownsHttp,
             await listener, _recording.Evidence.CleanupCompleted)
-        { WanNetwork = await network };
+        { WanNetwork = await network, Announce = _announce is null || await _announce.StopAsync(PcpAnnounceStopReason.Finish).ConfigureAwait(false) };
     }
 
     private async Task<ObsPublishOwnerCleanupEvidence> ObserveLocalCleanupAsync(CancellationToken token)

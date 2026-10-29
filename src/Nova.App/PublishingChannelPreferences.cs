@@ -9,6 +9,7 @@ namespace PeerCast.Nova.App;
 internal sealed record PublishingChannelPreferences(string ChannelName, string Genre, string Description,
     string Comment, string ContactUrl, int? BitrateKbps)
 {
+    internal PublishingAnnounceOptions Announce { get; init; } = new();
     internal ObsPublishLanOptions Lan { get; init; } = new();
     internal ObsPublishWanOptions Wan { get; init; } = new();
     internal PublishingRelayMode RelayMode => Wan.Enabled ? PublishingRelayMode.Wan : Lan.Enabled ? PublishingRelayMode.Lan : PublishingRelayMode.Loopback;
@@ -23,9 +24,13 @@ internal sealed record PublishingChannelPreferences(string ChannelName, string G
         BitrateKbps = BitrateKbps,
         Lan = Lan,
         Wan = Wan,
+        Announce = Announce,
     };
     internal PublishingChannelPreferences Validate()
     {
+        Announce.Validate();
+        if (Announce.Enabled && (!Wan.Enabled || Wan.AdvertisedPort == 0 || !PublishingIpv4.IsPublicAddress(Wan.AdvertisedAddress)))
+            throw new ArgumentException("YP requires explicit WAN and a public endpoint.");
         Lan.Validate();
         Wan.Validate();
         if (Lan.Enabled && Wan.Enabled) throw new ObsPublishWanException(ObsPublishWanFailure.InvalidSettings);
@@ -44,6 +49,9 @@ internal sealed record PublishingSettingsSnapshot(long SettingsRevision, Publish
 internal sealed record PublishingSettingsInput(string ChannelName, string Genre, string Description,
     string Comment, string ContactUrl, string BitrateKbps)
 {
+    internal bool AnnounceEnabled { get; init; }
+    internal string AnnounceName { get; init; } = "";
+    internal string AnnounceEndpoint { get; init; } = "";
     internal bool LanEnabled { get; init; }
     internal string LanInterfaceId { get; init; } = "";
     internal string LanAddress { get; init; } = "";
@@ -57,6 +65,9 @@ internal sealed record PublishingSettingsInput(string ChannelName, string Genre,
     internal static PublishingSettingsInput From(PublishingChannelPreferences value) => new(value.ChannelName,
         value.Genre, value.Description, value.Comment, value.ContactUrl, value.BitrateKbps?.ToString(CultureInfo.InvariantCulture) ?? "")
     {
+        AnnounceEnabled = value.Announce.Enabled,
+        AnnounceName = value.Announce.Name,
+        AnnounceEndpoint = value.Announce.Endpoint,
         LanEnabled = value.Lan.Enabled,
         LanInterfaceId = value.Lan.InterfaceId,
         LanAddress = value.Lan.Address,
@@ -87,7 +98,7 @@ internal sealed record PublishingSettingsInput(string ChannelName, string Genre,
             AdvertisedAddress, ParsePort(AdvertisedPort, nameof(AdvertisedPort)));
         try { wan.Validate(); if (lan.Enabled && wan.Enabled) throw new ObsPublishWanException(ObsPublishWanFailure.InvalidSettings); }
         catch (ObsPublishWanException) { throw new ArgumentException("WANのNIC/IP・内部ポート・公開IPv4/外部ポートを確認してください。", nameof(WanAddress)); }
-        return new PublishingChannelPreferences(ChannelName, Genre, Description, Comment, ContactUrl, bitrate) { Lan = lan, Wan = wan }.Validate();
+        return new PublishingChannelPreferences(ChannelName, Genre, Description, Comment, ContactUrl, bitrate) { Lan = lan, Wan = wan, Announce = new(AnnounceEnabled, AnnounceName, AnnounceEndpoint) }.Validate();
     }
     private static int ParsePort(string text, string field)
     {
@@ -122,6 +133,7 @@ internal sealed class JsonPublishingPreferencesStore(string path, Action? before
         public string Comment { get; init; } = "";
         public string ContactUrl { get; init; } = "";
         public int? BitrateKbps { get; init; }
+        public PublishingAnnounceOptions? Announce { get; init; }
         public ObsPublishLanOptions? Lan { get; init; }
         public ObsPublishWanOptions? Wan { get; init; }
         public PublishingRelayMode? RelayMode { get; init; }
@@ -147,16 +159,17 @@ internal sealed class JsonPublishingPreferencesStore(string path, Action? before
             if (count > MaximumBytes) throw new InvalidDataException("Publishing settings exceed the file limit.");
             var document = JsonSerializer.Deserialize<Document>(buffer.AsSpan(0, count), JsonOptions)
                 ?? throw new InvalidDataException("Publishing settings must contain an object.");
-            if (document.SchemaVersion is not (1 or 2 or 3) || document.SettingsRevision < 0 || document.SettingsRevision == long.MaxValue)
+            if (document.SchemaVersion is not (1 or 2 or 3 or 4) || document.SettingsRevision < 0 || document.SettingsRevision == long.MaxValue)
                 throw new InvalidDataException("Unsupported publishing settings version or revision.");
             var values = new PublishingChannelPreferences(document.ChannelName, document.Genre, document.Description,
                 document.Comment, document.ContactUrl, document.BitrateKbps)
             {
+                Announce = document.SchemaVersion < 4 ? new() : document.Announce ?? throw new InvalidDataException("YP configuration missing."),
                 Lan = document.SchemaVersion == 1 ? new() : document.Lan ?? throw new InvalidDataException("LAN configuration is missing."),
                 Wan = document.SchemaVersion < 3 ? new() : document.Wan ?? throw new InvalidDataException("WAN configuration is missing."),
             };
             values = values.Validate();
-            if (document.SchemaVersion == 3 && (document.RelayMode is null || !Enum.IsDefined(document.RelayMode.Value) || document.RelayMode != values.RelayMode))
+            if (document.SchemaVersion >= 3 && (document.RelayMode is null || !Enum.IsDefined(document.RelayMode.Value) || document.RelayMode != values.RelayMode))
                 throw new InvalidDataException("Publishing relay mode is missing or inconsistent.");
             var extensions = (document.Extra ?? []).ToImmutableDictionary(pair => pair.Key, pair => pair.Value.Clone());
             return new(document.SettingsRevision, values, extensions);
@@ -171,7 +184,7 @@ internal sealed class JsonPublishingPreferencesStore(string path, Action? before
             throw new InvalidDataException("Publishing settings revision is out of range.");
         var bytes = JsonSerializer.SerializeToUtf8Bytes(new Document
         {
-            SchemaVersion = 3,
+            SchemaVersion = 4,
             SettingsRevision = snapshot.SettingsRevision,
             ChannelName = values.ChannelName,
             Genre = values.Genre,
@@ -181,6 +194,7 @@ internal sealed class JsonPublishingPreferencesStore(string path, Action? before
             BitrateKbps = values.BitrateKbps,
             Lan = values.Lan,
             Wan = values.Wan,
+            Announce = values.Announce,
             RelayMode = values.RelayMode,
             Extra = snapshot.Extensions.ToDictionary(pair => pair.Key, pair => pair.Value.Clone()),
         }, JsonOptions);

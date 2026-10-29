@@ -26,6 +26,7 @@ public sealed record ObsPublishStatusSnapshot(
     ObsRtmpRejectionStage? RejectionStage,
     ObsRtmpRejectionReason? RejectionReason)
 {
+    public PublishingAnnounceStatus? Announce { get; init; }
     public ObsPublishLanStatus? LanRelay { get; init; }
     public ObsPublishWanStatus? WanRelay { get; init; }
 }

@@ -1,4 +1,7 @@
 using System.Net;
+using System.Reflection;
+using System.Reflection.Emit;
+using System.Runtime.CompilerServices;
 using PeerCast.Nova.Network.Publishing;
 using PeerCast.Nova.Protocol.Pcp;
 using static PeerCast.Nova.Network.Tests.AnnounceTestData;
@@ -7,6 +10,143 @@ namespace PeerCast.Nova.Network.Tests;
 
 public sealed class PcpAnnounceWorkerTests
 {
+    [Fact]
+    public async Task SilentTrackerContinuesAtThirtySixtyNinetySecondsAndCoalescesMetadata()
+    {
+        using var clock = new AnnounceManualTimeProvider();
+        var connector = new SilentProductionConnector();
+        await using var owner = new PcpAnnounceOwner(connector, timeProvider: clock);
+        var advertised = new IPEndPoint(IPAddress.Parse("198.41.0.4"), 17144);
+        var tracker = new IPEndPoint(IPAddress.Parse("198.41.0.5"), 7144);
+        var sid = Guid.NewGuid();
+        var identity = new PcpAnnounceIdentity(1, Guid.NewGuid(), sid, sid, owner.BroadcastId);
+        var capability = new PublishingAnnounceCapability(identity, Guid.NewGuid(),
+            new(IPAddress.Parse("192.168.1.2"), 7144), advertised, tracker, () => true);
+        PcpAnnounceDocument Snapshot(string name) => new(
+            new PeerCast.Nova.Core.Channels.ChannelMetadataSnapshot(name, "", "", "https://example.com/", "FLV", 128), advertised);
+        var oleh = PcpHeloCodec.CreateOleh("silent tracker", Guid.NewGuid());
+        connector.Connection.ReplaceHandshake(PcpAtom.Parent(oleh.Name, oleh.Children.Concat(new[]
+        {
+            PcpAtom.Leaf(PcpKnownAtomNames.HeloPort, PcpWireValueCodec.EncodeUInt16(17144)),
+            PcpAtom.Leaf(PcpKnownAtomNames.HeloRemoteIp, PcpWireValueCodec.EncodeLegacyIpv4(advertised.Address)),
+        }).ToArray()));
+        var worker = owner.Start(1, identity.ChannelId, sid, sid, PcpAnnounceEndpoint.Parse("pcp://198.41.0.5:7144"),
+            Snapshot("Motion + tone"), PcpAnnounceAccess.ForProduction(tracker), capability: capability);
+        await connector.Connection.NextWriteAsync();
+        Assert.Equal("Motion + tone", Name(Decode(await connector.Connection.NextWriteAsync())));
+        await clock.TimerCreated.Task.WaitAsync(Deadline);
+        await connector.Connection.IdleReadStarted.Task.WaitAsync(Deadline);
+        foreach (var seconds in new[] { 30, 60, 90 })
+        {
+            clock.Advance(TimeSpan.FromSeconds(30));
+            Assert.Equal("Motion + tone", Name(Decode(await connector.Connection.NextWriteAsync())));
+            Assert.Equal(seconds, clock.GetUtcNow().ToUnixTimeSeconds());
+            Assert.False(worker.Completion.IsCompleted);
+            Assert.True(worker.TrackerReport?.CanAnnounce(capability));
+            Assert.False(connector.Connection.Closed);
+            Assert.Equal(1, connector.Connection.PendingReads);
+        }
+        connector.Connection.BlockWriteAt = 6;
+        Assert.True(worker.Update(worker.Identity, Snapshot("in-flight")));
+        await connector.Connection.Blocked.Task.WaitAsync(Deadline);
+        for (var i = 0; i < 10; i++) Assert.True(worker.Update(worker.Identity, Snapshot($"latest{i}")));
+        connector.Connection.Release.TrySetResult();
+        Assert.Equal("in-flight", Name(Decode(await connector.Connection.NextWriteAsync())));
+        Assert.Equal("latest9", Name(Decode(await connector.Connection.NextWriteAsync())));
+        clock.Advance(TimeSpan.FromSeconds(30));
+        Assert.Equal("latest9", Name(Decode(await connector.Connection.NextWriteAsync())));
+        Assert.Equal(1, connector.Calls);
+        Assert.Equal(1, connector.Connection.MaxActiveWrites);
+        var result = await worker.StopAsync(PcpAnnounceStopReason.Finish).WaitAsync(Deadline);
+        Assert.True(result.StopNoticeSent && result.QuitSent && result.CleanupProven);
+        Assert.Equal(PcpAnnounceFailure.None, result.Failure);
+        Assert.Equal(0, connector.Connection.PendingReads);
+        Assert.Equal(0, clock.ActiveTimerCount);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public async Task SilentReadIsJoinedOnFinishEosDisposeOrCancellation(int stop)
+    {
+        var connector = new AnnounceFakeConnector();
+        using var cancel = new CancellationTokenSource();
+        await using var owner = new PcpAnnounceOwner(connector);
+        var worker = Start(owner, cancellationToken: cancel.Token);
+        await connector.Connection.NextWriteAsync(); await connector.Connection.NextWriteAsync();
+        await connector.Connection.IdleReadStarted.Task.WaitAsync(Deadline);
+        if (stop == 3) cancel.Cancel();
+        else if (stop == 2) await worker.DisposeAsync().AsTask().WaitAsync(Deadline);
+        else await worker.StopAsync((PcpAnnounceStopReason)stop).WaitAsync(Deadline);
+        var result = await worker.Completion.WaitAsync(Deadline);
+        Assert.Equal(stop == 3 ? PcpAnnounceStopReason.Cancelled : (PcpAnnounceStopReason)stop, result.StopReason);
+        Assert.True(result.StopNoticeSent && result.QuitSent && result.CleanupProven);
+        Assert.Equal(0, connector.Connection.PendingReads);
+        Assert.True(connector.Connection.Closed);
+        Assert.False(worker.Update(worker.Identity, Document("late")));
+    }
+
+    [Fact]
+    public async Task NonCooperativeSilentReadCannotProveCleanupOrPermitNextGeneration()
+    {
+        var connector = new AnnounceFakeConnector();
+        connector.Connection.IgnoreIdleReadCancellation = true;
+        await using var owner = new PcpAnnounceOwner(connector, new() { ShutdownTimeout = TimeSpan.FromMilliseconds(150) });
+        var worker = Start(owner);
+        await connector.Connection.NextWriteAsync(); await connector.Connection.NextWriteAsync();
+        await connector.Connection.IdleReadStarted.Task.WaitAsync(Deadline);
+        try
+        {
+            var result = await worker.StopAsync(PcpAnnounceStopReason.Finish).WaitAsync(Deadline);
+            Assert.False(result.CleanupProven);
+            Assert.Equal(1, connector.Connection.PendingReads);
+            Assert.Equal(PcpAnnounceState.CleanupIncomplete, worker.State);
+            Assert.True(connector.Connection.Aborted);
+            Assert.Throws<InvalidOperationException>(() => Start(owner, 2));
+        }
+        finally { connector.Connection.ReadRelease.TrySetResult(PcpAnnounceCodec.CreateQuit()); }
+        await connector.Connection.IdleReadFinished.Task.WaitAsync(Deadline);
+        await worker.Completion.WaitAsync(Deadline);
+        Assert.Equal(0, connector.Connection.PendingReads);
+        Assert.False(worker.CleanupProven);
+        Assert.Throws<InvalidOperationException>(() => Start(owner, 2));
+    }
+    [Fact]
+    public void IdleReadMustNotInstallATimeoutOnEitherClock()
+    {
+        // Fake time alone cannot catch the original system-clock WaitAsync(60s).
+        // Inspect this narrow read path as well, so the untouched original fails immediately.
+        var method = typeof(PcpAnnounceWorker).GetMethod("ReadControlAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var body = method.GetCustomAttribute<AsyncStateMachineAttribute>()?.StateMachineType
+            .GetMethod("MoveNext", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic) ?? method;
+        var il = body.GetMethodBody()!.GetILAsByteArray()!;
+        var opcodes = typeof(OpCodes).GetFields(BindingFlags.Public | BindingFlags.Static)
+            .Where(field => field.FieldType == typeof(OpCode)).Select(field => (OpCode)field.GetValue(null)!)
+            .ToDictionary(code => unchecked((ushort)code.Value));
+        for (var offset = 0; offset < il.Length;)
+        {
+            ushort value = il[offset++];
+            if (value == 0xfe) value = (ushort)(0xfe00 | il[offset++]);
+            var code = opcodes[value];
+            if (code.OperandType == OperandType.InlineMethod)
+            {
+                var called = body.Module.ResolveMethod(BitConverter.ToInt32(il, offset),
+                    body.DeclaringType!.GetGenericArguments(), null)!;
+                Assert.DoesNotContain(called.GetParameters(), parameter => parameter.ParameterType == typeof(TimeSpan));
+            }
+            offset += code.OperandType switch
+            {
+                OperandType.InlineNone => 0,
+                OperandType.ShortInlineBrTarget or OperandType.ShortInlineI or OperandType.ShortInlineVar => 1,
+                OperandType.InlineVar => 2,
+                OperandType.InlineI8 or OperandType.InlineR => 8,
+                OperandType.InlineSwitch => 4 + 4 * BitConverter.ToInt32(il, offset),
+                _ => 4,
+            };
+        }
+    }
     [Theory]
     [InlineData(0)]
     [InlineData(1)]
@@ -302,5 +442,16 @@ public sealed class PcpAnnounceWorkerTests
             Assert.Throws<InvalidOperationException>(() => Start(owner, 2));
         }
         finally { connector.Connection.Release.TrySetResult(); }
+    }
+    private sealed class SilentProductionConnector : IPcpAnnounceConnector
+    {
+        internal AnnounceFakeConnection Connection { get; } = new();
+        internal int Calls { get; private set; }
+        public Task<IPcpAnnounceConnection> ConnectAsync(IPEndPoint endpoint, CancellationToken cancellationToken)
+        {
+            Assert.Equal("198.41.0.5", endpoint.Address.ToString());
+            Calls++;
+            return Task.FromResult<IPcpAnnounceConnection>(Connection);
+        }
     }
 }

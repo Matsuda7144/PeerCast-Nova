@@ -11,11 +11,12 @@ public static class PcpAnnounceCodec
     public static readonly PcpAtomName BroadcastId = PcpAtomName.FromAscii("bcid");
     public static readonly PcpAtomName Disable = PcpAtomName.FromAscii("dis");
 
-    public static PcpAtom CreateHelo(string agent, Guid senderSessionId, Guid broadcastId, ushort port)
+    public static PcpAtom CreateHelo(string agent, Guid senderSessionId, Guid broadcastId, ushort port, bool requestPing = false)
     {
         ValidateIds(senderSessionId, broadcastId);
         if (port == 0) throw new ArgumentOutOfRangeException(nameof(port));
-        var helo = PcpHeloCodec.CreateHelo(agent, senderSessionId, openPort: port);
+        var helo = PcpHeloCodec.CreateHelo(agent, senderSessionId,
+            openPort: requestPing ? null : port, pingPort: requestPing ? port : null);
         return PcpAtom.Parent(helo.Name, helo.Children.Concat(new[]
         {
             PcpAtom.Leaf(BroadcastId, PcpWireValueCodec.EncodeGuid(broadcastId)),

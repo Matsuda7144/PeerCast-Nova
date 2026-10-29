@@ -23,8 +23,9 @@ public sealed record ObsPublishOwnerCleanupEvidence(
     public bool ForcedStopRequested { get; init; }
     public bool ForcedCancellationCompleted { get; init; }
     public bool RecordingFaultNotificationCompleted { get; init; }
+    public bool Announce { get; init; } = true;
     public bool WanNetwork { get; init; } = true;
-    public bool Completed => WanNetwork && Ingress && Relay && Fanout && HttpSource && HttpListener && RecordingLeases &&
+    public bool Completed => Announce && WanNetwork && Ingress && Relay && Fanout && HttpSource && HttpListener && RecordingLeases &&
         (!ForcedStopRequested || (ForcedCancellationCompleted && RecordingFaultNotificationCompleted));
 }
 
