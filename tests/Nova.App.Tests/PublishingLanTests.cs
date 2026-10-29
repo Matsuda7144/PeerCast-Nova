@@ -63,7 +63,7 @@ public sealed class PublishingLanTests
             Assert.Equal(Lan, loaded.Values.Lan);
             Assert.Equal(42, loaded.Extensions["Hint"].GetInt32());
             using var json = System.Text.Json.JsonDocument.Parse(await File.ReadAllTextAsync(path));
-            Assert.Equal(2, json.RootElement.GetProperty("SchemaVersion").GetInt32());
+            Assert.Equal(3, json.RootElement.GetProperty("SchemaVersion").GetInt32());
         }
         finally { Directory.Delete(directory, true); }
     }

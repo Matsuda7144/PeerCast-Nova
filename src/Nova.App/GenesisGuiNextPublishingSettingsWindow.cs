@@ -180,17 +180,22 @@ internal sealed class GenesisGuiNextPublishingSettingsWindow : IGenesisPublishin
             for (var index = 0; index < 5; index++)
                 if (!Add("STATIC", FieldLabels[index], 0, 20, 304 + index * 48, 136, 24) ||
                     !Add("EDIT", "", 1000 + index, 164, 300 + index * 48, 496, 28, true, 0x10080)) return false;
-            return Add("BUTTON", "LAN PCP Relayを有効にする", 1006, 20, 548, 620, 28, true, 0x10003) &&
-                Add("STATIC", "待受NIC / IPv4（同一Subnetのみ）", 0, 20, 586, 620, 24, true) &&
+            return Add("STATIC", "PCP公開モード", 0, 20, 548, 160, 24) &&
+                Add("COMBOBOX", "", 1006, 196, 544, 444, 180, true, 0x210003) &&
+                Add("STATIC", "待受NIC / IPv4", 0, 20, 586, 620, 24, true) &&
                 Add("COMBOBOX", "", 1007, 20, 614, 620, 180, true, 0x210003) &&
-                Add("STATIC", "LAN PCPポート (1～65535)", 0, 20, 656, 240, 24) &&
+                Add("STATIC", "内部PCPポート (1～65535)", 0, 20, 656, 240, 24) &&
                 Add("EDIT", "", 1008, 272, 652, 160, 28, style: 0x10080) &&
-                Add("STATIC", "既定OFF。IPv4 LANのみ。帯域制限は未適用です。\r\n接続設定にIPv4帯域数値がある場合はLAN開始不可。\r\nWAN公開・YP掲載・自動ポート開放は行いません。", 0, 20, 700, 640, 66, true) &&
-                Add("STATIC", "", NoticeId, 20, 780, 640, 44, true) &&
-                Add("STATIC", "", RevisionId, 20, 832, 640, 24, true) &&
-                Add("BUTTON", "保存", SaveId, 20, 866, 120, 32, style: 0x1000B) &&
-                Add("BUTTON", "キャンセル", CancelId, 160, 866, 120, 32, style: 0x1000B) &&
-                Add("STATIC", "", StatusId, 20, 912, 640, 54, true);
+                Add("STATIC", "公開IPv4（WANのみ・任意）", 0, 20, 700, 240, 24) &&
+                Add("EDIT", "", 1009, 272, 696, 320, 28, style: 0x10080) &&
+                Add("STATIC", "外部ポート (1～65535)", 0, 20, 742, 240, 24) &&
+                Add("EDIT", "", 1010, 272, 738, 160, 28, style: 0x10080) &&
+                Add("STATIC", "既定はこのPCのみ。LANは同一Subnetのみ受付。\r\nWANは次の配信開始で明示公開します。外部到達性は未確認。\r\n帯域数値上限がある場合はLAN/WAN開始不可。\r\nYP掲載・自動ポート開放・Firewall変更は行いません。", 0, 20, 786, 640, 88, true) &&
+                Add("STATIC", "", NoticeId, 20, 888, 640, 44, true) &&
+                Add("STATIC", "", RevisionId, 20, 940, 640, 24, true) &&
+                Add("BUTTON", "保存", SaveId, 20, 974, 120, 32, style: 0x1000B) &&
+                Add("BUTTON", "キャンセル", CancelId, 160, 974, 120, 32, style: 0x1000B) &&
+                Add("STATIC", "", StatusId, 20, 1020, 640, 64, true);
         }
         internal void Initialize()
         {
@@ -198,20 +203,33 @@ internal sealed class GenesisGuiNextPublishingSettingsWindow : IGenesisPublishin
             var input = _editor.Input;
             var values = new[] { input.ChannelName, input.Genre, input.Description, input.Comment, input.ContactUrl, input.BitrateKbps };
             for (var index = 0; index < values.Length; index++) SetText(1000 + index, values[index]);
-            _ = SendMessageW(GetDlgItem(window, 1006), 0x00F1, input.LanEnabled ? 1u : 0u, 0);
+            var modeCombo = GetDlgItem(window, 1006);
+            _ = SendMessageW(modeCombo, 0x014B, 0, 0);
+            foreach (var label in new[] { "このPCのみ (Loopback)", "LAN（同一Subnet）", "WAN（明示公開）" })
+                _ = SendMessageTextW(modeCombo, 0x0143, 0, label);
+            _ = SendMessageW(modeCombo, 0x014E, input.WanEnabled ? 2u : input.LanEnabled ? 1u : 0u, 0);
+            var selectedId = input.WanEnabled ? input.WanInterfaceId : input.LanInterfaceId;
+            var selectedAddress = input.WanEnabled ? input.WanAddress : input.LanAddress;
             _lanChoices.Clear();
             try
             {
                 foreach (var nic in settings.Interfaces.Read())
                 {
-                    if (!nic.IsUp || !ObsPublishLanOptions.TryPrivateAddress(nic.Address, out _)) continue;
-                    try { _ = new ObsPublishLanBinding(nic); _lanChoices.Add(nic); }
-                    catch (ObsPublishLanException) { }
+                    if (!nic.IsUp) continue;
+                    if (input.WanEnabled)
+                    {
+                        if (PublishingIpv4.IsBindAddress(nic.Address)) _lanChoices.Add(nic);
+                    }
+                    else if (ObsPublishLanOptions.TryPrivateAddress(nic.Address, out _))
+                    {
+                        try { _ = new ObsPublishLanBinding(nic); _lanChoices.Add(nic); }
+                        catch (ObsPublishLanException) { }
+                    }
                 }
             }
             catch { } // Empty list fails closed at Save/Start; never substitute another NIC.
-            if (input.LanAddress.Length != 0 && !_lanChoices.Any(nic => nic.Id == input.LanInterfaceId && nic.Address == input.LanAddress))
-                _lanChoices.Add(new(input.LanInterfaceId, "保存済み（未確認）", false, input.LanAddress, "", 0));
+            if (selectedAddress.Length != 0 && !_lanChoices.Any(nic => nic.Id == selectedId && nic.Address == selectedAddress))
+                _lanChoices.Add(new(selectedId, "保存済み（未確認）", false, selectedAddress, "", 0));
             var combo = GetDlgItem(window, 1007);
             _ = SendMessageW(combo, 0x014B, 0, 0);
             for (var index = 0; index < _lanChoices.Count; index++)
@@ -219,10 +237,16 @@ internal sealed class GenesisGuiNextPublishingSettingsWindow : IGenesisPublishin
                 var nic = _lanChoices[index];
                 var label = nic.Name.Length > 80 ? nic.Name[..80] : nic.Name;
                 _ = SendMessageTextW(combo, 0x0143, 0, $"{label} | {nic.Address}/{nic.PrefixLength}");
-                if (nic.Id == input.LanInterfaceId && nic.Address == input.LanAddress)
+                if (nic.Id == selectedId && nic.Address == selectedAddress)
                     _ = SendMessageW(combo, 0x014E, (nuint)index, 0);
             }
-            SetText(1008, input.LanPort);
+            SetText(1008, input.WanEnabled ? input.WanPort : input.LanPort);
+            SetText(1009, input.AdvertisedAddress);
+            SetText(1010, input.AdvertisedPort);
+            _ = EnableWindow(GetDlgItem(window, 1007), input.LanEnabled || input.WanEnabled);
+            _ = EnableWindow(GetDlgItem(window, 1008), input.LanEnabled || input.WanEnabled);
+            _ = EnableWindow(GetDlgItem(window, 1009), input.WanEnabled);
+            _ = EnableWindow(GetDlgItem(window, 1010), input.WanEnabled);
             SetText(NoticeId, "保存した設定は次の配信開始から適用されます。" + (isPublishing() ? "\r\n現在の配信には反映されません。" : ""));
             SetText(RevisionId, $"保存済み Revision: {settings.Saved.SettingsRevision} / 適用済み: {settings.Applied?.SettingsRevision.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "未開始"}");
             SetText(StatusId, _editor.Result.Message);
@@ -231,17 +255,32 @@ internal sealed class GenesisGuiNextPublishingSettingsWindow : IGenesisPublishin
         internal void Command(int id, int notification)
         {
             if (!_ready || Closed) return;
-            if (!_saving && (notification == 0x0300 && (id is >= 1000 and <= 1005 or 1008) ||
-                id == 1006 && notification == 0 || id == 1007 && notification == 1))
+            if (!_saving && id == 1006 && notification == 1)
             {
+                var mode = (int)SendMessageW(GetDlgItem(window, 1006), 0x0147, 0, 0);
+                if (mode is < 0 or > 2) return;
+                _editor.Edit(_editor.Input with { LanEnabled = mode == 1, WanEnabled = mode == 2 });
+                Initialize();
+                return;
+            }
+            if (!_saving && (notification == 0x0300 && (id is >= 1000 and <= 1005 or >= 1008 and <= 1010) ||
+                id == 1007 && notification == 1))
+            {
+                var input = _editor.Input;
                 var selected = (int)SendMessageW(GetDlgItem(window, 1007), 0x0147, 0, 0);
                 var nic = selected >= 0 && selected < _lanChoices.Count ? _lanChoices[selected] : null;
                 _editor.Edit(new(GetText(1000), GetText(1001), GetText(1002), GetText(1003), GetText(1004), GetText(1005))
                 {
-                    LanEnabled = SendMessageW(GetDlgItem(window, 1006), 0x00F0, 0, 0) == 1,
-                    LanInterfaceId = nic?.Id ?? "",
-                    LanAddress = nic?.Address ?? "",
-                    LanPort = GetText(1008),
+                    LanEnabled = input.LanEnabled,
+                    LanInterfaceId = input.LanEnabled ? nic?.Id ?? "" : input.LanInterfaceId,
+                    LanAddress = input.LanEnabled ? nic?.Address ?? "" : input.LanAddress,
+                    LanPort = input.LanEnabled ? GetText(1008) : input.LanPort,
+                    WanEnabled = input.WanEnabled,
+                    WanInterfaceId = input.WanEnabled ? nic?.Id ?? "" : input.WanInterfaceId,
+                    WanAddress = input.WanEnabled ? nic?.Address ?? "" : input.WanAddress,
+                    WanPort = input.WanEnabled ? GetText(1008) : input.WanPort,
+                    AdvertisedAddress = GetText(1009),
+                    AdvertisedPort = GetText(1010),
                 });
                 return;
             }
@@ -276,6 +315,12 @@ internal sealed class GenesisGuiNextPublishingSettingsWindow : IGenesisPublishin
             Initialize();
             if (_editor.Result.Field is { } field)
             {
+                if (field is "WanAddress" or "WanPort" or "AdvertisedAddress" or "AdvertisedPort")
+                {
+                    SetText(StatusId, _editor.Result.Message);
+                    _ = SetFocus(GetDlgItem(window, field switch { "WanPort" => 1008, "AdvertisedAddress" => 1009, "AdvertisedPort" => 1010, _ => 1007 }));
+                    return;
+                }
                 if (field is "LanAddress" or "LanPort")
                 {
                     SetText(StatusId, _editor.Result.Message);
@@ -293,7 +338,11 @@ internal sealed class GenesisGuiNextPublishingSettingsWindow : IGenesisPublishin
         }
         private void EnableInputs(bool enabled)
         {
-            for (var index = 0; index < 9; index++) _ = EnableWindow(GetDlgItem(window, 1000 + index), enabled);
+            for (var index = 0; index < 11; index++) _ = EnableWindow(GetDlgItem(window, 1000 + index), enabled);
+            _ = EnableWindow(GetDlgItem(window, 1007), enabled && (_editor.Input.LanEnabled || _editor.Input.WanEnabled));
+            _ = EnableWindow(GetDlgItem(window, 1008), enabled && (_editor.Input.LanEnabled || _editor.Input.WanEnabled));
+            _ = EnableWindow(GetDlgItem(window, 1009), enabled && _editor.Input.WanEnabled);
+            _ = EnableWindow(GetDlgItem(window, 1010), enabled && _editor.Input.WanEnabled);
             _ = EnableWindow(GetDlgItem(window, SaveId), enabled);
         }
         internal void ApplyLayout()
@@ -457,7 +506,7 @@ internal sealed class GenesisGuiNextPublishingSettingsWindow : IGenesisPublishin
 
 internal static class PublishingSettingsWindowLayout
 {
-    internal const int ContentHeight = 980;
+    internal const int ContentHeight = 1100;
     internal static int ClampScroll(int requested, int page, uint dpi) =>
         Math.Clamp(requested, 0, Math.Max(0, GenesisGuiNextPublishingSettingsWindow.Scale(ContentHeight, dpi) - page));
 }

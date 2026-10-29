@@ -254,7 +254,8 @@ public sealed partial class ObsPublishChannelHost
         var source = _httpSource is null ? Task.FromResult(true) :
             ReleaseOwned(ObsPublishTerminationPoint.HttpSourceCleanup, _httpSource.DisposeAsync);
         var listener = _ownsHttp ? ReleaseOwned(ObsPublishTerminationPoint.HttpListenerCleanup, _http.DisposeAsync) : Task.FromResult(true);
-        await Task.WhenAll(ingress, relay, fanout, source, listener).ConfigureAwait(false);
+        var network = StopWanNetworkAsync();
+        await Task.WhenAll(ingress, relay, fanout, source, listener, network).ConfigureAwait(false);
         var fanoutProof = _fanout.CleanupCompletion;
         var relaySnapshot = _relay.Snapshot;
         return new(await ingress, await relay && relaySnapshot.ActiveConnectionCount == 0 &&
@@ -262,7 +263,8 @@ public sealed partial class ObsPublishChannelHost
             relaySnapshot.AdmissionCleanupPendingCount == 0 && relaySnapshot.AdmissionCleanupFailedCount == 0 && RelayReservationsReleased,
             await fanout && fanoutProof?.IsCompletedSuccessfully == true && fanoutProof.Result.CleanupCompleted,
             await source && (_httpSource is null || _httpSource.CleanupCompleted), _ownsHttp,
-            await listener, _recording.Evidence.CleanupCompleted);
+            await listener, _recording.Evidence.CleanupCompleted)
+        { WanNetwork = await network };
     }
 
     private async Task<ObsPublishOwnerCleanupEvidence> ObserveLocalCleanupAsync(CancellationToken token)

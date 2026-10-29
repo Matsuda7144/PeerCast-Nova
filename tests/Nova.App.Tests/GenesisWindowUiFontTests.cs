@@ -300,6 +300,7 @@ public sealed class GenesisWindowUiFontTests
             "GenesisGuiNextPublishingSettingsWindow.cs",
             "PublishingChannelPreferences.cs",
             "PublishingLanPresentation.cs",
+            "PublishingWanPresentation.cs",
             "../Nova.Network/Publishing/ObsPublishChannelMetadata.cs",
             "NovaObsPublishingConnectionInfo.cs",
             "NovaGuiNextPublishingCommands.cs",

@@ -141,34 +141,52 @@ internal sealed class AnnounceLoopbackTracker : IAsyncDisposable
 internal sealed class AnnounceManualTimeProvider : TimeProvider, IDisposable
 {
     private long _ticks;
-    private ManualTimer? _timer;
+    private readonly List<ManualTimer> _timers = [];
+    private readonly object _gate = new();
+    internal int TimerCount { get { lock (_gate) return _timers.Count; } }
+    internal int ActiveTimerCount { get { lock (_gate) return _timers.Count(t => !t.Disposed); } }
     internal TaskCompletionSource TimerCreated { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     public override long TimestampFrequency => TimeSpan.TicksPerSecond;
-    public override long GetTimestamp() => _ticks;
+    public override long GetTimestamp() => Interlocked.Read(ref _ticks);
     public override DateTimeOffset GetUtcNow() => DateTimeOffset.UnixEpoch.AddTicks(_ticks);
     public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
     {
-        _timer = new(callback, state, _ticks + dueTime.Ticks, period.Ticks);
-        TimerCreated.TrySetResult();
-        return _timer;
+        lock (_gate)
+        {
+            var timer = new ManualTimer(this, callback, state, dueTime, period);
+            _timers.Add(timer);
+            TimerCreated.TrySetResult();
+            return timer;
+        }
     }
     internal void Advance(TimeSpan amount)
     {
-        _ticks += amount.Ticks;
-        _timer?.Fire(_ticks);
+        var now = Interlocked.Add(ref _ticks, amount.Ticks);
+        ManualTimer[] timers;
+        lock (_gate) timers = _timers.ToArray();
+        foreach (var timer in timers) timer.Fire(now);
     }
-    public void Dispose() => _timer?.Dispose();
-    private sealed class ManualTimer(TimerCallback callback, object? state, long due, long period) : ITimer
+    public void Dispose() { lock (_gate) foreach (var timer in _timers) timer.Dispose(); }
+    private sealed class ManualTimer(AnnounceManualTimeProvider clock, TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period) : ITimer
     {
+        private readonly object _gate = new();
         private bool _disposed;
-        public bool Change(TimeSpan dueTime, TimeSpan newPeriod) { due = dueTime.Ticks; period = newPeriod.Ticks; return !_disposed; }
-        public void Dispose() => _disposed = true;
+        private long _due = Due(clock.GetTimestamp(), dueTime);
+        private TimeSpan _period = period;
+        internal bool Disposed { get { lock (_gate) return _disposed; } }
+        public bool Change(TimeSpan nextDue, TimeSpan newPeriod)
+        { lock (_gate) { _due = Due(clock.GetTimestamp(), nextDue); _period = newPeriod; return !_disposed; } }
+        public void Dispose() { lock (_gate) _disposed = true; }
         public ValueTask DisposeAsync() { Dispose(); return ValueTask.CompletedTask; }
         internal void Fire(long now)
         {
-            if (_disposed || now < due) return;
-            due = now + period;
+            lock (_gate)
+            {
+                if (_disposed || now < _due) return;
+                _due = _period <= TimeSpan.Zero ? long.MaxValue : now + _period.Ticks;
+            }
             callback(state);
         }
+        private static long Due(long now, TimeSpan time) => time == Timeout.InfiniteTimeSpan ? long.MaxValue : now + time.Ticks;
     }
 }

@@ -13,6 +13,7 @@ public enum PcpDownstreamChildEndReason
     WriteTimedOut,
     WriteFailed,
     AdmissionClosed,
+    PingCompleted,
 }
 
 /// <summary>

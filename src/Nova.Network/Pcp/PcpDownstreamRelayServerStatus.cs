@@ -24,6 +24,7 @@ public enum PcpDownstreamRelayServerEndReason
 /// </summary>
 public sealed record PcpDownstreamRelayServerSnapshot
 {
+    public PcpWanIngressSnapshot? WanIngress { get; init; }
     internal PcpDownstreamRelayServerSnapshot(
         PcpDownstreamRelayServerState state,
         PcpDownstreamRelayServerEndReason? endReason,

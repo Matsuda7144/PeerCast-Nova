@@ -101,7 +101,11 @@ internal sealed class NovaObsPublishingReadOnlyStatus(INovaObsPublishingStatusSo
                 notStarted ? "未起動（待受未開始）" : panel.StateText,
                 panel.DiagnosticText, panel.Tone, status.EndReason,
                 status.RejectionStage, status.RejectionReason)
-            { IsSourceNotStarted = notStarted, LanRelayText = PublishingLanPresentation.Format(status.LanRelay, status.ChannelId.Value) };
+            {
+                IsSourceNotStarted = notStarted,
+                LanRelayText = status.WanRelay is { Enabled: true } wan
+                ? PublishingWanPresentation.Format(wan) : PublishingLanPresentation.Format(status.LanRelay, status.ChannelId.Value)
+            };
             return _last;
         }
         finally { Monitor.Exit(_gate); }

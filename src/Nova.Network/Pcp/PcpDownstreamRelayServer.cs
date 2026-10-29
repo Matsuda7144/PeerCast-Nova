@@ -19,6 +19,7 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
     private IDisposable? _publicMappingOwner;
     private readonly PcpRelayFanout _fanout;
     private readonly Func<IPAddress?, bool>? _acceptRemoteAddress;
+    private readonly PcpWanIngressPolicy? _wanIngress;
     private readonly ChannelId _channelId;
     private readonly Guid _localSessionId;
     private readonly PcpDownstreamChildOptions _childOptions;
@@ -79,7 +80,8 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
         NatPortMappingManager? portMapping = null,
         IPcpDownstreamRelayAdmission? admission = null,
         ChannelMetadataSnapshot? initialMetadata = null,
-        Func<IPAddress?, bool>? acceptRemoteAddress = null)
+        Func<IPAddress?, bool>? acceptRemoteAddress = null,
+        PcpWanIngressOptions? wanOptions = null)
     {
         ArgumentNullException.ThrowIfNull(localEndPoint);
         ArgumentNullException.ThrowIfNull(fanout);
@@ -114,6 +116,12 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
         _localSessionId = localSessionId;
         _admission = admission;
         _acceptRemoteAddress = acceptRemoteAddress;
+        if (wanOptions is not null)
+        {
+            wanOptions.Validate();
+            if (admission is null || portMapping is not null) throw new ArgumentException("WAN requires explicit admission without NAT mapping.", nameof(admission));
+            _wanIngress = new(wanOptions);
+        }
     }
 
     public IPEndPoint LocalEndPoint
@@ -189,6 +197,7 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
             ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
             if (_runTask is null) throw new InvalidOperationException("The relay server has not started.");
             _childAdmission.Close();
+            _wanIngress?.Close();
             return _closeAdmissionTask ??= Task.Run(WaitForAdmissionClosedAsync);
         }
     }
@@ -365,6 +374,7 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
     public async Task StopAsync(
         CancellationToken cancellationToken = default)
     {
+        _wanIngress?.Close();
         ObjectDisposedException.ThrowIf(
             Volatile.Read(ref _disposed) != 0,
             this);
@@ -400,6 +410,7 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
     /// </summary>
     public void RequestStop()
     {
+        _wanIngress?.Close();
         ObjectDisposedException.ThrowIf(
             Volatile.Read(ref _disposed) != 0,
             this);
@@ -412,6 +423,7 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
         lock (_gate)
         {
             if (_disposal is not null) return new(_disposal);
+            _wanIngress?.Close();
             Interlocked.Exchange(ref _disposed, 1);
             Interlocked.Exchange(ref _forcedStopRequested, 1);
             _disposal = Task.Run(DisposeCoreAsync);
@@ -512,6 +524,7 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
         }
         finally
         {
+            _wanIngress?.Close();
             var closed = false;
             try
             {
@@ -556,17 +569,24 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
         TcpTransportConnection connection,
         CancellationToken cancellationToken)
     {
+        if (_wanIngress is not null && cancellationToken.IsCancellationRequested) return false;
         // Gate before any HTTP/PCP read, reply or metadata disclosure.
         if (_acceptRemoteAddress is not null)
         {
             try { if (!_acceptRemoteAddress(connection.RemoteEndPoint?.Address)) return false; }
             catch { return false; }
         }
-        var entry = new SessionEntry(connection);
+        var lease = _wanIngress?.TryAccept(connection.RemoteEndPoint?.Address);
+        if (_wanIngress is not null && lease is null) return false;
+        var entry = new SessionEntry(connection) { WanLease = lease };
 
         lock (_gate)
         {
-            if (_childAdmission.IsClosed) return false;
+            if (_childAdmission.IsClosed)
+            {
+                if (lease is not null) TrackAdmissionCleanup(ReleaseWanAfterCleanupAsync(lease, connection.CleanupCompletion));
+                return false;
+            }
             _sessions.Add(entry);
             _acceptedConnectionCount = checked(
                 _acceptedConnectionCount + 1);
@@ -598,7 +618,8 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
                 admission: _admission,
                 childAdmission: _childAdmission,
                 quiescenceObserver: QuiescenceObserver,
-                initialMetadata: _initialMetadata);
+                initialMetadata: _initialMetadata,
+                wanIngress: entry.WanLease);
             result = await session.RunAsync(
                 cancellationToken).ConfigureAwait(false);
         }
@@ -623,6 +644,8 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
             }
             catch { internalFailure = true; }
             if (session is not null) TrackAdmissionCleanup(session.AdmissionCleanupCompletion);
+            if (entry.WanLease is { } lease) TrackAdmissionCleanup(ReleaseWanAfterCleanupAsync(lease, entry.Connection.CleanupCompletion,
+                session?.AdmissionCleanupCompletion));
             lock (_gate)
             {
                 _sessions.Remove(entry);
@@ -655,6 +678,17 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
         }
 
         await Task.WhenAll(tasks).ConfigureAwait(false);
+    }
+
+    private static async Task<bool> ReleaseWanAfterCleanupAsync(PcpWanIngressPolicy.Lease lease, Task transportCleanup, Task<bool>? workerCleanup = null)
+    {
+        try
+        {
+            await transportCleanup.ConfigureAwait(false);
+            if (workerCleanup is not null && !await workerCleanup.ConfigureAwait(false)) return false;
+            lease.Dispose(); return true;
+        }
+        catch { return false; }
     }
 
     private void RecordResultLocked(PcpDownstreamChildResult result)
@@ -718,6 +752,8 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
             case PcpDownstreamChildEndReason.WriteFailed:
                 _writeFailedCount = checked(_writeFailedCount + 1);
                 break;
+            case PcpDownstreamChildEndReason.PingCompleted:
+                break;
             default:
                 throw new InvalidOperationException(
                     "Unknown downstream child end reason.");
@@ -754,7 +790,8 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
             AdmissionClosedCount = _admissionClosedCount,
             AdmissionCloseFailedCount = _admissionCloseFailedCount,
             AdmissionCleanupPendingCount = _pendingAdmissionCleanup.Count,
-            AdmissionCleanupFailedCount = _admissionCleanupFailedCount
+            AdmissionCleanupFailedCount = _admissionCleanupFailedCount,
+            WanIngress = _wanIngress?.Snapshot,
         };
     }
 
@@ -781,5 +818,6 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
         public TcpTransportConnection Connection { get; }
 
         public Task? Task { get; set; }
+        public PcpWanIngressPolicy.Lease? WanLease { get; init; }
     }
 }

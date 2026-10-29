@@ -27,6 +27,11 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
     private readonly Func<ChannelId, ChannelSessionId, PcpRelayFanout, IPcpDownstreamRelayRegistration>? _registerRelay;
     private IPcpDownstreamRelayRegistration? _relayRegistration;
     private ObsPublishLanBinding? _lanBinding;
+    private ObsPublishWanBinding? _wanBinding;
+    private ObsPublishWanFailure _wanFailure;
+    private readonly IObsPublishInterfaceChanges _interfaceChanges;
+    private ObsPublishWanNetworkLifetime? _wanNetwork;
+    private Task<bool>? _wanNetworkCleanup;
     private ObsPublishLanFailure _lanFailure;
     private readonly PcpRelayFanoutRecordingStreamSourceLeaseFactory _recording;
     private readonly RecordingStreamSourceLeaseRegistry _registry;
@@ -57,8 +62,9 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
         PcpHttpFlvPlaybackHost? httpHost = null,
         RecordingStreamSourceLeaseRegistry? recordingRegistry = null,
         IObsPublishLanInterfaces? interfaces = null,
-        Func<ChannelId, ChannelSessionId, PcpRelayFanout, IPcpDownstreamRelayRegistration>? registerRelay = null)
-        : this(options, channelId, httpHost, recordingRegistry, null, null, interfaces, registerRelay)
+        Func<ChannelId, ChannelSessionId, PcpRelayFanout, IPcpDownstreamRelayRegistration>? registerRelay = null,
+        IObsPublishInterfaceChanges? interfaceChanges = null)
+        : this(options, channelId, httpHost, recordingRegistry, null, null, interfaces, registerRelay, interfaceChanges)
     {
     }
 
@@ -68,8 +74,12 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
         Func<IAsyncDisposable?>? acquireRecordingOwner,
         PcpRecordingSourceCleanupObserver? recordingCleanupObserver,
         IObsPublishLanInterfaces? interfaces = null,
-        Func<ChannelId, ChannelSessionId, PcpRelayFanout, IPcpDownstreamRelayRegistration>? registerRelay = null)
+        Func<ChannelId, ChannelSessionId, PcpRelayFanout, IPcpDownstreamRelayRegistration>? registerRelay = null,
+        IObsPublishInterfaceChanges? interfaceChanges = null,
+        Func<IPEndPoint, IPEndPoint>? bindForTests = null,
+        PcpWanIngressOptions? wanIngressForTests = null)
     {
+        _interfaceChanges = interfaceChanges ?? SystemObsPublishInterfaceChanges.Instance;
         _interfaces = interfaces ?? SystemObsPublishLanInterfaces.Instance;
         _registerRelay = registerRelay;
         var supplied = options ?? new();
@@ -100,11 +110,15 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
         _recording = new PcpRelayFanoutRecordingStreamSourceLeaseFactory(ChannelId, SessionId, _fanout,
             acquireOwnerLease: acquireRecordingOwner)
         { CleanupObserver = recordingCleanupObserver };
+        var endpoint = new IPEndPoint(_options.Wan.Enabled ? IPAddress.Parse(_options.Wan.Address) : _options.Lan.Enabled ? IPAddress.Parse(_options.Lan.Address) : IPAddress.Loopback,
+            _options.Wan.Enabled ? _options.Wan.Port : _options.Lan.Enabled ? _options.Lan.Port : _options.RelayPort);
+        var wanControl = _options.Wan.Enabled ? wanIngressForTests ?? new PcpWanIngressOptions() : null;
         _relay = new PcpDownstreamRelayServer(
-            new IPEndPoint(_options.Lan.Enabled ? IPAddress.Parse(_options.Lan.Address) : IPAddress.Loopback,
-                _options.Lan.Enabled ? _options.Lan.Port : _options.RelayPort), _fanout, ChannelId, SessionId.Value,
-            initialMetadata: InitialMetadata, admission: _options.Lan.Enabled ? new LanAdmission(this) : null,
-            acceptRemoteAddress: _options.Lan.Enabled ? address => Volatile.Read(ref _lanBinding)?.Accepts(address) == true : null);
+            bindForTests?.Invoke(endpoint) ?? endpoint, _fanout, ChannelId, SessionId.Value,
+            initialMetadata: InitialMetadata, admission: _options.Lan.Enabled || _options.Wan.Enabled ? new LanAdmission(this) : null,
+            acceptRemoteAddress: _options.Wan.Enabled ? address => CanAcceptWan && wanControl!.SourceAllowed(address)
+                : _options.Lan.Enabled ? address => Volatile.Read(ref _lanBinding)?.Accepts(address) == true : null,
+            wanOptions: wanControl);
         _ingest = new ObsRtmpIngestHost(ChannelId, SessionId, new PublishConsumer(this), _options.Ingest);
     }
 
@@ -145,7 +159,7 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
                     port is null ? null : $"rtmp://127.0.0.1:{port}/{_options.Ingest.Application}",
                     _options.Ingest.StreamName, head ? Volatile.Read(ref _httpStreamUrl) : null,
                     result?.EndReason, result?.Rejection?.Stage, result?.Rejection?.Reason)
-                { LanRelay = ReadLanStatus(active) };
+                { LanRelay = ReadLanStatus(active), WanRelay = ReadWanStatus(active) };
                 // Serialize observed revisions across tracker, TCP and terminal facts.
                 // TCP accept/listener changes need not advance ChannelStatusTracker.
                 // These are observation revisions, not an atomic network-event log.
@@ -196,10 +210,11 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
         try
         {
             lifetime.Token.ThrowIfCancellationRequested();
-            if (_options.Lan.Enabled)
+            if (_options.Lan.Enabled || _options.Wan.Enabled)
             {
                 // Revalidate at explicit Start before allocating any listener.
-                _lanBinding = _options.Lan.Resolve(_interfaces);
+                if (_options.Wan.Enabled) _wanBinding = _options.Wan.Resolve(_interfaces);
+                else _lanBinding = _options.Lan.Resolve(_interfaces);
                 _relayRegistration = _registerRelay?.Invoke(ChannelId, SessionId, _fanout)
                     ?? throw new ObsPublishLanException(ObsPublishLanFailure.AdmissionUnavailable);
                 if (_relayRegistration.ChannelId != ChannelId || _relayRegistration.SessionId != SessionId)
@@ -218,9 +233,12 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
             _tracker.UpdateMetadata(InitialMetadata);
             relayTask = _relay.RunAsync(lifetime.Token);
             _relayRunTask = relayTask;
+            if (_wanBinding is not null) _wanNetwork = new(_wanBinding, _interfaces, _interfaceChanges);
             _ingest.Start(lifetime.Token);
             started = true;
-            var first = await Task.WhenAny(_ingest.Completion, relayTask, _httpChild.Completion, _localFinishRequested.Task).ConfigureAwait(false);
+            Task[] endings = [_ingest.Completion, relayTask, _httpChild.Completion, _localFinishRequested.Task];
+            var first = await Task.WhenAny(_wanNetwork is null ? endings : endings.Append(_wanNetwork.Invalidated)).ConfigureAwait(false);
+            if (_wanNetwork?.Invalidated.IsCompleted == true) _wanFailure = ObsPublishWanFailure.NetworkChanged;
             await ObserveTerminationAsync(ObsPublishTerminationPoint.BeforeEndSelection).ConfigureAwait(false);
             if (first == _ingest.Completion)
             {
@@ -230,6 +248,7 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
             else
             {
                 reason = first == _localFinishRequested.Task ? ObsPublishChannelEndReason.LocalTerminated :
+                    first == _wanNetwork?.Invalidated ? ObsPublishChannelEndReason.TransportFailed :
                     lifetime.IsCancellationRequested ? ObsPublishChannelEndReason.HostCancelled :
                     first == relayTask ? ObsPublishChannelEndReason.DownstreamFailed :
                     ObsPublishChannelEndReason.ConsumerFaulted;
@@ -241,12 +260,20 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
         }
         catch (ObsPublishLanException exception)
         {
-            _lanFailure = exception.Failure;
+            if (_options.Wan.Enabled) _wanFailure = exception.Failure == ObsPublishLanFailure.BandwidthUnsupported
+                ? ObsPublishWanFailure.BandwidthUnsupported : ObsPublishWanFailure.AdmissionUnavailable;
+            else _lanFailure = exception.Failure;
+            reason = ObsPublishChannelEndReason.StartupFailed;
+        }
+        catch (ObsPublishWanException exception)
+        {
+            _wanFailure = exception.Failure;
             reason = ObsPublishChannelEndReason.StartupFailed;
         }
         catch (Exception)
         {
             if (_options.Lan.Enabled && !started) _lanFailure = ObsPublishLanFailure.BindFailed;
+            if (_options.Wan.Enabled && !started) _wanFailure = ObsPublishWanFailure.BindFailed;
             reason = started ? ObsPublishChannelEndReason.InternalFailure : ObsPublishChannelEndReason.StartupFailed;
         }
         finally
@@ -297,7 +324,7 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
                 _headAvailable.TrySetResult(false);
                 try
                 {
-                    if (_options.Lan.Enabled && _relayRunTask is not null)
+                    if ((_options.Lan.Enabled || _options.Wan.Enabled) && _relayRunTask is not null)
                         await _relay.StopAcceptingAsync().ConfigureAwait(false);
                     if (reason != ObsPublishChannelEndReason.PublisherStopped)
                         await lifetime.CancelAsync().ConfigureAwait(false);
@@ -350,6 +377,7 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
             catch (Exception) { clean = false; }
         }
         clean &= _relay.Snapshot.CleanupIncompleteCount == 0 && RelayReservationsReleased;
+        clean &= await StopWanNetworkAsync().ConfigureAwait(false);
         if (_localFinishResult is null && _forceRequested)
         {
             // All independent releases were already started. A noncooperative
@@ -456,6 +484,35 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
     }
 
     private bool RelayReservationsReleased => _relayRegistration is null || _relayRegistration.ReservationCount == 0;
+    private bool CanAcceptWan => !Volatile.Read(ref _ending) && Volatile.Read(ref _disposeTask) is null &&
+        !_localFinishRequested.Task.IsCompleted && !_stop.IsCancellationRequested && _wanNetwork?.Invalidated.IsCompleted != true;
+
+    private Task<bool> StopWanNetworkAsync()
+    {
+        lock (_gate) return _wanNetworkCleanup ??= StopCoreAsync();
+        async Task<bool> StopCoreAsync()
+        {
+            try
+            {
+                if (_wanNetwork is not null) await _wanNetwork.DisposeAsync().AsTask().WaitAsync(_options.DrainTimeout).ConfigureAwait(false);
+                return true;
+            }
+            catch { return false; }
+        }
+    }
+
+    private ObsPublishWanStatus? ReadWanStatus(bool active)
+    {
+        if (!_options.Wan.Enabled) return null;
+        var incomplete = _result is { ShutdownCompleted: false };
+        var ready = active && _wanFailure == ObsPublishWanFailure.None && _wanNetwork?.Invalidated.IsCompleted != true &&
+            _relay.Snapshot.State == PcpDownstreamRelayServerState.Running;
+        var bound = ready ? _relay.LocalEndPoint : null;
+        ready &= bound?.Address.ToString() == _options.Wan.Address && bound.Port == _options.Wan.Port;
+        return new(true, ready, ready ? bound!.Address.ToString() : null, ready ? bound!.Port : null,
+            _options.Wan.AdvertisedAddress.Length == 0 ? null : _options.Wan.AdvertisedAddress,
+            _options.Wan.AdvertisedPort == 0 ? null : _options.Wan.AdvertisedPort, _wanFailure, incomplete);
+    }
 
     private ObsPublishLanStatus ReadLanStatus(bool active)
     {
@@ -470,6 +527,7 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
         public bool TryReserve(long connectionId, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IDisposable? reservation, CancellationToken cancellationToken = default)
         {
             reservation = null;
+            if (owner._options.Wan.Enabled && !owner.CanAcceptWan) return false;
             return owner._relayRegistration?.TryReserve(connectionId, out reservation, cancellationToken) == true;
         }
     }

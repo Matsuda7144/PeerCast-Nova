@@ -43,8 +43,10 @@ public sealed class PcpDownstreamChildSession :
     private readonly ReadOnlyMemory<byte> _initialMetadata;
     private readonly PcpRelayChildAdmission? _childAdmission;
     private readonly PcpRelayQuiescenceObserver? _quiescenceObserver;
+    private readonly PcpWanIngressPolicy.Lease? _wanIngress;
     private IDisposable? _admissionReservation;
     private Task<bool> _admissionCleanup = Task.FromResult(true);
+    private Task? _pingWrite;
     private readonly CancellationTokenSource _lifetimeSource = new();
     private readonly TaskCompletionSource _handshakeReady = new(
         TaskCreationOptions.RunContinuationsAsynchronously);
@@ -87,7 +89,8 @@ public sealed class PcpDownstreamChildSession :
         IPcpDownstreamRelayAdmission? admission = null,
         PcpRelayChildAdmission? childAdmission = null,
         PcpRelayQuiescenceObserver? quiescenceObserver = null,
-        ReadOnlyMemory<byte> initialMetadata = default)
+        ReadOnlyMemory<byte> initialMetadata = default,
+        PcpWanIngressPolicy.Lease? wanIngress = null)
         : this(
             connection,
             fanout,
@@ -103,6 +106,7 @@ public sealed class PcpDownstreamChildSession :
         _childAdmission = childAdmission;
         _quiescenceObserver = quiescenceObserver;
         _initialMetadata = initialMetadata;
+        _wanIngress = wanIngress;
     }
 
     private PcpDownstreamChildSession(
@@ -324,8 +328,8 @@ public sealed class PcpDownstreamChildSession :
 
         await using var atomReader = new PcpAtomPipeMessageReader(
             pipeReader,
-            _options.CreateControlLimits(),
-            _options.MaxControlAtomBytes);
+            _wanIngress is null ? _options.CreateControlLimits() : new PcpProtocolLimits { MaxContentLength = 4096, MaxChildCount = 32, MaxNestingDepth = 4 },
+            _wanIngress is null ? _options.MaxControlAtomBytes : 4096);
 
         PcpDownstreamChildEndReason endReason;
         var cleanupCompleted = true;
@@ -362,6 +366,10 @@ public sealed class PcpDownstreamChildSession :
         catch (EndOfStreamException)
         {
             endReason = PcpDownstreamChildEndReason.ConnectionEnded;
+        }
+        catch (InvalidDataException) when (_wanIngress is not null)
+        {
+            endReason = PcpDownstreamChildEndReason.ProtocolRejected;
         }
         catch (IOException)
         {
@@ -411,6 +419,8 @@ public sealed class PcpDownstreamChildSession :
                     _admissionCleanup = ReleaseAdmissionAfterCleanupAsync(
                         reservation, _connection.CleanupCompletion,
                         _registration?.Completion ?? Task.CompletedTask);
+                if (_pingWrite is { } pingWrite)
+                    _admissionCleanup = ObservePingCleanupAsync(pingWrite, _connection.CleanupCompletion);
             }
         }
 
@@ -418,6 +428,7 @@ public sealed class PcpDownstreamChildSession :
         // Callback success is separate from actual worker/transport termination
         // and the existing reservation-release proof chain.
         cleanupCompleted &= snapshot?.CleanupFailed != true;
+        cleanupCompleted &= _pingWrite?.IsCompleted != false;
         return new PcpDownstreamChildResult(
             endReason,
             _httpStatusCode == 0 ? null : _httpStatusCode,
@@ -436,12 +447,22 @@ public sealed class PcpDownstreamChildSession :
             CancellationTokenSource operationSource)
     {
         using var handshakeTimeoutSource = new CancellationTokenSource(
-            _options.HandshakeTimeout);
+            _wanIngress?.Remaining(_options.HandshakeTimeout) ?? _options.HandshakeTimeout,
+            _wanIngress?.Clock ?? TimeProvider.System);
         using var handshakeSource =
             CancellationTokenSource.CreateLinkedTokenSource(
                 operationSource.Token,
                 handshakeTimeoutSource.Token);
         var handshakeToken = handshakeSource.Token;
+
+        if (_wanIngress is { } ingress)
+        {
+            using var identify = new CancellationTokenSource(ingress.Remaining(ingress.IdentificationTimeout), ingress.Clock);
+            using var identifyLinked = CancellationTokenSource.CreateLinkedTokenSource(handshakeToken, identify.Token);
+            if (await PcpWanProtocolIngress.IsDirectPcpAsync(pipeReader, identifyLinked.Token).ConfigureAwait(false))
+                return await PcpWanProtocolIngress.RunPingAsync(atomReader, _localSessionId, ingress,
+                    WritePingAsync, operationSource.Token).ConfigureAwait(false);
+        }
 
         PcpDownstreamRelayRequest relayRequest;
 
@@ -575,6 +596,7 @@ public sealed class PcpDownstreamChildSession :
             await WriteControlAsync(_initialMetadata, handshakeToken, _packetWriter).ConfigureAwait(false);
 
         Interlocked.Exchange(ref _handshakeAccepted, 1);
+        _wanIngress?.Handshaken();
         _handshakeReady.TrySetResult();
         handshakeTimeoutSource.CancelAfter(Timeout.InfiniteTimeSpan);
 
@@ -637,6 +659,20 @@ public sealed class PcpDownstreamChildSession :
             // A terminal worker fault still means its callback has returned.
         }
         reservation.Dispose();
+        return true;
+    }
+
+    private async ValueTask WritePingAsync(ReadOnlyMemory<byte> bytes, CancellationToken token)
+    {
+        _pingWrite = WriteControlAsync(bytes, token, _packetWriter).AsTask();
+        await _pingWrite.WaitAsync(token).ConfigureAwait(false);
+    }
+    private static async Task<bool> ObservePingCleanupAsync(Task write, Task transport)
+    {
+        try { await transport.ConfigureAwait(false); }
+        catch { return false; }
+        try { await write.ConfigureAwait(false); }
+        catch { /* An ended faulted write is distinct from a retained worker. */ }
         return true;
     }
 
