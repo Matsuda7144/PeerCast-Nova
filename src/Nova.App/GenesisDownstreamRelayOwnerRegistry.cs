@@ -137,7 +137,7 @@ internal sealed class GenesisDownstreamRelayOwnerRegistry : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    internal sealed class Owner : IPcpDownstreamRelayRegistration
+    internal sealed class Owner : IPcpDownstreamRelayRegistration, IPcpDownstreamRelayCapacity
     {
         private readonly GenesisDownstreamRelayOwnerRegistry _registry;
         internal Owner(GenesisDownstreamRelayOwnerRegistry registry, RelayAdmissionPolicy.Channel scope)
@@ -148,6 +148,8 @@ internal sealed class GenesisDownstreamRelayOwnerRegistry : IDisposable
         internal RelayAdmissionPolicy.Channel Scope { get; }
         internal bool Retired { get; set; }
         internal int ActiveReservations { get; set; }
+        public bool IsCurrent { get { lock (_registry._gate) return !_registry._disposed && !Retired && Scope.IsCurrent; } }
+        public bool CanReserve { get { lock (_registry._gate) return !_registry._disposed && !Retired && Scope.CanReserve; } }
         public int ReservationCount { get { lock (_registry._gate) { return ActiveReservations; } } }
         public ChannelId ChannelId => Scope.ChannelId;
         public ChannelSessionId SessionId => Scope.SessionId;

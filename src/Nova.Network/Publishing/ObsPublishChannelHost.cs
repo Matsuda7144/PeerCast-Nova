@@ -18,6 +18,11 @@ namespace PeerCast.Nova.Network.Publishing;
 public sealed partial class ObsPublishChannelHost : IAsyncDisposable
 {
     private readonly PublishingAnnounceOwner? _announceOwner;
+    private readonly TimeProvider _announceTime;
+    private long? _announceStart, _announceStopped;
+    private CancellationToken _announceCallerCancellation;
+    private readonly object _announceStateGate = new();
+    private PublishingAnnounceRuntimeSnapshot? _lastAnnounceRuntime;
     private PublishingAnnounceSession? _announce;
     private bool _announceFailed;
     public PublishingAnnounceStatus AnnounceStatus => _announce?.Status ?? new(_announceFailed ? "Failed" : _options.Announce.Enabled ? "WaitingForListener" : "Disabled", false, false, false, true);
@@ -81,8 +86,9 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
         Func<ChannelId, ChannelSessionId, PcpRelayFanout, IPcpDownstreamRelayRegistration>? registerRelay = null,
         IObsPublishInterfaceChanges? interfaceChanges = null,
         Func<IPEndPoint, IPEndPoint>? bindForTests = null,
-        PcpWanIngressOptions? wanIngressForTests = null, PublishingAnnounceOwner? announceOwner = null)
+        PcpWanIngressOptions? wanIngressForTests = null, PublishingAnnounceOwner? announceOwner = null, TimeProvider? announceTime = null)
     {
+        _announceTime = announceTime ?? TimeProvider.System;
         _announceOwner = announceOwner;
         _interfaceChanges = interfaceChanges ?? SystemObsPublishInterfaceChanges.Instance;
         _interfaces = interfaces ?? SystemObsPublishLanInterfaces.Instance;
@@ -197,6 +203,8 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
             cancellationToken.ThrowIfCancellationRequested();
             if (_completion is not null)
                 throw new InvalidOperationException("A publish host supports one generation.");
+            _announceCallerCancellation = cancellationToken;
+            _announceStart = _announceTime.GetTimestamp();
             _completion = RunAsync(cancellationToken);
         }
     }
@@ -248,7 +256,8 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
                 {
                     _announce = _announceOwner.Start(_options.Announce, ChannelId, SessionId, InitialMetadata, RelayEndPoint,
                     new IPEndPoint(IPAddress.Parse(_options.Wan.AdvertisedAddress), _options.Wan.AdvertisedPort),
-                    () => !lifetime.IsCancellationRequested && CanAcceptWan && ReadWanStatus(true)?.ListenerReady == true);
+                    () => !lifetime.IsCancellationRequested && CanAcceptWan && ReadWanStatus(true)?.ListenerReady == true &&
+                        (_relayRegistration as IPcpDownstreamRelayCapacity)?.IsCurrent == true, ReadAnnounceRuntime);
                 }
                 catch { _announceFailed = true; /* Announce failure does not stop ingest or relay. */ }
             }
@@ -298,6 +307,7 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
             lock (_gate)
             {
                 _ending = true;
+                if (_announceStart is not null) _announceStopped ??= _announceTime.GetTimestamp();
                 local = _localFinish;
                 _registered = false;
                 _recording.StopAccepting();
@@ -449,6 +459,7 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
             _tracker.TransitionTo(ChannelSessionState.Receiving);
             lock (_gate) { if (!_ending) _recording.StartAccepting(); }
             _headAvailable.TrySetResult(true);
+            NotifyAnnounceRuntimeChanged();
         }
         else _data++;
         _tracker.AdvanceStreamPosition(_acceptedBytes);
@@ -502,6 +513,37 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
     }
 
     private bool RelayReservationsReleased => _relayRegistration is null || _relayRegistration.ReservationCount == 0;
+    private void NotifyAnnounceRuntimeChanged() => Volatile.Read(ref _announce)?.NotifyRuntimeChanged();
+    internal PublishingAnnounceRuntimeSnapshot ReadAnnounceRuntime()
+    {
+        var live = CanAcceptWan && !_announceCallerCancellation.IsCancellationRequested && _announceStart is not null;
+        uint uptime;
+        lock (_gate)
+        {
+            if (!live && _announceStart is not null) _announceStopped ??= _announceTime.GetTimestamp();
+            uptime = _announceStart is { } start ? (uint)Math.Clamp(
+                _announceTime.GetElapsedTime(start, _announceStopped ?? _announceTime.GetTimestamp()).TotalSeconds,
+                0, uint.MaxValue) : 0;
+        }
+        var relay = _relay.ReadRuntimeCapacity();
+        var canReserve = false;
+        var currentAdmission = false;
+        try
+        {
+            var capacity = _relayRegistration as IPcpDownstreamRelayCapacity;
+            currentAdmission = capacity?.IsCurrent == true;
+            canReserve = capacity?.CanReserve == true;
+        }
+        catch { /* Unknown capacity is not permission to announce availability. */ }
+        var value = PublishingAnnounceRuntimeSnapshot.Create(PublishingStatus, live && currentAdmission, canReserve,
+            relay.CanAccept, _fanout.CanAddChild, relay.RelayCount, uptime) with
+        { Revision = 0 };
+        lock (_announceStateGate)
+        {
+            if (_lastAnnounceRuntime is not null && value == (_lastAnnounceRuntime with { Revision = 0 })) return _lastAnnounceRuntime;
+            return _lastAnnounceRuntime = value with { Revision = checked((_lastAnnounceRuntime?.Revision ?? 0) + 1) };
+        }
+    }
     private bool CanAcceptWan => !Volatile.Read(ref _ending) && Volatile.Read(ref _disposeTask) is null &&
         !_localFinishRequested.Task.IsCompleted && !_stop.IsCancellationRequested && _wanNetwork?.Invalidated.IsCompleted != true;
 

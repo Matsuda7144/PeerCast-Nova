@@ -129,10 +129,15 @@ internal sealed class PcpAnnounceDocument
         var bcid = Guid.Parse("00000000-0000-0000-0000-000000000003");
         Encode(new(1, MetadataChannelId, sid, sid, bcid), true);
     }
-    internal byte[] Encode(PcpAnnounceIdentity identity, bool receiving)
+    internal byte[] Encode(PcpAnnounceIdentity identity, bool receiving, PublishingAnnounceRuntimeSnapshot? runtime = null)
     {
+        if (runtime is not null && (runtime.ChannelId.Value != identity.ChannelId || runtime.SessionId.Value != identity.PublishingSessionId))
+            throw new InvalidDataException("HOST snapshot belongs to another generation.");
+        var active = receiving && (runtime?.Receiving ?? true);
         var atom = PcpAnnounceCodec.CreateBroadcast(identity.ChannelId, identity.SenderSessionId, identity.BroadcastId,
-            _info, _track, _address, Port, _listeners, _relays, _uptime, receiving, _relay, _direct);
+            _info, _track, _address, Port, runtime?.DirectCount ?? _listeners, runtime?.RelayCount ?? _relays,
+            runtime?.UptimeSeconds ?? _uptime, active, active && (runtime?.RelayAvailable ?? _relay),
+            active && (runtime?.DirectAvailable ?? _direct));
         return EncodeAtom(atom);
     }
     internal static byte[] EncodeAtom(PcpAtom atom)

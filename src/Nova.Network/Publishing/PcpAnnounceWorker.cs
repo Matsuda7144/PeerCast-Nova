@@ -9,6 +9,9 @@ internal sealed class PcpAnnounceWorker : IAsyncDisposable
     private readonly object _gate = new();
     private readonly HashSet<Task> _pending = [];
     private readonly PcpAnnounceIdentity _identity;
+    private readonly Func<PublishingAnnounceRuntimeSnapshot>? _runtime;
+    private long _lastRuntimeRevision = -1;
+    private byte[]? _lastPublished;
     private readonly PublishingAnnounceCapability? _capability;
     internal PublishingTrackerReport? TrackerReport { get; private set; }
     private readonly PcpAnnounceEndpoint _endpoint;
@@ -33,8 +36,9 @@ internal sealed class PcpAnnounceWorker : IAsyncDisposable
 
     internal PcpAnnounceWorker(PcpAnnounceIdentity identity, PcpAnnounceEndpoint endpoint,
         PcpAnnounceDocument document, PcpAnnounceAccess access, IPcpAnnounceConnector connector,
-        PcpAnnounceOptions? options = null, TimeProvider? timeProvider = null, PublishingAnnounceCapability? capability = null)
+        PcpAnnounceOptions? options = null, TimeProvider? timeProvider = null, PublishingAnnounceCapability? capability = null, Func<PublishingAnnounceRuntimeSnapshot>? runtime = null)
     {
+        _runtime = runtime;
         _capability = capability;
         if (capability is not null && capability.Identity != identity) throw new ArgumentException("Capability identity mismatch.", nameof(capability));
         _identity = identity; _endpoint = endpoint; _initial = document; _latest = document; _access = access; _connector = connector;
@@ -116,9 +120,7 @@ internal sealed class PcpAnnounceWorker : IAsyncDisposable
             SetState(PcpAnnounceState.Connected);
             if (!_stop.Task.IsCompleted)
             {
-                await WriteAsync(CurrentDocument().Encode(_identity, true)).ConfigureAwait(false);
-                _announced = true;
-                SetState(PcpAnnounceState.AnnounceSent);
+                await PublishRuntimeAsync(periodic: false).ConfigureAwait(false);
                 await UpdatesAsync().ConfigureAwait(false);
             }
         }
@@ -141,7 +143,7 @@ internal sealed class PcpAnnounceWorker : IAsyncDisposable
                 {
                     try
                     {
-                        await WriteAsync(CurrentDocument().Encode(_identity, false)).ConfigureAwait(false);
+                        await WriteAsync(CurrentDocument().Encode(_identity, false, ReadRuntime())).ConfigureAwait(false);
                         _stopNotice = true;
                         SetState(PcpAnnounceState.StopNoticeSent);
                     }
@@ -225,15 +227,42 @@ internal sealed class PcpAnnounceWorker : IAsyncDisposable
             }
             if (changed.IsCompleted || tick.IsCompleted)
             {
+                var periodic = tick.IsCompleted;
                 if (changed.IsCompleted) { await changed.ConfigureAwait(false); changed = Track(_updates.Reader.ReadAsync(_ioStop.Token).AsTask()); }
                 if (tick.IsCompleted) { await tick.ConfigureAwait(false); tick = Track(timer.WaitForNextTickAsync(_ioStop.Token).AsTask()); }
                 if (_stop.Task.IsCompleted) break;
-                await WriteAsync(CurrentDocument().Encode(_identity, true)).ConfigureAwait(false);
-                SetState(PcpAnnounceState.UpdateSent);
+                await PublishRuntimeAsync(periodic).ConfigureAwait(false);
             }
         }
     }
 
+    internal void NotifyRuntimeChanged() => _updates.Writer.TryWrite(true);
+    private PublishingAnnounceRuntimeSnapshot? ReadRuntime()
+    {
+        var snapshot = _runtime?.Invoke();
+        if (snapshot is null) return null;
+        if (snapshot.ChannelId.Value != _identity.ChannelId || snapshot.SessionId.Value != _identity.PublishingSessionId ||
+            snapshot.Revision < _lastRuntimeRevision)
+            throw new InvalidDataException("Stale HOST generation or revision.");
+        _lastRuntimeRevision = snapshot.Revision;
+        return snapshot;
+    }
+    private async Task PublishRuntimeAsync(bool periodic)
+    {
+        var snapshot = ReadRuntime();
+        if (snapshot is not null)
+        {
+            if (!snapshot.CapabilityValid) throw new InvalidDataException("HOST capability expired.");
+            // Initial and periodic HOST reflect current Receiving, including false before HEAD.
+        }
+        var bytes = CurrentDocument().Encode(_identity, true, snapshot);
+        if (!periodic && _announced && _lastPublished is not null && bytes.AsSpan().SequenceEqual(_lastPublished)) return;
+        await WriteAsync(bytes).ConfigureAwait(false);
+        var initial = !_announced;
+        _announced = true;
+        _lastPublished = bytes;
+        SetState(initial ? PcpAnnounceState.AnnounceSent : PcpAnnounceState.UpdateSent);
+    }
     private async Task<PcpAtom> ReadControlAsync()
     {
         var read = Track(_connection!.ReadAsync(_ioStop.Token));

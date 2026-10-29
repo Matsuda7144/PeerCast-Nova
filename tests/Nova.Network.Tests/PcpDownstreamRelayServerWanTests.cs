@@ -260,6 +260,7 @@ public sealed partial class PcpDownstreamRelayServerTests
             _owner = _policy.OpenChannel(ChannelId, UpstreamSessionId, RelayChannelKind.Broadcast);
         }
         public ChannelId ChannelId => PcpDownstreamRelayServerTests.ChannelId;
+        internal bool CanReserve => _owner.CanReserve;
         internal long ReservationCount => _policy.ReservedCount;
         public bool TryReserve(long connectionId, [NotNullWhen(true)] out IDisposable? reservation, CancellationToken cancellationToken = default)
         { reservation = _owner.TryReserve(connectionId, cancellationToken).Reservation; return reservation is not null; }

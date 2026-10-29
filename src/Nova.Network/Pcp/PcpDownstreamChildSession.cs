@@ -58,6 +58,8 @@ public sealed class PcpDownstreamChildSession :
     private CancellationToken _operationToken;
     private int _httpStatusCode;
     private int _handshakeAccepted;
+    private int _relayActive;
+    internal bool IsEstablishedRelay => Volatile.Read(ref _relayActive) != 0 && _registration?.Completion.IsCompleted == false;
     private int _writeTimedOut;
     private int _writeFailed;
     private bool _disposed;
@@ -383,6 +385,7 @@ public sealed class PcpDownstreamChildSession :
         {
             try
             {
+                Interlocked.Exchange(ref _relayActive, 0);
                 _handshakeReady.TrySetCanceled(operationSource.Token);
                 CancelBestEffort(operationSource);
 
@@ -596,6 +599,7 @@ public sealed class PcpDownstreamChildSession :
             await WriteControlAsync(_initialMetadata, handshakeToken, _packetWriter).ConfigureAwait(false);
 
         Interlocked.Exchange(ref _handshakeAccepted, 1);
+        Interlocked.Exchange(ref _relayActive, 1);
         _wanIngress?.Handshaken();
         _handshakeReady.TrySetResult();
         handshakeTimeoutSource.CancelAfter(Timeout.InfiniteTimeSpan);

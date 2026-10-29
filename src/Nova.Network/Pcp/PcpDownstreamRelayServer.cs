@@ -70,6 +70,14 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
     internal Func<TcpTransportConnection, IPcpDownstreamPacketWriter?>? PacketWriterFactory { get; init; }
     internal PcpRelayQuiescenceObserver? QuiescenceObserver { get; init; }
 
+    internal (bool CanAccept, int RelayCount) ReadRuntimeCapacity()
+    {
+        lock (_gate) return (_state == PcpDownstreamRelayServerState.Running && !_childAdmission.IsClosed &&
+            !_callerCancellation.IsCancellationRequested && !_stopSource.IsCancellationRequested &&
+            _activeConnectionCount < _listener.MaxConcurrentConnections && _pendingAdmissionCleanup.Count == 0 &&
+            _admissionCleanupFailedCount == 0 && _admissionCloseFailedCount == 0,
+            _sessions.Count(entry => entry.Session?.IsEstablishedRelay == true));
+    }
     public PcpDownstreamRelayServer(
         IPEndPoint localEndPoint,
         PcpRelayFanout fanout,
@@ -620,6 +628,7 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
                 quiescenceObserver: QuiescenceObserver,
                 initialMetadata: _initialMetadata,
                 wanIngress: entry.WanLease);
+            lock (_gate) entry.Session = session;
             result = await session.RunAsync(
                 cancellationToken).ConfigureAwait(false);
         }
@@ -817,6 +826,7 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
 
         public TcpTransportConnection Connection { get; }
 
+        public PcpDownstreamChildSession? Session;
         public Task? Task { get; set; }
         public PcpWanIngressPolicy.Lease? WanLease { get; init; }
     }

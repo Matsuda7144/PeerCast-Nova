@@ -22,3 +22,11 @@ public interface IPcpDownstreamRelayAdmission
         [NotNullWhen(true)] out IDisposable? reservation,
         CancellationToken cancellationToken = default);
 }
+
+/// <summary>Optional side-effect-free admission observation.</summary>
+public interface IPcpDownstreamRelayCapacity
+{
+    bool IsCurrent { get; }
+    bool CanReserve { get; }
+
+}

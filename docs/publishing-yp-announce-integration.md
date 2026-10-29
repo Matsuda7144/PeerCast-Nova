@@ -56,6 +56,38 @@ does not prove which tracker initiated it. It is not an announce authorization
 input. AnnounceSent is not listing confirmation; StopNoticeSent is not removal
 confirmation. All independent verification/listing/removal flags remain false.
 
+## Runtime HOST information
+
+Every initial/state/periodic BCST reads the current generation's runtime snapshot
+immediately before its serialized write. Initial BCST is allowed before HEAD, but
+Receiving remains false until a publisher is connected, HEAD has been accepted
+and the channel is Receiving. The listener/capability/generation must still be live.
+This follows the revised acceptance contract; no initial-BCST holding mechanism
+is introduced. Receiving=false does not itself prove YP removal.
+
+Relay availability additionally requires proven shared admission room (both
+global and channel limits), TCP room and fanout room. Reading capacity does not
+reserve/release anything. Unknown or retired capacity is unavailable. Capacity
+is advisory and may change after observation; the real connection is admitted
+again by the unchanged policy. No new observer, event subscription or timer is
+added. Capacity/count changes are reflected by the existing 30-second tick.
+HEAD notification uses the existing worker update queue; queued changes coalesce.
+
+numr counts only current established relay children of this server. Pending TCP/
+HELO, Ping, cumulative connection totals, internal HTTP children and cleanup-only
+reservations are excluded. External Direct availability/count remain false/zero.
+Uptime uses the host generation's monotonic start timestamp, freezes on terminal
+state/accepted Finish, resets for a new host and saturates at uint.MaxValue.
+Identity/revision checks reject stale snapshots. Identical queued updates are
+suppressed; periodic updates always refresh runtime state. A write already
+admitted/in flight is immutable; the next queued write reads the newest state.
+No network I/O is performed under the host or admission locks.
+
+Stop notice is sent only after an initial BCST was sent and forces Receiving,
+Relay and Direct OFF even if the last runtime observation was still Receiving.
+Latest available counts/uptime are used; stop notice/QUIT and cleanup remain
+owned by the existing writer and termination machinery.
+
 ## Ownership and shutdown
 
 The existing worker sends initial BCST and serializes latest-metadata and

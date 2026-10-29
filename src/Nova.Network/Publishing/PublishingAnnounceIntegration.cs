@@ -34,8 +34,8 @@ public sealed class PublishingAnnounceOwner : IAsyncDisposable
     public PublishingAnnounceOwner() : this(new PcpAnnounceProductionConnector(),
         (host, token) => Dns.GetHostAddressesAsync(host, token))
     { }
-    internal PublishingAnnounceOwner(IPcpAnnounceConnector connector, Func<string, CancellationToken, Task<IPAddress[]>> resolver)
-    { _owner = new(connector, new PcpAnnounceOptions { HandshakeTimeout = TimeSpan.FromSeconds(20) }); _resolve = resolver; }
+    internal PublishingAnnounceOwner(IPcpAnnounceConnector connector, Func<string, CancellationToken, Task<IPAddress[]>> resolver, TimeProvider? timeProvider = null)
+    { _owner = new(connector, new PcpAnnounceOptions { HandshakeTimeout = TimeSpan.FromSeconds(20) }, timeProvider); _resolve = resolver; }
 
     public async ValueTask DisposeAsync()
     {
@@ -45,7 +45,7 @@ public sealed class PublishingAnnounceOwner : IAsyncDisposable
         await _owner.DisposeAsync().ConfigureAwait(false);
     }
     internal PublishingAnnounceSession Start(PublishingAnnounceOptions options, ChannelId channel, ChannelSessionId session,
-        ChannelMetadataSnapshot metadata, IPEndPoint bind, IPEndPoint advertised, Func<bool> ready)
+        ChannelMetadataSnapshot metadata, IPEndPoint bind, IPEndPoint advertised, Func<bool> ready, Func<PublishingAnnounceRuntimeSnapshot> runtime)
     {
         lock (_gate)
         {
@@ -53,7 +53,7 @@ public sealed class PublishingAnnounceOwner : IAsyncDisposable
             if (_current is not null && !_current.CleanupProven)
                 throw new InvalidOperationException("Previous announce cleanup is unproven.");
             _current = new(_owner, Interlocked.Increment(ref _generation), options, channel, session, metadata,
-                bind, advertised, ready, _resolve);
+                bind, advertised, ready, runtime, _resolve);
             return _current;
         }
     }
@@ -78,7 +78,7 @@ internal sealed class PublishingAnnounceSession : IAsyncDisposable
 
     internal PublishingAnnounceSession(PcpAnnounceOwner owner, long generation, PublishingAnnounceOptions options,
         ChannelId channel, ChannelSessionId session, ChannelMetadataSnapshot metadata, IPEndPoint bind,
-        IPEndPoint advertised, Func<bool> ready, Func<string, CancellationToken, Task<IPAddress[]>> resolver)
+        IPEndPoint advertised, Func<bool> ready, Func<PublishingAnnounceRuntimeSnapshot> runtime, Func<string, CancellationToken, Task<IPAddress[]>> resolver)
     {
         _run = Task.Run(async () =>
         {
@@ -98,7 +98,8 @@ internal sealed class PublishingAnnounceSession : IAsyncDisposable
                     _capability = new(identity, Guid.NewGuid(), bind, advertised, endpoint, () => !_closing && ready());
                     _worker = owner.Start(generation, channel.Value, session.Value, session.Value,
                         PcpAnnounceEndpoint.Parse($"pcp://{endpoint.Address}:{endpoint.Port}"), new(metadata, advertised),
-                        PcpAnnounceAccess.ForProduction(endpoint), capability: _capability);
+                        PcpAnnounceAccess.ForProduction(endpoint), capability: _capability, runtime: runtime);
+                    _worker.NotifyRuntimeChanged();
                 }
                 await _worker.Completion.ConfigureAwait(false);
             }
@@ -106,6 +107,12 @@ internal sealed class PublishingAnnounceSession : IAsyncDisposable
             finally { _capability?.Invalidate(); }
         });
     }
+    internal bool UpdateMetadata(ChannelMetadataSnapshot metadata, IPEndPoint endpoint)
+    {
+        var worker = Volatile.Read(ref _worker);
+        return worker is not null && worker.Update(worker.Identity, new(metadata, endpoint));
+    }
+    internal void NotifyRuntimeChanged() => Volatile.Read(ref _worker)?.NotifyRuntimeChanged();
     public async ValueTask DisposeAsync() => await StopAsync(PcpAnnounceStopReason.Dispose).ConfigureAwait(false);
     internal Task<bool> StopAsync(PcpAnnounceStopReason reason)
     {

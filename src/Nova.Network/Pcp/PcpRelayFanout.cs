@@ -38,6 +38,14 @@ public sealed class PcpRelayFanout : IPcpChannelPacketConsumer, IAsyncDisposable
         _replayHeadForNewChildren = replayHeadForNewChildren;
     }
 
+    internal bool CanAddChild
+    {
+        get
+        {
+            lock (_gate) return !_stopping && !_completing &&
+            _knownChildren.Count(child => !child.Completion.IsCompleted) < _options.MaxChildren;
+        }
+    }
     public int ActiveChildCount
     {
         get

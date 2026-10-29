@@ -154,6 +154,22 @@ public sealed class RelayAdmissionPolicy : IDisposable
         }
     }
 
+    private bool ReadIsCurrent(Channel owner)
+    {
+        lock (_gate) return !_disposed && !owner.Retired && _channels.TryGetValue(owner.ChannelId, out var state) &&
+            ReferenceEquals(state.CurrentOwner, owner);
+    }
+    private bool ReadCanReserve(Channel owner)
+    {
+        lock (_gate)
+        {
+            if (_disposed || owner.Retired || !_channels.TryGetValue(owner.ChannelId, out var state) ||
+                !ReferenceEquals(state.CurrentOwner, owner)) return false;
+            var maximum = owner.Kind == RelayChannelKind.Broadcast ? Limits.MaxRelaysPerBroadcastChannel : Limits.MaxRelaysPerViewingChannel;
+            return (Limits.MaxRelaysTotal is null || _reservedCount < Limits.MaxRelaysTotal) &&
+                (maximum is null || state.ReservedCount < maximum);
+        }
+    }
     private long ReadChannelCount(ChannelId channelId)
     {
         lock (_gate)
@@ -194,6 +210,8 @@ public sealed class RelayAdmissionPolicy : IDisposable
         internal bool Retired { get; set; }
 
         /// <summary>Outstanding reservations for this channel across all generations.</summary>
+        public bool IsCurrent => _policy.ReadIsCurrent(this);
+        public bool CanReserve => _policy.ReadCanReserve(this);
         public long ReservedCount => _policy.ReadChannelCount(ChannelId);
 
         /// <summary>

@@ -16,7 +16,7 @@ public sealed class PublishingAnnounceIntegrationTests
         var dns = 0;
         await using var owner = new PublishingAnnounceOwner(connector, (_, _) =>
         { Interlocked.Increment(ref dns); throw new InvalidOperationException(); });
-        var session = owner.Start(new(enabled, "test", "pcp://unresolved.example"), new(Guid.NewGuid()), new(Guid.NewGuid()),
+        var session = StartFixture(owner, new(enabled, "test", "pcp://unresolved.example"), new(Guid.NewGuid()), new(Guid.NewGuid()),
             new("test", "", "", "https://example.com/", "FLV", 128),
             new(IPAddress.Parse("192.168.1.2"), 7144), new(IPAddress.Parse("198.41.0.4"), 17144), () => ready);
         Assert.True(await session.StopAsync(PcpAnnounceStopReason.Dispose));
@@ -31,7 +31,7 @@ public sealed class PublishingAnnounceIntegrationTests
         var dns = new TaskCompletionSource<IPAddress[]>(TaskCreationOptions.RunContinuationsAsynchronously);
         var connector = new Connector();
         await using var owner = new PublishingAnnounceOwner(connector, (_, _) => { started.TrySetResult(); return dns.Task; });
-        PublishingAnnounceSession Start() => owner.Start(new(true, "test", "pcp://unresolved.example"), new(Guid.NewGuid()), new(Guid.NewGuid()),
+        PublishingAnnounceSession Start() => StartFixture(owner, new(true, "test", "pcp://unresolved.example"), new(Guid.NewGuid()), new(Guid.NewGuid()),
             new("test", "", "", "https://example.com/", "FLV", 128),
             new(IPAddress.Parse("192.168.1.2"), 7144), new(IPAddress.Parse("198.41.0.4"), 17144), () => true);
         var session = Start();
@@ -70,7 +70,7 @@ public sealed class PublishingAnnounceIntegrationTests
         connector.Connection.ReplaceHandshake(PcpAtom.Parent(oleh.Name, fields));
         await using var owner = new PublishingAnnounceOwner(connector, (_, _) => throw new InvalidOperationException("Numeric endpoint must not resolve DNS."));
         var sid = new ChannelSessionId(Guid.NewGuid());
-        var session = owner.Start(new(true, "test", "pcp://198.41.0.5:7144"), new(Guid.NewGuid()), sid,
+        var session = StartFixture(owner, new(true, "test", "pcp://198.41.0.5:7144"), new(Guid.NewGuid()), sid,
             new ChannelMetadataSnapshot("test", "", "", "https://example.com/", "FLV", 128),
             new(IPAddress.Parse("192.168.1.2"), 7144), new(IPAddress.Parse("198.41.0.4"), 17144), () => true);
         var handshake = await connector.Connection.NextWriteAsync();
@@ -111,4 +111,8 @@ public sealed class PublishingAnnounceIntegrationTests
             }, CancellationToken.None));
         Assert.Equal(1, calls);
     }
+    private static PublishingAnnounceSession StartFixture(PublishingAnnounceOwner owner, PublishingAnnounceOptions options,
+        ChannelId channel, ChannelSessionId session, ChannelMetadataSnapshot metadata, IPEndPoint bind,
+        IPEndPoint advertised, Func<bool> ready) => owner.Start(options, channel, session, metadata, bind, advertised, ready,
+            () => new(channel, session, 1, true, false, 0, 0, ready()));
 }

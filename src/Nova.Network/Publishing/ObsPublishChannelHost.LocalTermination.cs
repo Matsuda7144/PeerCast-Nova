@@ -54,6 +54,7 @@ public sealed partial class ObsPublishChannelHost
                 return Task.FromResult(Unadmitted(ObsPublishLocalTerminationOutcome.Failed));
             var request = new LocalFinish(timeout, TerminationTimeProvider, cancellationToken);
             _localFinish = request;
+            if (_announceStart is not null) _announceStopped ??= _announceTime.GetTimestamp();
             _localFinishRequested.TrySetResult();
             return request.Completion.Task;
         }
