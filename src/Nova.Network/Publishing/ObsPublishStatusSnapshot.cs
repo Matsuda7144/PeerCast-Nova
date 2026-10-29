@@ -24,4 +24,7 @@ public sealed record ObsPublishStatusSnapshot(
     string? HttpStreamUrl,
     ObsPublishChannelEndReason? EndReason,
     ObsRtmpRejectionStage? RejectionStage,
-    ObsRtmpRejectionReason? RejectionReason);
+    ObsRtmpRejectionReason? RejectionReason)
+{
+    public ObsPublishLanStatus? LanRelay { get; init; }
+}

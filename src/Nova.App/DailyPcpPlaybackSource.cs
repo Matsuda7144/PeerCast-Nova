@@ -11,6 +11,13 @@ internal static class DailyPcpPlaybackSourceParser
 {
     private const string ChannelPathPrefix = "/channel/";
 
+    internal static string Format(string host, int port, Guid channelId)
+    {
+        var value = $"pcp://{host}:{port}{ChannelPathPrefix}{channelId:N}";
+        if (!TryParse(value, out _)) throw new ArgumentException("Invalid PCP endpoint.");
+        return value;
+    }
+
     public static bool TryParse(string? source, out DailyPcpPlaybackSource? result)
     {
         result = null;

@@ -60,6 +60,37 @@ public sealed class GenesisDownstreamRelayAdmissionIntegrationTests
     }
 
     [Fact]
+    public async Task PublishingRegistrationUsesSharedBroadcastPolicyAndRetainsOldLeases()
+    {
+        await using var fixture = await PublicChannelTestFixture.CreateAsync(new() { MaxRelaysTotal = 1, MaxRelaysPerBroadcastChannel = 1 });
+        using var timeout = TimeoutSource();
+        var factory = new SystemNovaObsPublishingRuntimeFactory(fixture.State);
+        var id = new ChannelId(Guid.NewGuid());
+        await using var fanout = new PcpRelayFanout();
+        using var owner = factory.Register(id, new(Guid.NewGuid()), fanout);
+        Assert.Equal(RelayChannelKind.Broadcast, owner.Kind);
+        Assert.Same(owner, fixture.State.DownstreamRelays.Resolve(id, fanout));
+        Assert.Equal(0, fixture.State.PublicChannels.OwnerCount); // No second server/composition owner.
+        await using var server = new PcpDownstreamRelayServer(new(IPAddress.Loopback, 0),
+            fanout, id, Guid.NewGuid(), Transport, admission: owner, acceptRemoteAddress: address => IPAddress.IsLoopback(address!));
+        var run = server.RunAsync(timeout.Token);
+        await using var peer = await Peer.ConnectAsync(server.LocalEndPoint, id, timeout.Token);
+        AssertAccepted(peer);
+        owner.Dispose();
+        Assert.Equal(1, fixture.State.DownstreamRelays.ActiveRelayCount);
+        Assert.False(owner.TryReserve(long.MaxValue, out _));
+        await using var nextFanout = new PcpRelayFanout();
+        using var next = factory.Register(id, new(Guid.NewGuid()), nextFanout);
+        Assert.False(next.TryReserve(long.MaxValue, out _)); // Retired TCP still consumes total/channel capacity.
+        await peer.QuitAsync(timeout.Token);
+        await UntilAsync(() => fixture.State.DownstreamRelays.ActiveRelayCount == 0, timeout.Token);
+        Assert.True(next.TryReserve(long.MaxValue, out var lease));
+        lease!.Dispose();
+        await server.StopAsync(timeout.Token);
+        await run;
+    }
+
+    [Fact]
     public async Task SharedListenerSharesTotalAndPerRoleLimitsWithoutDisconnectingExistingRelays()
     {
         using var timeout = TimeoutSource();

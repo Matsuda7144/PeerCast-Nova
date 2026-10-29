@@ -116,7 +116,7 @@ public sealed class NovaWindowsStartupComposition
     public ValueTask<NovaWindowsStartupResult> RunGenesisAsync(
         CancellationToken cancellationToken = default) =>
         RunOwnedGenesisCoreAsync(
-            (playbackPathSource, recordingSettings, publishingStatus, publishingCommands) =>
+            (playbackPathSource, recordingSettings, publishingStatus, publishingCommands, rootState) =>
                 new SystemGenesisInteractiveMainWindowSurfaceTarget(
                     new SystemGenesisMainWindowSurfaceTarget(),
                     SystemGenesisMainWindowInteractionBridgeFactory.Instance,
@@ -125,15 +125,14 @@ public sealed class NovaWindowsStartupComposition
                     GenesisMainWindowResizeGuard.Create,
                     token =>
                     {
-                        var state = _options.ValidationProfile is { } profile ? profile.GetGuiState(token) :
-                            LoadSystemGuiNextState(token, playbackPathSource);
+                        var state = rootState ?? throw new InvalidOperationException("Application state is unavailable.");
                         state.Tabs.BindPublishingStatus(publishingStatus, publishingCommands);
                         return state;
                     },
                     CreateSystemNotificationRuntime,
                     CaptureSystemNotificationSettingsPlacement,
-                    _options.NetworkSettingsController, recordingSettings),
-            cancellationToken: cancellationToken);
+                    _options.NetworkSettingsController, recordingSettings, ownsGuiNextState: false),
+            cancellationToken: cancellationToken, loadApplicationState: true);
 
     // The production root and managed composition tests use the same lifetime.
     // Surfaces receive a borrower; only this root initializes/disposes the owner.
@@ -144,17 +143,18 @@ public sealed class NovaWindowsStartupComposition
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(createSurface);
-        return RunOwnedGenesisCoreAsync((paths, settings, _, _) => createSurface(paths, settings),
-            recordingSettings, cancellationToken);
+        return RunOwnedGenesisCoreAsync((paths, settings, _, _, _) => createSurface(paths, settings),
+            recordingSettings, cancellationToken: cancellationToken);
     }
 
     private async ValueTask<NovaWindowsStartupResult> RunOwnedGenesisCoreAsync(
         Func<GenesisGuiNextPlaybackPathSource, GenesisRecordingOutputDirectorySettings,
-            INovaObsPublishingReadOnlyStatus, INovaGuiNextPublishingCommands, IGenesisMainWindowSurfaceTarget> createSurface,
+            INovaObsPublishingReadOnlyStatus, INovaGuiNextPublishingCommands, GenesisGuiNextApplicationState?, IGenesisMainWindowSurfaceTarget> createSurface,
         GenesisRecordingOutputDirectorySettings? recordingSettings = null,
-        CancellationToken cancellationToken = default)
+        bool loadApplicationState = false, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(createSurface);
+        GenesisGuiNextApplicationState? applicationState = null;
         INovaApplicationNetworkOwner? networkOwner = null;
         IPlaybackSessionController? playbackController = null;
         NovaGuiNextPublishingComposition? publishing = null;
@@ -176,10 +176,23 @@ public sealed class NovaWindowsStartupComposition
                 publishingSettings = new(_publishingPreferencesStore);
                 await publishingSettings.LoadAsync(cancellationToken).ConfigureAwait(false);
             }
-            publishing = NovaGuiNextPublishingComposition.Create(_publishingRuntimeFactory, settings: publishingSettings);
+            if (loadApplicationState)
+            {
+                try
+                {
+                    applicationState = _options.ValidationProfile is { } validation ? validation.GetGuiState(cancellationToken) :
+                        LoadSystemGuiNextState(cancellationToken, paths);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+                catch { /* Preserve auxiliary-state fallback; LAN has no registry and fails closed. */ }
+            }
+            var publishingFactory = ReferenceEquals(_publishingRuntimeFactory, SystemNovaObsPublishingRuntimeFactory.Instance) && applicationState is not null
+                ? new SystemNovaObsPublishingRuntimeFactory(applicationState, allowLan: _options.ValidationProfile is null)
+                : _publishingRuntimeFactory;
+            publishing = NovaGuiNextPublishingComposition.Create(publishingFactory, settings: publishingSettings);
             playbackController = _genesisPlaybackControllerFactory(paths, recordingSettings);
             result = await RunGenesisAsync(
-                createSurface(paths, recordingSettings, publishing.Status, publishing.Commands),
+                createSurface(paths, recordingSettings, publishing.Status, publishing.Commands, applicationState),
                 playbackWindowSurfaceTarget: null,
                 playbackController,
                 networkOwner,
@@ -226,6 +239,12 @@ public sealed class NovaWindowsStartupComposition
             if (publishingSettings is not null)
             {
                 try { await publishingSettings.DisposeAsync().ConfigureAwait(false); }
+                catch { result = NovaWindowsStartupResult.Faulted; }
+            }
+            // Registry/policies outlive Publishing's actual child and reservation cleanup.
+            if (applicationState is not null)
+            {
+                try { await applicationState.DisposeAsync().ConfigureAwait(false); }
                 catch { result = NovaWindowsStartupResult.Faulted; }
             }
         }

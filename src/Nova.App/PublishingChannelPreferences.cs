@@ -9,6 +9,7 @@ namespace PeerCast.Nova.App;
 internal sealed record PublishingChannelPreferences(string ChannelName, string Genre, string Description,
     string Comment, string ContactUrl, int? BitrateKbps)
 {
+    internal ObsPublishLanOptions Lan { get; init; } = new();
     internal static PublishingChannelPreferences Default { get; } = new("Local publish", "", "", "", "", null);
     internal ObsPublishChannelOptions ToOptions() => new()
     {
@@ -18,9 +19,11 @@ internal sealed record PublishingChannelPreferences(string ChannelName, string G
         Comment = Comment,
         ContactUrl = ContactUrl,
         BitrateKbps = BitrateKbps,
+        Lan = Lan,
     };
     internal PublishingChannelPreferences Validate()
     {
+        Lan.Validate();
         var metadata = ToOptions().CreateMetadata();
         return this with { ChannelName = metadata.Name! };
     }
@@ -36,8 +39,18 @@ internal sealed record PublishingSettingsSnapshot(long SettingsRevision, Publish
 internal sealed record PublishingSettingsInput(string ChannelName, string Genre, string Description,
     string Comment, string ContactUrl, string BitrateKbps)
 {
+    internal bool LanEnabled { get; init; }
+    internal string LanInterfaceId { get; init; } = "";
+    internal string LanAddress { get; init; } = "";
+    internal string LanPort { get; init; } = "";
     internal static PublishingSettingsInput From(PublishingChannelPreferences value) => new(value.ChannelName,
-        value.Genre, value.Description, value.Comment, value.ContactUrl, value.BitrateKbps?.ToString(CultureInfo.InvariantCulture) ?? "");
+        value.Genre, value.Description, value.Comment, value.ContactUrl, value.BitrateKbps?.ToString(CultureInfo.InvariantCulture) ?? "")
+    {
+        LanEnabled = value.Lan.Enabled,
+        LanInterfaceId = value.Lan.InterfaceId,
+        LanAddress = value.Lan.Address,
+        LanPort = value.Lan.Port == 0 ? "" : value.Lan.Port.ToString(CultureInfo.InvariantCulture)
+    };
     internal PublishingChannelPreferences Validate()
     {
         int? bitrate = null;
@@ -47,7 +60,13 @@ internal sealed record PublishingSettingsInput(string ChannelName, string Genre,
                 throw new ArgumentException("1～2147483647の整数kbps、または空欄で入力してください。", nameof(BitrateKbps));
             bitrate = number;
         }
-        return new PublishingChannelPreferences(ChannelName, Genre, Description, Comment, ContactUrl, bitrate).Validate();
+        var port = 0;
+        if (LanPort.Length != 0 && (!int.TryParse(LanPort, NumberStyles.None, CultureInfo.InvariantCulture, out port) || port is < 1 or > 65535))
+            throw new ArgumentException("LANポートは1～65535の整数で入力してください。", nameof(LanPort));
+        var lan = new ObsPublishLanOptions(LanEnabled, LanInterfaceId, LanAddress, port);
+        try { lan.Validate(); }
+        catch (ObsPublishLanException) { throw new ArgumentException("LANのNIC/IPとポートを選択してください。", nameof(LanAddress)); }
+        return new PublishingChannelPreferences(ChannelName, Genre, Description, Comment, ContactUrl, bitrate) { Lan = lan }.Validate();
     }
 }
 
@@ -75,6 +94,7 @@ internal sealed class JsonPublishingPreferencesStore(string path, Action? before
         public string Comment { get; init; } = "";
         public string ContactUrl { get; init; } = "";
         public int? BitrateKbps { get; init; }
+        public ObsPublishLanOptions? Lan { get; init; }
         [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; init; }
     }
 
@@ -97,10 +117,12 @@ internal sealed class JsonPublishingPreferencesStore(string path, Action? before
             if (count > MaximumBytes) throw new InvalidDataException("Publishing settings exceed the file limit.");
             var document = JsonSerializer.Deserialize<Document>(buffer.AsSpan(0, count), JsonOptions)
                 ?? throw new InvalidDataException("Publishing settings must contain an object.");
-            if (document.SchemaVersion != 1 || document.SettingsRevision < 0 || document.SettingsRevision == long.MaxValue)
+            if (document.SchemaVersion is not (1 or 2) || document.SettingsRevision < 0 || document.SettingsRevision == long.MaxValue)
                 throw new InvalidDataException("Unsupported publishing settings version or revision.");
             var values = new PublishingChannelPreferences(document.ChannelName, document.Genre, document.Description,
-                document.Comment, document.ContactUrl, document.BitrateKbps).Validate();
+                document.Comment, document.ContactUrl, document.BitrateKbps)
+            { Lan = document.SchemaVersion == 1 ? new() : document.Lan ?? throw new InvalidDataException("LAN configuration is missing.") };
+            values = values.Validate();
             var extensions = (document.Extra ?? []).ToImmutableDictionary(pair => pair.Key, pair => pair.Value.Clone());
             return new(document.SettingsRevision, values, extensions);
         }
@@ -114,7 +136,7 @@ internal sealed class JsonPublishingPreferencesStore(string path, Action? before
             throw new InvalidDataException("Publishing settings revision is out of range.");
         var bytes = JsonSerializer.SerializeToUtf8Bytes(new Document
         {
-            SchemaVersion = 1,
+            SchemaVersion = 2,
             SettingsRevision = snapshot.SettingsRevision,
             ChannelName = values.ChannelName,
             Genre = values.Genre,
@@ -122,6 +144,7 @@ internal sealed class JsonPublishingPreferencesStore(string path, Action? before
             Comment = values.Comment,
             ContactUrl = values.ContactUrl,
             BitrateKbps = values.BitrateKbps,
+            Lan = values.Lan,
             Extra = snapshot.Extensions.ToDictionary(pair => pair.Key, pair => pair.Value.Clone()),
         }, JsonOptions);
         if (bytes.Length > MaximumBytes) throw new InvalidDataException("Publishing settings exceed the file limit.");
@@ -153,8 +176,9 @@ internal sealed class JsonPublishingPreferencesStore(string path, Action? before
 internal sealed record PublishingSettingsSaveResult(bool Saved, string Message, string? Field = null);
 
 /// <summary>Application-owned Saved/Applied snapshots; no runtime callbacks or I/O under its gate.</summary>
-internal sealed class PublishingSettingsController(IPublishingPreferencesStore store) : IAsyncDisposable
+internal sealed class PublishingSettingsController(IPublishingPreferencesStore store, IObsPublishLanInterfaces? interfaces = null) : IAsyncDisposable
 {
+    internal IObsPublishLanInterfaces Interfaces { get; } = interfaces ?? SystemObsPublishLanInterfaces.Instance;
     private readonly object _gate = new();
     private PublishingSettingsSnapshot _saved = PublishingSettingsSnapshot.Default;
     private PublishingSettingsSnapshot? _applied;

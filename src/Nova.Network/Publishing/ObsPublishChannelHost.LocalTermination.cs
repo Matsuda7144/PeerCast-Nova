@@ -259,7 +259,7 @@ public sealed partial class ObsPublishChannelHost
         var relaySnapshot = _relay.Snapshot;
         return new(await ingress, await relay && relaySnapshot.ActiveConnectionCount == 0 &&
             relaySnapshot.CleanupIncompleteCount == 0 && relaySnapshot.InternalFailureCount == 0 &&
-            relaySnapshot.AdmissionCleanupPendingCount == 0 && relaySnapshot.AdmissionCleanupFailedCount == 0,
+            relaySnapshot.AdmissionCleanupPendingCount == 0 && relaySnapshot.AdmissionCleanupFailedCount == 0 && RelayReservationsReleased,
             await fanout && fanoutProof?.IsCompletedSuccessfully == true && fanoutProof.Result.CleanupCompleted,
             await source && (_httpSource is null || _httpSource.CleanupCompleted), _ownsHttp,
             await listener, _recording.Evidence.CleanupCompleted);

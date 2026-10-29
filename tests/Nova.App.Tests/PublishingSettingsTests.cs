@@ -98,6 +98,8 @@ public sealed class PublishingSettingsTests
     }
 
     [Theory]
+    [InlineData("""{"SchemaVersion":2,"Lan":{"Enabled":false,"Address":null}}""")]
+    [InlineData("""{"SchemaVersion":2,"Lan":{"Enabled":false,"InterfaceId":null}}""")]
     [InlineData("{broken")]
     [InlineData("null")]
     [InlineData("{}")]

@@ -18,6 +18,7 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
     private readonly NatPortMappingManager? _portMapping;
     private IDisposable? _publicMappingOwner;
     private readonly PcpRelayFanout _fanout;
+    private readonly Func<IPAddress?, bool>? _acceptRemoteAddress;
     private readonly ChannelId _channelId;
     private readonly Guid _localSessionId;
     private readonly PcpDownstreamChildOptions _childOptions;
@@ -77,7 +78,8 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
         PcpDownstreamChildOptions? childOptions = null,
         NatPortMappingManager? portMapping = null,
         IPcpDownstreamRelayAdmission? admission = null,
-        ChannelMetadataSnapshot? initialMetadata = null)
+        ChannelMetadataSnapshot? initialMetadata = null,
+        Func<IPAddress?, bool>? acceptRemoteAddress = null)
     {
         ArgumentNullException.ThrowIfNull(localEndPoint);
         ArgumentNullException.ThrowIfNull(fanout);
@@ -111,6 +113,7 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
         _channelId = channelId;
         _localSessionId = localSessionId;
         _admission = admission;
+        _acceptRemoteAddress = acceptRemoteAddress;
     }
 
     public IPEndPoint LocalEndPoint
@@ -553,6 +556,12 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
         TcpTransportConnection connection,
         CancellationToken cancellationToken)
     {
+        // Gate before any HTTP/PCP read, reply or metadata disclosure.
+        if (_acceptRemoteAddress is not null)
+        {
+            try { if (!_acceptRemoteAddress(connection.RemoteEndPoint?.Address)) return false; }
+            catch { return false; }
+        }
         var entry = new SessionEntry(connection);
 
         lock (_gate)

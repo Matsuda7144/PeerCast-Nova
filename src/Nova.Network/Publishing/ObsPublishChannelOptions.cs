@@ -9,6 +9,7 @@ public sealed record ObsPublishChannelOptions
     public PcpHttpFlvPlaybackOptions Http { get; init; } = new();
     public PcpRelayFanoutOptions Fanout { get; init; } = new();
     public int RelayPort { get; init; }
+    public ObsPublishLanOptions Lan { get; init; } = new();
     public string ChannelName { get; init; } = "Local publish";
     public string Genre { get; init; } = string.Empty;
     public string Description { get; init; } = string.Empty;
@@ -24,6 +25,8 @@ public sealed record ObsPublishChannelOptions
         ArgumentNullException.ThrowIfNull(Ingest);
         ArgumentNullException.ThrowIfNull(Http);
         ArgumentNullException.ThrowIfNull(Fanout);
+        ArgumentNullException.ThrowIfNull(Lan);
+        Lan.Validate();
         _ = CreateMetadata();
         Ingest.Validate();
         Http.Validate();

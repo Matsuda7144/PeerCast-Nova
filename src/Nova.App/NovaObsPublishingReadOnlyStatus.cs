@@ -29,6 +29,7 @@ internal sealed record NovaObsPublishingReadOnlySnapshot(
     ObsRtmpRejectionStage? RejectionStage,
     ObsRtmpRejectionReason? RejectionReason)
 {
+    public string LanRelayText { get; init; } = "LAN PCP Relay: OFF";
     public long? Generation { get; init; }
     public bool IsSourceNotStarted { get; init; }
     public NovaObsPublishingLifecycleState? LifecycleState { get; init; }
@@ -100,7 +101,7 @@ internal sealed class NovaObsPublishingReadOnlyStatus(INovaObsPublishingStatusSo
                 notStarted ? "未起動（待受未開始）" : panel.StateText,
                 panel.DiagnosticText, panel.Tone, status.EndReason,
                 status.RejectionStage, status.RejectionReason)
-            { IsSourceNotStarted = notStarted };
+            { IsSourceNotStarted = notStarted, LanRelayText = PublishingLanPresentation.Format(status.LanRelay, status.ChannelId.Value) };
             return _last;
         }
         finally { Monitor.Exit(_gate); }

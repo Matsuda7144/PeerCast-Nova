@@ -23,6 +23,11 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
     private readonly bool _ownsHttp;
     private readonly PcpRelayFanout _fanout;
     private readonly PcpDownstreamRelayServer _relay;
+    private readonly IObsPublishLanInterfaces _interfaces;
+    private readonly Func<ChannelId, ChannelSessionId, PcpRelayFanout, IPcpDownstreamRelayRegistration>? _registerRelay;
+    private IPcpDownstreamRelayRegistration? _relayRegistration;
+    private ObsPublishLanBinding? _lanBinding;
+    private ObsPublishLanFailure _lanFailure;
     private readonly PcpRelayFanoutRecordingStreamSourceLeaseFactory _recording;
     private readonly RecordingStreamSourceLeaseRegistry _registry;
     private readonly ChannelStatusTracker _tracker;
@@ -50,8 +55,10 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
         ObsPublishChannelOptions? options = null,
         ChannelId? channelId = null,
         PcpHttpFlvPlaybackHost? httpHost = null,
-        RecordingStreamSourceLeaseRegistry? recordingRegistry = null)
-        : this(options, channelId, httpHost, recordingRegistry, null, null)
+        RecordingStreamSourceLeaseRegistry? recordingRegistry = null,
+        IObsPublishLanInterfaces? interfaces = null,
+        Func<ChannelId, ChannelSessionId, PcpRelayFanout, IPcpDownstreamRelayRegistration>? registerRelay = null)
+        : this(options, channelId, httpHost, recordingRegistry, null, null, interfaces, registerRelay)
     {
     }
 
@@ -59,8 +66,12 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
         ObsPublishChannelOptions? options, ChannelId? channelId,
         PcpHttpFlvPlaybackHost? httpHost, RecordingStreamSourceLeaseRegistry? recordingRegistry,
         Func<IAsyncDisposable?>? acquireRecordingOwner,
-        PcpRecordingSourceCleanupObserver? recordingCleanupObserver)
+        PcpRecordingSourceCleanupObserver? recordingCleanupObserver,
+        IObsPublishLanInterfaces? interfaces = null,
+        Func<ChannelId, ChannelSessionId, PcpRelayFanout, IPcpDownstreamRelayRegistration>? registerRelay = null)
     {
+        _interfaces = interfaces ?? SystemObsPublishLanInterfaces.Instance;
+        _registerRelay = registerRelay;
         var supplied = options ?? new();
         ArgumentNullException.ThrowIfNull(supplied.Ingest);
         ArgumentNullException.ThrowIfNull(supplied.Http);
@@ -90,8 +101,10 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
             acquireOwnerLease: acquireRecordingOwner)
         { CleanupObserver = recordingCleanupObserver };
         _relay = new PcpDownstreamRelayServer(
-            new IPEndPoint(IPAddress.Loopback, _options.RelayPort), _fanout, ChannelId, SessionId.Value,
-            initialMetadata: InitialMetadata);
+            new IPEndPoint(_options.Lan.Enabled ? IPAddress.Parse(_options.Lan.Address) : IPAddress.Loopback,
+                _options.Lan.Enabled ? _options.Lan.Port : _options.RelayPort), _fanout, ChannelId, SessionId.Value,
+            initialMetadata: InitialMetadata, admission: _options.Lan.Enabled ? new LanAdmission(this) : null,
+            acceptRemoteAddress: _options.Lan.Enabled ? address => Volatile.Read(ref _lanBinding)?.Accepts(address) == true : null);
         _ingest = new ObsRtmpIngestHost(ChannelId, SessionId, new PublishConsumer(this), _options.Ingest);
     }
 
@@ -131,7 +144,8 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
                     active && ingest.Listening, active && ingest.PublisherConnected, head,
                     port is null ? null : $"rtmp://127.0.0.1:{port}/{_options.Ingest.Application}",
                     _options.Ingest.StreamName, head ? Volatile.Read(ref _httpStreamUrl) : null,
-                    result?.EndReason, result?.Rejection?.Stage, result?.Rejection?.Reason);
+                    result?.EndReason, result?.Rejection?.Stage, result?.Rejection?.Reason)
+                { LanRelay = ReadLanStatus(active) };
                 // Serialize observed revisions across tracker, TCP and terminal facts.
                 // TCP accept/listener changes need not advance ChannelStatusTracker.
                 // These are observation revisions, not an atomic network-event log.
@@ -182,6 +196,16 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
         try
         {
             lifetime.Token.ThrowIfCancellationRequested();
+            if (_options.Lan.Enabled)
+            {
+                // Revalidate at explicit Start before allocating any listener.
+                _lanBinding = _options.Lan.Resolve(_interfaces);
+                _relayRegistration = _registerRelay?.Invoke(ChannelId, SessionId, _fanout)
+                    ?? throw new ObsPublishLanException(ObsPublishLanFailure.AdmissionUnavailable);
+                if (_relayRegistration.ChannelId != ChannelId || _relayRegistration.SessionId != SessionId)
+                    throw new ObsPublishLanException(ObsPublishLanFailure.AdmissionUnavailable);
+                lifetime.Token.ThrowIfCancellationRequested();
+            }
             if (_ownsHttp) _http.Start();
             _httpSource = (PcpHttpFlvPlaybackSession)_http.Create(ChannelId, SessionId);
             Volatile.Write(ref _httpStreamUrl, _http.StreamUrlFor(ChannelId));
@@ -215,8 +239,14 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
         {
             reason = ObsPublishChannelEndReason.HostCancelled;
         }
+        catch (ObsPublishLanException exception)
+        {
+            _lanFailure = exception.Failure;
+            reason = ObsPublishChannelEndReason.StartupFailed;
+        }
         catch (Exception)
         {
+            if (_options.Lan.Enabled && !started) _lanFailure = ObsPublishLanFailure.BindFailed;
             reason = started ? ObsPublishChannelEndReason.InternalFailure : ObsPublishChannelEndReason.StartupFailed;
         }
         finally
@@ -231,6 +261,8 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
                 _registration?.Dispose();
                 _registration = null;
             }
+            try { _relayRegistration?.Dispose(); } // Retire without freeing live reservations.
+            catch { clean = false; }
             await ObserveTerminationAsync(ObsPublishTerminationPoint.RecordingAdmissionClosed).ConfigureAwait(false);
             if (local is not null)
             {
@@ -265,6 +297,8 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
                 _headAvailable.TrySetResult(false);
                 try
                 {
+                    if (_options.Lan.Enabled && _relayRunTask is not null)
+                        await _relay.StopAcceptingAsync().ConfigureAwait(false);
                     if (reason != ObsPublishChannelEndReason.PublisherStopped)
                         await lifetime.CancelAsync().ConfigureAwait(false);
                     clean &= await ReleaseOwned(ObsPublishTerminationPoint.IngressCleanup, _ingest.DisposeAsync).ConfigureAwait(false);
@@ -315,7 +349,7 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
             }
             catch (Exception) { clean = false; }
         }
-        clean &= _relay.Snapshot.CleanupIncompleteCount == 0;
+        clean &= _relay.Snapshot.CleanupIncompleteCount == 0 && RelayReservationsReleased;
         if (_localFinishResult is null && _forceRequested)
         {
             // All independent releases were already started. A noncooperative
@@ -418,6 +452,25 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
             // even if another cleanup stage faults first.
             try { if (_forcedCancellationTask is not null) await _forcedCancellationTask.ConfigureAwait(false); }
             finally { _stop.Dispose(); }
+        }
+    }
+
+    private bool RelayReservationsReleased => _relayRegistration is null || _relayRegistration.ReservationCount == 0;
+
+    private ObsPublishLanStatus ReadLanStatus(bool active)
+    {
+        var ready = _options.Lan.Enabled && active && _relay.Snapshot.State == PcpDownstreamRelayServerState.Running;
+        var endpoint = ready ? _relay.LocalEndPoint : null;
+        return new(_options.Lan.Enabled, ready, endpoint?.Address.ToString(), endpoint?.Port, _lanFailure);
+    }
+
+    private sealed class LanAdmission(ObsPublishChannelHost owner) : IPcpDownstreamRelayAdmission
+    {
+        public ChannelId ChannelId => owner.ChannelId;
+        public bool TryReserve(long connectionId, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IDisposable? reservation, CancellationToken cancellationToken = default)
+        {
+            reservation = null;
+            return owner._relayRegistration?.TryReserve(connectionId, out reservation, cancellationToken) == true;
         }
     }
 

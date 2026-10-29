@@ -1,3 +1,6 @@
+using PeerCast.Nova.Core.Channels;
+using PeerCast.Nova.Network.Pcp;
+using PeerCast.Nova.Network.Policies;
 using PeerCast.Nova.Network.Publishing;
 
 namespace PeerCast.Nova.App;
@@ -58,10 +61,27 @@ internal sealed class SystemNovaObsPublishingRuntimeFactory : INovaObsPublishing
 {
     public static SystemNovaObsPublishingRuntimeFactory Instance { get; } = new();
 
-    private SystemNovaObsPublishingRuntimeFactory() { }
+    private readonly GenesisGuiNextApplicationState? _state;
+    private readonly IObsPublishLanInterfaces _interfaces;
+    private readonly bool _allowLan;
+    internal SystemNovaObsPublishingRuntimeFactory(GenesisGuiNextApplicationState? state = null,
+        IObsPublishLanInterfaces? interfaces = null, bool allowLan = true)
+    { _state = state; _interfaces = interfaces ?? SystemObsPublishLanInterfaces.Instance; _allowLan = allowLan; }
 
-    public INovaObsPublishingRuntime Create() => new NovaObsPublishingRuntime(new ObsPublishChannelOptions());
-    public INovaObsPublishingRuntime Create(PublishingSettingsSnapshot settings) => new NovaObsPublishingRuntime(settings.Values.ToOptions());
+    internal GenesisDownstreamRelayOwnerRegistry.Owner Register(ChannelId channel, ChannelSessionId session, PcpRelayFanout fanout)
+    {
+        if (!_allowLan || _state is null || _state.Connection.LoadFailed)
+            throw new ObsPublishLanException(ObsPublishLanFailure.AdmissionUnavailable);
+        if (_state.NetworkPolicies.Bandwidth.Limits.Ipv4Kbps is not null)
+            throw new ObsPublishLanException(ObsPublishLanFailure.BandwidthUnsupported);
+        try { return _state.DownstreamRelays.Register(channel, session, RelayChannelKind.Broadcast, fanout); }
+        catch { throw new ObsPublishLanException(ObsPublishLanFailure.AdmissionUnavailable); }
+    }
+    private NovaObsPublishingRuntime Create(ObsPublishChannelOptions options) =>
+        NovaObsPublishingRuntime.ForOwner(new ObsPublishChannelHost(options, interfaces: _interfaces, registerRelay: Register));
+
+    public INovaObsPublishingRuntime Create() => Create(new ObsPublishChannelOptions());
+    public INovaObsPublishingRuntime Create(PublishingSettingsSnapshot settings) => Create(settings.Values.ToOptions());
 }
 
 internal sealed class NovaObsPublishingRuntime : INovaObsPublishingGenerationRuntime

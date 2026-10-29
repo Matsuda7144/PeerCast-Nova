@@ -137,7 +137,7 @@ internal sealed class GenesisDownstreamRelayOwnerRegistry : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    internal sealed class Owner : IPcpDownstreamRelayAdmission, IDisposable
+    internal sealed class Owner : IPcpDownstreamRelayRegistration
     {
         private readonly GenesisDownstreamRelayOwnerRegistry _registry;
         internal Owner(GenesisDownstreamRelayOwnerRegistry registry, RelayAdmissionPolicy.Channel scope)

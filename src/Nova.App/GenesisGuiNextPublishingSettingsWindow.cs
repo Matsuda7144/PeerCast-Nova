@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
+using PeerCast.Nova.Network.Publishing;
 
 namespace PeerCast.Nova.App;
 
@@ -146,6 +147,7 @@ internal sealed class GenesisGuiNextPublishingSettingsWindow : IGenesisPublishin
         internal nint Brush { get; } = CreateSolidBrush(Background);
         private readonly nint _editBrush = CreateSolidBrush(EditBackground);
         private readonly List<ControlBounds> _controls = [];
+        private readonly List<ObsPublishLanInterface> _lanChoices = [];
         private readonly CancellationTokenSource _stop = new();
         private Task _save = Task.CompletedTask;
         private bool _ready, _saving;
@@ -169,7 +171,7 @@ internal sealed class GenesisGuiNextPublishingSettingsWindow : IGenesisPublishin
             }
             if (Brush == 0 || _editBrush == 0 ||
                 !Add("STATIC", "ストリーム設定", 1030, 20, 16, 640, 24, true) ||
-                !Add("STATIC", "ネットワーク：このPCのみ（IPv4）［固定］\r\nソース：OBS（RTMP）［固定］\r\n配信形式：FLV［固定］", 0, 20, 50, 640, 66, true) ||
+                !Add("STATIC", "OBS/HTTP-FLV：このPCのみ（IPv4）［固定］\r\nソース：OBS（RTMP）［固定］\r\n配信形式：FLV［固定］", 0, 20, 50, 640, 66, true) ||
                 !Add("STATIC", FieldLabels[5], 0, 20, 130, 160, 24) ||
                 !Add("EDIT", "", 1005, 192, 126, 160, 28, style: 0x10080) ||
                 !Add("STATIC", "配信情報に申告する値です。実際のOBS送信速度ではありません。\r\n空欄にすると申告しません。", 0, 20, 168, 640, 44, true) ||
@@ -178,11 +180,17 @@ internal sealed class GenesisGuiNextPublishingSettingsWindow : IGenesisPublishin
             for (var index = 0; index < 5; index++)
                 if (!Add("STATIC", FieldLabels[index], 0, 20, 304 + index * 48, 136, 24) ||
                     !Add("EDIT", "", 1000 + index, 164, 300 + index * 48, 496, 28, true, 0x10080)) return false;
-            return Add("STATIC", "", NoticeId, 20, 548, 640, 44, true) &&
-                Add("STATIC", "", RevisionId, 20, 600, 640, 24, true) &&
-                Add("BUTTON", "保存", SaveId, 20, 634, 120, 32, style: 0x1000B) &&
-                Add("BUTTON", "キャンセル", CancelId, 160, 634, 120, 32, style: 0x1000B) &&
-                Add("STATIC", "", StatusId, 20, 680, 640, 54, true);
+            return Add("BUTTON", "LAN PCP Relayを有効にする", 1006, 20, 548, 620, 28, true, 0x10003) &&
+                Add("STATIC", "待受NIC / IPv4（同一Subnetのみ）", 0, 20, 586, 620, 24, true) &&
+                Add("COMBOBOX", "", 1007, 20, 614, 620, 180, true, 0x210003) &&
+                Add("STATIC", "LAN PCPポート (1～65535)", 0, 20, 656, 240, 24) &&
+                Add("EDIT", "", 1008, 272, 652, 160, 28, style: 0x10080) &&
+                Add("STATIC", "既定OFF。IPv4 LANのみ。帯域制限は未適用です。\r\n接続設定にIPv4帯域数値がある場合はLAN開始不可。\r\nWAN公開・YP掲載・自動ポート開放は行いません。", 0, 20, 700, 640, 66, true) &&
+                Add("STATIC", "", NoticeId, 20, 780, 640, 44, true) &&
+                Add("STATIC", "", RevisionId, 20, 832, 640, 24, true) &&
+                Add("BUTTON", "保存", SaveId, 20, 866, 120, 32, style: 0x1000B) &&
+                Add("BUTTON", "キャンセル", CancelId, 160, 866, 120, 32, style: 0x1000B) &&
+                Add("STATIC", "", StatusId, 20, 912, 640, 54, true);
         }
         internal void Initialize()
         {
@@ -190,6 +198,31 @@ internal sealed class GenesisGuiNextPublishingSettingsWindow : IGenesisPublishin
             var input = _editor.Input;
             var values = new[] { input.ChannelName, input.Genre, input.Description, input.Comment, input.ContactUrl, input.BitrateKbps };
             for (var index = 0; index < values.Length; index++) SetText(1000 + index, values[index]);
+            _ = SendMessageW(GetDlgItem(window, 1006), 0x00F1, input.LanEnabled ? 1u : 0u, 0);
+            _lanChoices.Clear();
+            try
+            {
+                foreach (var nic in settings.Interfaces.Read())
+                {
+                    if (!nic.IsUp || !ObsPublishLanOptions.TryPrivateAddress(nic.Address, out _)) continue;
+                    try { _ = new ObsPublishLanBinding(nic); _lanChoices.Add(nic); }
+                    catch (ObsPublishLanException) { }
+                }
+            }
+            catch { } // Empty list fails closed at Save/Start; never substitute another NIC.
+            if (input.LanAddress.Length != 0 && !_lanChoices.Any(nic => nic.Id == input.LanInterfaceId && nic.Address == input.LanAddress))
+                _lanChoices.Add(new(input.LanInterfaceId, "保存済み（未確認）", false, input.LanAddress, "", 0));
+            var combo = GetDlgItem(window, 1007);
+            _ = SendMessageW(combo, 0x014B, 0, 0);
+            for (var index = 0; index < _lanChoices.Count; index++)
+            {
+                var nic = _lanChoices[index];
+                var label = nic.Name.Length > 80 ? nic.Name[..80] : nic.Name;
+                _ = SendMessageTextW(combo, 0x0143, 0, $"{label} | {nic.Address}/{nic.PrefixLength}");
+                if (nic.Id == input.LanInterfaceId && nic.Address == input.LanAddress)
+                    _ = SendMessageW(combo, 0x014E, (nuint)index, 0);
+            }
+            SetText(1008, input.LanPort);
             SetText(NoticeId, "保存した設定は次の配信開始から適用されます。" + (isPublishing() ? "\r\n現在の配信には反映されません。" : ""));
             SetText(RevisionId, $"保存済み Revision: {settings.Saved.SettingsRevision} / 適用済み: {settings.Applied?.SettingsRevision.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "未開始"}");
             SetText(StatusId, _editor.Result.Message);
@@ -198,9 +231,18 @@ internal sealed class GenesisGuiNextPublishingSettingsWindow : IGenesisPublishin
         internal void Command(int id, int notification)
         {
             if (!_ready || Closed) return;
-            if (notification == 0x0300 && id is >= 1000 and <= 1005 && !_saving)
+            if (!_saving && (notification == 0x0300 && (id is >= 1000 and <= 1005 or 1008) ||
+                id == 1006 && notification == 0 || id == 1007 && notification == 1))
             {
-                _editor.Edit(new(GetText(1000), GetText(1001), GetText(1002), GetText(1003), GetText(1004), GetText(1005)));
+                var selected = (int)SendMessageW(GetDlgItem(window, 1007), 0x0147, 0, 0);
+                var nic = selected >= 0 && selected < _lanChoices.Count ? _lanChoices[selected] : null;
+                _editor.Edit(new(GetText(1000), GetText(1001), GetText(1002), GetText(1003), GetText(1004), GetText(1005))
+                {
+                    LanEnabled = SendMessageW(GetDlgItem(window, 1006), 0x00F0, 0, 0) == 1,
+                    LanInterfaceId = nic?.Id ?? "",
+                    LanAddress = nic?.Address ?? "",
+                    LanPort = GetText(1008),
+                });
                 return;
             }
             if (notification != 0) return;
@@ -234,6 +276,12 @@ internal sealed class GenesisGuiNextPublishingSettingsWindow : IGenesisPublishin
             Initialize();
             if (_editor.Result.Field is { } field)
             {
+                if (field is "LanAddress" or "LanPort")
+                {
+                    SetText(StatusId, _editor.Result.Message);
+                    _ = SetFocus(GetDlgItem(window, field == "LanPort" ? 1008 : 1007));
+                    return;
+                }
                 var fields = new[] { "ChannelName", "Genre", "Description", "Comment", "ContactUrl", "BitrateKbps" };
                 var index = Array.IndexOf(fields, field);
                 if (index >= 0)
@@ -245,7 +293,7 @@ internal sealed class GenesisGuiNextPublishingSettingsWindow : IGenesisPublishin
         }
         private void EnableInputs(bool enabled)
         {
-            for (var index = 0; index < 6; index++) _ = EnableWindow(GetDlgItem(window, 1000 + index), enabled);
+            for (var index = 0; index < 9; index++) _ = EnableWindow(GetDlgItem(window, 1000 + index), enabled);
             _ = EnableWindow(GetDlgItem(window, SaveId), enabled);
         }
         internal void ApplyLayout()
@@ -383,6 +431,7 @@ internal sealed class GenesisGuiNextPublishingSettingsWindow : IGenesisPublishin
     [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool EnableWindow(nint control, [MarshalAs(UnmanagedType.Bool)] bool enabled);
     [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool MoveWindow(nint window, int x, int y, int width, int height, [MarshalAs(UnmanagedType.Bool)] bool repaint);
     [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool SetWindowPos(nint window, nint after, int x, int y, int width, int height, uint flags);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "SendMessageW")] private static extern nint SendMessageTextW(nint window, uint message, nuint wParam, string text);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern nint SendMessageW(nint window, uint message, nuint wParam, nint lParam);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)][return: MarshalAs(UnmanagedType.Bool)] private static extern bool PostMessageW(nint window, uint message, nuint wParam, nint lParam);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern nint LoadCursorW(nint instance, nint name);
@@ -408,7 +457,7 @@ internal sealed class GenesisGuiNextPublishingSettingsWindow : IGenesisPublishin
 
 internal static class PublishingSettingsWindowLayout
 {
-    internal const int ContentHeight = 748;
+    internal const int ContentHeight = 980;
     internal static int ClampScroll(int requested, int page, uint dpi) =>
         Math.Clamp(requested, 0, Math.Max(0, GenesisGuiNextPublishingSettingsWindow.Scale(ContentHeight, dpi) - page));
 }

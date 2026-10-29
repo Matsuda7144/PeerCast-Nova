@@ -111,6 +111,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             _ = PresentVisible(_detailsDescription, ShowWindowHide);
             _ = PresentVisible(_detailsMetadata, ShowWindowHide);
             Place(_detailsIdentity, layout.Feedback);
+            _ = PresentText(_publishingInstructions, NovaObsPublishingConnectionPresentation.Instructions + "\r\n" +
+                (_tabs.PublishingRows.Count == 1 ? _tabs.PublishingRows[0].LanRelayText : "LAN PCP Relay: 状態未確認"));
             var presentation = _tabs.PublishingConnection;
             _ = PresentText(_publishingServerValue, presentation.ServerText);
             _ = PresentText(_publishingKeyValue, _tabs.PublishingKeyDisplay);

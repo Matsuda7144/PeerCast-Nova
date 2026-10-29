@@ -98,7 +98,7 @@ internal sealed record GenesisGuiNextConnectionSaveResult(bool Saved, string Mes
 internal sealed class GenesisGuiNextConnectionSettings : IAsyncDisposable
 {
     internal const string NextStartNotice =
-        "保存値は次回起動時に読み込みます。待ち受け・IPv6・帯域・リレー制御への適用は後続対応です。";
+        "保存値は次回起動時に読み込みます。LAN配信のリレー数上限に適用。待受ポート・IPv6への適用は後続対応。IPv4帯域数値設定時はLAN配信開始不可。";
     internal const string LoadFailureMessage =
         "設定を読み込めませんでした。今回は既定値で開始します。保存すると既存の設定を置き換えます。";
     private readonly IGenesisGuiNextConnectionPreferencesStore _store;

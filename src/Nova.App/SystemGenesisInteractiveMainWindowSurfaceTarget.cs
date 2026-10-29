@@ -62,6 +62,7 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
     private readonly IGenesisChannelCatalog _channelCatalog;
     private readonly TimeSpan _autoRefreshInterval;
     private readonly Func<long, IAsyncDisposable?> _resizeGuardFactory;
+    private readonly bool _ownsGuiNextState;
     private readonly Func<CancellationToken, GenesisGuiNextApplicationState?>
         _guiNextStateFactory;
     private readonly Func<
@@ -207,7 +208,7 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
         Func<long, IGenesisChannelNotificationSettingsPlacement?>
             notificationSettingsPlacementFactory,
         IGenesisNetworkSettingsController networkSettingsController,
-        GenesisRecordingOutputDirectorySettings? recordingSettings = null)
+        GenesisRecordingOutputDirectorySettings? recordingSettings = null, bool ownsGuiNextState = true)
     {
         ArgumentNullException.ThrowIfNull(surfaceTarget);
         ArgumentNullException.ThrowIfNull(bridgeFactory);
@@ -237,6 +238,7 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
         _notificationSettingsPlacementFactory = notificationSettingsPlacementFactory;
         _networkSettingsController = networkSettingsController;
         _recordingSettings = recordingSettings;
+        _ownsGuiNextState = ownsGuiNextState;
     }
 
     public async ValueTask<IAsyncDisposable?> OpenAsync(
@@ -381,7 +383,7 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
             await DisposeRejectedOpenAsync(
                     catalogSession,
                     notificationRuntime.Lifetime,
-                    guiNextState,
+                    _ownsGuiNextState ? guiNextState : null,
                     surfaceLifetime,
                     resizeGuard)
                 .ConfigureAwait(false);
@@ -395,7 +397,7 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
             await DisposeRejectedOpenAsync(
                     catalogSession,
                     notificationRuntime.Lifetime,
-                    guiNextState,
+                    _ownsGuiNextState ? guiNextState : null,
                     surfaceLifetime,
                     resizeGuard)
                 .ConfigureAwait(false);
@@ -436,7 +438,7 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
             notificationRuntime.Lifetime,
             guiNextState,
             resizeGuard,
-            viewModel);
+            viewModel, _ownsGuiNextState);
     }
 
     private static IAsyncDisposable? CreateNoopResizeGuard(long _) =>
@@ -646,6 +648,7 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
         private readonly IAsyncDisposable? _notificationSettingsLifetime;
         private readonly IAsyncDisposable _notificationLifetime;
         private readonly GenesisGuiNextApplicationState? _guiNextState;
+        private readonly bool _ownsGuiNextState;
         private readonly IAsyncDisposable _resizeGuard;
         private readonly GenesisMainViewModel _viewModel;
         private int _disposed;
@@ -658,7 +661,7 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
             IAsyncDisposable notificationLifetime,
             GenesisGuiNextApplicationState? guiNextState,
             IAsyncDisposable resizeGuard,
-            GenesisMainViewModel viewModel)
+            GenesisMainViewModel viewModel, bool ownsGuiNextState)
         {
             _surfaceLifetime = surfaceLifetime;
             _bridgeLifetime = bridgeLifetime;
@@ -666,6 +669,7 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
             _notificationSettingsLifetime = notificationSettingsLifetime;
             _notificationLifetime = notificationLifetime;
             _guiNextState = guiNextState;
+            _ownsGuiNextState = ownsGuiNextState;
             _resizeGuard = resizeGuard;
             _viewModel = viewModel;
         }
@@ -689,7 +693,7 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
                     _catalogSession,
                     _notificationSettingsLifetime,
                     _notificationLifetime,
-                    _guiNextState,
+                    _ownsGuiNextState ? _guiNextState : null,
                     _bridgeLifetime,
                     _surfaceLifetime).ConfigureAwait(false);
             }

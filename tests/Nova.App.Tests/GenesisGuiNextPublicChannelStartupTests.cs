@@ -75,6 +75,30 @@ public sealed class GenesisGuiNextPublicChannelStartupTests
         Assert.Equal(1, fixture.Store.LoadCount);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task BorrowedStateKeepsOneRegistryAliveUntilApplicationRootDisposes(bool rejectBridge)
+    {
+        await using var fixture = await CreateAsync();
+        var model = new GenesisMainViewModel(new FakePlaybackSessionController());
+        var surface = new SystemGenesisInteractiveMainWindowSurfaceTarget(new Surface(), new Bridge(_ => { }, rejectBridge),
+            EmptyGenesisChannelCatalog.Instance, TimeSpan.FromDays(1),
+            _ => NoopLifetime.Instance, _ => fixture.State,
+            static (_, _) => GenesisChannelNotificationRuntime.Empty, _ => null,
+            GenesisUnavailableNetworkSettingsController.Instance, ownsGuiNextState: false);
+        var lifetime = await surface.OpenAsync(123, model, CancellationToken.None);
+        if (lifetime is not null) await lifetime.DisposeAsync();
+        Assert.False(fixture.State.PublicChannels.IsDisposed);
+        await using var fanout = new PcpRelayFanout();
+        var factory = new SystemNovaObsPublishingRuntimeFactory(fixture.State);
+        using var registration = factory.Register(new(Guid.NewGuid()), new(Guid.NewGuid()), fanout);
+        Assert.Same(fixture.State.DownstreamRelays, fixture.State.PublicChannels.Registry);
+        await fixture.DisposeAsync();
+        Assert.Throws<PeerCast.Nova.Network.Publishing.ObsPublishLanException>(() =>
+            factory.Register(new(Guid.NewGuid()), new(Guid.NewGuid()), fanout));
+    }
+
     [Fact]
     public async Task WindowLifetimeCloseStopsRealRelayAndRemovesCommandBoundary()
     {

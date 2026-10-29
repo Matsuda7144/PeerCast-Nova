@@ -4,8 +4,8 @@ namespace PeerCast.Nova.App;
 
 /// <summary>
 /// Application-owned policy foundation captured from Connection.Startup once.
-/// These models are not attached to a live listener or relay controller.
-/// Saving next-start preferences cannot mutate this instance.
+/// LAN Publishing and activated viewing relay share Relays through DownstreamRelays.
+/// Bandwidth remains numerical only. Saving preferences cannot mutate this instance.
 /// </summary>
 internal sealed class GenesisGuiNextNetworkPolicies : IDisposable
 {
