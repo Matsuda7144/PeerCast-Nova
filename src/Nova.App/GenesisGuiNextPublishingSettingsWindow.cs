@@ -377,8 +377,11 @@ internal sealed class GenesisGuiNextPublishingSettingsWindow : IGenesisPublishin
             _ = SetScrollInfo(window, 1, ref info, true);
             foreach (var item in _controls)
                 _ = MoveWindow(item.Handle, Scale(item.X, Dpi), Scale(item.Y, Dpi) - _scroll,
-                    item.Stretch ? Math.Max(1, area.Right - Scale(item.X + 20, Dpi)) : Scale(item.Width, Dpi), Scale(item.Height, Dpi), true);
-            _ = InvalidateRect(window, 0, true);
+                    item.Stretch ? Math.Max(1, area.Right - Scale(item.X + 20, Dpi)) : Scale(item.Width, Dpi), Scale(item.Height, Dpi), false);
+            // Repaint only after every child has its final position. The parent clips
+            // children, so parent-only invalidation leaves partially exposed STATIC
+            // controls with stale/clipped text after scrolling.
+            _ = RedrawWindow(window, 0, 0, 0x0085); // INVALIDATE | ERASE | ALLCHILDREN
         }
         internal void ScrollBy(int change) { _scroll += change; ApplyLayout(); }
         internal void Scroll(int code)
@@ -506,7 +509,7 @@ internal sealed class GenesisGuiNextPublishingSettingsWindow : IGenesisPublishin
     [DllImport("user32.dll")] private static extern int SetScrollInfo(nint window, int bar, ref ScrollInfo info, [MarshalAs(UnmanagedType.Bool)] bool redraw);
     [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool GetScrollInfo(nint window, int bar, ref ScrollInfo info);
     [DllImport("user32.dll")] private static extern int FillRect(nint dc, ref Rectangle rectangle, nint brush);
-    [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool InvalidateRect(nint window, nint rectangle, [MarshalAs(UnmanagedType.Bool)] bool erase);
+    [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool RedrawWindow(nint window, nint rectangle, nint region, uint flags);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int DrawTextW(nint dc, string text, int length, ref Rectangle rectangle, uint format);
     [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool DrawFocusRect(nint dc, ref Rectangle rectangle);
     [DllImport("gdi32.dll")] private static extern nint CreateSolidBrush(uint color);
