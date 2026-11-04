@@ -458,21 +458,17 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
                 return;
             }
 
-            var selectedIndex = GetSelectedChannelIndex();
-            if (selectedIndex < 0 ||
-                code != NotifyDoubleClick ||
-                selectedIndex >= _renderedRows.Count ||
-                !_pendingCommand.IsCompleted)
+            if (code != NotifyDoubleClick || !_pendingCommand.IsCompleted)
             {
                 return;
             }
 
-            var interactiveChannel = _renderedRows[selectedIndex].InteractiveChannel;
-            if (interactiveChannel is not null)
-            {
-                _pendingCommand = ObserveActivationAsync(
-                    _interaction.ActivateChannelAsync(interactiveChannel));
-            }
+            // NMITEMACTIVATE shares this prefix with NMLISTVIEW. iItem is the
+            // actual double-click hit (-1 for blank space), not the selected row.
+            var activation = Marshal.PtrToStructure<ListViewNotify>(lParam);
+            _pendingCommand = ObserveActivationAsync(GenesisChannelListActivation.ActivateAsync(
+                code, activation.Item, _renderedRows, _interaction,
+                _pendingCommand.IsCompleted && Volatile.Read(ref _selectionChangesSuppressed) == 0));
         }
 
         public void RefreshControls()

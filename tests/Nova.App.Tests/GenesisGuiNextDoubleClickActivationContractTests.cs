@@ -18,15 +18,15 @@ public sealed class GenesisGuiNextDoubleClickActivationContractTests
             processNotify,
             StringComparison.Ordinal);
         Assert.Contains(
-            "var interactiveChannel = _renderedRows[selectedIndex].InteractiveChannel;",
+            "GenesisChannelListActivation.ActivateAsync(",
             processNotify,
             StringComparison.Ordinal);
         Assert.Contains(
-            "if (interactiveChannel is not null)",
+            "code, activation.Item, _renderedRows, _interaction",
             processNotify,
             StringComparison.Ordinal);
         Assert.Contains(
-            "_interaction.ActivateChannelAsync(interactiveChannel)",
+            "_pendingCommand.IsCompleted",
             processNotify,
             StringComparison.Ordinal);
         Assert.DoesNotContain(
