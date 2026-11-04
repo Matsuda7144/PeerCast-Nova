@@ -4,8 +4,10 @@ namespace PeerCast.Nova.App.Tests;
 
 public sealed class GenesisChannelListActivationTests
 {
-    [Fact]
-    public async Task WindowsNotificationUsesActualHitWithoutAnyNativeSelection()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task WindowsNotificationUsesActualHitWithoutAnyNativeSelection(bool controlGeneratesNotification)
     {
         if (!OperatingSystem.IsWindows()) return;
         var common = new CommonControls { Size = 8, Classes = 1 };
@@ -35,6 +37,21 @@ public sealed class GenesisChannelListActivationTests
             Assert.NotNull(bridge);
             Assert.Same(hit, GenesisChannelListRenderedChannels.Find(list, 1));
             model.SelectedChannel = first;
+            if (controlGeneratesNotification)
+            {
+                // Exercise the common control's cached notification target, not
+                // an artificial WM_NOTIFY sent straight to GetParent(list).
+                // This is a regression test; real mouse acceptance is separate.
+                _ = SendMessageW(list, 0x0203, 1, (nint)((90 << 16) | 10));
+                Assert.Equal(0, controller.Requests); // Blank space.
+                var rectangle = new ItemRectangle();
+                Assert.NotEqual(0, SendItemRectangle(list, 0x100E, 1, ref rectangle));
+                var point = (nint)(((rectangle.Top + 2) << 16) | (rectangle.Left + 10));
+                _ = SendMessageW(list, 0x0203, 1, point); // WM_LBUTTONDBLCLK -> real NM_DBLCLK.
+                Assert.Equal(1, controller.Requests);
+                Assert.Equal(hit.Source, model.CurrentSource);
+                return;
+            }
             var notification = new ItemActivation { Header = new() { From = list, Code = unchecked((uint)-3) }, Item = -1 };
             var memory = Marshal.AllocHGlobal(Marshal.SizeOf<ItemActivation>());
             try
@@ -149,6 +166,7 @@ public sealed class GenesisChannelListActivationTests
     private static GenesisChannelItem Channel(string name) => new(name, $"pcp://example/{name}");
 
     [StructLayout(LayoutKind.Sequential)] private struct CommonControls { public uint Size, Classes; }
+    [StructLayout(LayoutKind.Sequential)] private struct ItemRectangle { public int Left, Top, Right, Bottom; }
     [StructLayout(LayoutKind.Sequential)]
     private struct NotificationHeader
     {
@@ -171,6 +189,7 @@ public sealed class GenesisChannelListActivationTests
     [DllImport("user32.dll")] private static extern nint GetParent(nint window);
     [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool DestroyWindow(nint window);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern nint SendMessageW(nint window, uint message, nuint wParam, nint lParam);
+    [DllImport("user32.dll", EntryPoint = "SendMessageW")] private static extern nint SendItemRectangle(nint window, uint message, nuint wParam, ref ItemRectangle rectangle);
 
     private sealed class CountingController : IPlaybackSessionController
     {

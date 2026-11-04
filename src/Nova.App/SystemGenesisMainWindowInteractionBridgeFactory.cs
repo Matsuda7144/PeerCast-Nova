@@ -24,6 +24,32 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
     private const int ListViewNextItemSelected = 0x0002;
     private static readonly ConcurrentDictionary<nint, BridgeState> StatesByContainer = new();
     private static readonly WindowProcedure WindowProcedureDelegate = ProcessWindowMessage;
+    private const nuint OwnerSubclassIdentifier = 0x7144336;
+    private static readonly SubclassProcedure OwnerProcedure = ProcessOwnerMessage;
+    private delegate nint SubclassProcedure(nint window, uint message, nuint wParam, nint lParam, nuint id, nuint data);
+    [DllImport("comctl32.dll")]
+    private static extern bool SetWindowSubclass(nint window, SubclassProcedure procedure, nuint id, nuint data);
+    [DllImport("comctl32.dll")]
+    private static extern nint DefSubclassProc(nint window, uint message, nuint wParam, nint lParam);
+    [DllImport("comctl32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool RemoveWindowSubclass(nint window, SubclassProcedure procedure, nuint id);
+    private static nint ProcessOwnerMessage(nint window, uint message, nuint wParam, nint lParam, nuint id, nuint data)
+    {
+        if (message == WindowMessageNcDestroy)
+        {
+            _ = RemoveWindowSubclass(window, OwnerProcedure, id);
+        }
+        else if (message == WindowMessageNotify && lParam != 0 &&
+            StatesByContainer.TryGetValue(unchecked((nint)data), out var state))
+        {
+            // List-view caches its original notification parent. SetParent only
+            // changes the HWND hierarchy; real mouse notifications still arrive
+            // here. ProcessNotify checks the sender and actual hit row.
+            state.ProcessNotify(lParam);
+        }
+        return DefSubclassProc(window, message, wParam, lParam);
+    }
 
     public static SystemGenesisMainWindowInteractionBridgeFactory Instance { get; } = new();
 
@@ -198,6 +224,15 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
             status);
         if (!StatesByContainer.TryAdd(container, state))
         {
+            RestoreParents(controls, parent);
+            _ = DestroyWindow(container);
+            _ = UnregisterClassW(className, instance);
+            return null;
+        }
+
+        if (!SetWindowSubclass(parent, OwnerProcedure, OwnerSubclassIdentifier, unchecked((nuint)container)))
+        {
+            _ = StatesByContainer.TryRemove(container, out _);
             RestoreParents(controls, parent);
             _ = DestroyWindow(container);
             _ = UnregisterClassW(className, instance);
@@ -810,6 +845,7 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
 
                 if (_parent != 0 && IsWindow(_parent))
                 {
+                    _ = RemoveWindowSubclass(_parent, OwnerProcedure, OwnerSubclassIdentifier);
                     RestoreParents(_controls, _parent);
                 }
 
