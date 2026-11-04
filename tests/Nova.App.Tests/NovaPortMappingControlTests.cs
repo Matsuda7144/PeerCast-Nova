@@ -7,6 +7,24 @@ namespace PeerCast.Nova.App.Tests;
 public sealed class NovaPortMappingControlTests
 {
     [Fact]
+    public async Task PermanentUpnpLease_ViewExplainsCrashLimitationWithoutInventingExpiry()
+    {
+        await using var test = new NatPortMappingTestHarness();
+        using var owner = test.Acquire();
+        var turn = test.Manager.ReconcileAsync();
+        var call = await test.Router.NextAsync();
+        call.Completion.TrySetResult(new(NatBackendOutcome.Success, 7144, 0,
+            Backend: "UPnP IGD", LeaseKind: NatLeaseKind.Permanent));
+        await turn;
+        var view = NovaPortMappingView.Create(NatPortMappingStatusProjection.Create(test.Manager.ReadState()), false);
+        Assert.Contains("UPnP IGD", view.Summary);
+        Assert.Contains("確認 期限なし", view.Summary);
+        Assert.Contains("異常終了後の解除は保証されません", view.Summary);
+        Assert.Contains("推定期限: 不明", view.Summary);
+        Assert.Contains("外部接続: 未確認", view.Summary);
+    }
+
+    [Fact]
     public void DefaultOff_IsSharedBySettingsAndStartup()
     {
         Assert.False(new NovaOptions().AutoPortMapping);

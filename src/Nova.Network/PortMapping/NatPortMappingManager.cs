@@ -80,7 +80,8 @@ public sealed class NatPortMappingManager : IAsyncDisposable
                     entry.Lease,
                     entry.Pending is not null,
                     entry.MayExist,
-                    entry.Pending?.Request.Operation)).ToArray();
+                    entry.Pending?.Request.Operation,
+                    entry.Pending is null ? entry.Backend : backend.GetDisplayName(entry.Identity), entry.DetailCode)).ToArray();
             }
         }
     }
@@ -223,18 +224,19 @@ public sealed class NatPortMappingManager : IAsyncDisposable
                 {
                     lock (gate)
                     {
-                        entry.Status = pending.Request.Operation == NatMappingOperation.Unmap
+                        entry.Status = pending.Request.Operation == NatMappingOperation.Unmap || OwnerCountLocked(entry.Identity) == 0
                             ? NatMappingStatus.UnmapUnconfirmed : NatMappingStatus.ResultUnknown;
                         if (pending.Dispatched && pending.Request.RequestedLifetimeSeconds > 0)
                         {
                             var estimate = pending.StartedAt.AddSeconds(pending.Request.RequestedLifetimeSeconds);
-                            if (entry.Lease is { } previous && previous.EstimatedExpiresAt > estimate)
+                            if (entry.Lease?.EstimatedExpiresAt is { } previous && previous > estimate)
                             {
-                                estimate = previous.EstimatedExpiresAt;
+                                estimate = previous;
                             }
 
                             entry.Lease = new NatLeaseEvidence(pending.Request.RequestedLifetimeSeconds,
-                                null, null, estimate);
+                                null, null, backend.MayCreatePermanentLease(entry.Identity) ? null : estimate,
+                                backend.MayCreatePermanentLease(entry.Identity) ? NatLeaseKind.Unknown : NatLeaseKind.Finite);
                         }
 
                         RecordLocked("OperationWaitEnded", pending.Request,
@@ -337,7 +339,7 @@ public sealed class NatPortMappingManager : IAsyncDisposable
                 entry.Status = NatMappingStatus.UnmapUnconfirmed;
             }
 
-            if (entry.Status == NatMappingStatus.Mapped && entry.ExpiresAt <= now)
+            if (entry.Status == NatMappingStatus.Mapped && entry.ExpiresAt is { } expires && expires <= now)
             {
                 entry.Status = NatMappingStatus.ResultUnknown;
             }
@@ -378,12 +380,16 @@ public sealed class NatPortMappingManager : IAsyncDisposable
             if (result.Outcome == NatBackendOutcome.Success &&
                 (pending.Request.Operation == NatMappingOperation.Unmap
                     ? result.LifetimeSeconds != 0 || result.ExternalPort != 0
-                    : result.LifetimeSeconds is null or 0 || result.ExternalPort is null or < 1 or > 65535))
+                    : result.LifetimeSeconds is null || result.ExternalPort is null or < 1 or > 65535 ||
+                        (result.LeaseKind == NatLeaseKind.Permanent ? result.LifetimeSeconds != 0 :
+                            result.LeaseKind != NatLeaseKind.Finite || result.LifetimeSeconds == 0)))
             {
                 result = new NatBackendResult(NatBackendOutcome.ResultUnknown, DetailCode: "InvalidSuccessEvidence");
             }
 
             entry.Pending = null;
+            entry.Backend = result.Backend;
+            entry.DetailCode = result.DetailCode;
             pending.Cancellation.Dispose();
             RecordLocked("OperationObserved", pending.Request, result);
             var now = clock.GetUtcNow();
@@ -408,9 +414,12 @@ public sealed class NatPortMappingManager : IAsyncDisposable
                     entry.ReturnedExternalPort = result.ExternalPort;
                     entry.Lease = new NatLeaseEvidence(pending.Request.RequestedLifetimeSeconds,
                         result.LifetimeSeconds, now,
-                        pending.StartedAt.AddSeconds(result.LifetimeSeconds!.Value));
-                    entry.RenewAt = pending.StartedOnTimeline.AddSeconds(result.LifetimeSeconds.Value / 2.0);
-                    entry.ExpiresAt = pending.StartedOnTimeline.AddSeconds(result.LifetimeSeconds.Value);
+                        result.LeaseKind == NatLeaseKind.Permanent ? null : pending.StartedAt.AddSeconds(result.LifetimeSeconds!.Value),
+                        result.LeaseKind);
+                    entry.RenewAt = pending.StartedOnTimeline.AddSeconds(result.LeaseKind == NatLeaseKind.Permanent
+                        ? options.RequestedLifetimeSeconds / 2.0 : result.LifetimeSeconds!.Value / 2.0);
+                    entry.ExpiresAt = result.LeaseKind == NatLeaseKind.Permanent ? null :
+                        pending.StartedOnTimeline.AddSeconds(result.LifetimeSeconds!.Value);
                     entry.RetryAt = schedulingNow;
                     entry.Status = desired ? NatMappingStatus.Mapped : NatMappingStatus.UnmapUnconfirmed;
 
@@ -429,13 +438,14 @@ public sealed class NatPortMappingManager : IAsyncDisposable
                     if (pending.Request.RequestedLifetimeSeconds > 0 && pending.Dispatched)
                     {
                         var estimate = pending.StartedAt.AddSeconds(pending.Request.RequestedLifetimeSeconds);
-                        if (entry.Lease is { } previous && previous.EstimatedExpiresAt > estimate)
+                        if (entry.Lease?.EstimatedExpiresAt is { } previous && previous > estimate)
                         {
-                            estimate = previous.EstimatedExpiresAt;
+                            estimate = previous;
                         }
 
                         entry.Lease = new NatLeaseEvidence(pending.Request.RequestedLifetimeSeconds,
-                            null, null, estimate);
+                            null, null, backend.MayCreatePermanentLease(entry.Identity) ? null : estimate,
+                            backend.MayCreatePermanentLease(entry.Identity) ? NatLeaseKind.Unknown : NatLeaseKind.Finite);
                     }
 
                     // Correct a stale delete with current demand, or a stale
@@ -589,7 +599,9 @@ public sealed class NatPortMappingManager : IAsyncDisposable
         public NatLeaseEvidence? Lease { get; set; }
         public DateTimeOffset RetryAt { get; set; }
         public DateTimeOffset RenewAt { get; set; }
-        public DateTimeOffset ExpiresAt { get; set; }
+        public DateTimeOffset? ExpiresAt { get; set; }
+        public string Backend { get; set; } = "UPnP / NAT-PMP（検出中）";
+        public string? DetailCode { get; set; }
         public PendingOperation? Pending { get; set; }
     }
 

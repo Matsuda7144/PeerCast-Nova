@@ -5,7 +5,7 @@ namespace PeerCast.Nova.App;
 
 internal sealed partial class GenesisNetworkSettingsWindow
 {
-    internal const string NatCheckboxLabel = "NAT-PMP ポート自動開放";
+    internal const string NatCheckboxLabel = "ポート自動開放（UPnP / NAT-PMP）";
     internal const int NatRefreshIntervalMilliseconds = 1_000;
     private const int NatCheckboxId = 2201;
     private const uint NatCompletedMessage = 0x8000 + 0x73B;
@@ -47,7 +47,7 @@ internal sealed partial class GenesisNetworkSettingsWindow
                 throw new GenesisNetworkSettingsWindowCleanupException(classLifetime);
             return null;
         }
-        var window = CreateWindowExW(0x00010000, className, "通信 / NAT-PMP",
+        var window = CreateWindowExW(0x00010000, className, "通信 / ポート自動開放",
             WindowStyleCaption | WindowStyleSysMenu | WindowStyleClipChildren,
             UseDefaultPosition, UseDefaultPosition, 820, 760, owner, 0, instance, 0);
         if (window == 0)

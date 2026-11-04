@@ -11,7 +11,7 @@ internal sealed record GuiNextNetworkSettingsPresentation(
     NovaApplicationNetworkFailure Failure)
 {
     public static GuiNextNetworkSettingsPresentation Unavailable(string reason) =>
-        new(false, false, "NAT-PMP設定：利用不可", "公開PCP listener：状態未確認",
+        new(false, false, "ポート自動開放設定：利用不可", "公開PCP listener：状態未確認",
             "NAT mapping：状態未確認\r\n外部到達性：未確認", string.Empty, reason,
             GuiNextNetworkTone.Orange, GuiNextNetworkTone.Orange, GuiNextNetworkTone.Orange,
             NovaApplicationNetworkFailure.NotInitialized);
@@ -66,7 +66,8 @@ internal sealed record GuiNextNetworkSettingsPresentation(
         }, snapshot.StartupEnvironmentOverride);
         var mapping = view?.Summary ?? "NAT mapping：利用不可";
         mapping += "\r\nRouter ACK：" +
-            (nat?.LeaseEvidence == NatLeaseEvidenceKind.RouterConfirmedWithEstimatedExpiry ? "応答確認済み（期限は推定）" : "未確認");
+            (nat?.LeaseEvidence == NatLeaseEvidenceKind.RouterConfirmedPermanent ? "応答確認済み（期限なし）" :
+                nat?.LeaseEvidence == NatLeaseEvidenceKind.RouterConfirmedWithEstimatedExpiry ? "応答確認済み（期限は推定）" : "未確認");
         mapping += "\r\n外部到達性：" + (nat?.ExternalReachability switch
         {
             NatDisplayReachability.Reachable => "到達確認済み",
@@ -76,13 +77,13 @@ internal sealed record GuiNextNetworkSettingsPresentation(
         var notice = failure != NovaApplicationNetworkFailure.None ? $"Network分類：{failure}" :
             snapshot.RuntimeDesiredEnabled == true && snapshot.PublicListenerAvailability == NovaApplicationPublicListenerAvailability.Unavailable
                 ? "ポート自動開放：有効（公開listener待機中）。この画面は公開listenerを開始しません。"
-                : "NAT-PMP設定と公開listenerの開始は別操作です。この画面から公開開始・到達検査は行いません。";
+                : "ポート自動開放設定と公開listenerの開始は別操作です。この画面から公開開始・到達検査は行いません。";
         return new(snapshot.RuntimeDesiredEnabled == true, canEdit, settings, listener, mapping,
             view?.Diagnostics ?? string.Empty, notice,
             failure != NovaApplicationNetworkFailure.None ? GuiNextNetworkTone.Orange :
                 result?.Status == NovaApplicationNetworkPersistenceStatus.Saved ? GuiNextNetworkTone.Green : GuiNextNetworkTone.Blue,
             snapshot.PublicListenerAvailability == NovaApplicationPublicListenerAvailability.Failed ? GuiNextNetworkTone.Orange : GuiNextNetworkTone.Blue,
-            nat?.State == NatDisplayState.Mapped && nat.LeaseEvidence == NatLeaseEvidenceKind.RouterConfirmedWithEstimatedExpiry
+            nat?.State == NatDisplayState.Mapped && nat.LeaseEvidence is NatLeaseEvidenceKind.RouterConfirmedWithEstimatedExpiry or NatLeaseEvidenceKind.RouterConfirmedPermanent
                 ? GuiNextNetworkTone.Green : GuiNextNetworkTone.Orange, failure);
     }
 

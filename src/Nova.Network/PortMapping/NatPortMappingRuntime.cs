@@ -16,7 +16,7 @@ public sealed class NatPortMappingRuntime : IAsyncDisposable
         INatNetworkSource? networkSource = null,
         TimeProvider? timeProvider = null)
     {
-        Manager = new NatPortMappingManager(backend ?? new NatPmpMappingBackend(), options, timeProvider);
+        Manager = new NatPortMappingManager(backend ?? new AutomaticNatMappingBackend(), options, timeProvider);
         ownsNetworkSource = networkSource is null;
         this.networkSource = networkSource ?? new SystemNatNetworkSource();
         if (this.networkSource is SystemNatNetworkSource system)

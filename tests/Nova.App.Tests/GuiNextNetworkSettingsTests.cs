@@ -353,7 +353,7 @@ public sealed class GuiNextNetworkSettingsTests
         Assert.Contains("GetKeyState(0x10)", native);
         Assert.Contains("DrawFocusRect", native);
         Assert.Contains("診断情報（読み取り専用）", native);
-        Assert.Equal("NAT-PMP ポート自動開放", GenesisNetworkSettingsWindow.NatCheckboxLabel);
+        Assert.Equal("ポート自動開放（UPnP / NAT-PMP）", GenesisNetworkSettingsWindow.NatCheckboxLabel);
         Assert.Equal(1000, GenesisNetworkSettingsWindow.NatRefreshIntervalMilliseconds);
         foreach (var text in new[] { native, Source("GuiNextNetworkSettingsViewModel.cs"), Source("GuiNextNetworkSettingsPresentation.cs") })
             foreach (var forbidden in new[] { "AcquirePublicRelayAsync(", "InitializeAsync(", "NatPortMappingRuntime(", "Process.Start(", "settings.json", ".Wait()", ".Manager." })

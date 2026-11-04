@@ -16,20 +16,24 @@ internal sealed record NovaPortMappingView(long Generation, bool Enabled, string
             NatDisplayState.Renewing => "更新要求中",
             NatDisplayState.Unmapping => "閉鎖要求中",
             NatDisplayState.UnmapUnconfirmed => "閉鎖未確認",
+            NatDisplayState.RouterNotFound => "ルーター未検出",
+            NatDisplayState.PortConflict => "ポート競合",
             NatDisplayState.ResultUnknown => "状態未確認",
-            _ => "要求が拒否されました",
+            _ => "開放失敗（要求が拒否されました）",
         };
         var ports = state.RegisteredInternalPorts.Count == 0
             ? "不明" : string.Join(", ", state.RegisteredInternalPorts);
         var externalPort = state.ExternalPort?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "不明";
         var lease = state.Lease;
-        var confirmed = lease?.ConfirmedLifetimeSeconds is { } lifetime
+        var confirmed = lease?.Kind == NatLeaseKind.Permanent ? "期限なし" : lease?.ConfirmedLifetimeSeconds is { } lifetime
             ? $"{lifetime}s" : "未確認";
-        var expiry = lease is null ? "不明" : lease.EstimatedExpiresAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz", System.Globalization.CultureInfo.InvariantCulture);
+        var expiry = lease?.EstimatedExpiresAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz", System.Globalization.CultureInfo.InvariantCulture) ?? "不明";
         var evidence = state.LeaseEvidence switch
         {
             NatLeaseEvidenceKind.RequestedEstimate => "要求からの推定",
             NatLeaseEvidenceKind.RouterConfirmedWithEstimatedExpiry => "ルーター応答確認・期限は推定",
+            NatLeaseEvidenceKind.RouterConfirmedPermanent => "期限なし・異常終了後の解除は保証されません",
+            NatLeaseEvidenceKind.Unknown => "期限未確認（期限なしの可能性あり）",
             _ => "応答なし",
         };
         var observed = state.LastObservation?.ToLocalTime().ToString("HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture) ?? "なし";
@@ -75,6 +79,9 @@ internal sealed record NovaPortMappingView(long Generation, bool Enabled, string
         "LifetimeShortened" => "ルーターが要求より短い lease を返しました",
         "ResponseTimeout" => "最終操作: 応答タイムアウト（結果不明）",
         "RouterRejected" => "ルーターが要求を拒否しました",
+        "PortConflict" => "ポート競合（所有を確認できないマッピングは変更しません）",
+        "OwnershipUnconfirmed" => "マッピングの所有を確認できません",
+        "PreviousNetworkMappingUnconfirmed" => "以前のネットワークのマッピングが未解除のため再作成を保留しています",
         "Disabled" => "自動ポート開放は OFF です",
         "SettingChanged" => "desired state の設定が変更されました",
         _ => code,

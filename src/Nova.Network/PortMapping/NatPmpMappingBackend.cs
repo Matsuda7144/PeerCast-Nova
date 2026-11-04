@@ -11,6 +11,32 @@ namespace PeerCast.Nova.Network.PortMapping;
 /// </summary>
 public sealed class NatPmpMappingBackend : INatMappingBackend
 {
+    internal static async Task<bool> DiscoverAsync(NatNetworkIdentity network, CancellationToken cancellationToken)
+    {
+        network.Validate();
+        using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+        using var budget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        budget.CancelAfter(TimeSpan.FromMilliseconds(600));
+        try
+        {
+            socket.Bind(new IPEndPoint(IPAddress.Parse(network.InternalAddress), 0));
+            socket.Connect(new IPEndPoint(IPAddress.Parse(network.Device.GatewayAddress), 5351));
+            await socket.SendAsync(new byte[] { 0, 0 }, SocketFlags.None, budget.Token).ConfigureAwait(false);
+            var buffer = new byte[64];
+            while (true)
+            {
+                var length = await socket.ReceiveAsync(buffer, SocketFlags.None, budget.Token).ConfigureAwait(false);
+                if (length == 12 && buffer[0] == 0 && buffer[1] == 128 && buffer[2] == 0 && buffer[3] == 0)
+                    return true;
+            }
+        }
+        catch (Exception exception) when (exception is SocketException or OperationCanceledException)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return false;
+        }
+    }
+
     public async Task<NatBackendResult> ExecuteAsync(
         NatMappingRequest request,
         CancellationToken cancellationToken)

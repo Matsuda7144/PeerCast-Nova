@@ -72,7 +72,16 @@ public sealed record NatBackendResult(
     int? ExternalPort = null,
     uint? LifetimeSeconds = null,
     uint? RouterEpochSeconds = null,
-    string? DetailCode = null);
+    string? DetailCode = null,
+    string Backend = "NAT-PMP",
+    NatLeaseKind LeaseKind = NatLeaseKind.Finite);
+
+public enum NatLeaseKind
+{
+    Finite,
+    Permanent,
+    Unknown,
+}
 
 /// <summary>
 /// A backend's task must encompass all of its sends and retries. Cancellation
@@ -80,6 +89,10 @@ public sealed record NatBackendResult(
 /// </summary>
 public interface INatMappingBackend
 {
+    bool MayCreatePermanentLease(NatMappingIdentity identity) => false;
+
+    string GetDisplayName(NatMappingIdentity identity) => "NAT-PMP";
+
     Task<NatBackendResult> ExecuteAsync(
         NatMappingRequest request,
         CancellationToken cancellationToken);
@@ -105,7 +118,8 @@ public sealed record NatLeaseEvidence(
     uint RequestedLifetimeSeconds,
     uint? ConfirmedLifetimeSeconds,
     DateTimeOffset? ConfirmedAt,
-    DateTimeOffset EstimatedExpiresAt);
+    DateTimeOffset? EstimatedExpiresAt,
+    NatLeaseKind Kind = NatLeaseKind.Finite);
 
 public sealed record NatMappingSnapshot(
     NatMappingIdentity Identity,
@@ -116,7 +130,9 @@ public sealed record NatMappingSnapshot(
     NatLeaseEvidence? Lease,
     bool OperationPending,
     bool RouterMayContainMapping,
-    NatMappingOperation? PendingOperation = null);
+    NatMappingOperation? PendingOperation = null,
+    string Backend = "NAT-PMP",
+    string? DetailCode = null);
 
 /// <summary>A coherent, read-only capture; reading never runs the reconciler.</summary>
 public sealed record NatPortMappingReadState(

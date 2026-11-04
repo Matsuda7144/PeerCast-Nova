@@ -12,6 +12,8 @@ public enum NatDisplayState
     ResultUnknown,
     UnmapUnconfirmed,
     Rejected,
+    RouterNotFound,
+    PortConflict,
 }
 
 public enum NatLeaseEvidenceKind
@@ -19,6 +21,8 @@ public enum NatLeaseEvidenceKind
     None,
     RequestedEstimate,
     RouterConfirmedWithEstimatedExpiry,
+    RouterConfirmedPermanent,
+    Unknown,
 }
 
 public enum NatDisplayReachability
@@ -65,12 +69,15 @@ public static class NatPortMappingStatusProjection
             .FirstOrDefault();
         var state = current?.Status switch
         {
+            NatMappingStatus.Mapping when current.Backend == "UPnP / NAT-PMP（検出中）" => NatDisplayState.Discovering,
             NatMappingStatus.Mapping when current.PendingOperation == NatMappingOperation.Renew => NatDisplayState.Renewing,
             NatMappingStatus.Mapping => NatDisplayState.Mapping,
             NatMappingStatus.Mapped => NatDisplayState.Mapped,
             NatMappingStatus.Unmapping => NatDisplayState.Unmapping,
             NatMappingStatus.ResultUnknown => NatDisplayState.ResultUnknown,
             NatMappingStatus.UnmapUnconfirmed => NatDisplayState.UnmapUnconfirmed,
+            NatMappingStatus.Rejected when current.DetailCode == "RouterNotFound" => NatDisplayState.RouterNotFound,
+            NatMappingStatus.Rejected when current.DetailCode == "PortConflict" => NatDisplayState.PortConflict,
             NatMappingStatus.Rejected => NatDisplayState.Rejected,
             _ => source.Network is null && source.Enabled ? NatDisplayState.Discovering : NatDisplayState.Idle,
         };
@@ -106,6 +113,7 @@ public static class NatPortMappingStatusProjection
                 }
                 if (item.Event is "OperationObserved" or "OperationWaitEnded")
                 {
+                    if (item.Result?.DetailCode is { } detail) Add(item, detail);
                     if (item.Result?.Outcome == NatBackendOutcome.ResultUnknown)
                     {
                         Add(item, request.Operation == NatMappingOperation.Unmap
@@ -128,7 +136,7 @@ public static class NatPortMappingStatusProjection
                             {
                                 Add(item, "ExternalPortRemapped");
                             }
-                            if (item.Result.LifetimeSeconds < request.RequestedLifetimeSeconds)
+                            if (item.Result.LeaseKind == NatLeaseKind.Finite && item.Result.LifetimeSeconds < request.RequestedLifetimeSeconds)
                             {
                                 Add(item, "LifetimeShortened");
                             }
@@ -159,11 +167,13 @@ public static class NatPortMappingStatusProjection
         var lastObservation = source.Diagnostics.LastOrDefault(item => item.Event == "OperationObserved")?.Timestamp;
         var exposeResult = current is { RouterMayContainMapping: true };
         var lease = exposeResult ? current?.Lease : null;
-        return new NatPortMappingDisplay(source.Enabled, source.Generation, "NAT-PMP", source.Network,
+        return new NatPortMappingDisplay(source.Enabled, source.Generation, current?.Backend ?? "UPnP / NAT-PMP", source.Network,
             NatMappingProtocol.Tcp, source.RegisteredInternalPorts, state, NatDisplayReachability.NotChecked,
             null, exposeResult ? current?.ReturnedExternalPort : null,
             source.RequestedLifetimeSeconds, lease,
             lease is null ? NatLeaseEvidenceKind.None
+                : lease.Kind == NatLeaseKind.Permanent ? NatLeaseEvidenceKind.RouterConfirmedPermanent
+                : lease.Kind == NatLeaseKind.Unknown ? NatLeaseEvidenceKind.Unknown
                 : lease.ConfirmedLifetimeSeconds is null ? NatLeaseEvidenceKind.RequestedEstimate
                 : NatLeaseEvidenceKind.RouterConfirmedWithEstimatedExpiry,
             source.CapturedAt, lastObservation, diagnostics.TakeLast(32).ToArray());

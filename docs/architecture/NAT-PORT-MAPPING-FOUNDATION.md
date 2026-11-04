@@ -46,6 +46,72 @@ reported epoch counter are separate observations.
 
 ## Backend and lease evidence
 
+### UPnP IGD integration
+
+The production runtime now uses `AutomaticNatMappingBackend` within the same
+manager, device lane and listener lifecycle. It first probes NAT-PMP's public
+address action (read-only, 600 ms); if that does not establish support, it searches
+for UPnP IGD on the selected IPv4 interface. No protocol mutation is performed
+during discovery. A selected protocol is pinned per device/internal port until
+confirmed removal. A mapping timeout, rejection during renewal, or network epoch
+change cannot silently switch protocols. An unresolved mapping on the same
+device/port blocks creation in a new epoch and remains cleanup-unconfirmed.
+
+UPnP uses bounded SSDP M-SEARCH, IGD device descriptions and
+WANIPConnection:1/:2 or WANPPPConnection:1 SOAP actions. SSDP send source and HTTP
+connections bind to the selected internal address; replies and numeric HTTP URLs
+must refer to the selected gateway. DNS hosts, credentials, fragments, redirects,
+proxies and external control/URLBase hosts are refused. SSDP reads are bounded to
+64 packets/4 locations/1.2 seconds per search. Multicast rootdevice discovery is
+attempted first; only if its descriptions yield no supported IGD service is one
+rootdevice M-SEARCH sent directly to the selected gateway's IPv4 port 1900.
+The directed search returns its first validated rootdevice location for immediate
+description retrieval within the existing manager wait budget. Both paths use
+the same sender and URL validation; caller cancellation prevents further searches.
+NAT-PMP probing still precedes UPnP discovery. XML is limited to 64 KiB with DTD and external
+resolution disabled; HTTP header, connection and operation budgets are finite.
+
+Before Add, Renew or Delete, GetSpecificPortMappingEntry must establish absence
+(SOAP 714) or match the internal address/port, enabled flag and a random description
+receipt issued by this backend before its own Add. Pre-existing entries are never
+adopted based on target alone. Delete is followed by an absence check. Unknown
+queries, replacement entries and uncertain Add results do not authorize deletion;
+absence after an uncertain Add alone does not prove cleanup. UPnP has no atomic
+compare-and-delete operation, so simultaneous changes by another control point
+between the check and action cannot be transactionally excluded.
+
+Finite leases are requested first. Only explicit SOAP 725 permits retrying with
+lease zero after another ownership check. A confirmed zero lease is represented
+as `Permanent`, with no estimated expiry. The existing monotonic renewal schedule
+periodically verifies permanent mappings and recreates missing entries; it does
+not invent a lease deadline or send redundant Add requests. An unknown UPnP
+mutation has unknown expiry; NAT-PMP retains its finite estimate. Normal OFF,
+final listener release and shutdown use the same manager cleanup path. Receipts
+are process-local: after a crash a permanent entry may survive and cannot be
+automatically adopted or removed by the next process. The GUI states this limit.
+
+The existing checkbox is labelled `ポート自動開放（UPnP / NAT-PMP）`; default OFF,
+settings persistence and external-reachability semantics are unchanged. Method,
+discovery, router-not-found, conflict and cleanup diagnostics use the existing
+projection. Router mapping success still does not prove Internet reachability.
+
+This is an independent Apache-2.0 implementation of the published
+[UPnP Device Architecture](https://upnp.org/specs/arch/UPnP-arch-DeviceArchitecture-v1.1.pdf),
+[WANIPConnection v1](https://upnp.org/specs/gw/UPnP-gw-WANIPConnection-v1-Service.pdf),
+[WANIPConnection v2](https://upnp.org/specs/gw/UPnP-gw-WANIPConnection-v2-Service.pdf)
+and [WANPPPConnection v1](https://upnp.org/specs/gw/UPnP-gw-WANPPPConnection-v1-Service.pdf).
+PeerCastStation's GPLv3
+[UPnPDevice](https://github.com/kumaryu/peercaststation/blob/master/PeerCastStation/PeerCastStation.UI/PortMapper/UPnPDevice.cs),
+[NatDeviceDiscoverer](https://github.com/kumaryu/peercaststation/blob/master/PeerCastStation/PeerCastStation.UI/PortMapper/NatDeviceDiscoverer.cs)
+and [PortMapperPlugin](https://github.com/kumaryu/peercaststation/blob/master/PeerCastStation/PeerCastStation.UI/PortMapperPlugin.cs)
+were consulted for protocol discovery/service coverage and lifecycle behavior;
+no source was copied or ported. Its independent monitor/multi-protocol mapping
+loop and default-enabled setting are not used here. Deterministic fake-router
+tests cover this integration; real-router compatibility and physical GUI/external
+reachability acceptance remain unverified.
+
+### Existing NAT-PMP behavior
+
 The first backend is NAT-PMP, implemented without additional packages. Its TCP
 request/response, deletion, returned port, lifetime and counter semantics follow
 [RFC 6886](https://www.rfc-editor.org/rfc/rfc6886.html). Each operation binds a
