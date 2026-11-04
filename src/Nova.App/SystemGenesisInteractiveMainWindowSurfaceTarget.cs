@@ -295,6 +295,7 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
         }
 
         viewModel.PublicChannels = guiNextState?.PublicChannels;
+        viewModel.RecordingOutputSettings = _recordingSettings;
         viewModel.RelayActivation = guiNextState?.RelayActivation;
         if (guiNextState is not null)
         {

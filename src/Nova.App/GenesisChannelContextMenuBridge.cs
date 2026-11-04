@@ -441,14 +441,17 @@ internal sealed class GenesisChannelContextMenuBridge : IAsyncDisposable
                     _listView,
                     row,
                     _ => SynchronizeManagedSelection(renderedRow));
+            var actions = GenesisChannelContextActions.Capture(_viewModel, renderedRow);
             _ = GenesisChannelContextMenuPointer.TryOpenAfterSelection(
                 selectionSynchronized,
                 () => ProcessContextMenuCommand(
                     GenesisChannelContextMenuNative.Show(
                         _container,
                         renderedRow.IsInteractive,
-                        ResolveFavoriteText(renderedRow)),
-                    renderedRow));
+                        ResolveFavoriteText(renderedRow),
+                        actions),
+                    renderedRow,
+                    actions));
         }
 
         private void ProcessKey(ushort virtualKey)
@@ -512,14 +515,17 @@ internal sealed class GenesisChannelContextMenuBridge : IAsyncDisposable
                 return;
             }
 
+            var actions = GenesisChannelContextActions.Capture(_viewModel, renderedRow);
             ProcessContextMenuCommand(
                 GenesisChannelContextMenuNative.ShowResolvedRow(
                     _container,
                     _listView,
                     resolvedTarget.Row,
                     renderedRow.IsInteractive,
-                    ResolveFavoriteText(renderedRow)),
-                renderedRow);
+                    ResolveFavoriteText(renderedRow),
+                    actions),
+                renderedRow,
+                actions);
         }
 
         private GenesisChannelContextMenuRenderedKeyboardTarget? ResolveKeyboardTarget() =>
@@ -544,14 +550,20 @@ internal sealed class GenesisChannelContextMenuBridge : IAsyncDisposable
 
         private void ProcessContextMenuCommand(
             GenesisChannelContextMenuCommand command,
-            GenesisGuiNextNativeTabRow row)
+            GenesisGuiNextNativeTabRow row,
+            GenesisChannelContextTarget actions)
         {
             if (_interaction.IsRecordingHistoryView || row.RecordingRule is not null || row.RecordingLibrary is not null || row.RecordingHistory is not null || row.Log is not null || row.Publishing is not null)
             {
                 return;
             }
 
-            if (command == GenesisChannelContextMenuCommand.Play &&
+            if (GenesisChannelContextActions.IsAction(command))
+            {
+                _ = GenesisChannelContextActions.ExecuteAsync(
+                    _viewModel, actions, command, new SystemGenesisChannelContextEffects(_container));
+            }
+            else if (command == GenesisChannelContextMenuCommand.Play &&
                 row.InteractiveChannel is { } interactiveChannel &&
                 _commandLanes.CanStartPlayback)
             {

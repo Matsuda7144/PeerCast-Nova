@@ -693,6 +693,76 @@ public sealed class GenesisManualRecordingViewModelTests
         Assert.Equal(0, controller.StopCount);
     }
 
+    [Fact]
+    public async Task ContextRecordingCapturesChannelAndSwitchesToStop()
+    {
+        var controller = new RecordingAwarePlaybackController();
+        var viewModel = new GenesisMainViewModel(controller);
+        var first = Channel(FirstId);
+        var second = Channel(SecondId);
+        viewModel.ReplaceChannels([first, second]);
+        var target = GenesisChannelContextActions.Capture(viewModel, new(first, first));
+        Assert.Equal("録画開始", target.RecordingLabel);
+        Assert.True(target.CanRecord);
+        viewModel.SelectedChannel = second;
+        var effects = new GenesisChannelContextActionsTests.Effects();
+        await GenesisChannelContextActions.ExecuteAsync(viewModel, target, GenesisChannelContextMenuCommand.Recording, effects);
+        // Executing a stale Start again still uses the existing duplicate-start guard.
+        await GenesisChannelContextActions.ExecuteAsync(viewModel, target, GenesisChannelContextMenuCommand.Recording, effects);
+        Assert.Equal(1, controller.StartCount);
+        Assert.Equal(GenesisRecordingCoreStateKind.Manual, controller.GetSnapshot(first).State);
+        Assert.Equal(GenesisRecordingCoreStateKind.Idle, controller.GetSnapshot(second).State);
+        var stop = GenesisChannelContextActions.Capture(viewModel, new(first, first));
+        Assert.Equal("録画停止", stop.RecordingLabel);
+        Assert.True(stop.CanRecord);
+        await GenesisChannelContextActions.ExecuteAsync(viewModel, stop, GenesisChannelContextMenuCommand.Recording, effects);
+        Assert.Equal(1, controller.StopCount);
+        Assert.Equal(FirstId, controller.LastStopChannelId!.ToString());
+    }
+
+    [Fact]
+    public async Task ContextStopDoesNotStopReplacementOrAutomaticSession()
+    {
+        var controller = new RecordingAwarePlaybackController();
+        var viewModel = new GenesisMainViewModel(controller);
+        var channel = Channel(FirstId);
+        await viewModel.StartManualRecordingAsync(channel);
+        var stop = GenesisChannelContextActions.Capture(viewModel, new(channel, channel));
+        controller.SetSession(FirstId, GenesisRecordingCoreStateKind.Manual, new RecordingSessionId(Guid.NewGuid()));
+        var effects = new GenesisChannelContextActionsTests.Effects();
+        await GenesisChannelContextActions.ExecuteAsync(viewModel, stop, GenesisChannelContextMenuCommand.Recording, effects);
+        Assert.Equal(0, controller.StopCount);
+        controller.SetState(FirstId, GenesisRecordingCoreStateKind.Automatic);
+        await viewModel.RefreshActiveRecordingsAsync();
+        var automatic = GenesisChannelContextActions.Capture(viewModel, new(channel, channel));
+        Assert.False(automatic.CanRecord);
+        await GenesisChannelContextActions.ExecuteAsync(viewModel, automatic, GenesisChannelContextMenuCommand.Recording, effects);
+        Assert.Equal(0, controller.StopCount);
+    }
+
+    [Fact]
+    public async Task ContextRecordingDisablesInvalidAndTransitioningChannels()
+    {
+        var controller = new RecordingAwarePlaybackController();
+        var viewModel = new GenesisMainViewModel(controller);
+        var invalid = new GenesisChannelItem("Invalid", "https://example.test/live", ChannelId: FirstId);
+        Assert.False(GenesisChannelContextActions.Capture(viewModel, new(invalid, invalid)).CanRecord);
+        var channel = Channel(FirstId);
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        controller.StartHandler = async (_, cancellationToken) =>
+        {
+            entered.SetResult();
+            await release.Task.WaitAsync(cancellationToken);
+            return Outcome(GenesisManualRecordingCommandKind.Rejected, GenesisRecordingCoreStateKind.Idle);
+        };
+        var operation = viewModel.StartManualRecordingAsync(channel).AsTask();
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.False(GenesisChannelContextActions.Capture(viewModel, new(channel, channel)).CanRecord);
+        release.SetResult();
+        await operation;
+    }
+
     private static GenesisChannelItem Channel(string id, string? name = null) =>
         new(name ?? "station", Source(id), ChannelId: id);
 

@@ -11,6 +11,10 @@ internal enum GenesisChannelContextMenuCommand
     Refresh = 3,
     Favorite = 4,
     ManualSourceUrl = 5,
+    OpenContact = 6,
+    CopyContact = 7,
+    Recording = 8,
+    OpenRecordingDirectory = 9,
 }
 
 internal static class GenesisChannelContextMenuNative
@@ -23,6 +27,7 @@ internal static class GenesisChannelContextMenuNative
     private const uint TrackPopupMenuReturnCommand = 0x0100;
     private const uint TrackPopupMenuRightButton = 0x0002;
     private const uint MenuFlagString = 0x0000;
+    private const uint MenuFlagGrayed = 0x0001;
     private const uint MenuFlagSeparator = 0x0800;
     private const uint GlobalMemoryMoveable = 0x0002;
     private const uint ClipboardFormatUnicodeText = 13;
@@ -87,7 +92,8 @@ internal static class GenesisChannelContextMenuNative
     internal static GenesisChannelContextMenuCommand Show(
         nint owner,
         bool canPlay,
-        string? favoriteText)
+        string? favoriteText,
+        GenesisChannelContextTarget? actions = null)
     {
         if (owner == 0)
         {
@@ -106,7 +112,7 @@ internal static class GenesisChannelContextMenuNative
         GenesisChannelContextMenuDiagnostics.Write(
             "show",
             $"owner=0x{owner:X} canPlay={canPlay} favorite={(!string.IsNullOrWhiteSpace(favoriteText))} x={cursor.X} y={cursor.Y}");
-        return ShowAt(owner, cursor, canPlay, favoriteText);
+        return ShowAt(owner, cursor, canPlay, favoriteText, actions);
     }
 
     public static GenesisChannelContextMenuCommand ShowForRow(
@@ -141,7 +147,8 @@ internal static class GenesisChannelContextMenuNative
         nint listView,
         int row,
         bool canPlay,
-        string? favoriteText)
+        string? favoriteText,
+        GenesisChannelContextTarget? actions = null)
     {
         if (owner == 0 || listView == 0 || row < 0)
         {
@@ -179,7 +186,7 @@ internal static class GenesisChannelContextMenuNative
             return FailMenuOpen(owner);
         }
 
-        return ShowAt(owner, anchor, canPlay, favoriteText);
+        return ShowAt(owner, anchor, canPlay, favoriteText, actions);
     }
 
     internal static int ResolveKeyboardMenuRow(
@@ -202,7 +209,8 @@ internal static class GenesisChannelContextMenuNative
         return selectedRow >= 0 ? selectedRow : requestedRow;
     }
 
-    public static bool CopySourceToClipboard(nint owner, string source, Func<bool>? canCopy = null)
+    public static bool CopySourceToClipboard(nint owner, string source, Func<bool>? canCopy = null,
+        Action? reportFailure = null)
     {
         if (owner == 0 || string.IsNullOrWhiteSpace(source) || (canCopy is not null && !canCopy()))
         {
@@ -213,7 +221,7 @@ internal static class GenesisChannelContextMenuNative
         var memory = GlobalAlloc(GlobalMemoryMoveable, (nuint)bytes.Length);
         if (memory == 0)
         {
-            SystemGenesisGuiNextChannelContextFeedback.ReportClipboardCopyFailure(owner);
+            ReportFailure();
             return false;
         }
 
@@ -261,8 +269,14 @@ internal static class GenesisChannelContextMenuNative
             if (!transferred)
             {
                 _ = GlobalFree(memory);
-                SystemGenesisGuiNextChannelContextFeedback.ReportClipboardCopyFailure(owner);
+                ReportFailure();
             }
+        }
+
+        void ReportFailure()
+        {
+            if (reportFailure is not null) reportFailure();
+            else SystemGenesisGuiNextChannelContextFeedback.ReportClipboardCopyFailure(owner);
         }
     }
 
@@ -277,7 +291,8 @@ internal static class GenesisChannelContextMenuNative
         nint owner,
         WindowPoint anchor,
         bool canPlay,
-        string? favoriteText)
+        string? favoriteText,
+        GenesisChannelContextTarget? actions)
     {
         var menu = CreatePopupMenu();
         if (menu == 0)
@@ -295,12 +310,20 @@ internal static class GenesisChannelContextMenuNative
                         menu,
                         MenuFlagString,
                         (nuint)GenesisChannelContextMenuCommand.Play,
-                        "Play\tEnter")) ||
+                        "再生\tEnter")) ||
+                !AppendMenuW(menu, actions?.CanRecord == true ? MenuFlagString : MenuFlagGrayed,
+                    (nuint)GenesisChannelContextMenuCommand.Recording, actions?.RecordingLabel ?? "録画開始") ||
+                !AppendMenuW(menu, MenuFlagSeparator, 0, string.Empty) ||
+                !AppendMenuW(menu, actions?.ContactUrl is not null ? MenuFlagString : MenuFlagGrayed,
+                    (nuint)GenesisChannelContextMenuCommand.OpenContact, "コンタクトURLを開く") ||
+                !AppendMenuW(menu, actions?.ContactUrl is not null ? MenuFlagString : MenuFlagGrayed,
+                    (nuint)GenesisChannelContextMenuCommand.CopyContact, "コンタクトURLをコピー") ||
                 !AppendMenuW(
                     menu,
                     MenuFlagString,
                     (nuint)GenesisChannelContextMenuCommand.CopySource,
-                    "Copy Source\tCtrl+C"))
+                    "ソースURLをコピー\tCtrl+C") ||
+                !AppendMenuW(menu, MenuFlagSeparator, 0, string.Empty))
             {
                 GenesisChannelContextMenuDiagnostics.Write(
                     "popup",
@@ -325,7 +348,7 @@ internal static class GenesisChannelContextMenuNative
                     menu,
                     MenuFlagString,
                     (nuint)GenesisChannelContextMenuCommand.Refresh,
-                    "Refresh\tF5"))
+                    "更新\tF5"))
             {
                 GenesisChannelContextMenuDiagnostics.Write(
                     "popup",
@@ -334,6 +357,8 @@ internal static class GenesisChannelContextMenuNative
             }
 
             if (!AppendMenuW(menu, MenuFlagSeparator, 0, string.Empty) ||
+                !AppendMenuW(menu, actions?.RecordingDirectory is not null ? MenuFlagString : MenuFlagGrayed,
+                    (nuint)GenesisChannelContextMenuCommand.OpenRecordingDirectory, "録画フォルダを開く") ||
                 !AppendMenuW(
                     menu,
                     MenuFlagString,

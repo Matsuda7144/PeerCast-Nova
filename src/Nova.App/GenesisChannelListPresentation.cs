@@ -100,6 +100,7 @@ public sealed record GenesisChannelItem(
     string? ChannelId = null)
 {
     public string? YellowPage { get; init; }
+    public string? ContactUrl { get; init; }
 
     public string DetailsText => Description ?? string.Empty;
 

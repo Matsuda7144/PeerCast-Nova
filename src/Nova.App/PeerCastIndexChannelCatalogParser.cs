@@ -8,6 +8,7 @@ internal static class PeerCastIndexChannelCatalogParser
     private const int ChannelNameField = 0;
     private const int ChannelIdField = 1;
     private const int TrackerField = 2;
+    private const int ContactUrlField = 3;
     private const int GenreField = 4;
     private const int DetailField = 5;
     private const int ListenerField = 6;
@@ -85,7 +86,10 @@ internal static class PeerCastIndexChannelCatalogParser
                 ParseNonNegativeInteger(fields[BitrateField]),
                 ParseBroadcastTime(fields[BroadcastTimeField]),
                 type,
-                channelId));
+                channelId)
+            {
+                ContactUrl = GenesisContactUrl.Normalize(Decode(fields[ContactUrlField])),
+            });
         }
 
         return new(

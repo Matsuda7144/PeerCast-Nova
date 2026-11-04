@@ -48,6 +48,7 @@ internal static class GenesisChannelCatalogSanitizer
             var uptime = NormalizeNonNegative(channel.Uptime);
             var type = NormalizeOptional(channel.Type, MaximumTypeCharacters);
             var channelId = NormalizeChannelId(channel.ChannelId);
+            var contactUrl = GenesisContactUrl.Normalize(channel.ContactUrl);
 
             channels.Add(IsUnchanged(
                     channel,
@@ -59,7 +60,7 @@ internal static class GenesisChannelCatalogSanitizer
                     bitrateKbps,
                     uptime,
                     type,
-                    channelId)
+                    channelId) && string.Equals(channel.ContactUrl, contactUrl, StringComparison.Ordinal)
                 ? channel
                 : new GenesisChannelItem(
                     name,
@@ -70,7 +71,11 @@ internal static class GenesisChannelCatalogSanitizer
                     bitrateKbps,
                     uptime,
                     type,
-                    channelId));
+                    channelId)
+                {
+                    ContactUrl = contactUrl,
+                    YellowPage = channel.YellowPage,
+                });
         }
 
         var remainingEntries = MaximumChannels - channels.Count;

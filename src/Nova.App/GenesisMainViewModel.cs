@@ -13,6 +13,7 @@ namespace PeerCast.Nova.App;
 public sealed partial class GenesisMainViewModel : INotifyPropertyChanged
 {
     internal const int MaximumSourceCharacters = 2_048;
+    internal GenesisRecordingOutputDirectorySettings? RecordingOutputSettings { get; set; }
     private readonly IPlaybackSessionController _controller;
     private readonly IGenesisManualRecordingSessionController? _recordingController;
     private readonly GenesisManualRecordingCommandLanes _recordingCommandLanes = new();

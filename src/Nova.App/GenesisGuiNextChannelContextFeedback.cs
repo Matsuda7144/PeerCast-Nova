@@ -6,6 +6,10 @@ internal enum GenesisGuiNextChannelContextFailure
 {
     MenuOpen,
     ClipboardCopy,
+    ContactClipboardCopy,
+    ExternalOpen,
+    RecordingDirectoryMissing,
+    RecordingCommand,
 }
 
 internal sealed record GenesisGuiNextChannelContextFeedbackPresentation(
@@ -24,6 +28,14 @@ internal static class GenesisGuiNextChannelContextFeedback
                 new("Channel menu could not be opened. Try again.", Caption),
             GenesisGuiNextChannelContextFailure.ClipboardCopy =>
                 new("Channel source could not be copied to the clipboard.", Caption),
+            GenesisGuiNextChannelContextFailure.ContactClipboardCopy =>
+                new("コンタクトURLをクリップボードへコピーできませんでした。", Caption),
+            GenesisGuiNextChannelContextFailure.ExternalOpen =>
+                new("URLまたは録画フォルダを開けませんでした。", Caption),
+            GenesisGuiNextChannelContextFailure.RecordingDirectoryMissing =>
+                new("現在の録画保存先フォルダが存在しないか、利用できません。", Caption),
+            GenesisGuiNextChannelContextFailure.RecordingCommand =>
+                new("録画操作を完了できませんでした。録画状態を確認してください。", Caption),
             _ => throw new ArgumentOutOfRangeException(nameof(failure), failure, null),
         };
 
@@ -55,7 +67,7 @@ internal static class SystemGenesisGuiNextChannelContextFeedback
     public static void ReportClipboardCopyFailure(nint owner) =>
         Report(owner, GenesisGuiNextChannelContextFailure.ClipboardCopy);
 
-    private static void Report(
+    public static void Report(
         nint owner,
         GenesisGuiNextChannelContextFailure failure)
     {

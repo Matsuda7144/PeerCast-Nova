@@ -9,14 +9,16 @@ public sealed class GenesisAggregatingYellowPageChannelCatalogTests
         var firstShared = new GenesisChannelItem(
             "Shared from first",
             "pcp://first.example/channel/0123456789ABCDEF0123456789ABCDEF",
-            ChannelId: sharedId);
+            ChannelId: sharedId)
+        { ContactUrl = "https://first.example/contact" };
         var firstOnly = new GenesisChannelItem(
             "First only",
             "pcp://first.example/only");
         var secondShared = new GenesisChannelItem(
             "Shared from second",
             "pcp://second.example/channel/0123456789ABCDEF0123456789ABCDEF",
-            ChannelId: sharedId);
+            ChannelId: sharedId)
+        { ContactUrl = "https://second.example/contact" };
         var secondOnly = new GenesisChannelItem(
             "Second only",
             "pcp://second.example/only");

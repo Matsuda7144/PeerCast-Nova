@@ -74,13 +74,16 @@ public sealed class GenesisGuiNextChannelContextFeedbackTests
 
         Assert.True(
             source.Split(
-                "SystemGenesisGuiNextChannelContextFeedback.ReportClipboardCopyFailure(owner);",
+                "ReportFailure();",
                 StringSplitOptions.None).Length - 1 >= 2,
             "Allocation and post-allocation clipboard failures should report feedback.");
         Assert.Contains(
-            "_ = GlobalFree(memory);\n                SystemGenesisGuiNextChannelContextFeedback.ReportClipboardCopyFailure(owner);",
+            "_ = GlobalFree(memory);\n                ReportFailure();",
             source,
             StringComparison.Ordinal);
+        Assert.Contains("if (reportFailure is not null) reportFailure();", source, StringComparison.Ordinal);
+        Assert.Contains("else SystemGenesisGuiNextChannelContextFeedback.ReportClipboardCopyFailure(owner);",
+            source, StringComparison.Ordinal);
     }
 
     private static string FindRepositoryFile(params string[] relativeParts)
