@@ -23,6 +23,7 @@ internal sealed class GenesisChannelSearchBoxBridge : IAsyncDisposable
     private const int EditNotificationChange = 0x0300;
     private const int ComboBoxNotificationSelectionChanged = 1;
     private const int LabelWidth = 52;
+    internal const int MinimumWidth = LabelWidth + MinimumSearchEditWidth + YellowPageFilterGap + YellowPageFilterWidth;
     private const int SearchCharacterLimit = 256;
     private const int YellowPageDropDownHeight = 240;
     private readonly nint _label;
@@ -145,6 +146,19 @@ internal sealed class GenesisChannelSearchBoxBridge : IAsyncDisposable
 
     internal void SynchronizeYellowPageFilter() =>
         _state.SynchronizeYellowPageFilter();
+
+    internal void ApplyLayout(int left, int width, int height, uint dpi)
+    {
+        if (!TryResolveControlLayout(width, out var editWidth, out var filterLeft)) return;
+        int S(int value) => GenesisMainWindowLayout.Scale(value, dpi);
+        _ = MoveWindow(_label, S(left), 0, S(LabelWidth - 4), S(height), true);
+        _ = MoveWindow(_edit, S(left + LabelWidth), S(2), S(editWidth), S(height - 4), true);
+        _ = MoveWindow(_yellowPageFilter, S(left + filterLeft), S(2), S(YellowPageFilterWidth), S(YellowPageDropDownHeight), true);
+    }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool MoveWindow(nint window, int x, int y, int width, int height, bool repaint);
 
     public bool Focus()
     {

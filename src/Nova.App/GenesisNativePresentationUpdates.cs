@@ -90,7 +90,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
 
         private bool PresentBounds(nint control, int x, int y, int width, int height, bool repaint) =>
             _detailsUpdates.Set(control, "bounds", (x, y, width, height),
-                () => IsWindow(control) && MoveWindow(control, x, y, width, height, repaint));
+                () => IsWindow(control) && MoveWindow(control, Scale(x), Scale(y), Scale(width), Scale(height), repaint));
 
         private bool PresentInvalidation(nint control, nint rectangle, bool erase) => _detailsUpdates.Invalidate(control);
     }

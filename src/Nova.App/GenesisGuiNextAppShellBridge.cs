@@ -521,6 +521,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
     private const int PlaybackButtonBottomInset = 10;
     private const int MinimumPlaybackButtonTop =
         NavigationItemTop + (NavigationItemCount * NavigationItemHeight) + 8;
+    internal const int MinimumSidebarHeight = MinimumPlaybackButtonTop + PlaybackButtonHeight + PlaybackButtonBottomInset;
     private const int ButtonStyleOwnerDraw = 0x0000000B;
     private const uint WindowStyleChild = 0x40000000;
     private const uint WindowStyleVisible = 0x10000000;
@@ -944,16 +945,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             (nint)RefreshControlId,
             instance,
             0);
-        var detailsCopyButtonLeft = Math.Max(
-            0,
-            detailsRectangle.Width - DetailsCopyButtonWidth - 12);
-        var detailsStopRecordingButtonLeft = Math.Max(
-            0,
-            detailsCopyButtonLeft - DetailsStopRecordingButtonWidth - DetailsRecordingButtonGap);
-        var detailsRecordButtonLeft = Math.Max(
-            0,
-            detailsStopRecordingButtonLeft - DetailsRecordButtonWidth - DetailsRecordingButtonGap);
-        var detailsTextWidth = Math.Max(1, detailsRecordButtonLeft - 20);
+        var (detailsRecordButtonLeft, detailsStopRecordingButtonLeft, detailsCopyButtonLeft, detailsTextWidth) =
+            ResolveDetailsActions(detailsRectangle.Width);
         var detailsTitle = CreateDetailsTextControl(
             detailsPane,
             left: 12,
@@ -965,21 +958,21 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             GenesisGuiNextRecordingPageModePresentation.ActiveRecordingsLabel,
             detailsPane,
             ActiveRecordingsModeControlId,
-            left: 12,
+            left: RecordingToolbarLeft(0),
             instance);
         var recordingRulesModeButton = CreateRecordingModeButton(
             GenesisGuiNextRecordingPageModePresentation.RulesLabel,
             detailsPane,
             RecordingRulesModeControlId,
-            left: 12 + 2 * (RecordingModeButtonWidth + RecordingModeButtonGap),
+            left: RecordingToolbarLeft(2),
             instance);
         var recordingLibraryModeButton = CreateRecordingModeButton(
             GenesisGuiNextRecordingPageModePresentation.LibraryLabel,
             detailsPane, RecordingLibraryModeControlId,
-            left: 12 + RecordingModeButtonWidth + RecordingModeButtonGap, instance);
+            left: RecordingToolbarLeft(1), instance);
         var recordingLibraryRefreshButton = CreateRecordingModeButton(
             "更新", detailsPane, RecordingLibraryRefreshControlId,
-            left: 12 + 4 * (RecordingModeButtonWidth + RecordingModeButtonGap), instance);
+            left: RecordingToolbarLeft(4), instance);
         var detailsDescription = CreateDetailsTextControl(
             detailsPane,
             left: 12,
@@ -1154,6 +1147,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
         }
 
         state.Attach();
+        StatesByOwner[owner] = state;
+        state.ApplyClientLayout();
         state.SynchronizeNativeSelection();
         return new(
             listView,
@@ -1435,7 +1430,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             state.SynchronizeNativeSelection();
             return 0;
         }
-        else if (message is 0x0005 or 0x02E3) // WM_SIZE / WM_DPICHANGED_AFTERPARENT
+        else if ((message is 0x0005 or 0x02E3) && state.IsDetailsPane(window) && !state.LayoutInProgress) // WM_SIZE / WM_DPICHANGED_AFTERPARENT
         {
             state.ResetDetailsPresentation();
             state.SynchronizeNativeSelection();
@@ -1499,7 +1494,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
         private readonly nint _sidebar;
         private readonly nint _statusBar;
         private readonly nint _detailsPane;
-        private readonly int _detailsTextWidth;
+        private int _detailsTextWidth;
         private readonly GenesisChannelSearchBoxBridge _searchBox;
         private readonly nint _favoriteButton;
         private readonly GenesisNativePresentationUpdates _favoriteUpdates = new();
@@ -1597,9 +1592,9 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             _recordingLibraryRefreshButton = recordingLibraryRefreshButton;
             _recordingHistoryModeButton = CreateRecordingModeButton(
                 GenesisGuiNextRecordingPageModePresentation.HistoryLabel, detailsPane,
-                RecordingHistoryModeControlId, 264, GetModuleHandleW(null));
+                RecordingHistoryModeControlId, RecordingToolbarLeft(3), GetModuleHandleW(null));
             _recordingHistoryRefreshButton = CreateRecordingModeButton(
-                "更新", detailsPane, RecordingHistoryRefreshControlId, 348, GetModuleHandleW(null));
+                "更新", detailsPane, RecordingHistoryRefreshControlId, RecordingToolbarLeft(4), GetModuleHandleW(null));
             _recordingHistoryDetails = CreateWindowExW(0, "EDIT", string.Empty,
                 WindowStyleChild | WindowStyleTabStop | RecordingHistoryDetailsStyle,
                 12, HistoryDetailsLayout.Top, Math.Max(1, detailsTextWidth), HistoryDetailsLayout.Height,
@@ -1608,17 +1603,17 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             ApplyDefaultFont(_recordingHistoryModeButton);
             ApplyDefaultFont(_recordingHistoryRefreshButton);
             _createRuleButton = CreateRecordingModeButton("新規", detailsPane,
-                CreateRuleControlId, 348, GetModuleHandleW(null));
+                CreateRuleControlId, RecordingToolbarLeft(4), GetModuleHandleW(null));
             _editRuleButton = CreateRecordingModeButton("編集", detailsPane,
-                EditRuleControlId, 432, GetModuleHandleW(null));
+                EditRuleControlId, RecordingToolbarLeft(5), GetModuleHandleW(null));
             _toggleRuleButton = CreateRecordingModeButton("有効化", detailsPane,
-                ToggleRuleControlId, 516, GetModuleHandleW(null));
+                ToggleRuleControlId, RecordingToolbarLeft(6), GetModuleHandleW(null));
             _deleteRuleButton = CreateRecordingModeButton("削除", detailsPane,
-                DeleteRuleControlId, 600, GetModuleHandleW(null));
+                DeleteRuleControlId, RecordingToolbarLeft(7), GetModuleHandleW(null));
             _moveRuleUpButton = CreateRecordingModeButton("上へ", detailsPane,
-                MoveRuleUpControlId, 684, GetModuleHandleW(null));
+                MoveRuleUpControlId, RecordingToolbarLeft(8), GetModuleHandleW(null));
             _moveRuleDownButton = CreateRecordingModeButton("下へ", detailsPane,
-                MoveRuleDownControlId, 768, GetModuleHandleW(null));
+                MoveRuleDownControlId, RecordingToolbarLeft(9), GetModuleHandleW(null));
             ApplyDefaultFont(_createRuleButton);
             ApplyDefaultFont(_editRuleButton);
             ApplyDefaultFont(_toggleRuleButton);
@@ -1682,6 +1677,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
         {
             if (Interlocked.Exchange(ref _detached, 1) == 0)
             {
+                _ = StatesByOwner.TryRemove(_owner, out _);
                 _detailsUpdates.Close();
                 _favoriteUpdates.Close();
                 _tabs.SetPublishingDispatcher(null);
@@ -2498,7 +2494,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             _ = PresentEnabled(_relayStart, showRelay && GenesisGuiNextRelayCommandDispatch.CanStart(_viewModel, row));
             _ = PresentEnabled(_relayStop, showRelay && _viewModel.RelayActivation?.CanStop == true);
             if (GetClientRect(_detailsPane, out var relayPane))
-                _ = PresentBounds(_relayStatus, 12, RelayStatusTop, RelayStatusWidth(relayPane.Right - relayPane.Left), 40, true);
+                _ = PresentBounds(_relayStatus, 12, RelayStatusTop, RelayStatusWidth(LogicalWidth(relayPane.Right - relayPane.Left)), 40, true);
             _ = PresentInvalidation(_relayStatus, 0, true);
 
             var isRecordingPage = _tabs.SelectedTab == GenesisGuiNextTab.Recording;
@@ -2746,7 +2742,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 identityTop = 96;
             }
             var fullWidth = GetClientRect(_detailsPane, out var clientRectangle)
-                ? Math.Max(1, clientRectangle.Right - clientRectangle.Left - 24)
+                ? Math.Max(1, LogicalWidth(clientRectangle.Right - clientRectangle.Left) - 24)
                 : Math.Max(1, _detailsTextWidth);
             _ = PresentBounds(
                 _detailsTitle,

@@ -3,18 +3,18 @@ namespace PeerCast.Nova.App.Tests;
 public sealed class GenesisMainWindowResizeGuardTests
 {
     [Fact]
-    public void FixedStyleRemovesOnlyResizeCapabilities()
+    public void ResizableStyleAddsOnlyResizeCapabilities()
     {
         const int overlappedWindowStyle = 0x00CF0000;
         const int resizeMask =
             GenesisMainWindowResizeGuard.WindowStyleThickFrame |
             GenesisMainWindowResizeGuard.WindowStyleMaximizeBox;
 
-        var fixedStyle = GenesisMainWindowResizeGuard.ResolveFixedStyle(
-            overlappedWindowStyle);
+        var resizableStyle = GenesisMainWindowResizeGuard.ResolveResizableStyle(
+            overlappedWindowStyle & ~resizeMask);
 
-        Assert.Equal(0, fixedStyle & resizeMask);
-        Assert.Equal(overlappedWindowStyle & ~resizeMask, fixedStyle);
+        Assert.Equal(overlappedWindowStyle, resizableStyle);
+        Assert.Equal(0x00020000, resizableStyle & 0x00020000); // Keep minimize.
     }
 
     [Fact]

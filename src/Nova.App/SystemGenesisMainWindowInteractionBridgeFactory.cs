@@ -55,6 +55,9 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
 
     internal static TimeSpan GuiNextStatusRefreshInterval { get; } = TimeSpan.FromSeconds(1);
 
+    internal static nint GetStatusWindow(nint container) =>
+        StatesByContainer.TryGetValue(container, out var state) ? state.StatusWindow : 0;
+
     private SystemGenesisMainWindowInteractionBridgeFactory()
     {
     }
@@ -322,6 +325,7 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
 
     private sealed class BridgeState : IDisposable
     {
+        internal nint StatusWindow => _status;
         private readonly nint _container;
         private readonly GenesisMainViewModel _viewModel;
         private readonly GenesisGuiNextTabsViewModel? _guiNextTabs;

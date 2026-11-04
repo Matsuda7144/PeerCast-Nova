@@ -89,7 +89,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 _ = PresentText(_publishingServerValue, string.Empty);
                 return;
             }
-            var width = GetClientRect(_detailsPane, out var rectangle) ? rectangle.Right - rectangle.Left : _detailsTextWidth;
+            var width = GetClientRect(_detailsPane, out var rectangle) ? LogicalWidth(rectangle.Right - rectangle.Left) : _detailsTextWidth;
             var layout = GenesisGuiNextPublishingGuideLayout.ForWidth(width);
             void Place(nint control, GenesisGuiNextPublishingGuideRectangle bounds) =>
                 _ = PresentBounds(control, bounds.Left, bounds.Top, bounds.Width, bounds.Height, true);
@@ -155,7 +155,7 @@ internal readonly record struct GenesisGuiNextPublishingGuideRectangle(int Left,
     internal int Bottom => Top + Height;
 }
 
-/// <summary>Logical coordinates in the existing fixed-size, DPI-virtualized shell.</summary>
+/// <summary>Logical coordinates in the main-window shell.</summary>
 internal readonly record struct GenesisGuiNextPublishingGuideLayout(int ContentWidth, int ServerWidth, int KeyWidth, int CopyLeft, int RevealLeft)
 {
     internal GenesisGuiNextPublishingGuideRectangle Title => new(12, 8, Math.Max(1, ContentWidth - 264), 24);

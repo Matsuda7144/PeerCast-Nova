@@ -11,7 +11,7 @@ internal sealed class GenesisPlaybackModeButtonPlacement
     private const int FullscreenWidth = 88;
     private const int ButtonGap = 6;
     private const int StatusGap = 8;
-    private const int TotalButtonWidth =
+    internal const int TotalButtonWidth =
         NormalWidth + VideoOnlyWidth + FullscreenWidth + (ButtonGap * 2);
     private readonly nint _parent;
     private readonly nint _status;
@@ -160,6 +160,24 @@ internal sealed class GenesisPlaybackModeButtonPlacement
 
 internal sealed class GenesisPlaybackModeButtonBridge : IAsyncDisposable
 {
+    internal static bool TryResize(nint owner, nint status, int left, int top, int width, int height, uint dpi)
+    {
+        foreach (var (container, state) in StatesByContainer)
+        {
+            if (GetParent(container) != owner) continue;
+            var modeWidth = GenesisPlaybackModeButtonPlacement.TotalButtonWidth;
+            var statusWidth = Math.Max(120, width - modeWidth - 8);
+            int S(int value) => GenesisMainWindowLayout.Scale(value, dpi);
+            _ = MoveWindow(status, S(left), S(top), S(statusWidth), S(height), true);
+            _ = MoveWindow(container, S(left + statusWidth + 8), S(top), S(modeWidth), S(height), true);
+            state.ApplyLayout(height, dpi);
+            return true;
+        }
+        return false;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern nint GetParent(nint window);
     private const uint WindowStyleChild = 0x40000000;
     private const uint WindowStyleVisible = 0x10000000;
     private const uint WindowStyleTabStop = 0x00010000;
@@ -386,6 +404,16 @@ internal sealed class GenesisPlaybackModeButtonBridge : IAsyncDisposable
 
     internal sealed class ModeState : IDisposable
     {
+        internal void ApplyLayout(int height, uint dpi)
+        {
+            int S(int value) => GenesisMainWindowLayout.Scale(value, dpi);
+            var videoLeft = NormalWidth + ButtonGap;
+            var fullscreenLeft = videoLeft + VideoOnlyWidth + ButtonGap;
+            _ = MoveWindow(_normalButton, 0, 0, S(NormalWidth), S(height), true);
+            _ = MoveWindow(_videoOnlyButton, S(videoLeft), 0, S(VideoOnlyWidth), S(height), true);
+            _ = MoveWindow(_fullscreenButton, S(fullscreenLeft), 0,
+                S(GenesisPlaybackModeButtonPlacement.TotalButtonWidth - fullscreenLeft), S(height), true);
+        }
         private readonly GenesisMainViewModel _viewModel;
         private readonly GenesisMainWindowInteraction _interaction;
         private readonly nint _container;
