@@ -30,6 +30,7 @@ internal sealed class GenesisChannelSearchBoxBridge : IAsyncDisposable
     private readonly nint _edit;
     private readonly nint _yellowPageFilter;
     private readonly SearchState _state;
+    internal bool IsYellowPageFilter(nint window) => window == _yellowPageFilter;
     private int _disposed;
 
     private GenesisChannelSearchBoxBridge(
@@ -49,7 +50,8 @@ internal sealed class GenesisChannelSearchBoxBridge : IAsyncDisposable
         int left,
         int width,
         int height,
-        GenesisGuiNextTabsViewModel tabs)
+        GenesisGuiNextTabsViewModel tabs,
+        bool modernAppearance = false)
     {
         ArgumentNullException.ThrowIfNull(tabs);
         if (statusBar == 0 ||
@@ -95,7 +97,7 @@ internal sealed class GenesisChannelSearchBoxBridge : IAsyncDisposable
                 WindowStyleVisible |
                 WindowStyleTabStop |
                 WindowStyleVerticalScroll |
-                ComboBoxStyleDropDownList,
+                ComboBoxStyleDropDownList | (modernAppearance ? 0x0010u | 0x0200u : 0u), // CBS_OWNERDRAWFIXED | CBS_HASSTRINGS
             left + yellowPageFilterLeft,
             2,
             YellowPageFilterWidth,
@@ -146,6 +148,13 @@ internal sealed class GenesisChannelSearchBoxBridge : IAsyncDisposable
 
     internal void SynchronizeYellowPageFilter() =>
         _state.SynchronizeYellowPageFilter();
+
+    internal void UpdateItemHeight(uint dpi)
+    {
+        _ = SendMessageW(_yellowPageFilter, 0x0153, nuint.MaxValue,
+            GenesisMainWindowLayout.Scale(20, dpi)); // selection field
+        _ = SendMessageW(_yellowPageFilter, 0x0153, 0, GenesisMainWindowLayout.Scale(26, dpi));
+    }
 
     internal void ApplyLayout(int left, int width, int height, uint dpi)
     {

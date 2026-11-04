@@ -28,6 +28,24 @@ public sealed class GenesisWindowUiFontTests
     }
 
     [Theory]
+    [InlineData(96u, true)]
+    [InlineData(144u, true)]
+    [InlineData(192u, true)]
+    [InlineData(96u, false)]
+    public void PhaseOneFontUsesReadableDpiScaledSizeAndExistingOwnedLease(uint dpi, bool metricsAvailable)
+    {
+        var api = new FontApi("System UI") { MetricsAvailable = metricsAvailable };
+        api.Supported.UnionWith(["System UI", "Yu Gothic UI"]);
+        var font = GenesisUiFontLease.TryCreate(api, dpi, GenesisGuiNextDesign.BodyFontHeight);
+        Assert.NotNull(font);
+        Assert.True(api.Created.All(spec => Math.Abs(spec.Height) >= GenesisMainWindowLayout.Scale(14, dpi)));
+        var handle = font.Handle;
+        font.Dispose();
+        font.Dispose();
+        Assert.Equal(1, api.Deleted.Count(deleted => deleted == handle));
+    }
+
+    [Theory]
     [InlineData("Yu Gothic UI", 2)]
     [InlineData("Meiryo", 3)]
     [InlineData("MS UI Gothic", 4)]
@@ -292,6 +310,7 @@ public sealed class GenesisWindowUiFontTests
             "GenesisGuiNextPlaybackSettingsWindow.cs",
             "GenesisGuiNextConnectionSettingsWindow.cs",
             "GenesisGuiNextConnectionSettings.cs",
+            "GenesisAppearanceSettings.cs",
             "GenesisGuiNextRelayActivation.cs",
             "GenesisGuiNextPublishingPresentation.cs",
             "GenesisGuiNextPublishingRefresh.cs",

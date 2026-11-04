@@ -37,6 +37,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             try
             {
                 _layoutDpi = dpi;
+                UpdateVisualDpi(dpi);
                 // The interaction bridge reparents channel controls into a notification
                 // container. Grow that retained parent before positioning its children.
                 var parent = GetParent(_listView);

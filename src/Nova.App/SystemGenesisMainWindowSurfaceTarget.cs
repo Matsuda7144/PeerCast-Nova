@@ -72,7 +72,6 @@ internal sealed class GenesisMainWindowNativeSurface : IAsyncDisposable
     private const uint ListViewStyleReport = 0x0001;
     private const uint ListViewStyleSingleSelect = 0x0004;
     private const uint ListViewStyleShowSelectionAlways = 0x0008;
-    private const uint ListViewExtendedStyleGridLines = 0x00000001;
     private const uint ListViewExtendedStyleFullRowSelect = 0x00000020;
     private const uint ListViewExtendedStyleDoubleBuffer = 0x00010000;
     private const uint ListViewMessageFirst = 0x1000;
@@ -250,10 +249,10 @@ internal sealed class GenesisMainWindowNativeSurface : IAsyncDisposable
             channelList,
             ListViewMessageSetExtendedStyle,
             0,
-            (nint)(ListViewExtendedStyleGridLines |
+            (nint)((viewModel.UsesModernAppearance ? 0u : 0x00000001u) |
                 ListViewExtendedStyleFullRowSelect |
                 ListViewExtendedStyleDoubleBuffer));
-        GenesisGuiNextAppShellBridge.ApplyListViewColors(channelList);
+        GenesisGuiNextAppShellBridge.ApplyListViewColors(channelList, viewModel.UsesModernAppearance);
         _ = GenesisWindowUiFont.Apply(
             SendMessageW(channelList, ListViewMessageGetHeader, 0, 0));
 

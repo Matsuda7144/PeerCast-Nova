@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
+using PeerCast.Nova.Foundation.Configuration;
 
 namespace PeerCast.Nova.App;
 
@@ -41,6 +42,7 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
     private static readonly WindowProcedure WindowProcedureDelegate = ProcessWindowMessage;
 
     private readonly nint _window;
+    private readonly WindowState _state;
     private readonly string _className;
     private readonly nint _instance;
     private int _disposed;
@@ -48,8 +50,9 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
     private GenesisGuiNextPlaybackSettingsWindow(
         nint window,
         string className,
-        nint instance)
+        nint instance, WindowState state)
     {
+        _state = state;
         _window = window;
         _className = className;
         _instance = instance;
@@ -57,7 +60,7 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
 
     public bool IsOpen =>
         Volatile.Read(ref _disposed) == 0 &&
-        _window != 0 &&
+        _window != 0 && StatesByWindow.TryGetValue(_window, out var active) && ReferenceEquals(active, _state) &&
         IsWindow(_window);
 
     public static GenesisGuiNextPlaybackSettingsWindow? TryCreate(
@@ -67,11 +70,14 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
     internal static GenesisGuiNextPlaybackSettingsWindow? TryCreate(
         nint owner, GenesisRecordingOutputDirectorySettings settings) => TryCreate(owner, null, settings);
 
+    internal static GenesisGuiNextPlaybackSettingsWindow? TryCreate(
+        nint owner, GenesisAppearanceSettings appearance) => TryCreate(owner, null, null, appearance);
+
     private static GenesisGuiNextPlaybackSettingsWindow? TryCreate(
         nint owner, GenesisGuiNextPlaybackSettings? settings,
-        GenesisRecordingOutputDirectorySettings? recordingSettings)
+        GenesisRecordingOutputDirectorySettings? recordingSettings, GenesisAppearanceSettings? appearance = null)
     {
-        ArgumentNullException.ThrowIfNull((object?)settings ?? recordingSettings);
+        ArgumentNullException.ThrowIfNull((object?)settings ?? recordingSettings ?? (object?)appearance);
         if (!OperatingSystem.IsWindows() || owner == 0 || !IsWindow(owner))
         {
             return null;
@@ -83,7 +89,7 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
             return null;
         }
 
-        var className = $"PeerCastNova{(recordingSettings is null ? "Playback" : "Recording")}Settings-{Guid.NewGuid():N}";
+        var className = $"PeerCastNova{(appearance is not null ? "Appearance" : recordingSettings is null ? "Playback" : "Recording")}Settings-{Guid.NewGuid():N}";
         var windowClass = new WindowClassEx
         {
             Size = (uint)Marshal.SizeOf<WindowClassEx>(),
@@ -101,7 +107,7 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
         var window = CreateWindowExW(
             0,
             className,
-            recordingSettings is null ? "Playback / PCRPlayer" : "録画保存先",
+            appearance is not null ? "外観設定" : recordingSettings is null ? "Playback / PCRPlayer" : "録画保存先",
             WindowStyleCaption |
                 WindowStyleSysMenu |
                 WindowStyleClipChildren |
@@ -109,7 +115,7 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
             UseDefaultPosition,
             UseDefaultPosition,
             WindowWidth,
-            recordingSettings is null ? WindowHeight : 315,
+            appearance is not null ? 280 : recordingSettings is null ? WindowHeight : 315,
             owner,
             0,
             instance,
@@ -120,7 +126,8 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
             return null;
         }
 
-        var controls = CreateControls(window, instance, recordingSettings is not null);
+        var controls = appearance is not null ? CreateAppearanceControls(window, instance) :
+            CreateControls(window, instance, recordingSettings is not null);
         if (controls is null)
         {
             _ = DestroyWindow(window);
@@ -128,7 +135,7 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
             return null;
         }
 
-        var state = new WindowState(window, controls, settings, recordingSettings);
+        var state = new WindowState(window, controls, settings, recordingSettings, appearance);
         if (!StatesByWindow.TryAdd(window, state))
         {
             _ = DestroyWindow(window);
@@ -148,7 +155,7 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
 
         _ = SetForegroundWindow(window);
         _ = SetFocus(controls.Path);
-        return new(window, className, instance);
+        return new(window, className, instance, state);
     }
 
     public void Activate()
@@ -167,8 +174,9 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
             return ValueTask.CompletedTask;
         }
 
-        _ = StatesByWindow.TryRemove(_window, out _);
-        if (_window != 0 && IsWindow(_window))
+        // An already closed editor's HWND may have been reused by another editor.
+        // WM_NCDESTROY removes only this live state after native child/font cleanup.
+        if (StatesByWindow.TryGetValue(_window, out var active) && ReferenceEquals(active, _state) && IsWindow(_window))
         {
             _ = DestroyWindow(_window);
         }
@@ -293,6 +301,26 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
             _ => "PCRPlayer設定を保存しました。次の再生から使用します。",
         };
 
+    private static Controls? CreateAppearanceControls(nint window, nint instance)
+    {
+        var label = CreateControl(window, instance, "STATIC", "表示モード", 16, 16, 610, 22, 0);
+        var classic = CreateControl(window, instance, "BUTTON", "クラシック", 24, 46, 200, 28, PathControlId,
+            WindowStyleTabStop | 0x00020000 | 9); // WS_GROUP | BS_AUTORADIOBUTTON
+        var modern = CreateControl(window, instance, "BUTTON", "モダン", 240, 46, 200, 28, BrowseControlId,
+            WindowStyleTabStop | 9);
+        var help = CreateControl(window, instance, "STATIC", GenesisAppearanceSettings.NextStartNotice, 16, 90, 610, 40, 0);
+        var save = CreateControl(window, instance, "BUTTON", "保存", 16, 142, 90, 30, SaveControlId,
+            WindowStyleTabStop | 0x00020000);
+        var close = CreateControl(window, instance, "BUTTON", "閉じる", 536, 142, 90, 30, CloseControlId, WindowStyleTabStop);
+        var status = CreateControl(window, instance, "STATIC", string.Empty, 16, 184, 610, 46, StatusControlId);
+        foreach (var control in new[] { label, classic, modern, help, save, close, status })
+        {
+            if (control == 0) return null;
+            ApplyDefaultFont(control);
+        }
+        return new(classic, modern, save, 0, close, status, 0);
+    }
+
     private static Controls? CreateControls(nint window, nint instance, bool recordingMode)
     {
         var label = CreateControl(window, instance, "STATIC", recordingMode ? "録画保存先 (絶対パス)" : "PCRPlayer 実行ファイル", 16, 16, 580, 20, 0);
@@ -389,10 +417,17 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
     }
 
     private sealed class WindowState(nint window, Controls controls, GenesisGuiNextPlaybackSettings? settings,
-        GenesisRecordingOutputDirectorySettings? recordingSettings)
+        GenesisRecordingOutputDirectorySettings? recordingSettings, GenesisAppearanceSettings? appearance)
     {
         public void Initialize()
         {
+            if (appearance is not null)
+            {
+                _ = SendMessageW(controls.Path, 0x00F1, appearance.ConfiguredMode == NovaGuiMode.Classic ? 1u : 0u, 0);
+                _ = SendMessageW(controls.Browse, 0x00F1, appearance.ConfiguredMode == NovaGuiMode.Modern ? 1u : 0u, 0);
+                SetText(controls.Status, appearance.Error ?? string.Empty);
+                return;
+            }
             if (recordingSettings is null)
             {
                 SetText(controls.Path, settings!.PcrPlayerExecutablePath ?? string.Empty);
@@ -420,7 +455,7 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
             switch ((int)(wParam & 0xffff))
             {
                 case BrowseControlId:
-                    Browse();
+                    if (appearance is null) Browse();
                     break;
                 case SaveControlId:
                     Save(GetText(controls.Path));
@@ -451,6 +486,14 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
 
         private void Save(string? path)
         {
+            if (appearance is not null)
+            {
+                var mode = SendMessageW(controls.Browse, 0x00F0, 0, 0) == 1 ? NovaGuiMode.Modern : NovaGuiMode.Classic;
+                SetText(controls.Status, appearance.Save(mode)
+                    ? "設定を保存しました。変更は次回起動時から適用されます。"
+                    : appearance.Error ?? "設定を保存できませんでした。");
+                return;
+            }
             if (recordingSettings is not null)
             {
                 var saveResult = path is null ? recordingSettings.ResetToDefault() : recordingSettings.Save(path);

@@ -114,8 +114,10 @@ public sealed class NovaWindowsStartupComposition
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
     public ValueTask<NovaWindowsStartupResult> RunGenesisAsync(
-        CancellationToken cancellationToken = default) =>
-        RunOwnedGenesisCoreAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var appearance = new GenesisAppearanceSettings(_options.ValidationProfile?.Settings ?? NovaSettingsStore.CreateDefault());
+        return RunOwnedGenesisCoreAsync(
             (playbackPathSource, recordingSettings, publishingStatus, publishingCommands, rootState) =>
                 new SystemGenesisInteractiveMainWindowSurfaceTarget(
                     new SystemGenesisMainWindowSurfaceTarget(),
@@ -130,9 +132,10 @@ public sealed class NovaWindowsStartupComposition
                         return state;
                     },
                     CreateSystemNotificationRuntime,
-                    CaptureSystemNotificationSettingsPlacement,
-                    _options.NetworkSettingsController, recordingSettings, ownsGuiNextState: false),
+                    token => CaptureSystemNotificationSettingsPlacement(token, appearance),
+                    _options.NetworkSettingsController, recordingSettings, ownsGuiNextState: false, appearanceSettings: appearance),
             cancellationToken: cancellationToken, loadApplicationState: true);
+    }
 
     // The production root and managed composition tests use the same lifetime.
     // Surfaces receive a borrower; only this root initializes/disposes the owner.
@@ -495,14 +498,14 @@ public sealed class NovaWindowsStartupComposition
             : SystemGenesisGuiNextNotificationRuntime.Create(windowToken, guiNextState);
 
     private static StartupNotificationSettingsPlacement?
-        CaptureSystemNotificationSettingsPlacement(long windowToken)
+        CaptureSystemNotificationSettingsPlacement(long windowToken, GenesisAppearanceSettings? appearance = null)
     {
         if (!OperatingSystem.IsWindows())
         {
             return null;
         }
 
-        var placement = GenesisChannelNotificationSettingsButtonPlacement.Capture(windowToken);
+        var placement = GenesisChannelNotificationSettingsButtonPlacement.Capture(windowToken, appearance);
         return placement is null
             ? null
             : new StartupNotificationSettingsPlacement(placement);

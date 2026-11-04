@@ -10,6 +10,7 @@ internal enum GenesisGuiNextSettingsWindowKind
     Recording,
     Connection,
     Publishing,
+    Appearance,
 }
 
 internal sealed record GenesisGuiNextSettingsWindowFeedbackPresentation(
@@ -38,6 +39,8 @@ internal static class GenesisGuiNextSettingsWindowFeedback
                 new("録画保存先の設定を開けませんでした。", "録画保存先"),
             GenesisGuiNextSettingsWindowKind.Connection =>
                 new("接続・帯域・リレー設定を開けませんでした。", "接続 / 帯域 / リレー数"),
+            GenesisGuiNextSettingsWindowKind.Appearance =>
+                new("外観設定を開けませんでした。", "外観設定"),
             GenesisGuiNextSettingsWindowKind.Publishing =>
                 new("配信設定を開けませんでした。", "配信設定"),
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
@@ -96,6 +99,12 @@ internal static class SystemGenesisGuiNextSettingsWindowFeedback
                     presentation.Caption,
                     MessageBoxOk | MessageBoxIconWarning);
             });
+    }
+
+    internal static void ReportAppearanceLoadFailure(nint owner, string? error)
+    {
+        if (error is not null && OperatingSystem.IsWindows() && IsWindow(owner))
+            _ = MessageBoxW(owner, error, "外観設定", MessageBoxOk | MessageBoxIconWarning);
     }
 
     [DllImport("user32.dll")]

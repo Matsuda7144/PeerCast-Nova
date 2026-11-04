@@ -11,4 +11,6 @@ public sealed record NovaOptions
     public bool AutoPortMapping { get; init; }
 
     public string? RecordingOutputDirectory { get; init; }
+
+    public NovaGuiMode GuiMode { get; init; } = NovaGuiMode.Classic;
 }

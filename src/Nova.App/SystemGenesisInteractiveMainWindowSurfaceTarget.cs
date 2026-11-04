@@ -73,6 +73,7 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
         _notificationSettingsPlacementFactory;
     private readonly IGenesisNetworkSettingsController _networkSettingsController;
     private readonly GenesisRecordingOutputDirectorySettings? _recordingSettings;
+    private readonly GenesisAppearanceSettings? _appearanceSettings;
 
     internal SystemGenesisInteractiveMainWindowSurfaceTarget(
         IGenesisMainWindowSurfaceTarget surfaceTarget,
@@ -208,7 +209,8 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
         Func<long, IGenesisChannelNotificationSettingsPlacement?>
             notificationSettingsPlacementFactory,
         IGenesisNetworkSettingsController networkSettingsController,
-        GenesisRecordingOutputDirectorySettings? recordingSettings = null, bool ownsGuiNextState = true)
+        GenesisRecordingOutputDirectorySettings? recordingSettings = null, bool ownsGuiNextState = true,
+        GenesisAppearanceSettings? appearanceSettings = null)
     {
         ArgumentNullException.ThrowIfNull(surfaceTarget);
         ArgumentNullException.ThrowIfNull(bridgeFactory);
@@ -238,6 +240,7 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
         _notificationSettingsPlacementFactory = notificationSettingsPlacementFactory;
         _networkSettingsController = networkSettingsController;
         _recordingSettings = recordingSettings;
+        _appearanceSettings = appearanceSettings;
         _ownsGuiNextState = ownsGuiNextState;
     }
 
@@ -247,6 +250,7 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(viewModel);
+        viewModel.AppearanceSettings = _appearanceSettings;
         var surfaceLifetime = await _surfaceTarget.OpenAsync(
             windowToken,
             viewModel,
@@ -256,6 +260,7 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
             return null;
         }
 
+        SystemGenesisGuiNextSettingsWindowFeedback.ReportAppearanceLoadFailure((nint)windowToken, _appearanceSettings?.Error);
         IAsyncDisposable? resizeGuard;
         try
         {

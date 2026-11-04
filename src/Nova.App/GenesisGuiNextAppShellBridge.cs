@@ -701,19 +701,19 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
         return true;
     }
 
-    internal static void ApplyListViewColors(nint listView)
+    internal static void ApplyListViewColors(nint listView, bool modernAppearance = false)
     {
         _ = SetWindowTheme(listView, " ", " ");
         _ = SendMessageW(
             listView,
             ListViewMessageSetBackgroundColor,
             0,
-            (nint)BackgroundColor);
+            (nint)(modernAppearance ? GenesisGuiNextDesign.List : BackgroundColor));
         _ = SendMessageW(
             listView,
             ListViewMessageSetTextBackgroundColor,
             0,
-            (nint)UnselectedColor);
+            (nint)(modernAppearance ? GenesisGuiNextDesign.List : UnselectedColor));
         _ = SendMessageW(
             listView,
             ListViewMessageSetTextColor,
@@ -915,12 +915,13 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 searchLeft,
                 searchWidth,
                 statusRectangle.Height,
-                tabs);
+                tabs, viewModel.UsesModernAppearance);
         var favoriteButton = CreateWindowExW(
             0,
             "BUTTON",
             "Add Favorite",
-            WindowStyleChild | WindowStyleVisible | WindowStyleTabStop,
+            WindowStyleChild | WindowStyleVisible | WindowStyleTabStop |
+                (viewModel.UsesModernAppearance ? ButtonStyleOwnerDraw : 0u),
             favoriteButtonLeft,
             2,
             FavoriteButtonWidth,
@@ -1148,6 +1149,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
 
         state.Attach();
         StatesByOwner[owner] = state;
+        if (viewModel.UsesModernAppearance) state.AttachVisuals();
         state.ApplyClientLayout();
         state.SynchronizeNativeSelection();
         return new(
@@ -1396,6 +1398,10 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
         {
             state.ProcessCommand(wParam, lParam);
         }
+        else if (message == 0x0014 && state.PaintPaneBackground(window, (nint)wParam))
+        {
+            return 1;
+        }
         else if (message == WindowMessageDrawItem &&
             state.DrawNavigationItem(lParam))
         {
@@ -1408,12 +1414,12 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
         }
         else if (message == WindowMessageControlColorStatic)
         {
-            return state.PrepareStaticControl(wParam);
+            return state.PrepareStaticControl(wParam, window);
         }
         else if (message == WindowMessageControlColorEdit ||
             message == WindowMessageControlColorListBox)
         {
-            return state.PrepareDarkControl(wParam);
+            return state.PrepareDarkControl(wParam, window);
         }
         else if (message == WindowMessageSynchronizeYellowPageFilter)
         {
@@ -1449,6 +1455,11 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
     {
         _ = subclassIdentifier;
         _ = referenceData;
+        // Release the row image list before the native list's WM_DESTROY owns cleanup.
+        if (message == 0x0002 && StatesByListView.TryGetValue(window, out var destroyingState))
+            destroyingState.DetachVisuals();
+        if (message == WindowMessageNotify && StatesByListView.TryGetValue(window, out var headerState) &&
+            headerState.DrawListHeader(lParam, out var headerResult)) return headerResult;
         if (message == WindowMessageNcDestroy)
         {
             if (StatesByListView.TryRemove(window, out var removedState))
@@ -1466,6 +1477,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
         var result = DefSubclassProc(window, message, wParam, lParam);
         if (StatesByListView.TryGetValue(window, out var state))
         {
+            if (state.IsModern && message is (0x0200 or 0x02A3)) state.TrackListHover(message, lParam);
             if (message == WindowMessagePaint)
             {
                 state.PaintSelectedRowAccent();
@@ -1575,6 +1587,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             nint backgroundBrush)
         {
             _owner = owner;
+            _modernAppearance = viewModel.UsesModernAppearance;
             _sidebar = sidebar;
             _statusBar = statusBar;
             _detailsPane = detailsPane;
@@ -1678,6 +1691,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             if (Interlocked.Exchange(ref _detached, 1) == 0)
             {
                 _ = StatesByOwner.TryRemove(_owner, out _);
+                DetachVisuals();
                 _detailsUpdates.Close();
                 _favoriteUpdates.Close();
                 _tabs.SetPublishingDispatcher(null);
@@ -1963,6 +1977,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             using var fontSelection = GenesisWindowUiFont.SelectForDrawing(
                 drawItem.DeviceContext,
                 drawItem.ControlWindow);
+            if (IsModern && drawItem.ControlType == 3 && _searchBox.IsYellowPageFilter(drawItem.ControlWindow))
+                return DrawYellowPageItem(drawItem);
             if (IsOwnerDrawButton(drawItem.ControlType) &&
                 drawItem.ControlId is CreateRuleControlId or EditRuleControlId)
             {
@@ -1970,9 +1986,9 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                     drawItem.ControlId == CreateRuleControlId ? "新規" : "編集", false);
             }
             if (IsOwnerDrawButton(drawItem.ControlType) &&
-                drawItem.ControlId == RefreshControlId)
+                (drawItem.ControlId == RefreshControlId || IsModern && drawItem.ControlId == FavoriteControlId))
             {
-                return DrawRefreshButton(drawItem);
+                return IsModern ? DrawTopButton(drawItem) : DrawClassicRefreshButton(drawItem);
             }
 
             if (IsOwnerDrawButton(drawItem.ControlType) &&
@@ -2076,17 +2092,18 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 return false;
             }
 
+            if (!IsModern) return DrawClassicNavigation(drawItem, itemIndex);
             var selected = _utilityNavigationSelection.IsSelected(itemIndex, _tabs.SelectedTab);
             var disabled = (drawItem.ItemState & DrawItemDisabled) != 0;
             FillRectangle(
                 drawItem.DeviceContext,
                 drawItem.ItemRectangle,
-                selected ? SelectedColor : UnselectedColor);
+                GenesisGuiNextDesign.NavigationBackground(selected, _hoverControl == drawItem.ControlWindow));
             if (selected)
             {
                 var accent = drawItem.ItemRectangle;
-                accent.Right = Math.Min(accent.Right, accent.Left + AccentWidth);
-                FillRectangle(drawItem.DeviceContext, accent, AccentColor);
+                accent.Right = Math.Min(accent.Right, accent.Left + Scale(4));
+                FillRectangle(drawItem.DeviceContext, accent, GenesisGuiNextDesign.Accent);
             }
 
             _ = SetBkMode(drawItem.DeviceContext, TransparentBackgroundMode);
@@ -2094,8 +2111,9 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 drawItem.DeviceContext,
                 disabled ? DisabledTextColor : TextColor);
             var labelRectangle = drawItem.ItemRectangle;
-            labelRectangle.Left += 16;
-            labelRectangle.Right -= 4;
+            DrawNavigationIcon(drawItem.DeviceContext, itemIndex, drawItem.ItemRectangle, disabled);
+            labelRectangle.Left += Scale(38);
+            labelRectangle.Right -= Scale(6);
             _ = DrawTextW(
                 drawItem.DeviceContext,
                 GenesisGuiNextNavigationPresentation.Items[itemIndex],
@@ -2103,38 +2121,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 ref labelRectangle,
                 DrawTextSingleLine |
                     DrawTextVerticalCenter |
-                    DrawTextNoPrefix);
-            if ((drawItem.ItemState & DrawItemFocused) != 0)
-            {
-                _ = DrawFocusRect(drawItem.DeviceContext, ref drawItem.ItemRectangle);
-            }
-
-            return true;
-        }
-
-        private static bool DrawRefreshButton(DrawItem drawItem)
-        {
-            var pressed = (drawItem.ItemState & 0x0001) != 0;
-            var disabled = (drawItem.ItemState & DrawItemDisabled) != 0;
-            FillRectangle(
-                drawItem.DeviceContext,
-                drawItem.ItemRectangle,
-                pressed ? SelectedColor : UnselectedColor);
-            _ = SetBkMode(drawItem.DeviceContext, TransparentBackgroundMode);
-            _ = SetTextColor(
-                drawItem.DeviceContext,
-                disabled ? DisabledTextColor : TextColor);
-            var labelRectangle = drawItem.ItemRectangle;
-            labelRectangle.Left += 4;
-            labelRectangle.Right -= 4;
-            _ = DrawTextW(
-                drawItem.DeviceContext,
-                "更新",
-                -1,
-                ref labelRectangle,
-                DrawTextSingleLine |
-                    DrawTextVerticalCenter |
-                    DrawTextNoPrefix);
+                    DrawTextNoPrefix | 0x8000);
             if ((drawItem.ItemState & DrawItemFocused) != 0)
             {
                 _ = DrawFocusRect(drawItem.DeviceContext, ref drawItem.ItemRectangle);
@@ -2342,6 +2329,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             nint notificationPointer,
             out nint result)
         {
+            if (!IsModern) return HandleClassicListViewCustomDraw(notificationPointer, out result);
             result = 0;
             if (notificationPointer == 0 ||
                 Volatile.Read(ref _detached) != 0)
@@ -2358,34 +2346,62 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             var draw = Marshal.PtrToStructure<CustomDraw>(notificationPointer);
             if (draw.DrawStage == CustomDrawStagePrePaint)
             {
+                _paintSelectedRow = SendMessageW(_listView, ListViewMessageGetNextItem, nuint.MaxValue,
+                    (nint)ListViewNextItemSelected).ToInt32();
                 result = (nint)CustomDrawNotifyItemDraw;
                 return true;
             }
 
             if (draw.DrawStage == CustomDrawStageItemPrePaint)
             {
+                var selected = draw.ItemSpec == (nuint)_paintSelectedRow;
+                var textColor = GenesisGuiNextDesign.Text;
                 if (_tabs.SelectedTab == GenesisGuiNextTab.Logs && draw.ItemSpec <= int.MaxValue &&
                     GenesisChannelListRenderedChannels.FindRow(_listView, (int)draw.ItemSpec)?.Log is { } log)
                 {
-                    var colorOffset = Marshal.OffsetOf<ListViewCustomDraw>(nameof(ListViewCustomDraw.TextColor)).ToInt32();
-                    Marshal.WriteInt32(notificationPointer, colorOffset, GenesisGuiNextLogProjection.TextColor(log.Kind));
-                    result = (nint)0x00000002; // CDRF_NEWFONT, apply row COLORREF.
+                    textColor = GenesisGuiNextLogProjection.TextColor(log.Kind);
                 }
-                if ((draw.ItemState & CustomDrawStateSelected) != 0)
-                {
-                    result = (nint)((long)result | CustomDrawNotifyPostPaint);
-                }
-
+                Marshal.WriteInt32(notificationPointer,
+                    Marshal.OffsetOf<ListViewCustomDraw>(nameof(ListViewCustomDraw.TextColor)).ToInt32(),
+                    selected ? GenesisGuiNextDesign.Text : textColor);
+                Marshal.WriteInt32(notificationPointer,
+                    Marshal.OffsetOf<ListViewCustomDraw>(nameof(ListViewCustomDraw.TextBackgroundColor)).ToInt32(),
+                    GenesisGuiNextDesign.RowBackground(selected, draw.ItemSpec == (nuint)_hoverRow));
+                // Suppress only native selection painting, never the actual list selection.
+                draw.ItemState &= ~(CustomDrawStateSelected | 0x0010u);
+                Marshal.StructureToPtr(draw, notificationPointer, false);
+                result = (nint)(0x00000002 | CustomDrawNotifyPostPaint);
                 return true;
             }
 
             if (draw.DrawStage == CustomDrawStageItemPostPaint)
             {
-                if ((draw.ItemState & CustomDrawStateSelected) != 0)
+                var bounds = new Rectangle();
+                if (SendHeaderRectangle(_listView, ListViewMessageGetItemRectangle, draw.ItemSpec, ref bounds) != 0)
+                    draw.ItemRectangle = bounds;
+                if (GetClientRect(_listView, out var client))
+                {
+                    if (draw.ItemRectangle.Right < client.Right)
+                    {
+                        var tail = draw.ItemRectangle;
+                        tail.Left = tail.Right; tail.Right = client.Right;
+                        FillRectangle(draw.DeviceContext, tail, GenesisGuiNextDesign.RowBackground(
+                            draw.ItemSpec == (nuint)_paintSelectedRow, draw.ItemSpec == (nuint)_hoverRow));
+                    }
+                    draw.ItemRectangle.Right = client.Right;
+                }
+                PaintRowSeparator(draw);
+                if (draw.ItemSpec == (nuint)_paintSelectedRow)
                 {
                     var accent = draw.ItemRectangle;
                     accent.Right = Math.Min(accent.Right, accent.Left + AccentWidth);
-                    FillRectangle(draw.DeviceContext, accent, AccentColor);
+                    FillRectangle(draw.DeviceContext, accent, GenesisGuiNextDesign.Accent);
+                    if (GetFocus() == _listView)
+                    {
+                        var focus = draw.ItemRectangle;
+                        focus.Left += Scale(4);
+                        _ = DrawFocusRect(draw.DeviceContext, ref focus);
+                    }
                 }
 
                 return true;
@@ -2394,19 +2410,19 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             return false;
         }
 
-        public nint PrepareStaticControl(nuint deviceContext)
+        public nint PrepareStaticControl(nuint deviceContext, nint pane)
         {
             _ = SetBkMode((nint)deviceContext, TransparentBackgroundMode);
-            _ = SetTextColor((nint)deviceContext, TextColor);
-            return _backgroundBrush;
+            _ = SetTextColor((nint)deviceContext, IsModern && pane == _statusBar ? GenesisGuiNextDesign.SecondaryText : TextColor);
+            return IsModern && pane == _statusBar ? _topBrush : _backgroundBrush;
         }
 
-        public nint PrepareDarkControl(nuint deviceContext)
+        public nint PrepareDarkControl(nuint deviceContext, nint pane)
         {
             _ = SetBkMode((nint)deviceContext, 2);
-            _ = SetBkColor((nint)deviceContext, BackgroundColor);
+            _ = SetBkColor((nint)deviceContext, IsModern && pane == _statusBar ? GenesisGuiNextDesign.Input : BackgroundColor);
             _ = SetTextColor((nint)deviceContext, TextColor);
-            return _backgroundBrush;
+            return IsModern && pane == _statusBar ? _inputBrush : _backgroundBrush;
         }
 
         public void SynchronizeYellowPageFilter() =>
@@ -3157,7 +3173,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                                 Right = accent.Right,
                                 Bottom = accent.Bottom,
                             },
-                            AccentColor);
+                            IsModern ? GenesisGuiNextDesign.Accent : AccentColor);
                     }
                     finally
                     {

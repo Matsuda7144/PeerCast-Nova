@@ -33,7 +33,7 @@ internal sealed class GenesisUiFontLease : IDisposable
         _handle = handle;
     }
 
-    internal static GenesisUiFontLease? TryCreate(IGenesisUiFontNativeApi api, uint dpi)
+    internal static GenesisUiFontLease? TryCreate(IGenesisUiFontNativeApi api, uint dpi, int minimumLogicalHeight = 0)
     {
         var hasSystemFont = api.TryGetMessageFont(dpi, out var font);
         if (!hasSystemFont)
@@ -42,6 +42,8 @@ internal sealed class GenesisUiFontLease : IDisposable
             font = new GenesisUiLogFont { Height = -(int)Math.Max(1, (12 * dpi + 48) / 96), Weight = 400 };
         }
 
+        var minimumHeight = GenesisMainWindowLayout.Scale(Math.Max(0, minimumLogicalHeight), dpi);
+        if (Math.Abs(font.Height) < minimumHeight) font.Height = -minimumHeight;
         if (hasSystemFont && TryCandidate(api, font) is { } system)
         {
             return system;
@@ -255,7 +257,7 @@ internal sealed class SystemUiFontNativeApi : IGenesisUiFontNativeApi
 {
     internal static int MetricsSize => Marshal.SizeOf<NonClientMetrics>();
 
-    internal const string JapaneseSample = "ABCチャンネル一覧配信開始終了中断設定ログについて検索新着お気入り視聴録画更新警告情報種類日時内容情報をコピー保存参照録画保存先絶対パス実行ファイル既定に戻す未設定閉じる空欄では既存のを使います。保存した設定は次のPlayから反映されます。設定を保存できませんでした。保存場所を確認してください。絶対パスを入力してください。ファイル名はにしてください。指定した実行ファイルが見つかりません。フォルダーではなく実行ファイルを指定してください。実行ファイルを確認できません。アクセス権を確認してください。パスを確認してください。PCRPlayer設定は未設定です。次の再生では環境変数またはPATHを使います。既に保存されています。未設定に戻しました。PCRPlayer設定を保存しました。次の再生から使用します。新規編集有効化削除上へ下へ一部の保存先またはファイルを確認できません。詳細録画停止外規起効今細削止自手集除象上停動別編面有抑カけこタブへムやよラリ、回同選択ポト番号～整合計レ毎（制限無）値読み込待ち受・帯域御適後続応めと置換え処理接う最大半角状態不わ—ず世代作備切利取失完敗替流消済準·エ分由専操要求キ正常界メディ候全前可安成明果結能補許証識：あ付件功性拠期条立等＝→もサバ初在度機現異示表隠／ジ概者ビッワ［固］ソ形式申際送速元　掲載…白文字ユザ含列改以本端強公競放ドモ任働到意稼達";
+    internal const string JapaneseSample = "ABCチャンネル一覧配信開始終了中断設定ログについて検索新着お気入り視聴録画更新警告情報種類日時内容情報をコピー保存参照録画保存先絶対パス実行ファイル既定に戻す未設定閉じる空欄では既存のを使います。保存した設定は次のPlayから反映されます。設定を保存できませんでした。保存場所を確認してください。絶対パスを入力してください。ファイル名はにしてください。指定した実行ファイルが見つかりません。フォルダーではなく実行ファイルを指定してください。実行ファイルを確認できません。アクセス権を確認してください。パスを確認してください。PCRPlayer設定は未設定です。次の再生では環境変数またはPATHを使います。既に保存されています。未設定に戻しました。PCRPlayer設定を保存しました。次の再生から使用します。新規編集有効化削除上へ下へ一部の保存先またはファイルを確認できません。詳細録画停止外規起効今細削止自手集除象上停動別編面有抑カけこタブへムやよラリ、回同選択ポト番号～整合計レ毎（制限無）値読み込待ち受・帯域御適後続応めと置換え処理接う最大半角状態不わ—ず世代作備切利取失完敗替流消済準·エ分由専操要求キ正常界メディ候全前可安成明果結能補許証識：あ付件功性拠期条立等＝→もサバ初在度機現異示表隠／ジ概者ビッワ［固］ソ形式申際送速元　掲載…白文字ユザ含列改以本端強公競放ドモ任働到意稼達観シ";
     private const uint SpiGetNonClientMetrics = 0x0029;
     private const int LogPixelsX = 88;
 
