@@ -1977,6 +1977,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             using var fontSelection = GenesisWindowUiFont.SelectForDrawing(
                 drawItem.DeviceContext,
                 drawItem.ControlWindow);
+            if (DrawChannelCardItem(drawItem)) return true;
             if (IsModern && drawItem.ControlType == 3 && _searchBox.IsYellowPageFilter(drawItem.ControlWindow))
                 return DrawYellowPageItem(drawItem);
             if (IsOwnerDrawButton(drawItem.ControlType) &&
@@ -2533,7 +2534,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             _ = PresentBounds(_detailsRecordButton, _detailsTextWidth + 20, 8,
                 _allowAutomaticShown ? DetailsRecordButtonWidth + DetailsRecordingButtonGap + DetailsStopRecordingButtonWidth : DetailsRecordButtonWidth,
                 DetailsCopyButtonHeight, true);
-            _ = PresentText(_detailsRecordButton, _allowAutomaticShown ? GenesisGuiNextRecordingCommandDispatch.AllowAutomaticLabel : "録画");
+            _ = PresentText(_detailsRecordButton, _allowAutomaticShown ? GenesisGuiNextRecordingCommandDispatch.AllowAutomaticLabel : UsesChannelCard ? "録画開始" : "録画");
             _ = PresentVisible(_createRuleButton, isRulesPage ? ShowWindowShowNoActivate : ShowWindowHide);
             _ = PresentVisible(_editRuleButton, isRulesPage ? ShowWindowShowNoActivate : ShowWindowHide);
             _ = PresentVisible(_toggleRuleButton, isRulesPage ? ShowWindowShowNoActivate : ShowWindowHide);
@@ -2739,6 +2740,19 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
 
         private void MoveDetailsTextControls(bool recordingPage, bool libraryPage)
         {
+            if (UsesChannelCard)
+            {
+                PlaceChannelCard();
+                return;
+            }
+            if (IsModern && GetClientRect(_detailsPane, out var resetClient))
+            {
+                var actions = ResolveDetailsActions(LogicalWidth(resetClient.Right));
+                _ = PresentBounds(_detailsStopRecordingButton, actions.StopLeft, 8, DetailsStopRecordingButtonWidth, DetailsCopyButtonHeight, true);
+                _ = PresentBounds(_detailsCopyButton, actions.CopyLeft, 8, DetailsCopyButtonWidth, DetailsCopyButtonHeight, true);
+                _ = PresentBounds(_relayStart, 12, RelayControlsTop, 84, 26, true);
+                _ = PresentBounds(_relayStop, 102, RelayControlsTop, 84, 26, true);
+            }
             var titleTop = recordingPage ? 40 : 8;
             var titleHeight = recordingPage ? 20 : 24;
             var descriptionTop = recordingPage ? 64 : 36;

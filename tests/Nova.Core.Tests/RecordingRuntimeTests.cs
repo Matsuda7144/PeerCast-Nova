@@ -390,14 +390,16 @@ public sealed class RecordingRuntimeTests : IDisposable
         var start = await runtime.StartManualAsync(CreateCandidate());
 
         Assert.Equal(RecordingManualStartResultKind.Started, start.Kind);
-        await WaitForFileAsync(pathProvider.Path);
+        var evaluated = await WaitForIdleAsync(async () =>
+        {
+            var result = await runtime.EvaluateAutomaticAsync(
+                CreateCandidate(),
+                new RecordingRuleSet([]));
+            Assert.Equal(RecordingAutomationExecutionResultKind.NoChange, result.Kind);
+            return result.State;
+        });
 
-        var evaluated = await runtime.EvaluateAutomaticAsync(
-            CreateCandidate(),
-            new RecordingRuleSet([]));
-
-        Assert.Equal(RecordingAutomationExecutionResultKind.NoChange, evaluated.Kind);
-        Assert.Same(RecordingAutomationExecutionState.Idle, evaluated.State);
+        Assert.Same(RecordingAutomationExecutionState.Idle, evaluated);
         Assert.Same(RecordingAutomationExecutionState.Idle, runtime.GetState(TestChannelId));
         Assert.Equal([9, 8, 7], await File.ReadAllBytesAsync(pathProvider.Path));
     }
@@ -407,15 +409,24 @@ public sealed class RecordingRuntimeTests : IDisposable
     {
         var pathProvider = new FixedPathProvider(
             Path.Combine(directory, "reconcile-completed.bin"));
+        var source = new CompletionGatedStream([6, 5, 4]);
         await using var runtime = new RecordingRuntime(
-            new SingleStreamSourceProvider(new MemoryStream([6, 5, 4])),
+            new SingleStreamSourceProvider(source),
             pathProvider);
 
         var started = await runtime.StartManualAsync(CreateCandidate());
         Assert.Equal(RecordingManualStartResultKind.Started, started.Kind);
-        await WaitForFileAsync(pathProvider.Path);
+        try
+        {
+            await source.DisposeStarted.Task.WaitAsync(TimeSpan.FromMilliseconds(TestTimeoutMilliseconds));
+            // File finalization precedes source disposal and writer completion.
+            // Reconciliation must preserve the active session until then.
+            Assert.True(File.Exists(pathProvider.Path));
+            Assert.Same(started.State, await runtime.ReconcileStateAsync(TestChannelId));
+        }
+        finally { source.ReleaseDispose.TrySetResult(); }
 
-        var reconciled = await runtime.ReconcileStateAsync(TestChannelId);
+        var reconciled = await WaitForIdleAsync(() => runtime.ReconcileStateAsync(TestChannelId));
 
         Assert.Same(RecordingAutomationExecutionState.Idle, reconciled);
         Assert.Same(RecordingAutomationExecutionState.Idle, runtime.GetState(TestChannelId));
@@ -549,22 +560,23 @@ public sealed class RecordingRuntimeTests : IDisposable
             $"Observed files: {string.Join(", ", observedFiles)}.");
     }
 
-    private static async Task WaitForFileAsync(string path)
+    private static async Task<RecordingAutomationExecutionState> WaitForIdleAsync(
+        Func<ValueTask<RecordingAutomationExecutionState>> observe)
     {
-        var deadline = DateTime.UtcNow.AddMilliseconds(
-            TestTimeoutMilliseconds);
-
-        while (DateTime.UtcNow < deadline)
+        using var timeout = new CancellationTokenSource(TestTimeoutMilliseconds);
+        while (true)
         {
-            if (File.Exists(path))
+            timeout.Token.ThrowIfCancellationRequested();
+            var state = await observe();
+            if (ReferenceEquals(RecordingAutomationExecutionState.Idle, state))
             {
-                return;
+                return state;
             }
 
-            await Task.Delay(10);
+            // Wait for the actual terminal state, not elapsed wall-clock time
+            // or the earlier appearance of a finalized file.
+            await Task.Yield();
         }
-
-        Assert.Fail($"The finalized recording file '{path}' was not created.");
     }
 
     private static string[] GetPartialFiles(string directory)
@@ -576,6 +588,18 @@ public sealed class RecordingRuntimeTests : IDisposable
                     StringComparison.OrdinalIgnoreCase))
                 .ToArray()
             : [];
+    }
+
+    private sealed class CompletionGatedStream(byte[] bytes) : MemoryStream(bytes)
+    {
+        public TaskCompletionSource DisposeStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource ReleaseDispose { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public override async ValueTask DisposeAsync()
+        {
+            DisposeStarted.TrySetResult();
+            await ReleaseDispose.Task;
+            await base.DisposeAsync();
+        }
     }
 
     private sealed class FixedPathProvider(string path) : IRecordingFilePathProvider

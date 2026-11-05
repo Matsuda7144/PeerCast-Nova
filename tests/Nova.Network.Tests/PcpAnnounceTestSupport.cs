@@ -210,3 +210,26 @@ internal sealed class AnnounceManualTimeProvider : TimeProvider, IDisposable
         private static long Due(long now, TimeSpan time) => time == Timeout.InfiniteTimeSpan ? long.MaxValue : now + time.Ticks;
     }
 }
+
+// The first read is the initial subscription. The second rearms metadata
+// delivery, allowing a timer callback to race that subscription deterministically.
+internal sealed class AnnounceReadCallbackChannel : Channel<bool>
+{
+    internal AnnounceReadCallbackChannel(Channel<bool> inner, Action onRearm)
+    {
+        Reader = new CallbackReader(inner.Reader, onRearm);
+        Writer = inner.Writer;
+    }
+
+    private sealed class CallbackReader(ChannelReader<bool> inner, Action onRearm) : ChannelReader<bool>
+    {
+        private int _reads;
+        public override bool TryRead(out bool item) => inner.TryRead(out item);
+        public override ValueTask<bool> WaitToReadAsync(CancellationToken cancellationToken = default) => inner.WaitToReadAsync(cancellationToken);
+        public override ValueTask<bool> ReadAsync(CancellationToken cancellationToken = default)
+        {
+            if (Interlocked.Increment(ref _reads) == 2) onRearm();
+            return inner.ReadAsync(cancellationToken);
+        }
+    }
+}

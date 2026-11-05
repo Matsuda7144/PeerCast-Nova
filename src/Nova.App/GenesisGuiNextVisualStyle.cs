@@ -15,6 +15,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         {
             if (message == WindowMessageNotify && state.HandleListViewCustomDraw(lParam, out var drawResult))
                 return drawResult;
+            if (state.PaintChannelCardText(window, message)) return message == 0x0014 ? 1 : 0;
             if (message is 0x0200 or 0x02A3) state.TrackControlHover(window, message);
             if (window == GetParent(state.ListWindow))
             {
@@ -59,7 +60,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             _sidebarBrush = CreateSolidBrush(GenesisGuiNextDesign.Sidebar);
             _topBrush = CreateSolidBrush(GenesisGuiNextDesign.Panel);
             _inputBrush = CreateSolidBrush(GenesisGuiNextDesign.Input);
-            foreach (var control in VisualButtons.Concat([GetParent(_listView), _owner]))
+            foreach (var control in VisualSubclassControls)
                 _ = SetWindowSubclass(control, VisualProcedure, VisualSubclassId, (nuint)_owner);
             var header = SendMessageW(_listView, 0x101F, 0, 0);
             _ = SetWindowTheme(header, " ", " ");
@@ -68,7 +69,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         internal void DetachVisuals()
         {
             if (!IsModern || Interlocked.Exchange(ref _visualsDetached, 1) != 0) return;
-            foreach (var control in VisualButtons.Concat([GetParent(_listView), _owner]))
+            foreach (var control in VisualSubclassControls)
                 if (IsWindow(control)) _ = RemoveWindowSubclass(control, VisualProcedure, VisualSubclassId);
             foreach (var (control, font) in _originalFonts)
                 if (IsWindow(control) && SendMessageW(control, 0x0031, 0, 0) == _visualFont?.Handle)
@@ -76,6 +77,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             _originalFonts.Clear();
             _visualFont?.Dispose();
             _visualFont = null;
+            _cardTitleFont?.Dispose();
+            _cardTitleFont = null;
             if (_rowImages != 0)
             {
                 if (IsWindow(_listView)) _ = SendMessageW(_listView, 0x1003, 1, _originalImages);
@@ -106,6 +109,12 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 _visualFont?.Dispose();
                 _visualFont = font;
             }
+            var titleFont = GenesisUiFontLease.TryCreate(new SystemUiFontNativeApi(), dpi, GenesisGuiNextDesign.CardTitleFontHeight);
+            if (titleFont is not null)
+            {
+                _cardTitleFont?.Dispose();
+                _cardTitleFont = titleFont;
+            }
             var images = ImageList_Create(1, GenesisMainWindowLayout.Scale(GenesisGuiNextDesign.RowImageHeight, dpi), 0x0020, 1, 1);
             if (images != 0)
             {
@@ -121,6 +130,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         internal bool PaintPaneBackground(nint pane, nint dc)
         {
             if (!IsModern) return false;
+            if (PaintChannelCard(pane, dc)) return true;
             var brush = pane == _sidebar ? _sidebarBrush : pane == _statusBar ? _topBrush : 0;
             if (brush == 0 || !GetClientRect(pane, out var rectangle)) return false;
             _ = FillRect(dc, ref rectangle, brush);
@@ -134,7 +144,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
 
         internal void TrackControlHover(nint control, uint message)
         {
-            if (control == GetParent(_listView)) return;
+            if (control == GetParent(_listView) || CardTexts.Contains(control)) return;
             var next = message == 0x02A3 ? 0 : control;
             var old = _hoverControl;
             if (old == next) return;

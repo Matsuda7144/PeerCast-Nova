@@ -227,9 +227,11 @@ internal sealed class PcpAnnounceWorker : IAsyncDisposable
             }
             if (changed.IsCompleted || tick.IsCompleted)
             {
-                var periodic = tick.IsCompleted;
                 if (changed.IsCompleted) { await changed.ConfigureAwait(false); changed = Track(_updates.Reader.ReadAsync(_ioStop.Token).AsTask()); }
-                if (tick.IsCompleted) { await tick.ConfigureAwait(false); tick = Track(timer.WaitForNextTickAsync(_ioStop.Token).AsTask()); }
+                // Decide periodic publication from the same observation that
+                // consumes the tick; it may arrive while metadata is rearmed.
+                var periodic = tick.IsCompleted;
+                if (periodic) { await tick.ConfigureAwait(false); tick = Track(timer.WaitForNextTickAsync(_ioStop.Token).AsTask()); }
                 if (_stop.Task.IsCompleted) break;
                 await PublishRuntimeAsync(periodic).ConfigureAwait(false);
             }

@@ -64,6 +64,37 @@ public sealed class PcpAnnounceWorkerTests
         Assert.Equal(0, clock.ActiveTimerCount);
     }
 
+    [Fact]
+    public async Task PeriodicTickDuringMetadataReadRearmStillPublishesUnchangedMetadata()
+    {
+        using var clock = new AnnounceManualTimeProvider();
+        var connector = new AnnounceFakeConnector();
+        connector.Connection.BlockWriteAt = 2;
+        await using var owner = new PcpAnnounceOwner(connector, timeProvider: clock);
+        var worker = Start(owner);
+        await connector.Connection.Blocked.Task.WaitAsync(Deadline);
+
+        // Deliver the tick between the initial IsCompleted check and consuming
+        // it, while the next metadata read is registered on the real channel.
+        // Keep this scheduling seam in the fixture, not the production API.
+        var updatesField = typeof(PcpAnnounceWorker).GetField("_updates", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var updates = (System.Threading.Channels.Channel<bool>)updatesField.GetValue(worker)!;
+        updatesField.SetValue(worker, new AnnounceReadCallbackChannel(updates,
+            () => clock.Advance(TimeSpan.FromSeconds(30))));
+        connector.Connection.Release.TrySetResult();
+        await connector.Connection.NextWriteAsync(); // HELO
+        await connector.Connection.NextWriteAsync(); // Initial announcement
+        await connector.Connection.IdleReadStarted.Task.WaitAsync(Deadline);
+
+        Assert.True(worker.Update(worker.Identity, Document())); // Same bytes; only a periodic tick must resend.
+        Assert.Equal("Motion + tone", Name(Decode(await connector.Connection.NextWriteAsync())));
+        Assert.Equal(30, clock.GetUtcNow().ToUnixTimeSeconds());
+        var result = await worker.StopAsync(PcpAnnounceStopReason.Finish).WaitAsync(Deadline);
+        Assert.Equal(PcpAnnounceFailure.None, result.Failure);
+        Assert.True(result.CleanupProven);
+        Assert.Equal(1, connector.Connection.MaxActiveWrites);
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(1)]

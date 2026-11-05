@@ -22,6 +22,13 @@ internal static class GenesisGuiNextDesign
     internal const int Special = 0x00DA8AB6;
     internal const int BodyFontHeight = 14;
     internal const int RowImageHeight = 26;
+    internal const int CardTitleFontHeight = 20;
+    internal const int DisabledText = 0x0093826C;
+    internal static (int Background, int Border, int Text) CardButtonColors(
+        bool play, bool recording, bool disabled, bool hot, bool pressed) => disabled
+        ? (Panel, Separator, DisabledText)
+        : (pressed ? Selected : hot ? Hover : play ? Selected : Input,
+            recording ? Recording : play ? Accent : Border, Text);
     internal static int RowBackground(bool selected, bool hot) => selected ? Selected : hot ? Hover : List;
     internal static int NavigationBackground(bool selected, bool hot) => selected ? Selected : hot ? Hover : Sidebar;
 }
