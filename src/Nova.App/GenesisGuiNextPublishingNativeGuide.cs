@@ -90,27 +90,31 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 return;
             }
             var width = GetClientRect(_detailsPane, out var rectangle) ? LogicalWidth(rectangle.Right - rectangle.Left) : _detailsTextWidth;
-            var layout = GenesisGuiNextPublishingGuideLayout.ForWidth(width);
-            void Place(nint control, GenesisGuiNextPublishingGuideRectangle bounds) =>
-                _ = PresentBounds(control, bounds.Left, bounds.Top, bounds.Width, bounds.Height, true);
-            Place(_detailsTitle, layout.Title);
-            Place(_publishingStartButton, layout.Start);
-            Place(_publishingFinishButton, layout.Finish);
-            Place(_publishingInterruptButton, layout.Interrupt);
-            Place(_publishingConnectionState, layout.State);
-            Place(_publishingSettingsButton, layout.Settings);
+            if (UsesPublishingPanel) PlacePublishingPanel(width);
+            else
+            {
+                var layout = GenesisGuiNextPublishingGuideLayout.ForWidth(width);
+                void Place(nint control, GenesisGuiNextPublishingGuideRectangle bounds) =>
+                    _ = PresentBounds(control, bounds.Left, bounds.Top, bounds.Width, bounds.Height, true);
+                Place(_detailsTitle, layout.Title);
+                Place(_publishingStartButton, layout.Start);
+                Place(_publishingFinishButton, layout.Finish);
+                Place(_publishingInterruptButton, layout.Interrupt);
+                Place(_publishingConnectionState, layout.State);
+                Place(_publishingSettingsButton, layout.Settings);
+                Place(_publishingServerLabel, GenesisGuiNextPublishingGuideLayout.ServerLabel);
+                Place(_publishingServerValue, layout.Server);
+                Place(_publishingServerCopy, layout.ServerCopy);
+                Place(_publishingKeyLabel, GenesisGuiNextPublishingGuideLayout.KeyLabel);
+                Place(_publishingKeyValue, layout.Key);
+                Place(_publishingKeyReveal, layout.Reveal);
+                Place(_publishingKeyCopy, layout.KeyCopy);
+                Place(_publishingInstructions, layout.Instructions);
+                Place(_detailsIdentity, layout.Feedback);
+            }
             _ = PresentEnabled(_publishingSettingsButton, _tabs.PublishingSettings is not null);
-            Place(_publishingServerLabel, GenesisGuiNextPublishingGuideLayout.ServerLabel);
-            Place(_publishingServerValue, layout.Server);
-            Place(_publishingServerCopy, layout.ServerCopy);
-            Place(_publishingKeyLabel, GenesisGuiNextPublishingGuideLayout.KeyLabel);
-            Place(_publishingKeyValue, layout.Key);
-            Place(_publishingKeyReveal, layout.Reveal);
-            Place(_publishingKeyCopy, layout.KeyCopy);
-            Place(_publishingInstructions, layout.Instructions);
             _ = PresentVisible(_detailsDescription, ShowWindowHide);
             _ = PresentVisible(_detailsMetadata, ShowWindowHide);
-            Place(_detailsIdentity, layout.Feedback);
             _ = PresentText(_publishingInstructions, NovaObsPublishingConnectionPresentation.Instructions + "\r\n" +
                 (_tabs.PublishingRows.Count == 1 ? _tabs.PublishingRows[0].LanRelayText : "LAN PCP Relay: 状態未確認"));
             var presentation = _tabs.PublishingConnection;

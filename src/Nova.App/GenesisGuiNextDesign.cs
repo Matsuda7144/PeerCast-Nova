@@ -1,3 +1,5 @@
+using PeerCast.Nova.Windows;
+
 namespace PeerCast.Nova.App;
 
 // COLORREF (BGR), shared by the Phase 1 Win32 surfaces.
@@ -41,6 +43,19 @@ internal static class GenesisGuiNextDesign
             selected || hot || focused || pressed ? Accent : Border, Text);
     internal static int RecordingStatusColor(bool failed, bool active, bool transitioning) =>
         failed ? Warning : active || transitioning ? Recording : SecondaryText;
+    internal static (int Background, int Border, int Text) PublishingButtonColors(
+        bool start, bool interrupt, bool disabled, bool hot, bool pressed, bool focused)
+    {
+        var colors = TopButtonColors(start, disabled, hot, pressed, focused);
+        return (colors.Background, interrupt && !disabled && !hot && !pressed && !focused ? Warning : colors.Border, colors.Text);
+    }
+    internal static int PublishingStatusColor(NovaObsPublishingTone tone) => tone switch
+    {
+        NovaObsPublishingTone.Active => Success,
+        NovaObsPublishingTone.Warning => Warning,
+        NovaObsPublishingTone.Special => Special,
+        _ => SecondaryText,
+    };
     internal static int RowBackground(bool selected, bool hot) => selected ? Selected : hot ? Hover : List;
     internal static int NavigationBackground(bool selected, bool hot) => selected ? Selected : hot ? Hover : Sidebar;
 }

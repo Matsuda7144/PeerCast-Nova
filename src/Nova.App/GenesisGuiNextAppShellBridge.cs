@@ -1981,6 +1981,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             using var fontSelection = GenesisWindowUiFont.SelectForDrawing(
                 drawItem.DeviceContext,
                 drawItem.ControlWindow);
+            if (DrawPublishingPanelItem(drawItem)) return true;
             if (DrawRecordingPanelItem(drawItem)) return true;
             if (DrawChannelCardItem(drawItem)) return true;
             if (IsModern && drawItem.ControlType == 3 && _searchBox.IsYellowPageFilter(drawItem.ControlWindow))
@@ -2420,14 +2421,14 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
         {
             _ = SetBkMode((nint)deviceContext, TransparentBackgroundMode);
             _ = SetTextColor((nint)deviceContext, IsModern && pane == _statusBar ? GenesisGuiNextDesign.SecondaryText : TextColor);
-            if (UsesRecordingPanel && pane == _detailsPane) return _topBrush;
+            if ((UsesRecordingPanel || UsesPublishingPanel) && pane == _detailsPane) return _topBrush;
             return IsModern && pane == _statusBar ? _topBrush : _backgroundBrush;
         }
 
         public nint PrepareDarkControl(nuint deviceContext, nint pane)
         {
             _ = SetBkMode((nint)deviceContext, 2);
-            if (UsesRecordingPanel && pane == _detailsPane)
+            if ((UsesRecordingPanel || UsesPublishingPanel) && pane == _detailsPane)
             {
                 _ = SetBkColor((nint)deviceContext, GenesisGuiNextDesign.Input);
                 _ = SetTextColor((nint)deviceContext, GenesisGuiNextDesign.Text);
@@ -2752,6 +2753,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
 
         private void MoveDetailsTextControls(bool recordingPage, bool libraryPage)
         {
+            if (UsesPublishingPanel) return; // SynchronizePublishingGuide places these shared controls.
             if (UsesRecordingPanel)
             {
                 PlaceRecordingPanel();
