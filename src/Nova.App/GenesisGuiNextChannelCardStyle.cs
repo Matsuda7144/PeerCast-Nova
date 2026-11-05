@@ -12,7 +12,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private nint[] CardTexts => [_detailsTitle, _detailsDescription, _detailsMetadata, _detailsIdentity];
         private nint[] CardButtons => [_detailsRecordButton, _detailsStopRecordingButton, _detailsCopyButton,
             _playButton, _stopButton, _relayStart, _relayStop];
-        private nint[] VisualSubclassControls => [.. VisualButtons, .. CardTexts, .. CardButtons, .. TopVisualControls, GetParent(_listView), _owner];
+        private nint[] VisualSubclassControls => [.. VisualButtons, .. CardTexts, .. CardButtons, .. TopVisualControls, .. RecordingVisualControls, GetParent(_listView), _owner];
 
         private void PlaceChannelCard()
         {

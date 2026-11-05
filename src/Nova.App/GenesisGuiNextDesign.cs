@@ -34,6 +34,13 @@ internal static class GenesisGuiNextDesign
         ? (Panel, Separator, DisabledText)
         : (pressed ? Selected : hot ? Hover : primary ? 0x0055320F : Input,
             hot || focused || pressed ? Accent : Border, Text);
+    internal static (int Background, int Border, int Text) RecordingButtonColors(
+        bool selected, bool disabled, bool hot, bool pressed, bool focused) => disabled
+        ? (Panel, Separator, DisabledText)
+        : (pressed || selected ? Selected : hot ? Hover : Input,
+            selected || hot || focused || pressed ? Accent : Border, Text);
+    internal static int RecordingStatusColor(bool failed, bool active, bool transitioning) =>
+        failed ? Warning : active || transitioning ? Recording : SecondaryText;
     internal static int RowBackground(bool selected, bool hot) => selected ? Selected : hot ? Hover : List;
     internal static int NavigationBackground(bool selected, bool hot) => selected ? Selected : hot ? Hover : Sidebar;
 }

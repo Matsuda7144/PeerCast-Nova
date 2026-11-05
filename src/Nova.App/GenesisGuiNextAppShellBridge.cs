@@ -1981,6 +1981,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             using var fontSelection = GenesisWindowUiFont.SelectForDrawing(
                 drawItem.DeviceContext,
                 drawItem.ControlWindow);
+            if (DrawRecordingPanelItem(drawItem)) return true;
             if (DrawChannelCardItem(drawItem)) return true;
             if (IsModern && drawItem.ControlType == 3 && _searchBox.IsYellowPageFilter(drawItem.ControlWindow))
                 return DrawYellowPageItem(drawItem);
@@ -2419,12 +2420,19 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
         {
             _ = SetBkMode((nint)deviceContext, TransparentBackgroundMode);
             _ = SetTextColor((nint)deviceContext, IsModern && pane == _statusBar ? GenesisGuiNextDesign.SecondaryText : TextColor);
+            if (UsesRecordingPanel && pane == _detailsPane) return _topBrush;
             return IsModern && pane == _statusBar ? _topBrush : _backgroundBrush;
         }
 
         public nint PrepareDarkControl(nuint deviceContext, nint pane)
         {
             _ = SetBkMode((nint)deviceContext, 2);
+            if (UsesRecordingPanel && pane == _detailsPane)
+            {
+                _ = SetBkColor((nint)deviceContext, GenesisGuiNextDesign.Input);
+                _ = SetTextColor((nint)deviceContext, GenesisGuiNextDesign.Text);
+                return _inputBrush;
+            }
             _ = SetBkColor((nint)deviceContext, IsModern && pane == _statusBar ? GenesisGuiNextDesign.Input : BackgroundColor);
             _ = SetTextColor((nint)deviceContext, TextColor);
             return IsModern && pane == _statusBar ? _inputBrush : _backgroundBrush;
@@ -2744,6 +2752,11 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
 
         private void MoveDetailsTextControls(bool recordingPage, bool libraryPage)
         {
+            if (UsesRecordingPanel)
+            {
+                PlaceRecordingPanel();
+                return;
+            }
             if (UsesChannelCard)
             {
                 PlaceChannelCard();
