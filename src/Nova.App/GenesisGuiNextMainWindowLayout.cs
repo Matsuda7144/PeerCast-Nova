@@ -51,6 +51,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 Pane(_statusBar, status);
                 Pane(_listView, list);
                 Pane(_detailsPane, details);
+                _publishingPanePlacement = null;
                 if (_settingsPane != 0)
                 {
                     Pane(_settingsPane, new(list.Left, list.Top, list.Right, details.Bottom));

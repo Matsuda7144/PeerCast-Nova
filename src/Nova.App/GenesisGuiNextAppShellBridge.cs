@@ -2503,6 +2503,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 }
             }
 
+            SynchronizePublishingPageBounds();
             SynchronizeFavoriteButtonPresentation();
             SynchronizePlaybackButtonPresentation();
         }
@@ -2645,7 +2646,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             if (isPublishingPage)
             {
                 var publishing = row?.Publishing ?? (_tabs.PublishingRows.Count > 0 ? _tabs.PublishingRows[0] : null);
-                _ = PresentText(_detailsTitle, "OBS 接続設定");
+                _ = PresentText(_detailsTitle, UsesPublishingPanel ? "配信" : "OBS 接続設定");
                 _ = PresentText(_detailsDescription, publishing is null ? "配信状態を確認できません。" :
                     publishing.StateText + (string.IsNullOrEmpty(publishing.DiagnosticText) ? string.Empty : " · " + publishing.DiagnosticText));
                 _ = PresentText(_detailsMetadata, NovaObsPublishingConnectionPresentation.Instructions);

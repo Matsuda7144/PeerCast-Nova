@@ -19,7 +19,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
 
         private bool PublishingGuideAvailable => new[] { _publishingServerLabel, _publishingServerValue,
             _publishingKeyLabel, _publishingKeyValue, _publishingServerCopy, _publishingKeyReveal,
-            _publishingKeyCopy, _publishingConnectionState, _publishingInstructions, _publishingSettingsButton }.All(handle => handle != 0);
+            _publishingKeyCopy, _publishingConnectionState, _publishingInstructions, _publishingSettingsButton }.Concat(PublishingPageControls).All(handle => handle != 0);
 
         private void CreatePublishingGuide(nint instance)
         {
@@ -44,8 +44,9 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             // Keep wrapped instructions readable at narrow widths without growing
             // into lifecycle feedback. This read-only field never contains a key.
             _publishingInstructions = CreateWindowExW(0, "EDIT", NovaObsPublishingConnectionPresentation.Instructions,
-                WindowStyleChild | 0x00200000 | 0x0800 | 0x0004 | 0x0040,
+                WindowStyleChild | (IsModern ? WindowStyleTabStop : 0) | 0x00200000 | 0x0800 | 0x0004 | 0x0040,
                 0, 0, 1, 1, _detailsPane, 0, instance, 0);
+            CreatePublishingPage(instance);
             foreach (var control in PublishingGuideControls())
             {
                 ApplyDefaultFont(control);
@@ -81,6 +82,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
 
         private void SynchronizePublishingGuide(bool visible)
         {
+            SynchronizePublishingPage(visible);
             foreach (var control in PublishingGuideControls())
                 _ = PresentVisible(control, visible ? ShowWindowShowNoActivate : ShowWindowHide);
             if (!visible)
