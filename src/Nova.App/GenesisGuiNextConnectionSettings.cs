@@ -125,8 +125,13 @@ internal sealed class GenesisGuiNextConnectionSettings : IAsyncDisposable
     public bool LoadFailed => Volatile.Read(ref _loadFailed) != 0;
     public bool HasPendingRestart => Saved != Startup;
 
+    internal ValueTask<GenesisGuiNextConnectionSaveResult> SaveAsync(
+        GenesisGuiNextConnectionInput input, CancellationToken cancellationToken = default) =>
+        SaveAsync(input, expectedSaved: null, cancellationToken);
+
     internal async ValueTask<GenesisGuiNextConnectionSaveResult> SaveAsync(
-        GenesisGuiNextConnectionInput input, CancellationToken cancellationToken = default)
+        GenesisGuiNextConnectionInput input, GenesisGuiNextConnectionPreferences? expectedSaved,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(input);
         cancellationToken.ThrowIfCancellationRequested();
@@ -137,19 +142,21 @@ internal sealed class GenesisGuiNextConnectionSettings : IAsyncDisposable
         lock (_saveGate)
         {
             if (_closing) return new(false, "終了処理中のため保存できません。設定は変更されていません。");
-            pending = PersistAfterAsync(_pendingSave, next!, cancellationToken);
+            pending = PersistAfterAsync(_pendingSave, next!, expectedSaved, cancellationToken);
             _pendingSave = pending;
         }
         return await pending.ConfigureAwait(false);
     }
 
     private async Task<GenesisGuiNextConnectionSaveResult> PersistAfterAsync(Task previous,
-        GenesisGuiNextConnectionPreferences next, CancellationToken cancellationToken)
+        GenesisGuiNextConnectionPreferences next, GenesisGuiNextConnectionPreferences? expectedSaved, CancellationToken cancellationToken)
     {
         try { await previous.ConfigureAwait(false); }
         catch (OperationCanceledException) { /* An earlier canceled save does not cancel the next request. */ }
         try
         {
+            if (expectedSaved is not null && Saved != expectedSaved)
+                return new(false, "保存値が変更されました。キャンセルして再読込してください。");
             await _store.SaveAsync(next!, cancellationToken).ConfigureAwait(false);
             Volatile.Write(ref _saved, next!);
             Volatile.Write(ref _loadFailed, 0);

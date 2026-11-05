@@ -17,11 +17,11 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private nint _notifyNew, _notifyFavorite, _notifySound, _testSound;
         private bool _updatingSettingsPath, _notificationError;
         private string _notificationMessage = string.Empty;
-        private nint[] AdditionalSettingsButtons => [_playbackCategory, _recordingCategory, _notificationsCategory, _settingsBrowse, _settingsReset, _testSound];
-        private nint[] SettingsChecks => [_notifyNew, _notifyFavorite, _notifySound];
+        private nint[] AdditionalSettingsButtons => [_playbackCategory, _recordingCategory, _notificationsCategory, _settingsBrowse, _settingsReset, _testSound, .. NetworkSettingsButtons];
+        private nint[] SettingsChecks => [_notifyNew, _notifyFavorite, _notifySound, _connectionIpv6, _ypEnabled];
         private bool PathCategory => _settingsCategory is GenesisIntegratedSettingsCategory.Playback or GenesisIntegratedSettingsCategory.Recording;
         private bool SettingsError => _settingsCategory == GenesisIntegratedSettingsCategory.General ? _generalSettings?.IsError == true :
-            PathCategory ? _pathSettings?.IsError == true : _notificationError;
+            PathCategory ? _pathSettings?.IsError == true : NetworkCategory ? NetworkSettingsError : _notificationError;
 
         private void CreateSettingsCategories(nint instance)
         {
@@ -46,6 +46,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             _notifyFavorite = Check("お気に入りチャンネル通知", NotifyFavoriteId);
             _notifySound = Check("通知音を有効にする", NotifySoundId);
             _pathSettings = new(_viewModel.PlaybackSettings, _viewModel.RecordingOutputSettings);
+            CreateNetworkSettingsCategories(instance);
         }
 
         private void SelectSettingsCategory(GenesisIntegratedSettingsCategory category)
@@ -53,16 +54,20 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             if (_settingsCategory == category) return;
             if (category is GenesisIntegratedSettingsCategory.Playback or GenesisIntegratedSettingsCategory.Recording && _pathSettings?.Available(category) != true) return;
             if (category == GenesisIntegratedSettingsCategory.Notifications && _viewModel.NotificationSettings is null) return;
+            if (category == GenesisIntegratedSettingsCategory.Connection && _connectionPage is null || category == GenesisIntegratedSettingsCategory.YellowPages && _ypPage is null) return;
+            CloseNetworkSettingsPages();
             _generalSettings!.Close();
             _pathSettings!.Close();
             _settingsCategoryRevision++;
             _settingsCategory = category;
             if (category == GenesisIntegratedSettingsCategory.General) _ = _generalSettings.Open();
             else if (PathCategory) _ = _pathSettings.Open(category);
+            else if (category == GenesisIntegratedSettingsCategory.Connection) _connectionPage!.Open();
+            else if (category == GenesisIntegratedSettingsCategory.YellowPages) _ypPage!.Open();
             else { _notificationError = false; _notificationMessage = "変更は即時に保存・反映されます。保存・キャンセル操作はありません。"; }
             ShowSettingsCategory();
             RefreshIntegratedSettings();
-            _ = SetFocus(PathCategory ? _settingsPath : category == GenesisIntegratedSettingsCategory.Notifications ? _notifyNew : _modernChoice);
+            _ = SetFocus(NetworkCategory ? NetworkInitialFocus : PathCategory ? _settingsPath : category == GenesisIntegratedSettingsCategory.Notifications ? _notifyNew : _modernChoice);
         }
 
         private void ShowSettingsCategory()
@@ -71,11 +76,13 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             var notification = _settingsCategory == GenesisIntegratedSettingsCategory.Notifications;
             void Show(nint control, bool visible) => _ = ShowWindow(control, visible ? ShowWindowShowNoActivate : ShowWindowHide);
             Show(_classicChoice, general); Show(_modernChoice, general);
+            Show(_generalNotice, true); // YP hides this shared text; restore it for every other category.
             Show(_generalRuntime, !notification); Show(_generalConfigured, !notification);
             Show(_generalSave, !notification); Show(_generalCancel, !notification);
             Show(_settingsPath, PathCategory); Show(_settingsBrowse, _settingsCategory == GenesisIntegratedSettingsCategory.Playback);
             Show(_settingsReset, PathCategory); Show(_testSound, notification);
-            foreach (var control in SettingsChecks) Show(control, notification);
+            foreach (var control in new[] { _notifyNew, _notifyFavorite, _notifySound }) Show(control, notification);
+            ShowNetworkSettingsCategory();
             _ = EnableWindow(_playbackCategory, _pathSettings?.Available(GenesisIntegratedSettingsCategory.Playback) == true);
             _ = EnableWindow(_recordingCategory, _pathSettings?.Available(GenesisIntegratedSettingsCategory.Recording) == true);
             _ = EnableWindow(_notificationsCategory, _viewModel.NotificationSettings is not null);
@@ -108,6 +115,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
 
         private bool ProcessSettingsCategoryCommand(int id, nint control)
         {
+            if (ProcessNetworkSettingsCommand(id, control)) return true;
             if (id == PlaybackCategoryId && control == _playbackCategory) SelectSettingsCategory(GenesisIntegratedSettingsCategory.Playback);
             else if (id == RecordingCategoryId && control == _recordingCategory) SelectSettingsCategory(GenesisIntegratedSettingsCategory.Recording);
             else if (id == NotificationsCategoryId && control == _notificationsCategory) SelectSettingsCategory(GenesisIntegratedSettingsCategory.Notifications);
@@ -151,6 +159,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
 
         private void RefreshAdditionalSettings()
         {
+            if (NetworkCategory) { RefreshNetworkSettings(); return; }
             if (PathCategory)
             {
                 var page = _pathSettings!;
@@ -189,6 +198,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private void PlaceSettingsCategory(GenesisGuiNextSettingsLayout layout)
         {
             void Place(nint control, GenesisGuiNextAppShellPlacement.WindowRectangle b) => _ = MoveWindow(control, Scale(b.Left), Scale(b.Top), Scale(b.Width), Scale(b.Height), true);
+            PlaceNetworkSettingsCategory(layout);
             Place(_playbackCategory, GenesisGuiNextSettingsLayout.PlaybackTab); Place(_recordingCategory, GenesisGuiNextSettingsLayout.RecordingTab);
             Place(_notificationsCategory, GenesisGuiNextSettingsLayout.NotificationsTab);
             Place(_settingsBrowse, layout.Browse); Place(_settingsReset, layout.Reset); Place(_testSound, layout.SoundTest);
@@ -201,13 +211,13 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             {
                 Place(_generalNotice, layout.PathNotice); Place(_generalStatus, layout.NotificationStatus);
             }
-            for (var i = 0; i < SettingsChecks.Length; i++) Place(SettingsChecks[i], layout.NotificationCheck(i));
+            for (var i = 0; i < 3; i++) Place(SettingsChecks[i], layout.NotificationCheck(i));
         }
 
         internal bool IsSettingsPane(nint window) => window == _settingsPane && _settingsPane != 0;
         internal void RefreshSettingsPathFocus(nint window)
         {
-            if (window == _settingsPath && SettingsPageOpen) _ = RedrawWindow(_settingsPane, 0, 0, 0x0001 | 0x0004);
+            if ((window == _settingsPath || NetworkSettingsInputs.Contains(window)) && SettingsPageOpen) _ = RedrawWindow(_settingsPane, 0, 0, 0x0001 | 0x0004);
         }
     }
 

@@ -5,6 +5,8 @@ internal readonly record struct GenesisGuiNextSettingsLayout(int Width, int Heig
     private static GenesisGuiNextAppShellPlacement.WindowRectangle Box(int x, int y, int w, int h) => new(x, y, x + w, y + h);
     internal GenesisGuiNextAppShellPlacement.WindowRectangle Title => Box(16, 12, Width - 32, 28);
     internal static GenesisGuiNextAppShellPlacement.WindowRectangle General => Box(16, 54, 108, 30);
+    internal static GenesisGuiNextAppShellPlacement.WindowRectangle ConnectionTab => Box(516, 54, 72, 30);
+    internal static GenesisGuiNextAppShellPlacement.WindowRectangle YellowPagesTab => Box(596, 54, 56, 30);
     internal GenesisGuiNextAppShellPlacement.WindowRectangle Legacy => Box(Width - 224, 54, 208, 30);
     internal GenesisGuiNextAppShellPlacement.WindowRectangle Card => Box(16, 100, Width - 32, Height - 164);
     internal GenesisGuiNextAppShellPlacement.WindowRectangle CardTitle => Box(32, 116, Width - 64, 24);

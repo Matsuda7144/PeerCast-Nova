@@ -1,6 +1,6 @@
 namespace PeerCast.Nova.App;
 
-internal enum GenesisIntegratedSettingsCategory { General, Playback, Recording, Notifications }
+internal enum GenesisIntegratedSettingsCategory { General, Playback, Recording, Notifications, Connection, YellowPages }
 
 // A draft for the two existing path editors, not a settings store or a global save transaction.
 internal sealed class GenesisPathSettingsPage(GenesisGuiNextPlaybackSettings? playback, GenesisRecordingOutputDirectorySettings? recording)

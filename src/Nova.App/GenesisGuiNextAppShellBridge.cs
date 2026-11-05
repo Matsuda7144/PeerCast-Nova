@@ -1401,6 +1401,11 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             return DefWindowProcW(window, message, wParam, lParam);
         }
 
+        if (message == NetworkSettingsSaveCompleted)
+        {
+            state.CompleteNetworkSettingsSave(wParam);
+            return 0;
+        }
         if (message == WindowMessageCommand)
         {
             state.ProcessCommand(wParam, lParam);
@@ -1705,6 +1710,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 DetachVisuals();
                 _generalSettings?.Release();
                 _pathSettings?.Release();
+                CloseNetworkSettingsPages();
                 _settingsCategory = null;
                 _detailsUpdates.Close();
                 _favoriteUpdates.Close();
@@ -1749,6 +1755,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             var commandId = (int)(wParam & 0xffff);
             var notificationCode = (int)((wParam >> 16) & 0xffff);
             if (Volatile.Read(ref _detached) == 0 && ProcessSettingsPathInput(commandId, notificationCode, lParam)) return;
+            if (Volatile.Read(ref _detached) == 0 && ProcessNetworkSettingsInput(commandId, notificationCode, lParam)) return;
             if (notificationCode != ButtonNotificationClicked ||
                 Volatile.Read(ref _detached) != 0)
             {
@@ -1998,6 +2005,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             using var fontSelection = GenesisWindowUiFont.SelectForDrawing(
                 drawItem.DeviceContext,
                 drawItem.ControlWindow);
+            if (DrawSettingsYpList(drawItem)) return true;
             if (DrawSettingsButton(drawItem)) return true;
             if (DrawPublishingPanelItem(drawItem)) return true;
             if (DrawRecordingPanelItem(drawItem)) return true;

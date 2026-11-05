@@ -15,7 +15,7 @@ public sealed class GenesisGuiNextSettingsLayoutTests
             var layout = new GenesisGuiNextSettingsLayout(list.Width, details.Bottom - list.Top);
             GenesisGuiNextAppShellPlacement.WindowRectangle[] boxes = [layout.Title, GenesisGuiNextSettingsLayout.General,
                 GenesisGuiNextSettingsLayout.PlaybackTab, GenesisGuiNextSettingsLayout.RecordingTab, GenesisGuiNextSettingsLayout.NotificationsTab,
-                layout.Legacy, layout.CardTitle, layout.Runtime, layout.Configured, layout.Notice,
+                GenesisGuiNextSettingsLayout.ConnectionTab, GenesisGuiNextSettingsLayout.YellowPagesTab, layout.Legacy, layout.CardTitle, layout.Runtime, layout.Configured, layout.Notice,
                 GenesisGuiNextSettingsLayout.Classic, GenesisGuiNextSettingsLayout.Modern, layout.Status, layout.Back, layout.Cancel, layout.Save];
             foreach (var b in boxes)
             {
@@ -56,7 +56,7 @@ public sealed class GenesisGuiNextSettingsLayoutTests
             var layout = new GenesisGuiNextSettingsLayout(list.Width, details.Bottom - list.Top);
             var boxes = new List<GenesisGuiNextAppShellPlacement.WindowRectangle> { layout.Title, GenesisGuiNextSettingsLayout.General,
                 GenesisGuiNextSettingsLayout.PlaybackTab, GenesisGuiNextSettingsLayout.RecordingTab, GenesisGuiNextSettingsLayout.NotificationsTab,
-                layout.Legacy, layout.CardTitle, layout.PathNotice, layout.Back };
+                GenesisGuiNextSettingsLayout.ConnectionTab, GenesisGuiNextSettingsLayout.YellowPagesTab, layout.Legacy, layout.CardTitle, layout.PathNotice, layout.Back };
             if (category == (int)GenesisIntegratedSettingsCategory.Notifications)
             {
                 boxes.AddRange(Enumerable.Range(0, 3).Select(layout.NotificationCheck));
@@ -82,6 +82,50 @@ public sealed class GenesisGuiNextSettingsLayoutTests
                     var a = boxes[i]; var b = boxes[j];
                     Assert.False(S(a.Left) < S(b.Right) && S(b.Left) < S(a.Right) && S(a.Top) < S(b.Bottom) && S(b.Top) < S(a.Bottom));
                 }
+        }
+    }
+
+    [Theory]
+    [InlineData(false, 96u)]
+    [InlineData(true, 96u)]
+    [InlineData(false, 144u)]
+    [InlineData(true, 144u)]
+    [InlineData(false, 192u)]
+    [InlineData(true, 192u)]
+    public void NetworkAndYpFieldsFitMinimumInitialAndExpandedShells(bool yp, uint dpi)
+    {
+        foreach (var size in new[] { (GenesisMainWindowLayout.MinimumClientWidth, GenesisMainWindowLayout.MinimumClientHeight), (1120, 620), (1920, 1080) })
+        {
+            int S(int n) => GenesisMainWindowLayout.Scale(n, dpi);
+            Assert.True(GenesisMainWindowLayout.TryResolve(S(size.Item1), S(size.Item2), dpi, out _, out _, out var list, out var details));
+            var layout = new GenesisGuiNextSettingsLayout(list.Width, details.Bottom - list.Top);
+            var n = new GenesisGuiNextNetworkSettingsLayout(layout.Width);
+            var boxes = new List<GenesisGuiNextAppShellPlacement.WindowRectangle> { layout.Title, GenesisGuiNextSettingsLayout.General,
+                GenesisGuiNextSettingsLayout.PlaybackTab, GenesisGuiNextSettingsLayout.RecordingTab, GenesisGuiNextSettingsLayout.NotificationsTab,
+                GenesisGuiNextSettingsLayout.ConnectionTab, GenesisGuiNextSettingsLayout.YellowPagesTab, layout.Legacy, layout.Back, layout.Save, layout.Cancel };
+            var fields = new List<GenesisGuiNextAppShellPlacement.WindowRectangle>();
+            if (yp)
+            {
+                fields.AddRange([layout.CardTitle, n.YpStatus, GenesisGuiNextNetworkSettingsLayout.YpList, GenesisGuiNextNetworkSettingsLayout.Enabled]);
+                for (var j = 0; j < 5; j++) fields.AddRange([n.YpInput(j), GenesisGuiNextNetworkSettingsLayout.YpLabel(j)]);
+                boxes.AddRange([GenesisGuiNextNetworkSettingsLayout.New(layout.Height), GenesisGuiNextNetworkSettingsLayout.Remove(layout.Height), GenesisGuiNextNetworkSettingsLayout.Toggle(layout.Height)]);
+            }
+            else
+            {
+                fields.AddRange([n.ConnectionTitle, n.Ipv6, n.Notice, n.Runtime, n.Saved, n.Status]);
+                for (var j = 0; j < 6; j++) fields.AddRange([n.ConnectionInput(j), n.ConnectionLabel(j)]);
+            }
+            foreach (var b in fields) Assert.True(b.Top >= layout.Card.Top && b.Bottom < layout.Card.Bottom);
+            boxes.AddRange(fields);
+            foreach (var b in boxes)
+            {
+                Assert.True(b.Width > 0 && b.Height > 0);
+                Assert.True(S(b.Left) >= S(16) && S(b.Right) <= S(layout.Width - 16));
+                Assert.True(S(b.Top) >= 0 && S(b.Bottom) <= S(layout.Height));
+            }
+            for (var a = 0; a < boxes.Count; a++)
+                for (var b = a + 1; b < boxes.Count; b++)
+                    Assert.False(boxes[a].Left < boxes[b].Right && boxes[b].Left < boxes[a].Right && boxes[a].Top < boxes[b].Bottom && boxes[b].Top < boxes[a].Bottom);
         }
     }
 }

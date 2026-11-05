@@ -16,6 +16,8 @@ public sealed partial class GenesisMainViewModel : INotifyPropertyChanged
     internal GenesisRecordingOutputDirectorySettings? RecordingOutputSettings { get; set; }
     internal GenesisGuiNextPlaybackSettings? PlaybackSettings { get; set; }
     internal GenesisChannelNotificationSettings? NotificationSettings { get; set; }
+    internal GenesisGuiNextConnectionSettings? ConnectionSettings { get; set; }
+    internal GenesisYellowPageSettingsModel? YellowPageSettings { get; set; }
     internal GenesisAppearanceSettings? AppearanceSettings { get; set; }
     internal bool UsesModernAppearance => AppearanceSettings?.CurrentRuntimeMode ==
         Foundation.Configuration.NovaGuiMode.Modern;

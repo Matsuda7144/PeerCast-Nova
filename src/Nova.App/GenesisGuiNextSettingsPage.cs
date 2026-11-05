@@ -17,7 +17,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private bool SettingsPageOpen => _settingsCategory is not null;
         private nint[] SettingsButtons => _settingsPane == 0 ? [] : [_generalCategory, _legacySettings, _classicChoice, _modernChoice, _generalSave, _generalCancel, _generalBack, .. AdditionalSettingsButtons];
         private nint[] SettingsTexts => _settingsPane == 0 ? [] : [_settingsTitle, _generalTitle, _generalRuntime, _generalConfigured, _generalNotice, _generalStatus];
-        private nint[] SettingsVisualControls => _settingsPane == 0 ? [] : [.. SettingsButtons, .. SettingsTexts, _settingsPath, .. SettingsChecks];
+        private nint[] SettingsVisualControls => _settingsPane == 0 ? [] : [.. SettingsButtons, .. SettingsTexts, _settingsPath, .. SettingsChecks, .. NetworkSettingsInputs, .. NetworkSettingsTexts, _ypList];
 
         internal void CreateIntegratedSettings(string className, nint instance)
         {
@@ -32,7 +32,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             _generalTitle = Text("外観設定");
             _generalRuntime = Text(string.Empty);
             _generalConfigured = Text(string.Empty);
-            _generalNotice = Text(GenesisAppearanceSettings.NextStartNotice + "\r\n通信・YPなどの未移植設定は「従来の設定を開く…」から変更できます。");
+            _generalNotice = Text(GenesisAppearanceSettings.NextStartNotice + "\r\nUPnP/NATなどの詳細設定は「従来の設定を開く…」から変更できます。");
             _generalStatus = Text(string.Empty);
             _generalCategory = Button("一般", GeneralCategoryId);
             _legacySettings = Button("従来の設定を開く…", LegacySettingsId);
@@ -53,6 +53,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
 
         internal void DestroyIntegratedSettings()
         {
+            CloseNetworkSettingsPages();
             _generalSettings?.Release();
             _generalSettings = null;
             _pathSettings?.Release();
@@ -79,7 +80,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             RefreshIntegratedSettings();
             _favoriteUpdates.Reset();
             SynchronizeNativeSelection();
-            _ = SetFocus(PathCategory ? _settingsPath : _settingsCategory == GenesisIntegratedSettingsCategory.Notifications ? _notifyNew :
+            _ = SetFocus(NetworkCategory ? NetworkInitialFocus : PathCategory ? _settingsPath : _settingsCategory == GenesisIntegratedSettingsCategory.Notifications ? _notifyNew :
                 _generalSettings.Draft == NovaGuiMode.Modern ? _modernChoice : _classicChoice);
             return true;
         }
@@ -87,6 +88,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private void CloseIntegratedSettings()
         {
             if (!SettingsPageOpen) return;
+            CloseNetworkSettingsPages();
             _generalSettings!.Close();
             _pathSettings!.Close();
             _settingsCategoryRevision++;
@@ -155,7 +157,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 var page = _generalSettings!;
                 page.Refresh();
                 _ = SetWindowTextW(_generalTitle, "外観設定");
-                _ = SetWindowTextW(_generalNotice, GenesisAppearanceSettings.NextStartNotice + "\r\n通信・YPなどの未移植設定は「従来の設定を開く…」から変更できます。");
+                _ = SetWindowTextW(_generalNotice, GenesisAppearanceSettings.NextStartNotice + "\r\nUPnP/NATなどの詳細設定は「従来の設定を開く…」から変更できます。");
                 _ = SetWindowTextW(_generalRuntime, "現在の起動時表示: " + GenesisGeneralSettingsPage.Label(page.RuntimeMode));
                 _ = SetWindowTextW(_generalConfigured, "保存済み（次回起動）: " + GenesisGeneralSettingsPage.Label(page.ConfiguredMode));
                 _ = SetWindowTextW(_classicChoice, page.Draft == NovaGuiMode.Classic ? "Classic（選択中）" : "Classic");
@@ -192,6 +194,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             _ = FillRect(dc, ref box, _topBrush);
             using var pen = new VisualPen(dc, Scale(1), GenesisGuiNextDesign.Border);
             _ = GdiRectangle(dc, box.Left, box.Top, box.Right, box.Bottom);
+            PaintNetworkSettingsFrames(dc);
             if (PathCategory)
             {
                 var input = new GenesisGuiNextSettingsLayout(LogicalWidth(client.Right), LogicalWidth(client.Bottom)).PathInput(_settingsCategory == GenesisIntegratedSettingsCategory.Playback);
@@ -203,7 +206,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
 
         internal bool PaintSettingsText(nint control, uint message)
         {
-            if (!IsModern || !SettingsTexts.Contains(control)) return false;
+            if (!IsModern || !(SettingsTexts.Contains(control) || NetworkSettingsTexts.Contains(control))) return false;
             if (message == 0x0014) return true;
             if (message != WindowMessagePaint) return false;
             var dc = BeginCardPaint(control, out var paint);
@@ -228,6 +231,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             var selected = draw.ControlId == GeneralCategoryId && _settingsCategory == GenesisIntegratedSettingsCategory.General ||
                 draw.ControlId == PlaybackCategoryId && _settingsCategory == GenesisIntegratedSettingsCategory.Playback ||
                 draw.ControlId == RecordingCategoryId && _settingsCategory == GenesisIntegratedSettingsCategory.Recording ||
+                draw.ControlId == ConnectionCategoryId && _settingsCategory == GenesisIntegratedSettingsCategory.Connection ||
+                draw.ControlId == YellowPagesCategoryId && _settingsCategory == GenesisIntegratedSettingsCategory.YellowPages ||
                 draw.ControlId == NotificationsCategoryId && _settingsCategory == GenesisIntegratedSettingsCategory.Notifications || draw.ControlId == ClassicChoiceId && _generalSettings?.Draft == NovaGuiMode.Classic ||
                 draw.ControlId == ModernChoiceId && _generalSettings?.Draft == NovaGuiMode.Modern;
             var disabled = (draw.ItemState & DrawItemDisabled) != 0;

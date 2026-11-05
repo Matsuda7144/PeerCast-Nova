@@ -303,6 +303,8 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
         viewModel.RecordingOutputSettings = _recordingSettings;
         viewModel.PlaybackSettings = guiNextState?.Playback;
         viewModel.NotificationSettings = guiNextState?.Notifications;
+        viewModel.ConnectionSettings = guiNextState?.Connection;
+        viewModel.YellowPageSettings = guiNextState is null ? null : new(guiNextState.YellowPages);
         viewModel.RelayActivation = guiNextState?.RelayActivation;
         if (guiNextState is not null)
         {
