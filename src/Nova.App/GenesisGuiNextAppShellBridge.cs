@@ -1694,6 +1694,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
 
         public void Attach()
         {
+            if (IsModern && _tabs.PublishingSettings is { } settings) _publishingEditor = new(settings);
             _tabs.SetPublishingDispatcher(PostPublishingUi);
             _tabs.PropertyChanged += OnTabsPropertyChanged;
             _viewModel.PropertyChanged += OnViewModelPropertyChanged;
@@ -1707,6 +1708,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             if (Interlocked.Exchange(ref _detached, 1) == 0)
             {
                 _ = StatesByOwner.TryRemove(_owner, out _);
+                _publishingEditor?.Dispose();
+                if (IsWindow(_publishingEditPane)) _ = RemoveWindowSubclass(_publishingEditPane, PublishingEditorProcedure, PublishingEditorSubclassId);
                 DetachVisuals();
                 _generalSettings?.Release();
                 _pathSettings?.Release();
@@ -1754,6 +1757,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             _searchBox.ProcessCommand(wParam, lParam);
             var commandId = (int)(wParam & 0xffff);
             var notificationCode = (int)((wParam >> 16) & 0xffff);
+            if (Volatile.Read(ref _detached) == 0 && ProcessPublishingInlineInput(commandId, notificationCode, lParam)) return;
             if (Volatile.Read(ref _detached) == 0 && ProcessSettingsPathInput(commandId, notificationCode, lParam)) return;
             if (Volatile.Read(ref _detached) == 0 && ProcessNetworkSettingsInput(commandId, notificationCode, lParam)) return;
             if (notificationCode != ButtonNotificationClicked ||
@@ -1942,6 +1946,9 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             }
 
             var itemIndex = commandId - NavigationControlIdBase;
+            if (itemIndex >= 0 && itemIndex < GenesisGuiNextNavigationPresentation.Items.Count &&
+                !(GenesisGuiNextNavigationPresentation.TryResolveExistingView(itemIndex, out var targetTab) && targetTab == GenesisGuiNextTab.Publishing) &&
+                !CanLeavePublishingEditor()) return;
             if (GenesisGuiNextNavigationPresentation.TryResolveExistingView(
                     itemIndex,
                     out var selectedTab))
@@ -2460,7 +2467,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
         public nint PrepareDarkControl(nuint deviceContext, nint pane)
         {
             _ = SetBkMode((nint)deviceContext, 2);
-            if (IsSettingsPane(pane))
+            if (IsSettingsPane(pane) || pane == _publishingEditPane && IsModern)
             {
                 _ = SetBkColor((nint)deviceContext, GenesisGuiNextDesign.Input);
                 _ = SetTextColor((nint)deviceContext, GenesisGuiNextDesign.Text);

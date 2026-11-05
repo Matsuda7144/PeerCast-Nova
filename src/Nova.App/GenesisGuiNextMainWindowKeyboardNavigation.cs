@@ -157,7 +157,10 @@ internal sealed class GenesisGuiNextMainWindowKeyboardNavigation : IDisposable
                         GenesisChannelRefreshButtonBridge.FindRefreshRequestForOwner(_owner));
                 }
 
-                if (refreshHandled || (IsRemovedTabKeyDown(
+                var inlineTabHandled = IsRemovedTabKeyDown(code, removalAction, message.Message, message.WParam) &&
+                    IsMessageForOwner(message.Window) && GenesisGuiNextAppShellBridge.TryMovePublishingInlineTab(
+                        _owner, GetFocus(), IsKeyPressed(VirtualKeyShift));
+                if (refreshHandled || inlineTabHandled || (IsRemovedTabKeyDown(
                         code,
                         removalAction,
                         message.Message,

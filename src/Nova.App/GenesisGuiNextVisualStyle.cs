@@ -13,6 +13,18 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             _ = RemoveWindowSubclass(window, VisualProcedure, id);
         else if (StatesByOwner.TryGetValue((nint)owner, out var state))
         {
+            if (window == (nint)owner && message == 0x0010 && !state.CanLeavePublishingEditor()) return 0;
+            if (state.PublishingInlineControlMessage(window, message, wParam)) return 0;
+            if (state.IsPublishingInlineInput(window))
+            {
+                if (message is 0x0007 or 0x0008) _ = RedrawWindow(window, 0, 0, 0x0001);
+                if (message is WindowMessagePaint or 0x0085)
+                {
+                    var painted = DefSubclassProc(window, message, wParam, lParam);
+                    state.PaintPublishingInlineInput(window);
+                    return painted;
+                }
+            }
             if (message == WindowMessageNotify && state.HandleListViewCustomDraw(lParam, out var drawResult))
                 return drawResult;
             if (state.PaintTopStatus(window, message)) return message == 0x0014 ? 1 : 0;

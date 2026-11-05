@@ -61,8 +61,10 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private bool ProcessPublishingGuideCommand(int commandId, nint control)
         {
             if (_tabs.SelectedTab != GenesisGuiNextTab.Publishing) return false;
+            if (ProcessPublishingInlineCommand(commandId, control)) return true;
             if (commandId == PublishingSettingsControlId && control == _publishingSettingsButton)
             {
+                if (!CanLeavePublishingEditor()) return true;
                 if (_tabs.PublishingSettings is { } settings)
                 {
                     _publishingSettingsWindow ??= new(_owner, settings, () => _tabs.PublishingCommands.CanInterrupt || _tabs.PublishingCommands.CanFinish);

@@ -10,7 +10,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private (bool Expanded, bool Settings)? _publishingPaneVisibility;
         private nint[] PublishingPageTitles => IsModern ? [_publishingSubtitle, _publishingObsTitle, _publishingBasicTitle, _publishingOptionsTitle] : [];
         private nint[] PublishingPageValues => IsModern ? [_publishingBasic, _publishingOptions, _publishingDiagnostic] : [];
-        private nint[] PublishingPageControls => [.. PublishingPageTitles, .. PublishingPageValues];
+        private nint[] PublishingPageControls => [.. PublishingPageTitles, .. PublishingPageValues, .. PublishingEditorControls];
 
         private void CreatePublishingPage(nint instance)
         {
@@ -25,6 +25,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             _publishingBasicTitle = Text("基本設定（保存済み）");
             _publishingOptionsTitle = Text("詳細設定・適用状況");
             _publishingBasic = Value(); _publishingOptions = Value(); _publishingDiagnostic = Value();
+            CreatePublishingInlineSettings(instance);
             foreach (var h in PublishingPageControls) ApplyDefaultFont(h);
         }
 
@@ -57,14 +58,17 @@ internal sealed partial class GenesisGuiNextAppShellBridge
 
         private void SynchronizePublishingPage(bool visible)
         {
-            foreach (var h in PublishingPageControls) _ = PresentVisible(h, visible && IsModern ? ShowWindowShowNoActivate : ShowWindowHide);
+            foreach (var h in PublishingPageTitles.Concat(PublishingPageValues.Where(h => h != _publishingBasic)))
+                _ = PresentVisible(h, visible && IsModern ? ShowWindowShowNoActivate : ShowWindowHide);
+            if (IsModern) SynchronizePublishingInline(visible);
             if (!visible || !IsModern) return;
             var settings = _tabs.PublishingSettings;
             var summary = GenesisGuiNextPublishingPageSummary.Create(settings?.Saved, settings?.Applied, settings?.LoadFailed == true,
                 _tabs.PublishingRows.Count > 0 ? _tabs.PublishingRows[0] : null, _tabs.PublishingCommands.DiagnosticText, _tabs.PublishingConnectionFeedback);
             _ = PresentText(_publishingBasic, summary.Basic);
             _ = PresentText(_publishingOptions, summary.Options);
-            _ = PresentText(_publishingDiagnostic, summary.Diagnostic);
+            _ = PresentText(_publishingDiagnostic, (_publishingEditor is { } editor ? editor.Result.Message +
+                (editor.Result.Field is { } field && Array.IndexOf(BasicFieldNames, field) is var index && index >= 0 ? "（" + GenesisGuiNextPublishingSettingsWindow.FieldLabels[index] + "）" : "") + "\r\n" : "") + summary.Diagnostic);
             _ = PresentVisible(_detailsIdentity, ShowWindowHide);
         }
     }

@@ -16,7 +16,7 @@ internal sealed record GenesisGuiNextPublishingPageSummary(string Basic, string 
             var scope = v.Wan.Enabled ? "WAN（到達性は別途確認）" : v.Lan.Enabled ? "LAN（到達性は別途確認）" : "このPCのみ";
             var bitrate = v.BitrateKbps is { } n ? $"{n} kbps" : "未指定";
             var used = applied is null ? "未適用（配信開始前）" : applied.Values == v ? "保存値と一致" : "保存値と異なります";
-            options = $"ソース: OBS（ローカルRTMP）\r\n公開範囲の設定: {scope}\r\nビットレート: {bitrate}\r\nYP掲載: {(v.Announce.Enabled ? v.Announce.Name : "無効")}\r\n前回開始時の設定: {used}\r\n変更は「配信設定…」で保存し、次回の配信開始から使用します。";
+            options = $"ソース: OBS（ローカルRTMP）\r\n公開範囲の設定: {scope}\r\nビットレート: {bitrate}\r\nYP掲載: {(v.Announce.Enabled ? v.Announce.Name : "無効")}\r\n前回開始時の設定: {used}\r\n変更は保存後、次回の配信開始から使用します。詳細項目は「配信設定…」で編集できます。";
         }
         else if (loadFailed) basic = options = PublishingSettingsController.LoadWarning;
         var diagnostic = status is null ? "配信状態を確認できません。" :

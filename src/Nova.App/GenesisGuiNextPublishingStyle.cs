@@ -7,9 +7,9 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private bool UsesPublishingPanel => Volatile.Read(ref _detached) == 0 &&
             GenesisGuiNextPublishingModernLayout.Applies(IsModern, _tabs.SelectedTab);
         private nint[] PublishingButtons => [_publishingStartButton, _publishingFinishButton, _publishingInterruptButton,
-            _publishingSettingsButton, _publishingServerCopy, _publishingKeyReveal, _publishingKeyCopy];
+            _publishingSettingsButton, _publishingServerCopy, _publishingKeyReveal, _publishingKeyCopy, .. PublishingEditorButtons];
         private nint[] PublishingGuideTexts => [_publishingServerLabel, _publishingServerValue, _publishingKeyLabel, _publishingKeyValue];
-        private nint[] PublishingTexts => [_detailsTitle, _detailsIdentity, .. PublishingGuideTexts, .. PublishingPageTitles];
+        private nint[] PublishingTexts => [_detailsTitle, _detailsIdentity, .. PublishingGuideTexts, .. PublishingPageTitles, .. _publishingInputLabels, _publishingEditNote];
         private nint[] PublishingVisualControls => [.. PublishingButtons, .. PublishingGuideTexts, _publishingInstructions, .. PublishingPageControls];
 
         private void PlacePublishingPanel(int width)
@@ -34,8 +34,9 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             Place(_publishingSubtitle, layout.Subtitle);
             Place(_publishingDiagnostic, layout.Feedback);
             Place(_publishingObsTitle, layout.ObsTitle);
-            Place(_publishingBasicTitle, layout.BasicTitle); Place(_publishingBasic, layout.Basic);
+            Place(_publishingBasicTitle, layout.BasicTitle);
             Place(_publishingOptionsTitle, layout.OptionsTitle); Place(_publishingOptions, layout.Options);
+            PlacePublishingInline(layout);
         }
 
         internal void RefreshPublishingFocus(nint control)
@@ -95,7 +96,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 // Read the existing STATIC text only. Key disclosure/masking is still owned by the VM.
                 DrawCardLabel(dc, box, ReadCardControlText(control), title || value ? GenesisGuiNextDesign.Text : GenesisGuiNextDesign.SecondaryText,
                     title ? _cardTitleFont?.Handle ?? 0 : _visualFont?.Handle ?? 0, control,
-                    feedback ? GenesisGuiNextPublishingModernLayout.FeedbackFlags : GenesisGuiNextPublishingModernLayout.SingleLineFlags);
+                    feedback || control == _publishingEditNote ? GenesisGuiNextPublishingModernLayout.FeedbackFlags : GenesisGuiNextPublishingModernLayout.SingleLineFlags);
                 return true;
             }
             finally { _ = EndCardPaint(control, ref paint); }
