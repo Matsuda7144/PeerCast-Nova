@@ -19,6 +19,7 @@ public sealed class GenesisGuiNextDesignTests
     [InlineData(GenesisGuiNextDesign.Text, GenesisGuiNextDesign.Hover)]
     [InlineData(GenesisGuiNextDesign.SecondaryText, GenesisGuiNextDesign.Header)]
     [InlineData(GenesisGuiNextDesign.SecondaryText, GenesisGuiNextDesign.Panel)]
+    [InlineData(GenesisGuiNextDesign.SecondaryText, GenesisGuiNextDesign.Input)]
     public void MainTextAndSecondaryLabelsRemainReadable(int foreground, int background)
     {
         var first = Luminance(foreground);

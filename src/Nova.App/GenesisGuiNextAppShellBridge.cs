@@ -757,7 +757,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 out var searchLeft,
                 out var searchWidth,
                 out var refreshButtonLeft,
-                out var favoriteButtonLeft))
+                out var favoriteButtonLeft, viewModel.UsesModernAppearance))
         {
             return null;
         }
@@ -1242,8 +1242,12 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
         out int searchLeft,
         out int searchWidth,
         out int refreshButtonLeft,
-        out int favoriteButtonLeft)
+        out int favoriteButtonLeft,
+        bool modernAppearance = false)
     {
+        if (modernAppearance)
+            return GenesisGuiNextTopBarLayout.TryResolve(totalWidth, out statusTextWidth, out searchLeft,
+                out searchWidth, out refreshButtonLeft, out favoriteButtonLeft);
         const int statusTextLeft = 8;
         const int statusSearchGap = 8;
         favoriteButtonLeft = totalWidth - FavoriteButtonWidth;

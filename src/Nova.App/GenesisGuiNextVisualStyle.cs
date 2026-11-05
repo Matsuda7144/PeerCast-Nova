@@ -15,6 +15,15 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         {
             if (message == WindowMessageNotify && state.HandleListViewCustomDraw(lParam, out var drawResult))
                 return drawResult;
+            if (state.PaintTopStatus(window, message)) return message == 0x0014 ? 1 : 0;
+            if (state.IsTopInput(window) && message is (0x0007 or 0x0008))
+                _ = RedrawWindow(window, 0, 0, 0x0001 | 0x0400); // repaint the native focus border
+            if (state.IsTopInput(window) && message is (0x0085 or WindowMessagePaint))
+            {
+                var result = DefSubclassProc(window, message, wParam, lParam);
+                state.PaintTopInputFrame(window);
+                return result;
+            }
             if (state.PaintChannelCardText(window, message)) return message == 0x0014 ? 1 : 0;
             if (message is 0x0200 or 0x02A3) state.TrackControlHover(window, message);
             if (window == GetParent(state.ListWindow))
@@ -50,7 +59,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private GenesisUiFontLease? _visualFont;
         private readonly Dictionary<nint, nint> _originalFonts = new();
         private nint[] VisualButtons => [.. _navigationButtons, _refreshButton, _favoriteButton];
-        private nint[] VisualFontControls => [.. VisualButtons, _listView,
+        private nint[] VisualFontControls => [.. VisualButtons, _listView, TopStatusWindow, _searchBox.LabelWindow,
             FindWindowExW(_statusBar, 0, "EDIT", null), FindWindowExW(_statusBar, 0, "COMBOBOX", null)];
 
         internal void AttachVisuals()
@@ -149,11 +158,16 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             var old = _hoverControl;
             if (old == next) return;
             _hoverControl = next;
-            if (old != 0) _ = InvalidateRect(old, 0, false);
+            if (old != 0)
+            {
+                _ = InvalidateRect(old, 0, false);
+                if (IsTopInput(old)) _ = RedrawWindow(old, 0, 0, 0x0001 | 0x0400);
+            }
             if (next != 0)
             {
                 RequestMouseLeave(next);
                 _ = InvalidateRect(next, 0, false);
+                if (IsTopInput(next)) _ = RedrawWindow(next, 0, 0, 0x0001 | 0x0400);
             }
         }
 
@@ -180,16 +194,16 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         {
             var disabled = (draw.ItemState & DrawItemDisabled) != 0;
             var active = (draw.ItemState & 0x0001) != 0;
-            var color = active ? GenesisGuiNextDesign.Selected :
-                _hoverControl == draw.ControlWindow ? GenesisGuiNextDesign.Hover : GenesisGuiNextDesign.Input;
-            FillRectangle(draw.DeviceContext, draw.ItemRectangle, color);
-            using var border = new VisualPen(draw.DeviceContext, Scale(1), GenesisGuiNextDesign.Border);
+            var colors = GenesisGuiNextDesign.TopButtonColors(draw.ControlWindow == _refreshButton, disabled,
+                _hoverControl == draw.ControlWindow, active, (draw.ItemState & DrawItemFocused) != 0);
+            FillRectangle(draw.DeviceContext, draw.ItemRectangle, colors.Background);
+            using var border = new VisualPen(draw.DeviceContext, Scale(1), colors.Border);
             _ = GdiRectangle(draw.DeviceContext, draw.ItemRectangle.Left, draw.ItemRectangle.Top,
                 draw.ItemRectangle.Right, draw.ItemRectangle.Bottom);
             var label = new char[128];
             var length = GetWindowTextW(draw.ControlWindow, label, label.Length);
             _ = SetBkMode(draw.DeviceContext, TransparentBackgroundMode);
-            _ = SetTextColor(draw.DeviceContext, disabled ? GenesisGuiNextDesign.SecondaryText : GenesisGuiNextDesign.Text);
+            _ = SetTextColor(draw.DeviceContext, colors.Text);
             var rectangle = draw.ItemRectangle;
             rectangle.Left += Scale(4); rectangle.Right -= Scale(4);
             _ = DrawTextW(draw.DeviceContext, new string(label, 0, length), -1, ref rectangle,
@@ -208,7 +222,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             if (length is < 0 or > 4096) return true;
             var text = new char[length + 1];
             _ = SendComboText(draw.ControlWindow, 0x0148, draw.ItemId, text);
-            _ = SetTextColor(draw.DeviceContext, GenesisGuiNextDesign.Text);
+            _ = SetTextColor(draw.DeviceContext, (draw.ItemState & DrawItemDisabled) != 0 ? GenesisGuiNextDesign.DisabledText : GenesisGuiNextDesign.Text);
             _ = SetBkMode(draw.DeviceContext, TransparentBackgroundMode);
             var bounds = draw.ItemRectangle;
             bounds.Left += Scale(6); bounds.Right -= Scale(4);

@@ -30,7 +30,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             if (!GenesisMainWindowLayout.TryResolve(client.Right, client.Bottom, dpi,
                 out var sidebar, out var status, out var list, out var details) ||
                 !TryResolveControlLayout(status.Width, out var statusWidth, out var searchLeft,
-                    out var searchWidth, out var refreshLeft, out var favoriteLeft) ||
+                    out var searchWidth, out var refreshLeft, out var favoriteLeft, IsModern) ||
                 !TryResolvePlaybackButtonLayout(sidebar.Width, sidebar.Height, out var playLeft,
                     out var stopLeft, out var playbackTop, out var playbackWidth, out var playbackHeight)) return;
             LayoutInProgress = true;

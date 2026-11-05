@@ -31,14 +31,20 @@ internal sealed class GenesisChannelSearchBoxBridge : IAsyncDisposable
     private readonly nint _yellowPageFilter;
     private readonly SearchState _state;
     internal bool IsYellowPageFilter(nint window) => window == _yellowPageFilter;
+    private readonly bool _modernAppearance;
+    internal nint LabelWindow => _label;
+    internal nint EditWindow => _edit;
+    internal nint FilterWindow => _yellowPageFilter;
     private int _disposed;
 
     private GenesisChannelSearchBoxBridge(
         nint label,
         nint edit,
         nint yellowPageFilter,
-        SearchState state)
+        SearchState state,
+        bool modernAppearance)
     {
+        _modernAppearance = modernAppearance;
         _label = label;
         _edit = edit;
         _yellowPageFilter = yellowPageFilter;
@@ -55,11 +61,12 @@ internal sealed class GenesisChannelSearchBoxBridge : IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(tabs);
         if (statusBar == 0 ||
-            !TryResolveControlLayout(width, out var editWidth, out var yellowPageFilterLeft))
+            !TryResolveControlLayout(width, out var editWidth, out var yellowPageFilterLeft, modernAppearance))
         {
             return null;
         }
 
+        var labelWidth = modernAppearance ? GenesisGuiNextTopBarLayout.SearchLabelWidth : LabelWidth;
         var label = CreateWindowExW(
             0,
             "STATIC",
@@ -67,21 +74,21 @@ internal sealed class GenesisChannelSearchBoxBridge : IAsyncDisposable
             WindowStyleChild | WindowStyleVisible,
             left,
             0,
-            LabelWidth - 4,
+            labelWidth - 4,
             height,
             statusBar,
             0,
             0,
             0);
         var edit = CreateWindowExW(
-            WindowExtendedStyleClientEdge,
+            modernAppearance ? 0u : WindowExtendedStyleClientEdge,
             "EDIT",
             tabs.SearchText,
             WindowStyleChild |
                 WindowStyleVisible |
                 WindowStyleTabStop |
-                EditStyleAutoHorizontalScroll,
-            left + LabelWidth,
+                EditStyleAutoHorizontalScroll | (modernAppearance ? 0x00800000u : 0u), // WS_BORDER
+            left + labelWidth,
             2,
             editWidth,
             Math.Max(1, height - 4),
@@ -123,7 +130,7 @@ internal sealed class GenesisChannelSearchBoxBridge : IAsyncDisposable
         var state = new SearchState(statusBar, edit, yellowPageFilter, tabs);
         state.Attach();
         state.SynchronizeYellowPageFilter();
-        return new(label, edit, yellowPageFilter, state);
+        return new(label, edit, yellowPageFilter, state, modernAppearance);
     }
 
     public void Dispose()
@@ -152,16 +159,22 @@ internal sealed class GenesisChannelSearchBoxBridge : IAsyncDisposable
     internal void UpdateItemHeight(uint dpi)
     {
         _ = SendMessageW(_yellowPageFilter, 0x0153, nuint.MaxValue,
-            GenesisMainWindowLayout.Scale(20, dpi)); // selection field
+            GenesisMainWindowLayout.Scale(_modernAppearance ? GenesisGuiNextTopBarLayout.Height - 6 : 20, dpi)); // selection field
         _ = SendMessageW(_yellowPageFilter, 0x0153, 0, GenesisMainWindowLayout.Scale(26, dpi));
+        if (_modernAppearance)
+        {
+            var margin = GenesisMainWindowLayout.Scale(8, dpi);
+            _ = SendMessageW(_edit, 0x00D3, 3, margin | (margin << 16)); // EM_SETMARGINS; keep native EDIT/IME.
+        }
     }
 
     internal void ApplyLayout(int left, int width, int height, uint dpi)
     {
-        if (!TryResolveControlLayout(width, out var editWidth, out var filterLeft)) return;
+        if (!TryResolveControlLayout(width, out var editWidth, out var filterLeft, _modernAppearance)) return;
         int S(int value) => GenesisMainWindowLayout.Scale(value, dpi);
-        _ = MoveWindow(_label, S(left), 0, S(LabelWidth - 4), S(height), true);
-        _ = MoveWindow(_edit, S(left + LabelWidth), S(2), S(editWidth), S(height - 4), true);
+        var labelWidth = _modernAppearance ? GenesisGuiNextTopBarLayout.SearchLabelWidth : LabelWidth;
+        _ = MoveWindow(_label, S(left), 0, S(labelWidth - 4), S(height), true);
+        _ = MoveWindow(_edit, S(left + labelWidth), S(2), S(editWidth), S(height - 4), true);
         _ = MoveWindow(_yellowPageFilter, S(left + filterLeft), S(2), S(YellowPageFilterWidth), S(YellowPageDropDownHeight), true);
     }
 
@@ -185,8 +198,11 @@ internal sealed class GenesisChannelSearchBoxBridge : IAsyncDisposable
     internal static bool TryResolveControlLayout(
         int totalWidth,
         out int editWidth,
-        out int yellowPageFilterLeft)
+        out int yellowPageFilterLeft,
+        bool modernAppearance = false)
     {
+        if (modernAppearance)
+            return GenesisGuiNextTopBarLayout.TryResolveSearch(totalWidth, out editWidth, out yellowPageFilterLeft);
         yellowPageFilterLeft = totalWidth - YellowPageFilterWidth;
         editWidth = yellowPageFilterLeft - YellowPageFilterGap - LabelWidth;
         if (editWidth < MinimumSearchEditWidth || yellowPageFilterLeft < 0)
