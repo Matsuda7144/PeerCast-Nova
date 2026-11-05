@@ -272,9 +272,21 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
             }
             else
             {
+                bool forcedOwnerStop;
+                lock (_gate)
+                {
+                    // Independent forced cleanup may finish a child before cancellation
+                    // reaches this linked lifetime. Require actual owner-stop evidence;
+                    // accept/sink failures do not qualify, and cleanup is still joined below.
+                    forcedOwnerStop = _forceRequested &&
+                        ((first == relayTask && relayTask.IsCompletedSuccessfully &&
+                            relayTask.Result.EndReason == PcpDownstreamRelayServerEndReason.Stopped) ||
+                        (first == _httpChild.Completion &&
+                            _httpChild.Snapshot is { EndReason: PcpRelayChildEndReason.FanoutStopped, CleanupFailed: false }));
+                }
                 reason = first == _localFinishRequested.Task ? ObsPublishChannelEndReason.LocalTerminated :
                     first == _wanNetwork?.Invalidated ? ObsPublishChannelEndReason.TransportFailed :
-                    lifetime.IsCancellationRequested ? ObsPublishChannelEndReason.HostCancelled :
+                    lifetime.IsCancellationRequested || forcedOwnerStop ? ObsPublishChannelEndReason.HostCancelled :
                     first == relayTask ? ObsPublishChannelEndReason.DownstreamFailed :
                     ObsPublishChannelEndReason.ConsumerFaulted;
             }

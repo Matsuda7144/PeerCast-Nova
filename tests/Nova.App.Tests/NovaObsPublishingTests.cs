@@ -1,5 +1,6 @@
 using System.Text.Json;
 using PeerCast.Nova.Core.Channels;
+using PeerCast.Nova.Network.Pcp;
 using PeerCast.Nova.Network.Publishing;
 using PeerCast.Nova.Network.Rtmp;
 using PeerCast.Nova.Windows;
@@ -179,12 +180,140 @@ public sealed class NovaObsPublishingTests
         var runtime = new NovaObsPublishingRuntime(new() { Ingest = new() { Port = 0 } });
         runtime.Start(CancellationToken.None);
         await runtime.DisposeAsync();
+        var result = await runtime.Completion;
+        Assert.Equal(ObsPublishChannelEndReason.HostCancelled, result.EndReason);
+        Assert.True(result.ShutdownCompleted);
         var status = runtime.Snapshot;
+        Assert.Equal(result.EndReason, status.EndReason);
         Assert.Equal(ChannelSessionState.Stopped, status.State);
         Assert.False(status.ListenerReady);
         Assert.False(status.HeadAvailable);
         Assert.Null(status.HttpStreamUrl);
         Assert.Equal("停止（キャンセル）", Project(status).StateText);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task Forced_child_stop_before_owner_cancellation_preserves_terminal_evidence(
+        bool relayFirst, bool failCleanup)
+    {
+        var cancelEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var endSelected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseCleanup = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var releaseCancel = new ManualResetEventSlim();
+        var limit = TimeSpan.FromSeconds(10);
+        var host = new ObsPublishChannelHost(new() { Ingest = new() { Port = 0 } })
+        {
+            TerminationObserver = async point =>
+            {
+                if (point == ObsPublishTerminationPoint.BeforeResourceRelease) await releaseCleanup.Task;
+                if (point == ObsPublishTerminationPoint.RecordingAdmissionClosed) endSelected.TrySetResult();
+                if (failCleanup && point == ObsPublishTerminationPoint.FanoutCleanup)
+                    throw new IOException("fixture cleanup failure");
+            },
+        };
+        var runtime = NovaObsPublishingRuntime.ForOwner(host);
+        runtime.Start(CancellationToken.None);
+        using var callback = host.OwnerStopToken.Register(() =>
+        {
+            cancelEntered.TrySetResult();
+            if (!releaseCancel.Wait(limit)) throw new TimeoutException();
+        });
+        var dispose = runtime.DisposeAsync().AsTask();
+        try
+        {
+            await cancelEntered.Task.WaitAsync(limit);
+            // Run one existing owned release first while cancellation propagation
+            // and the other releases remain blocked. Reflection avoids a new host API.
+            var child = relayFirst
+                ? (IAsyncDisposable)Assert.IsType<PcpDownstreamRelayServer>(typeof(ObsPublishChannelHost)
+                    .GetField("_relay", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(host))
+                : host.Fanout;
+            await child.DisposeAsync().AsTask().WaitAsync(limit);
+            await endSelected.Task.WaitAsync(limit);
+        }
+        finally
+        {
+            releaseCleanup.TrySetResult();
+            releaseCancel.Set();
+            if (failCleanup)
+                await Assert.ThrowsAsync<InvalidOperationException>(() => dispose.WaitAsync(limit));
+            else
+                await dispose.WaitAsync(limit);
+        }
+        var result = await runtime.Completion.WaitAsync(limit);
+        Assert.Equal(ObsPublishChannelEndReason.HostCancelled, result.EndReason);
+        Assert.Equal(ObsRtmpIngestEndReason.Cancelled, result.Ingest!.EndReason);
+        if (relayFirst)
+            Assert.Equal(PcpDownstreamRelayServerEndReason.Stopped, result.Relay!.EndReason);
+        else
+            Assert.Contains(result.Relay!.EndReason, new[]
+            {
+                PcpDownstreamRelayServerEndReason.Stopped,
+                PcpDownstreamRelayServerEndReason.CallerCanceled,
+            });
+        Assert.Equal(!failCleanup, result.ShutdownCompleted);
+        var status = runtime.Snapshot;
+        Assert.Equal(result.EndReason, status.EndReason);
+        Assert.Equal(ChannelSessionState.Stopped, status.State);
+        Assert.False(status.ListenerReady);
+        Assert.False(status.HeadAvailable);
+        Assert.Null(status.HttpStreamUrl);
+        Assert.Equal("停止（キャンセル）", Project(status).StateText);
+    }
+
+    [Theory]
+    [InlineData(false, ObsPublishChannelEndReason.ConsumerFaulted)]
+    [InlineData(true, ObsPublishChannelEndReason.InternalFailure)]
+    public async Task Dispose_preserves_failure_selected_before_forced_cleanup(
+        bool failEndSelection, ObsPublishChannelEndReason expected)
+    {
+        var selected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var limit = TimeSpan.FromSeconds(10);
+        var host = new ObsPublishChannelHost(new() { Ingest = new() { Port = 0 } })
+        {
+            TerminationObserver = async point =>
+            {
+                if (failEndSelection && point == ObsPublishTerminationPoint.BeforeEndSelection)
+                    throw new IOException("fixture end selection failure");
+                if (point == ObsPublishTerminationPoint.RecordingAdmissionClosed)
+                {
+                    selected.TrySetResult();
+                    await release.Task;
+                }
+            },
+        };
+        var runtime = NovaObsPublishingRuntime.ForOwner(host);
+        runtime.Start(CancellationToken.None);
+        var forceRequested = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var stopObservation = host.OwnerStopToken.Register(() => forceRequested.TrySetResult());
+        Task? dispose = null;
+        try
+        {
+            // No stop has been requested: losing the mandatory child is a failure.
+            await host.Fanout.DisposeAsync().AsTask().WaitAsync(limit);
+            await selected.Task.WaitAsync(limit);
+            dispose = runtime.DisposeAsync().AsTask();
+            await forceRequested.Task.WaitAsync(limit);
+        }
+        finally
+        {
+            release.TrySetResult();
+            await (dispose ?? runtime.DisposeAsync().AsTask()).WaitAsync(limit);
+        }
+        var result = await runtime.Completion;
+        Assert.Equal(expected, result.EndReason);
+        Assert.True(result.ShutdownCompleted);
+        var status = runtime.Snapshot;
+        Assert.Equal(result.EndReason, status.EndReason);
+        Assert.False(status.ListenerReady);
+        Assert.False(status.HeadAvailable);
+        Assert.Null(status.HttpStreamUrl);
+        Assert.Equal("配信エラー", Project(status).StateText);
     }
 
     private static NovaObsPublishingPanel Project(ObsPublishStatusSnapshot status)
