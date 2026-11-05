@@ -1124,6 +1124,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             viewModel,
             interaction,
             backgroundBrush);
+        state.CreateIntegratedSettings(className, instance);
         if (!state.RuleButtonsAvailable || !StatesByContainer.TryAdd(sidebar, state) ||
             !StatesByContainer.TryAdd(statusBar, state) ||
             !StatesByContainer.TryAdd(detailsPane, state) ||
@@ -1134,6 +1135,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 ListViewSubclassIdentifier,
                 0))
         {
+            state.DestroyIntegratedSettings();
             _ = StatesByContainer.TryRemove(sidebar, out _);
             _ = StatesByContainer.TryRemove(statusBar, out _);
             _ = StatesByContainer.TryRemove(detailsPane, out _);
@@ -1201,6 +1203,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             if (StatesByContainer.TryRemove(_sidebar, out var state))
             {
                 state.Detach();
+                state.DestroyIntegratedSettings();
                 await state.DrainAutomaticCommandsAsync().ConfigureAwait(false);
             }
 
@@ -1696,6 +1699,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             {
                 _ = StatesByOwner.TryRemove(_owner, out _);
                 DetachVisuals();
+                _generalSettings?.Release();
                 _detailsUpdates.Close();
                 _favoriteUpdates.Close();
                 _tabs.SetPublishingDispatcher(null);
@@ -1744,6 +1748,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 return;
             }
 
+            if (ProcessIntegratedSettingsCommand(commandId, lParam)) return;
+            if (SettingsPageOpen && commandId == FavoriteControlId) return;
             if (_tabs.SelectedTab == GenesisGuiNextTab.Publishing &&
                 lParam == _publishingStartButton && commandId == PublishingStartControlId)
             {
@@ -1926,6 +1932,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                     itemIndex,
                     out var selectedTab))
             {
+                CloseIntegratedSettings();
                 _utilityNavigationSelection.SelectView(_tabs, selectedTab);
                 _ = InvalidateRect(_sidebar, 0, true);
                 if (selectedTab == GenesisGuiNextTab.Recording)
@@ -1947,6 +1954,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             {
                 if (primaryCommand == GenesisGuiNextPrimaryCommand.Search)
                 {
+                    CloseIntegratedSettings();
                     _ = _utilityNavigationSelection.ActivateSearch(
                         _tabs,
                         _searchBox.Focus);
@@ -1954,13 +1962,15 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 }
                 else
                 {
+                    if (primaryCommand != GenesisGuiNextPrimaryCommand.Settings) CloseIntegratedSettings();
                     _utilityNavigationSelection.SelectUtility(itemIndex);
                     _ = InvalidateRect(_sidebar, 0, true);
                     if (primaryCommand == GenesisGuiNextPrimaryCommand.Settings)
                     {
-                        _ = GenesisChannelNotificationSettingsButtonBridge.TryOpenForOwner(
-                            _owner,
-                            _navigationButtons[itemIndex]);
+                        if (!OpenIntegratedSettings())
+                            _ = GenesisChannelNotificationSettingsButtonBridge.TryOpenForOwner(
+                                _owner,
+                                _navigationButtons[itemIndex]);
                     }
                     else if (primaryCommand == GenesisGuiNextPrimaryCommand.About)
                     {
@@ -1981,6 +1991,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             using var fontSelection = GenesisWindowUiFont.SelectForDrawing(
                 drawItem.DeviceContext,
                 drawItem.ControlWindow);
+            if (DrawSettingsButton(drawItem)) return true;
             if (DrawPublishingPanelItem(drawItem)) return true;
             if (DrawRecordingPanelItem(drawItem)) return true;
             if (DrawChannelCardItem(drawItem)) return true;
@@ -2490,14 +2501,15 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             var presentation = GenesisGuiNextFavoriteButtonPresentationResolver.Resolve(
                 _tabs,
                 renderedRow);
+            var favoriteEnabled = presentation.IsEnabled && !SettingsPageOpen;
             using (var update = _favoriteUpdates.Begin(0, _ => { }))
             {
                 _favoriteUpdates.Set(_favoriteButton, "text", presentation.Label,
                     () => IsWindow(_favoriteButton) && SetWindowTextW(_favoriteButton, presentation.Label));
-                _favoriteUpdates.Set(_favoriteButton, "enabled", presentation.IsEnabled, () =>
+                _favoriteUpdates.Set(_favoriteButton, "enabled", favoriteEnabled, () =>
                 {
                     if (!IsWindow(_favoriteButton)) return false;
-                    _ = EnableWindow(_favoriteButton, presentation.IsEnabled);
+                    _ = EnableWindow(_favoriteButton, favoriteEnabled);
                     return true;
                 });
             }
@@ -3229,6 +3241,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             {
                 if (eventArgs.PropertyName == nameof(GenesisGuiNextTabsViewModel.SelectedTab))
                 {
+                    CloseIntegratedSettings();
                     _utilityNavigationSelection.OnSelectedTabChanged();
                     _ = InvalidateRect(_sidebar, 0, true);
                 }

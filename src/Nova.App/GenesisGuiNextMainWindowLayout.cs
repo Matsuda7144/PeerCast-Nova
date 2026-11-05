@@ -51,6 +51,11 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 Pane(_statusBar, status);
                 Pane(_listView, list);
                 Pane(_detailsPane, details);
+                if (_settingsPane != 0)
+                {
+                    Pane(_settingsPane, new(list.Left, list.Top, list.Right, details.Bottom));
+                    PlaceIntegratedSettings(list.Width, details.Bottom - list.Top);
+                }
                 for (var i = 0; i < _navigationButtons.Length; i++)
                     Place(_navigationButtons[i], 0, NavigationItemTop + i * NavigationItemHeight,
                         sidebar.Width, NavigationItemHeight - 2);

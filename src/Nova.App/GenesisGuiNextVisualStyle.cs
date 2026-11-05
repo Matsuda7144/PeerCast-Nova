@@ -24,6 +24,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 state.PaintTopInputFrame(window);
                 return result;
             }
+            state.RefreshSettingsOnActivation(window, message, wParam);
+            if (state.PaintSettingsText(window, message)) return message == 0x0014 ? 1 : 0;
             if (state.PaintPublishingText(window, message)) return message == 0x0014 ? 1 : 0;
             if (message is 0x0007 or 0x0008) state.RefreshPublishingFocus(window);
             if (state.PaintRecordingText(window, message)) return message == 0x0014 ? 1 : 0;
@@ -63,7 +65,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private GenesisUiFontLease? _visualFont;
         private readonly Dictionary<nint, nint> _originalFonts = new();
         private nint[] VisualButtons => [.. _navigationButtons, _refreshButton, _favoriteButton];
-        private nint[] VisualFontControls => [.. VisualButtons, .. RecordingVisualControls, .. PublishingVisualControls, _publishingConnectionState, _listView, TopStatusWindow, _searchBox.LabelWindow,
+        private nint[] VisualFontControls => [.. VisualButtons, .. RecordingVisualControls, .. PublishingVisualControls, .. SettingsVisualControls, _publishingConnectionState, _listView, TopStatusWindow, _searchBox.LabelWindow,
             FindWindowExW(_statusBar, 0, "EDIT", null), FindWindowExW(_statusBar, 0, "COMBOBOX", null)];
 
         internal void AttachVisuals()
@@ -143,6 +145,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         internal bool PaintPaneBackground(nint pane, nint dc)
         {
             if (!IsModern) return false;
+            if (PaintIntegratedSettings(pane, dc)) return true;
             if (PaintPublishingPanel(pane, dc)) return true;
             if (PaintRecordingPanel(pane, dc)) return true;
             if (PaintChannelCard(pane, dc)) return true;
