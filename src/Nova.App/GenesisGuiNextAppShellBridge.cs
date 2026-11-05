@@ -1419,6 +1419,10 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
         {
             return customDrawResult;
         }
+        else if (message == 0x0135 && state.IsSettingsPane(window)) // WM_CTLCOLORBTN for native notification checkboxes.
+        {
+            return state.PrepareStaticControl(wParam, window);
+        }
         else if (message == WindowMessageControlColorStatic)
         {
             return state.PrepareStaticControl(wParam, window);
@@ -1700,6 +1704,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 _ = StatesByOwner.TryRemove(_owner, out _);
                 DetachVisuals();
                 _generalSettings?.Release();
+                _pathSettings?.Release();
+                _settingsCategory = null;
                 _detailsUpdates.Close();
                 _favoriteUpdates.Close();
                 _tabs.SetPublishingDispatcher(null);
@@ -1742,6 +1748,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             _searchBox.ProcessCommand(wParam, lParam);
             var commandId = (int)(wParam & 0xffff);
             var notificationCode = (int)((wParam >> 16) & 0xffff);
+            if (Volatile.Read(ref _detached) == 0 && ProcessSettingsPathInput(commandId, notificationCode, lParam)) return;
             if (notificationCode != ButtonNotificationClicked ||
                 Volatile.Read(ref _detached) != 0)
             {
@@ -2431,6 +2438,12 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
         public nint PrepareStaticControl(nuint deviceContext, nint pane)
         {
             _ = SetBkMode((nint)deviceContext, TransparentBackgroundMode);
+            if (IsSettingsPane(pane))
+            {
+                _ = SetBkColor((nint)deviceContext, GenesisGuiNextDesign.Panel);
+                _ = SetTextColor((nint)deviceContext, GenesisGuiNextDesign.Text);
+                return _topBrush;
+            }
             _ = SetTextColor((nint)deviceContext, IsModern && pane == _statusBar ? GenesisGuiNextDesign.SecondaryText : TextColor);
             if ((UsesRecordingPanel || UsesPublishingPanel) && pane == _detailsPane) return _topBrush;
             return IsModern && pane == _statusBar ? _topBrush : _backgroundBrush;
@@ -2439,6 +2452,12 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
         public nint PrepareDarkControl(nuint deviceContext, nint pane)
         {
             _ = SetBkMode((nint)deviceContext, 2);
+            if (IsSettingsPane(pane))
+            {
+                _ = SetBkColor((nint)deviceContext, GenesisGuiNextDesign.Input);
+                _ = SetTextColor((nint)deviceContext, GenesisGuiNextDesign.Text);
+                return _inputBrush;
+            }
             if ((UsesRecordingPanel || UsesPublishingPanel) && pane == _detailsPane)
             {
                 _ = SetBkColor((nint)deviceContext, GenesisGuiNextDesign.Input);

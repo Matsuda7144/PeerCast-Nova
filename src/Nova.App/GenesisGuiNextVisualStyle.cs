@@ -25,6 +25,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 return result;
             }
             state.RefreshSettingsOnActivation(window, message, wParam);
+            if (message is 0x0007 or 0x0008) state.RefreshSettingsPathFocus(window);
             if (state.PaintSettingsText(window, message)) return message == 0x0014 ? 1 : 0;
             if (state.PaintPublishingText(window, message)) return message == 0x0014 ? 1 : 0;
             if (message is 0x0007 or 0x0008) state.RefreshPublishingFocus(window);

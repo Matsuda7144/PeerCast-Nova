@@ -195,6 +195,9 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
 
     internal readonly record struct BrowseResult(string? SelectedPath, bool Failed);
 
+    internal static BrowseResult BrowseForExecutable(nint owner, string? currentPath) =>
+        BrowseForExecutable(owner, currentPath, GetOpenFileNameW, CommDlgExtendedError, Marshal.FreeHGlobal, Console.Error.WriteLine);
+
     internal static BrowseResult BrowseForExecutable(
         nint owner,
         string? currentPath,
@@ -471,8 +474,7 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
 
         private void Browse()
         {
-            var result = BrowseForExecutable(window, GetText(controls.Path),
-                GetOpenFileNameW, CommDlgExtendedError, Marshal.FreeHGlobal, Console.Error.WriteLine);
+            var result = BrowseForExecutable(window, GetText(controls.Path));
             if (result.SelectedPath is { } selectedPath)
             {
                 SetText(controls.Path, selectedPath);

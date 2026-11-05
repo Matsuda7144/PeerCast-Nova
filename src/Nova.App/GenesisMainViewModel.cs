@@ -14,6 +14,8 @@ public sealed partial class GenesisMainViewModel : INotifyPropertyChanged
 {
     internal const int MaximumSourceCharacters = 2_048;
     internal GenesisRecordingOutputDirectorySettings? RecordingOutputSettings { get; set; }
+    internal GenesisGuiNextPlaybackSettings? PlaybackSettings { get; set; }
+    internal GenesisChannelNotificationSettings? NotificationSettings { get; set; }
     internal GenesisAppearanceSettings? AppearanceSettings { get; set; }
     internal bool UsesModernAppearance => AppearanceSettings?.CurrentRuntimeMode ==
         Foundation.Configuration.NovaGuiMode.Modern;

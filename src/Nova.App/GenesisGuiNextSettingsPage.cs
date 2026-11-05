@@ -14,15 +14,15 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private nint _settingsPane, _settingsTitle, _generalTitle, _generalRuntime, _generalConfigured, _generalNotice, _generalStatus;
         private nint _generalCategory, _legacySettings, _classicChoice, _modernChoice, _generalSave, _generalCancel, _generalBack;
         private GenesisGeneralSettingsPage? _generalSettings;
-        private bool SettingsPageOpen => _generalSettings?.IsOpen == true;
-        private nint[] SettingsButtons => _settingsPane == 0 ? [] : [_generalCategory, _legacySettings, _classicChoice, _modernChoice, _generalSave, _generalCancel, _generalBack];
+        private bool SettingsPageOpen => _settingsCategory is not null;
+        private nint[] SettingsButtons => _settingsPane == 0 ? [] : [_generalCategory, _legacySettings, _classicChoice, _modernChoice, _generalSave, _generalCancel, _generalBack, .. AdditionalSettingsButtons];
         private nint[] SettingsTexts => _settingsPane == 0 ? [] : [_settingsTitle, _generalTitle, _generalRuntime, _generalConfigured, _generalNotice, _generalStatus];
-        private nint[] SettingsVisualControls => [.. SettingsButtons, .. SettingsTexts];
+        private nint[] SettingsVisualControls => _settingsPane == 0 ? [] : [.. SettingsButtons, .. SettingsTexts, _settingsPath, .. SettingsChecks];
 
         internal void CreateIntegratedSettings(string className, nint instance)
         {
             if (!IsModern || _viewModel.AppearanceSettings is not { } appearance) return;
-            _settingsPane = CreateWindowExW(0x00010000, className, string.Empty, WindowStyleChild,
+            _settingsPane = CreateWindowExW(0x00010000, className, string.Empty, WindowStyleChild | 0x02000000,
                 0, 0, 1, 1, GetParent(_detailsPane), 0, instance, 0); // WS_EX_CONTROLPARENT
             if (_settingsPane == 0) return;
             nint Text(string text) => CreateWindowExW(0, "STATIC", text, WindowStyleChild | WindowStyleVisible,
@@ -32,7 +32,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             _generalTitle = Text("外観設定");
             _generalRuntime = Text(string.Empty);
             _generalConfigured = Text(string.Empty);
-            _generalNotice = Text(GenesisAppearanceSettings.NextStartNotice + "\r\n再生・録画・通知・通信・YPは「従来の設定を開く…」から変更できます。");
+            _generalNotice = Text(GenesisAppearanceSettings.NextStartNotice + "\r\n通信・YPなどの未移植設定は「従来の設定を開く…」から変更できます。");
             _generalStatus = Text(string.Empty);
             _generalCategory = Button("一般", GeneralCategoryId);
             _legacySettings = Button("従来の設定を開く…", LegacySettingsId);
@@ -41,6 +41,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             _generalBack = Button("戻る", GeneralBackId);
             _generalCancel = Button("キャンセル", GeneralCancelId);
             _generalSave = Button("保存", GeneralSaveId);
+            CreateSettingsCategories(instance);
             if (SettingsVisualControls.Any(control => control == 0) || !StatesByContainer.TryAdd(_settingsPane, this))
             {
                 DestroyIntegratedSettings(); // The ordinary settings menu remains the fallback.
@@ -54,6 +55,9 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         {
             _generalSettings?.Release();
             _generalSettings = null;
+            _pathSettings?.Release();
+            _pathSettings = null;
+            _settingsCategory = null;
             _ = StatesByContainer.TryRemove(_settingsPane, out _);
             DestroyWindowIfPresent(_settingsPane);
             _settingsPane = 0;
@@ -61,21 +65,32 @@ internal sealed partial class GenesisGuiNextAppShellBridge
 
         private bool OpenIntegratedSettings()
         {
-            if (!GenesisGeneralSettingsPage.UseIntegrated(IsModern, _settingsPane != 0) || _generalSettings?.Open() != true) return false;
+            if (!GenesisGeneralSettingsPage.UseIntegrated(IsModern, _settingsPane != 0) || _generalSettings is null) return false;
+            if (!SettingsPageOpen)
+            {
+                if (!_generalSettings.Open()) return false;
+                _settingsCategoryRevision++;
+                _settingsCategory = GenesisIntegratedSettingsCategory.General;
+                ShowSettingsCategory();
+            }
             _ = ShowWindow(_listView, ShowWindowHide);
             _ = ShowWindow(_detailsPane, ShowWindowHide);
             _ = ShowWindow(_settingsPane, ShowWindowShowNoActivate);
-            RefreshGeneralSettings();
+            RefreshIntegratedSettings();
             _favoriteUpdates.Reset();
             SynchronizeNativeSelection();
-            _ = SetFocus(_generalSettings.Draft == NovaGuiMode.Modern ? _modernChoice : _classicChoice);
+            _ = SetFocus(PathCategory ? _settingsPath : _settingsCategory == GenesisIntegratedSettingsCategory.Notifications ? _notifyNew :
+                _generalSettings.Draft == NovaGuiMode.Modern ? _modernChoice : _classicChoice);
             return true;
         }
 
         private void CloseIntegratedSettings()
         {
             if (!SettingsPageOpen) return;
-            _generalSettings!.Close(); // Leaving discards this category's unsaved draft only.
+            _generalSettings!.Close();
+            _pathSettings!.Close();
+            _settingsCategoryRevision++;
+            _settingsCategory = null; // Leaving discards drafts only; immediate notification changes remain saved.
             _ = ShowWindow(_settingsPane, ShowWindowHide);
             _ = ShowWindow(_listView, ShowWindowShowNoActivate);
             _ = ShowWindow(_detailsPane, ShowWindowShowNoActivate);
@@ -86,11 +101,12 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private bool ProcessIntegratedSettingsCommand(int id, nint control)
         {
             if (!SettingsPageOpen) return false;
-            if (id == GeneralCategoryId && control == _generalCategory) return true;
+            if (id == GeneralCategoryId && control == _generalCategory) { SelectSettingsCategory(GenesisIntegratedSettingsCategory.General); return true; }
+            if (ProcessSettingsCategoryCommand(id, control)) return true;
             if (id == LegacySettingsId && control == _legacySettings)
             {
                 _ = GenesisChannelNotificationSettingsButtonBridge.TryOpenForOwner(_owner, _legacySettings);
-                RefreshGeneralSettings();
+                RefreshIntegratedSettings();
                 return true;
             }
             if (id == GeneralBackId && control == _generalBack)
@@ -101,13 +117,26 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 _ = SetFocus(_listView);
                 return true;
             }
-            if (id == ClassicChoiceId && control == _classicChoice) _generalSettings!.Select(NovaGuiMode.Classic);
-            else if (id == ModernChoiceId && control == _modernChoice) _generalSettings!.Select(NovaGuiMode.Modern);
-            else if (id == GeneralSaveId && control == _generalSave) _ = _generalSettings!.Save();
-            else if (id == GeneralCancelId && control == _generalCancel) _generalSettings!.Cancel();
+            if (_settingsCategory == GenesisIntegratedSettingsCategory.General)
+            {
+                if (id == ClassicChoiceId && control == _classicChoice) _generalSettings!.Select(NovaGuiMode.Classic);
+                else if (id == ModernChoiceId && control == _modernChoice) _generalSettings!.Select(NovaGuiMode.Modern);
+                else if (id == GeneralSaveId && control == _generalSave) _ = _generalSettings!.Save();
+                else if (id == GeneralCancelId && control == _generalCancel) _generalSettings!.Cancel();
+                else return false;
+            }
+            else if (PathCategory)
+            {
+                if (id == GeneralSaveId && control == _generalSave)
+                {
+                    if (ReadSettingsPath(out var path)) { if (path != _pathSettings!.Draft) _pathSettings.Edit(path); _ = _pathSettings.Save(); }
+                }
+                else if (id == GeneralCancelId && control == _generalCancel) _pathSettings!.Cancel();
+                else return false;
+            }
             else return false;
-            RefreshGeneralSettings();
-            if ((control == _generalSave || control == _generalCancel) && !_generalSettings!.IsDirty)
+            RefreshIntegratedSettings();
+            if ((control == _generalSave || control == _generalCancel) && !(PathCategory ? _pathSettings!.IsDirty : _generalSettings!.IsDirty))
                 _ = SetFocus(_generalBack);
             return true;
         }
@@ -115,20 +144,27 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         internal void RefreshSettingsOnActivation(nint window, uint message, nuint value)
         {
             if (SettingsPageOpen && window == _owner && message == 0x0006 && (value & 0xffff) != 0)
-                RefreshGeneralSettings();
+                RefreshIntegratedSettings();
         }
 
-        private void RefreshGeneralSettings()
+        private void RefreshIntegratedSettings()
         {
-            if (_generalSettings is not { IsOpen: true } page) return;
-            page.Refresh();
-            _ = SetWindowTextW(_generalRuntime, "現在の起動時表示: " + GenesisGeneralSettingsPage.Label(page.RuntimeMode));
-            _ = SetWindowTextW(_generalConfigured, "保存済み（次回起動）: " + GenesisGeneralSettingsPage.Label(page.ConfiguredMode));
-            _ = SetWindowTextW(_classicChoice, page.Draft == NovaGuiMode.Classic ? "Classic（選択中）" : "Classic");
-            _ = SetWindowTextW(_modernChoice, page.Draft == NovaGuiMode.Modern ? "Modern（選択中）" : "Modern");
-            _ = SetWindowTextW(_generalStatus, page.Message);
-            _ = EnableWindow(_generalSave, page.IsDirty);
-            _ = EnableWindow(_generalCancel, page.IsDirty);
+            if (!SettingsPageOpen) return;
+            if (_settingsCategory == GenesisIntegratedSettingsCategory.General)
+            {
+                var page = _generalSettings!;
+                page.Refresh();
+                _ = SetWindowTextW(_generalTitle, "外観設定");
+                _ = SetWindowTextW(_generalNotice, GenesisAppearanceSettings.NextStartNotice + "\r\n通信・YPなどの未移植設定は「従来の設定を開く…」から変更できます。");
+                _ = SetWindowTextW(_generalRuntime, "現在の起動時表示: " + GenesisGeneralSettingsPage.Label(page.RuntimeMode));
+                _ = SetWindowTextW(_generalConfigured, "保存済み（次回起動）: " + GenesisGeneralSettingsPage.Label(page.ConfiguredMode));
+                _ = SetWindowTextW(_classicChoice, page.Draft == NovaGuiMode.Classic ? "Classic（選択中）" : "Classic");
+                _ = SetWindowTextW(_modernChoice, page.Draft == NovaGuiMode.Modern ? "Modern（選択中）" : "Modern");
+                _ = SetWindowTextW(_generalStatus, page.Message);
+                _ = EnableWindow(_generalSave, page.IsDirty);
+                _ = EnableWindow(_generalCancel, page.IsDirty);
+            }
+            else RefreshAdditionalSettings();
             _ = RedrawWindow(_settingsPane, 0, 0, 0x0001 | 0x0004 | 0x0080);
         }
 
@@ -144,6 +180,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             Place(_generalCategory, GenesisGuiNextSettingsLayout.General); Place(_legacySettings, layout.Legacy);
             Place(_classicChoice, GenesisGuiNextSettingsLayout.Classic); Place(_modernChoice, GenesisGuiNextSettingsLayout.Modern);
             Place(_generalSave, layout.Save); Place(_generalCancel, layout.Cancel); Place(_generalBack, layout.Back);
+            PlaceSettingsCategory(layout);
         }
 
         private bool PaintIntegratedSettings(nint pane, nint dc)
@@ -155,6 +192,12 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             _ = FillRect(dc, ref box, _topBrush);
             using var pen = new VisualPen(dc, Scale(1), GenesisGuiNextDesign.Border);
             _ = GdiRectangle(dc, box.Left, box.Top, box.Right, box.Bottom);
+            if (PathCategory)
+            {
+                var input = new GenesisGuiNextSettingsLayout(LogicalWidth(client.Right), LogicalWidth(client.Bottom)).PathInput(_settingsCategory == GenesisIntegratedSettingsCategory.Playback);
+                using var focus = new VisualPen(dc, Scale(1), GetFocus() == _settingsPath ? GenesisGuiNextDesign.Accent : GenesisGuiNextDesign.Border);
+                _ = GdiRectangle(dc, Scale(input.Left) - 1, Scale(input.Top) - 1, Scale(input.Right) + 1, Scale(input.Bottom) + 1);
+            }
             return true;
         }
 
@@ -169,7 +212,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 if (dc == 0 || !GetClientRect(control, out var box)) return true;
                 _ = FillRect(dc, ref box, control == _settingsTitle ? _mainBrush : _topBrush);
                 var title = control == _settingsTitle || control == _generalTitle;
-                var color = control == _generalStatus && _generalSettings?.IsError == true ? GenesisGuiNextDesign.Warning :
+                var color = control == _generalStatus && SettingsError ? GenesisGuiNextDesign.Warning :
                     title ? GenesisGuiNextDesign.Text : GenesisGuiNextDesign.SecondaryText;
                 DrawCardLabel(dc, box, ReadCardControlText(control), color,
                     title ? _cardTitleFont?.Handle ?? 0 : _visualFont?.Handle ?? 0, control,
@@ -182,7 +225,10 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private bool DrawSettingsButton(DrawItem draw)
         {
             if (!IsModern || !IsOwnerDrawButton(draw.ControlType) || !SettingsButtons.Contains(draw.ControlWindow)) return false;
-            var selected = draw.ControlId == GeneralCategoryId || draw.ControlId == ClassicChoiceId && _generalSettings?.Draft == NovaGuiMode.Classic ||
+            var selected = draw.ControlId == GeneralCategoryId && _settingsCategory == GenesisIntegratedSettingsCategory.General ||
+                draw.ControlId == PlaybackCategoryId && _settingsCategory == GenesisIntegratedSettingsCategory.Playback ||
+                draw.ControlId == RecordingCategoryId && _settingsCategory == GenesisIntegratedSettingsCategory.Recording ||
+                draw.ControlId == NotificationsCategoryId && _settingsCategory == GenesisIntegratedSettingsCategory.Notifications || draw.ControlId == ClassicChoiceId && _generalSettings?.Draft == NovaGuiMode.Classic ||
                 draw.ControlId == ModernChoiceId && _generalSettings?.Draft == NovaGuiMode.Modern;
             var disabled = (draw.ItemState & DrawItemDisabled) != 0;
             var hot = _hoverControl == draw.ControlWindow;
