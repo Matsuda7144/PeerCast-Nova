@@ -29,6 +29,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         {
             if (!IsModern || !GetClientRect(_listView, out var client)) return;
             var channels = UsesChannelListStyle;
+            if (_footerShowsModes != !channels) PlaceFooter();
             var header = SendMessageW(_listView, 0x101F, 0, 0);
             var count = (int)SendMessageW(header, 0x1200, 0, 0);
             var style = (channels, LogicalWidth(client.Right), _layoutDpi, count);
@@ -53,6 +54,23 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             }
             SetModernRowHeight(channels ? GenesisGuiNextChannelListStyle.RowHeight : GenesisGuiNextDesign.RowImageHeight, _layoutDpi);
             _channelListStyle = style;
+        }
+
+        internal void PaintChannelListFrame()
+        {
+            if (!UsesChannelListStyle || !GetWindowRect(_listView, out var bounds)) return;
+            var dc = GetWindowDC(_listView);
+            if (dc == 0) return;
+            try
+            {
+                // Repaint only the existing CLIENTEDGE; keep client bounds, native scrollbars and hit testing.
+                for (var inset = 0; inset < Scale(2); inset++)
+                {
+                    using var pen = new VisualPen(dc, 1, inset == 0 ? GenesisGuiNextDesign.Border : GenesisGuiNextDesign.Panel);
+                    _ = GdiRectangle(dc, inset, inset, bounds.Right - bounds.Left - inset, bounds.Bottom - bounds.Top - inset);
+                }
+            }
+            finally { _ = ReleaseDC(_listView, dc); }
         }
 
         private void SetModernRowHeight(int height, uint dpi)

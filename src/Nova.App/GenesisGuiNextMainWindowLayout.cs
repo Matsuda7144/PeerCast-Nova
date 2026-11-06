@@ -21,6 +21,20 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private int Scale(int value) => GenesisMainWindowLayout.Scale(value, _layoutDpi);
         private int LogicalWidth(int value) => GenesisMainWindowLayout.Logical(value, _layoutDpi);
 
+        private bool? _footerShowsModes;
+        private void PlaceFooter()
+        {
+            if (!GetClientRect(_owner, out var client)) return;
+            var footer = SystemGenesisMainWindowInteractionBridgeFactory.GetStatusWindow(GetParent(_listView));
+            var top = LogicalWidth(client.Bottom) - 28;
+            var width = LogicalWidth(client.Right) - GenesisMainWindowLayout.ContentLeft - 12;
+            var showModes = !UsesChannelListStyle;
+            if (!GenesisPlaybackModeButtonBridge.TryResize(_owner, footer,
+                GenesisMainWindowLayout.ContentLeft, top, width, 24, _layoutDpi, showModes))
+                _ = MoveWindow(footer, Scale(GenesisMainWindowLayout.ContentLeft), Scale(top), Scale(width), Scale(24), true);
+            _footerShowsModes = showModes;
+        }
+
         internal void ApplyClientLayout()
         {
             if (LayoutInProgress || Volatile.Read(ref _detached) != 0 ||
@@ -83,12 +97,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 Place(_relayStart, 12, RelayControlsTop, 84, 26);
                 Place(_relayStop, 102, RelayControlsTop, 84, 26);
 
-                var footer = SystemGenesisMainWindowInteractionBridgeFactory.GetStatusWindow(parent);
-                var footerTop = LogicalWidth(client.Bottom) - 28;
-                var footerWidth = LogicalWidth(client.Right) - GenesisMainWindowLayout.ContentLeft - 12;
-                if (!GenesisPlaybackModeButtonBridge.TryResize(_owner, footer,
-                    GenesisMainWindowLayout.ContentLeft, footerTop, footerWidth, 24, dpi))
-                    Place(footer, GenesisMainWindowLayout.ContentLeft, footerTop, footerWidth, 24);
+                PlaceFooter();
                 _detailsUpdates.Reset();
                 SynchronizeNativeSelection();
                 _clientLayout = (client.Right, client.Bottom, dpi);

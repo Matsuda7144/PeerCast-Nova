@@ -26,6 +26,12 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                     return painted;
                 }
             }
+            if (window == state.ListWindow)
+            {
+                var result = DefSubclassProc(window, message, wParam, lParam);
+                if (message is WindowMessagePaint or 0x0085) state.PaintChannelListFrame();
+                return result;
+            }
             if (message == WindowMessageNotify && state.HandleListViewCustomDraw(lParam, out var drawResult))
                 return drawResult;
             if (state.PaintTopStatus(window, message)) return message == 0x0014 ? 1 : 0;

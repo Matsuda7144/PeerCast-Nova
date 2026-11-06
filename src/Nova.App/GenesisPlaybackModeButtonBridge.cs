@@ -160,22 +160,26 @@ internal sealed class GenesisPlaybackModeButtonPlacement
 
 internal sealed class GenesisPlaybackModeButtonBridge : IAsyncDisposable
 {
-    internal static bool TryResize(nint owner, nint status, int left, int top, int width, int height, uint dpi)
+    internal static bool TryResize(nint owner, nint status, int left, int top, int width, int height, uint dpi, bool showButtons = true)
     {
         foreach (var (container, state) in StatesByContainer)
         {
             if (GetParent(container) != owner) continue;
             var modeWidth = GenesisPlaybackModeButtonPlacement.TotalButtonWidth;
-            var statusWidth = Math.Max(120, width - modeWidth - 8);
+            var buttonLeft = Math.Max(120, width - modeWidth - 8);
+            var statusWidth = showButtons ? buttonLeft : width;
             int S(int value) => GenesisMainWindowLayout.Scale(value, dpi);
             _ = MoveWindow(status, S(left), S(top), S(statusWidth), S(height), true);
-            _ = MoveWindow(container, S(left + statusWidth + 8), S(top), S(modeWidth), S(height), true);
+            _ = MoveWindow(container, S(left + buttonLeft + 8), S(top), S(modeWidth), S(height), true);
+            _ = ShowWindow(container, showButtons ? 4 : 0);
             state.ApplyLayout(height, dpi);
             return true;
         }
         return false;
     }
 
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(nint window, int command);
     [DllImport("user32.dll")]
     private static extern nint GetParent(nint window);
     private const uint WindowStyleChild = 0x40000000;
