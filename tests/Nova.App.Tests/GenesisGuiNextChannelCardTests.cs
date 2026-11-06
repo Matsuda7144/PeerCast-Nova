@@ -40,7 +40,7 @@ public sealed class GenesisGuiNextChannelCardTests
         var layout = new GenesisGuiNextChannelCardLayout(details.Width);
         var texts = new[] { layout.Title, layout.Description, layout.Metadata, layout.Identity, layout.RecordingStatus, layout.RelayStatus };
         var buttons = new[] { GenesisGuiNextChannelCardLayout.Record, GenesisGuiNextChannelCardLayout.Stop,
-            GenesisGuiNextChannelCardLayout.Copy, GenesisGuiNextChannelCardLayout.RelayStart, GenesisGuiNextChannelCardLayout.RelayStop };
+            GenesisGuiNextChannelCardLayout.RelayStop };
         var all = texts.Concat(buttons).ToArray();
         foreach (var bounds in all)
         {
@@ -54,7 +54,7 @@ public sealed class GenesisGuiNextChannelCardTests
             for (var j = i + 1; j < all.Length; j++)
                 Assert.True(all[i].Right <= all[j].Left || all[j].Right <= all[i].Left ||
                     all[i].Bottom <= all[j].Top || all[j].Bottom <= all[i].Top, $"Overlap: {i}, {j}");
-        Assert.Equal(GenesisGuiNextChannelCardLayout.Record.Height, GenesisGuiNextChannelCardLayout.Copy.Height);
+        Assert.Equal(GenesisGuiNextChannelCardLayout.Record.Height, GenesisGuiNextChannelCardLayout.RelayStop.Height);
         Assert.True(layout.Title.Right < layout.DividerLeft && layout.Metadata.Left > layout.DividerLeft);
     }
 
@@ -74,9 +74,9 @@ public sealed class GenesisGuiNextChannelCardTests
             Assert.True(widths[0] >= 200 && widths[1] >= 260);
             if (list.Width >= 884) Assert.Equal(list.Width - 4, widths.Sum());
             Assert.InRange(GenesisGuiNextChannelListStyle.RowHeight, GenesisGuiNextDesign.RowImageHeight, 36);
-            var card = new GenesisGuiNextChannelCardLayout(details.Width, true);
+            var card = new GenesisGuiNextChannelCardLayout(details.Width);
             var regions = new[] { card.Title, card.Description, card.Metadata, card.Identity, card.RecordingStatus, card.RelayStatus }
-                .Concat(Enumerable.Range(0, 5).Select(card.Action)).ToArray();
+                .Concat(new[] { GenesisGuiNextChannelCardLayout.Record, GenesisGuiNextChannelCardLayout.Stop, GenesisGuiNextChannelCardLayout.RelayStop }).ToArray();
             Assert.Equal(22, card.Title.Left); // text uses the left edge; there is no thumbnail slot
             Assert.True(card.Metadata.Height >= 5 * GenesisGuiNextDesign.BodyFontHeight);
             foreach (var r in regions)
@@ -91,6 +91,27 @@ public sealed class GenesisGuiNextChannelCardTests
             Assert.False(GenesisGuiNextChannelListStyle.Applies(false, tab));
             Assert.Equal(tab == GenesisGuiNextTab.Channels, GenesisGuiNextChannelListStyle.Applies(true, tab));
         }
+    }
+
+    [Fact]
+    public void ModernHidesIdleRelayButKeepsStopAndFailureEvidenceAcrossChannelAndRecordingTabs()
+    {
+        foreach (var tab in new[] { GenesisGuiNextTab.Channels, GenesisGuiNextTab.New, GenesisGuiNextTab.Favorites,
+            GenesisGuiNextTab.Playing, GenesisGuiNextTab.Recording, GenesisGuiNextTab.Logs })
+        {
+            Assert.Equal(new(false, false, false), GenesisGuiNextRelayControlsPresentation.Resolve(true, tab, new(), false));
+            Assert.Equal(new(true, true, true), GenesisGuiNextRelayControlsPresentation.Resolve(false, tab, new(), false));
+            foreach (var state in Enum.GetValues<GenesisRelayActivationState>())
+            {
+                var owned = new GenesisRelayActivationSnapshot(State: state, CleanupConfirmed: false);
+                Assert.Equal(new(false, true, true), GenesisGuiNextRelayControlsPresentation.Resolve(true, tab, owned, true));
+            }
+            Assert.Equal(new(false, false, true), GenesisGuiNextRelayControlsPresentation.Resolve(true, tab,
+                new(State: GenesisRelayActivationState.Failed, Error: GenesisRelayActivationError.ShutdownFailed, CleanupConfirmed: false), false));
+            Assert.True(GenesisGuiNextRelayControlsPresentation.Resolve(true, tab,
+                new(Error: GenesisRelayActivationError.BindFailed), false).Status);
+        }
+        Assert.Equal(new(false, false, false), GenesisGuiNextRelayControlsPresentation.Resolve(false, GenesisGuiNextTab.Publishing, new(), true));
     }
 
     [Fact]

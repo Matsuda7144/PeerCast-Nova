@@ -21,7 +21,8 @@ public sealed class GenesisGuiNextTopBarTests
             out var status, out var searchLeft, out var searchWidth, out var refresh, out var favorite, true));
         Assert.True(GenesisChannelSearchBoxBridge.TryResolveControlLayout(searchWidth,
             out var inputWidth, out var filterLeft, true));
-        Assert.True(inputWidth >= GenesisChannelSearchBoxBridge.MinimumSearchEditWidth);
+        Assert.True(inputWidth >= 160);
+        Assert.Equal(GenesisGuiNextTopBarLayout.Height, top.Height - 4);
         Assert.True(S(8) + S(status) < S(searchLeft));
         Assert.True(S(searchLeft + GenesisGuiNextTopBarLayout.SearchLabelWidth) + S(inputWidth) < S(searchLeft + filterLeft));
         Assert.True(S(searchLeft + filterLeft) + S(GenesisChannelSearchBoxBridge.YellowPageFilterWidth) < S(refresh));
@@ -35,7 +36,7 @@ public sealed class GenesisGuiNextTopBarTests
         {
             var cell = GenesisGuiNextTopBarLayout.StatusCell(status, i);
             Assert.Equal(right, cell.Left);
-            Assert.True(cell.Width >= 48);
+            Assert.True(cell.Width >= 40);
             right = cell.Left + cell.Width;
         }
         Assert.Equal(status, right);

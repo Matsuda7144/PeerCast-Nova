@@ -439,21 +439,23 @@ internal static class GenesisGuiNextFavoriteButtonPresentationResolver
 
     public static GenesisGuiNextFavoriteButtonPresentation Resolve(
         GenesisGuiNextTabsViewModel tabs,
-        GenesisGuiNextNativeTabRow? row)
+        GenesisGuiNextNativeTabRow? row, bool modern = false)
     {
         ArgumentNullException.ThrowIfNull(tabs);
+        var add = modern ? "お気に入り追加" : AddLabel;
+        var remove = modern ? "お気に入り削除" : RemoveLabel;
         if (row is null || tabs.SelectedTab is GenesisGuiNextTab.Playing or
             GenesisGuiNextTab.Recording or GenesisGuiNextTab.Logs or GenesisGuiNextTab.Publishing)
         {
-            return new(AddLabel, IsEnabled: false);
+            return new(add, IsEnabled: false);
         }
 
         if (tabs.IsFavorite(row.DisplayChannel))
         {
-            return new(RemoveLabel, IsEnabled: true);
+            return new(remove, IsEnabled: true);
         }
 
-        return new(AddLabel, row.InteractiveChannel is not null);
+        return new(add, row.InteractiveChannel is not null);
     }
 }
 
@@ -2540,7 +2542,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 selectedRow);
             var presentation = GenesisGuiNextFavoriteButtonPresentationResolver.Resolve(
                 _tabs,
-                renderedRow);
+                renderedRow, IsModern);
             var favoriteEnabled = presentation.IsEnabled && !SettingsPageOpen;
             using (var update = _favoriteUpdates.Begin(0, _ => { }))
             {
@@ -2570,11 +2572,13 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                     GetCurrentRecordingPresentation(), _tabs.RecordingHistoryStatus,
                     _tabs.PublishingConnection.StateText, _tabs.PublishingConnection.Tone, _tabs.PublishingKeyRevealed),
                 control => { if (IsWindow(control)) _ = InvalidateRect(control, 0, true); });
-            var showRelay = GenesisGuiNextPublishingGuideLayout.ShowRelayControls(_tabs.SelectedTab);
-            foreach (var control in new[] { _relayStart, _relayStop, _relayStatus })
-                _ = PresentVisible(control, showRelay ? ShowWindowShowNoActivate : ShowWindowHide);
-            _ = PresentEnabled(_relayStart, showRelay && GenesisGuiNextRelayCommandDispatch.CanStart(_viewModel, row));
-            _ = PresentEnabled(_relayStop, showRelay && _viewModel.RelayActivation?.CanStop == true);
+            var relayControls = GenesisGuiNextRelayControlsPresentation.Resolve(IsModern, _tabs.SelectedTab,
+                _viewModel.RelaySnapshot, _viewModel.RelayActivation?.CanStop == true);
+            _ = PresentVisible(_relayStart, relayControls.Start ? ShowWindowShowNoActivate : ShowWindowHide);
+            _ = PresentVisible(_relayStop, relayControls.Stop ? ShowWindowShowNoActivate : ShowWindowHide);
+            _ = PresentVisible(_relayStatus, relayControls.Status ? ShowWindowShowNoActivate : ShowWindowHide);
+            _ = PresentEnabled(_relayStart, relayControls.Start && GenesisGuiNextRelayCommandDispatch.CanStart(_viewModel, row));
+            _ = PresentEnabled(_relayStop, relayControls.Stop && _viewModel.RelayActivation?.CanStop == true);
             if (GetClientRect(_detailsPane, out var relayPane))
                 _ = PresentBounds(_relayStatus, 12, RelayStatusTop, RelayStatusWidth(LogicalWidth(relayPane.Right - relayPane.Left)), 40, true);
             _ = PresentInvalidation(_relayStatus, 0, true);
@@ -2649,7 +2653,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 hideRecordingActions || _allowAutomaticShown ? ShowWindowHide : ShowWindowShowNoActivate);
             _ = PresentVisible(
                 _detailsCopyButton,
-                hideRecordingActions ? ShowWindowHide : ShowWindowShowNoActivate);
+                hideRecordingActions || IsModern ? ShowWindowHide : ShowWindowShowNoActivate);
             _ = PresentVisible(
                 _detailsRecordingStatus,
                 !isLogPage && !isPublishingPage && IsRecordingStatusVisible(isRulesPage) ? ShowWindowShowNoActivate : ShowWindowHide);
@@ -2790,8 +2794,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 string.IsNullOrWhiteSpace(details.Description)
                     ? string.Empty
                     : $"詳細: {details.Description}");
-            _ = PresentText(_detailsMetadata, UsesChannelListStyle ? details.MetadataLines : details.MetadataText);
-            _ = PresentText(_detailsIdentity, details.IdentityText);
+            _ = PresentText(_detailsMetadata, UsesChannelCard ? details.MetadataLines : details.MetadataText);
+            _ = PresentText(_detailsIdentity, UsesChannelCard ? details.IdentityLines : details.IdentityText);
             _ = PresentEnabled(_detailsCopyButton, !details.IsEmpty);
             var recording = row?.ActiveRecording is { } activeRecording
                 ? _viewModel.GetActiveRecordingPresentation(activeRecording)

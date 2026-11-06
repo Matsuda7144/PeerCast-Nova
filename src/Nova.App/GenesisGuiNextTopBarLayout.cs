@@ -4,8 +4,8 @@ namespace PeerCast.Nova.App;
 internal static class GenesisGuiNextTopBarLayout
 {
     internal const int Height = 24;
-    internal const int SearchLabelWidth = 28;
-    internal const int FilterGap = 12;
+    internal const int SearchLabelWidth = 24;
+    internal const int FilterGap = 8;
     internal const int FullStatusWidth = 420;
 
     internal static bool TryResolve(int width, out int statusWidth, out int searchLeft,
@@ -13,9 +13,9 @@ internal static class GenesisGuiNextTopBarLayout
     {
         statusWidth = searchLeft = searchWidth = refreshLeft = favoriteLeft = 0;
         if (width < GenesisMainWindowLayout.MinimumContentWidth) return false;
-        statusWidth = Math.Min(FullStatusWidth, 300 + (width - GenesisMainWindowLayout.MinimumContentWidth) / 3);
+        statusWidth = Math.Min(FullStatusWidth, 264 + (width - GenesisMainWindowLayout.MinimumContentWidth) / 3);
         searchLeft = 8 + statusWidth + 12;
-        favoriteLeft = width - GenesisGuiNextAppShellBridge.FavoriteButtonWidth - 4;
+        favoriteLeft = width - GenesisGuiNextAppShellBridge.FavoriteButtonWidth - 8;
         refreshLeft = favoriteLeft - GenesisGuiNextAppShellBridge.FavoriteButtonGap - GenesisGuiNextAppShellBridge.RefreshButtonWidth;
         searchWidth = refreshLeft - GenesisGuiNextAppShellBridge.RefreshButtonGap - searchLeft;
         return TryResolveSearch(searchWidth, out _, out _);
@@ -32,8 +32,8 @@ internal static class GenesisGuiNextTopBarLayout
 
     internal static (int Left, int Width) StatusCell(int width, int index)
     {
-        ReadOnlySpan<int> weights = width < FullStatusWidth ? [64, 60, 48, 48, 80] : [64, 112, 64, 64, 116];
-        var total = width < FullStatusWidth ? 300 : FullStatusWidth;
+        ReadOnlySpan<int> weights = width < FullStatusWidth ? [60, 52, 40, 40, 72] : [64, 112, 64, 64, 116];
+        var total = width < FullStatusWidth ? 264 : FullStatusWidth;
         var left = 0;
         for (var i = 0; i < index; i++) left += weights[i];
         return (left * width / total, (left + weights[index]) * width / total - left * width / total);

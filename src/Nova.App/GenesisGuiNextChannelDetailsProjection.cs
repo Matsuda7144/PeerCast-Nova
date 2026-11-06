@@ -67,6 +67,8 @@ internal sealed record GenesisChannelDetailsPresentation(
         }
     }
 
+    public string IdentityLines => IdentityText.Replace("    Source:", "\r\nSource:", StringComparison.Ordinal);
+
     public string CopyText
     {
         get

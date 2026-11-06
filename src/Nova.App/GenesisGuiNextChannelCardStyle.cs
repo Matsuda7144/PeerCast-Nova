@@ -17,7 +17,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private void PlaceChannelCard()
         {
             if (!GetClientRect(_detailsPane, out var client)) return;
-            var layout = new GenesisGuiNextChannelCardLayout(LogicalWidth(client.Right), UsesChannelListStyle);
+            var layout = new GenesisGuiNextChannelCardLayout(LogicalWidth(client.Right));
             void Place(nint control, GenesisGuiNextAppShellPlacement.WindowRectangle bounds) =>
                 _ = PresentBounds(control, bounds.Left, bounds.Top, bounds.Width, bounds.Height, true);
             Place(_detailsTitle, layout.Title);
@@ -25,11 +25,9 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             Place(_detailsMetadata, layout.Metadata);
             Place(_detailsIdentity, layout.Identity);
             Place(_detailsRecordingStatus, layout.RecordingStatus);
-            Place(_detailsRecordButton, layout.Action(0));
-            Place(_detailsStopRecordingButton, layout.Action(1));
-            Place(_detailsCopyButton, layout.Action(2));
-            Place(_relayStart, layout.Action(3));
-            Place(_relayStop, layout.Action(4));
+            Place(_detailsRecordButton, GenesisGuiNextChannelCardLayout.Record);
+            Place(_detailsStopRecordingButton, GenesisGuiNextChannelCardLayout.Stop);
+            Place(_relayStop, GenesisGuiNextChannelCardLayout.RelayStop);
             Place(_relayStatus, layout.RelayStatus);
         }
 
@@ -40,12 +38,10 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             var card = client;
             card.Left += Scale(6); card.Right -= Scale(6);
             card.Top += Scale(6); card.Bottom -= Scale(6);
-            if (UsesChannelListStyle) DrawModernSurface(dc, card, GenesisGuiNextDesign.Panel, GenesisGuiNextDesign.Border, Scale(12));
-            else _ = FillRect(dc, ref card, _topBrush);
+            DrawModernSurface(dc, card, GenesisGuiNextDesign.Panel, GenesisGuiNextDesign.Border, Scale(12));
             using var border = new VisualPen(dc, Scale(1), GenesisGuiNextDesign.Border);
-            if (!UsesChannelListStyle) _ = GdiRectangle(dc, card.Left, card.Top, card.Right, card.Bottom);
-            var layout = new GenesisGuiNextChannelCardLayout(LogicalWidth(client.Right), UsesChannelListStyle);
-            Line(dc, Scale(layout.DividerLeft), Scale(18), Scale(layout.DividerLeft), Scale(UsesChannelListStyle ? 108 : 90));
+            var layout = new GenesisGuiNextChannelCardLayout(LogicalWidth(client.Right));
+            Line(dc, Scale(layout.DividerLeft), Scale(18), Scale(layout.DividerLeft), Scale(124));
             return true;
         }
 
@@ -62,7 +58,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 if (dc == 0 || !GetClientRect(control, out var bounds)) return true;
                 _ = FillRect(dc, ref bounds, _topBrush);
                 var title = control == _detailsTitle;
-                var wrap = control == _detailsDescription || control == _detailsMetadata;
+                var wrap = control != _detailsTitle;
                 DrawCardLabel(dc, bounds, ReadCardControlText(control),
                     title ? GenesisGuiNextDesign.Text : GenesisGuiNextDesign.SecondaryText,
                     title ? _cardTitleFont?.Handle ?? 0 : control == _detailsIdentity ? 0 : _visualFont?.Handle ?? 0,
@@ -83,11 +79,10 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 var play = draw.ControlId == PlayControlId;
                 var colors = GenesisGuiNextDesign.CardButtonColors(play, recording, disabled,
                     _hoverControl == draw.ControlWindow, pressed);
-                FillRectangle(draw.DeviceContext, draw.ItemRectangle, UsesChannelListStyle ? GenesisGuiNextDesign.Panel : colors.Background);
+                FillRectangle(draw.DeviceContext, draw.ItemRectangle, GenesisGuiNextDesign.Panel);
                 using var pen = new VisualPen(draw.DeviceContext, Scale(1), colors.Border);
                 var box = draw.ItemRectangle;
-                if (UsesChannelListStyle) DrawModernSurface(draw.DeviceContext, box, colors.Background, colors.Border, Scale(8));
-                else _ = GdiRectangle(draw.DeviceContext, box.Left, box.Top, box.Right, box.Bottom);
+                DrawModernSurface(draw.DeviceContext, box, colors.Background, colors.Border, Scale(8));
                 var x = box.Left + Scale(12); var y = (box.Top + box.Bottom) / 2;
                 if (draw.ControlId == DetailsRecordControlId)
                     _ = Ellipse(draw.DeviceContext, x - Scale(4), y - Scale(4), x + Scale(4), y + Scale(4));

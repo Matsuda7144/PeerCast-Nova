@@ -7,6 +7,7 @@ internal enum GenesisGuiNextChannelContextFailure
     MenuOpen,
     ClipboardCopy,
     ContactClipboardCopy,
+    DetailsClipboardCopy,
     ExternalOpen,
     RecordingDirectoryMissing,
     RecordingCommand,
@@ -30,6 +31,8 @@ internal static class GenesisGuiNextChannelContextFeedback
                 new("Channel source could not be copied to the clipboard.", Caption),
             GenesisGuiNextChannelContextFailure.ContactClipboardCopy =>
                 new("コンタクトURLをクリップボードへコピーできませんでした。", Caption),
+            GenesisGuiNextChannelContextFailure.DetailsClipboardCopy =>
+                new("チャンネル情報をクリップボードへコピーできませんでした。", Caption),
             GenesisGuiNextChannelContextFailure.ExternalOpen =>
                 new("URLまたは録画フォルダを開けませんでした。", Caption),
             GenesisGuiNextChannelContextFailure.RecordingDirectoryMissing =>

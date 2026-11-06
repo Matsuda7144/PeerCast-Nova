@@ -15,6 +15,7 @@ internal enum GenesisChannelContextMenuCommand
     CopyContact = 7,
     Recording = 8,
     OpenRecordingDirectory = 9,
+    CopyDetails = 10,
 }
 
 internal static class GenesisChannelContextMenuNative
@@ -323,6 +324,8 @@ internal static class GenesisChannelContextMenuNative
                     MenuFlagString,
                     (nuint)GenesisChannelContextMenuCommand.CopySource,
                     "ソースURLをコピー\tCtrl+C") ||
+                (actions?.DetailsText is { Length: > 0 } && !AppendMenuW(menu, MenuFlagString,
+                    (nuint)GenesisChannelContextMenuCommand.CopyDetails, "情報をコピー")) ||
                 !AppendMenuW(menu, MenuFlagSeparator, 0, string.Empty))
             {
                 GenesisChannelContextMenuDiagnostics.Write(

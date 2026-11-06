@@ -79,6 +79,38 @@ public sealed class GenesisChannelContextActionsTests
     }
 
     [Fact]
+    public async Task DetailsCopyUsesCapturedFullProjectionAndBoundsClipboardFailure()
+    {
+        var model = new GenesisMainViewModel(new FakePlaybackSessionController());
+        var first = new GenesisChannelItem("First", "pcp://first", new string('長', 1000));
+        var second = new GenesisChannelItem("Second", "pcp://second");
+        var captured = GenesisChannelContextActions.Capture(model, new(first, first));
+        Assert.Null(captured.DetailsText); // Classic's native menu is unchanged.
+        var root = Path.Combine(Path.GetTempPath(), "Nova-phase15-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        GenesisChannelContextTarget target;
+        try
+        {
+            var store = new NovaSettingsStore(Path.Combine(root, "settings.json"));
+            await store.UpdateAsync(value => value with { GuiMode = PeerCast.Nova.Foundation.Configuration.NovaGuiMode.Modern });
+            model.AppearanceSettings = new GenesisAppearanceSettings(store);
+            target = GenesisChannelContextActions.Capture(model, new(first, first));
+            Assert.Equal(GenesisGuiNextChannelDetailsProjection.FromChannel(first).CopyText, target.DetailsText);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+        model.ReplaceChannels([first, second]); model.SelectedChannel = second;
+        var effects = new Effects();
+        Assert.True(GenesisChannelContextActions.IsAction(GenesisChannelContextMenuCommand.CopyDetails));
+        await GenesisChannelContextActions.ExecuteAsync(model, target, GenesisChannelContextMenuCommand.CopyDetails, effects);
+        Assert.Equal(target.DetailsText, effects.CopiedDetails);
+        Assert.Contains(first.Description!, effects.CopiedDetails!);
+        Assert.DoesNotContain("Second", effects.CopiedDetails!);
+        effects.ThrowOnCopyDetails = true;
+        await GenesisChannelContextActions.ExecuteAsync(model, target, GenesisChannelContextMenuCommand.CopyDetails, effects);
+        Assert.Equal(GenesisGuiNextChannelContextFailure.DetailsClipboardCopy, effects.Failure);
+    }
+
+    [Fact]
     public async Task FolderUsesRuntimeSnapshotAndDoesNotCreateMissingDirectory()
     {
         var root = Path.Combine(Path.GetTempPath(), "Nova-context-tests", Guid.NewGuid().ToString("N"));
@@ -119,6 +151,9 @@ public sealed class GenesisChannelContextActionsTests
     internal sealed class Effects : IGenesisChannelContextEffects
     {
         public string? OpenedContact { get; set; }
+        public string? CopiedDetails { get; private set; }
+        public bool ThrowOnCopyDetails { get; set; }
+        public void CopyDetails(string text) { if (ThrowOnCopyDetails) throw new IOException(); CopiedDetails = text; }
         public string? CopiedContact { get; private set; }
         public string? ProbedDirectory { get; private set; }
         public string? OpenedDirectory { get; private set; }

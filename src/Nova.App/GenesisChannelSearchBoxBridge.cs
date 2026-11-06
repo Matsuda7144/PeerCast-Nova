@@ -174,7 +174,7 @@ internal sealed class GenesisChannelSearchBoxBridge : IAsyncDisposable
         int S(int value) => GenesisMainWindowLayout.Scale(value, dpi);
         var labelWidth = _modernAppearance ? GenesisGuiNextTopBarLayout.SearchLabelWidth : LabelWidth;
         _ = MoveWindow(_label, S(left), 0, S(labelWidth - 4), S(height), true);
-        _ = MoveWindow(_edit, S(left + labelWidth), S(2), S(editWidth), S(height - 4), true);
+        _ = MoveWindow(_edit, S(left + labelWidth), S(2), S(editWidth), S(_modernAppearance ? GenesisGuiNextTopBarLayout.Height : height - 4), true);
         _ = MoveWindow(_yellowPageFilter, S(left + filterLeft), S(2), S(YellowPageFilterWidth), S(YellowPageDropDownHeight), true);
     }
 

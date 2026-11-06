@@ -228,9 +228,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             var colors = GenesisGuiNextDesign.TopButtonColors(draw.ControlWindow == _refreshButton, disabled,
                 _hoverControl == draw.ControlWindow, active, (draw.ItemState & DrawItemFocused) != 0);
             FillRectangle(draw.DeviceContext, draw.ItemRectangle, colors.Background);
-            using var border = new VisualPen(draw.DeviceContext, Scale(1), colors.Border);
-            _ = GdiRectangle(draw.DeviceContext, draw.ItemRectangle.Left, draw.ItemRectangle.Top,
-                draw.ItemRectangle.Right, draw.ItemRectangle.Bottom);
+            DrawModernSurface(draw.DeviceContext, draw.ItemRectangle, colors.Background, colors.Border, Scale(6));
             var label = new char[128];
             var length = GetWindowTextW(draw.ControlWindow, label, label.Length);
             _ = SetBkMode(draw.DeviceContext, TransparentBackgroundMode);

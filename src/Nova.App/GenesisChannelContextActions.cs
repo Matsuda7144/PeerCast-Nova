@@ -26,6 +26,7 @@ internal sealed record GenesisChannelContextTarget(
     string? ContactUrl, GenesisChannelItem? RecordingChannel, bool StopRecording,
     bool CanRecord, ChannelId? ChannelId, RecordingSessionId? SessionId, string? RecordingDirectory)
 {
+    public string? DetailsText { get; init; }
     public string RecordingLabel => StopRecording ? "録画停止" : "録画開始";
 }
 
@@ -33,6 +34,7 @@ internal interface IGenesisChannelContextEffects
 {
     void OpenContact(string url);
     void CopyContact(string url);
+    void CopyDetails(string text);
     bool DirectoryExists(string path);
     void OpenDirectory(string path);
     void Report(GenesisGuiNextChannelContextFailure failure);
@@ -50,12 +52,13 @@ internal static class GenesisChannelContextActions
         return new(GenesisContactUrl.Normalize(channel?.ContactUrl), channel, stop,
             stop ? presentation.CanStop && manual is not null : presentation.CanRecord,
             manual?.ChannelId, manual?.SessionId,
-            viewModel.RecordingOutputSettings?.CurrentRuntimeDirectory);
+            viewModel.RecordingOutputSettings?.CurrentRuntimeDirectory)
+        { DetailsText = viewModel.UsesModernAppearance ? GenesisGuiNextChannelDetailsProjection.FromChannel(row.DisplayChannel).CopyText : null };
     }
 
     public static bool IsAction(GenesisChannelContextMenuCommand command) => command is
         GenesisChannelContextMenuCommand.OpenContact or GenesisChannelContextMenuCommand.CopyContact or
-        GenesisChannelContextMenuCommand.Recording or GenesisChannelContextMenuCommand.OpenRecordingDirectory;
+        GenesisChannelContextMenuCommand.Recording or GenesisChannelContextMenuCommand.OpenRecordingDirectory or GenesisChannelContextMenuCommand.CopyDetails;
 
     public static async Task ExecuteAsync(GenesisMainViewModel viewModel, GenesisChannelContextTarget target,
         GenesisChannelContextMenuCommand command, IGenesisChannelContextEffects effects)
@@ -69,6 +72,9 @@ internal static class GenesisChannelContextActions
                     break;
                 case GenesisChannelContextMenuCommand.CopyContact:
                     if (GenesisContactUrl.Normalize(target.ContactUrl) is { } copyUrl) effects.CopyContact(copyUrl);
+                    break;
+                case GenesisChannelContextMenuCommand.CopyDetails when !string.IsNullOrEmpty(target.DetailsText):
+                    effects.CopyDetails(target.DetailsText);
                     break;
                 case GenesisChannelContextMenuCommand.Recording when target.CanRecord:
                     if (target.StopRecording && target.ChannelId is { } channelId && target.SessionId is { } sessionId)
@@ -89,6 +95,7 @@ internal static class GenesisChannelContextActions
             effects.Report(command switch
             {
                 GenesisChannelContextMenuCommand.Recording => GenesisGuiNextChannelContextFailure.RecordingCommand,
+                GenesisChannelContextMenuCommand.CopyDetails => GenesisGuiNextChannelContextFailure.DetailsClipboardCopy,
                 GenesisChannelContextMenuCommand.CopyContact => GenesisGuiNextChannelContextFailure.ContactClipboardCopy,
                 _ => GenesisGuiNextChannelContextFailure.ExternalOpen,
             });
@@ -101,6 +108,8 @@ internal sealed class SystemGenesisChannelContextEffects(nint owner) : IGenesisC
     public void OpenContact(string url) => Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
     public void CopyContact(string url) => GenesisChannelContextMenuNative.CopySourceToClipboard(owner, url,
         reportFailure: () => Report(GenesisGuiNextChannelContextFailure.ContactClipboardCopy));
+    public void CopyDetails(string text) => GenesisChannelContextMenuNative.CopySourceToClipboard(owner, text,
+        reportFailure: () => Report(GenesisGuiNextChannelContextFailure.DetailsClipboardCopy));
     public bool DirectoryExists(string path) => Directory.Exists(path);
     public void OpenDirectory(string path)
     {
