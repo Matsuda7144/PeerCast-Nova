@@ -55,7 +55,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             foreach (var card in new[] { layout.StatusCard, layout.ObsCard, layout.BasicCard, layout.OptionsCard })
             {
                 var box = new Rectangle { Left = Scale(card.Left), Top = Scale(card.Top), Right = Scale(card.Right), Bottom = Scale(card.Bottom) };
-                DrawPublishingSurface(dc, box, GenesisGuiNextDesign.Panel, GenesisGuiNextDesign.Border, Scale(12));
+                DrawModernSurface(dc, box, GenesisGuiNextDesign.Panel, GenesisGuiNextDesign.Border, Scale(12));
             }
             foreach (var area in new[] { (layout.Instructions, _publishingInstructions), (layout.Basic, _publishingBasic),
                 (layout.AdvancedViewport, _publishingOptions), (layout.Feedback, _publishingDiagnostic) })
@@ -111,7 +111,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 var lifecycle = draw.ControlWindow == _publishingStartButton || draw.ControlWindow == _publishingFinishButton ||
                     draw.ControlWindow == _publishingInterruptButton || draw.ControlWindow == _publishingSettingsButton;
                 FillRectangle(draw.DeviceContext, draw.ItemRectangle, lifecycle ? GenesisGuiNextDesign.Background : GenesisGuiNextDesign.Panel);
-                DrawPublishingSurface(draw.DeviceContext, draw.ItemRectangle, colors.Background, colors.Border, Scale(8));
+                DrawModernSurface(draw.DeviceContext, draw.ItemRectangle, colors.Background, colors.Border, Scale(8));
                 var box = draw.ItemRectangle;
                 box.Left += Scale(5); box.Right -= Scale(5);
                 DrawCardLabel(draw.DeviceContext, box, ReadCardControlText(draw.ControlWindow), colors.Text,
@@ -136,7 +136,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 draw.ControlWindow, GenesisGuiNextPublishingModernLayout.SingleLineFlags);
             return true;
         }
-        private void DrawPublishingSurface(nint dc, Rectangle box, int background, int border, int radius)
+        private void DrawModernSurface(nint dc, Rectangle box, int background, int border, int radius)
         {
             using var pen = new VisualPen(dc, Scale(1), border);
             var brush = CreateSolidBrush((uint)background);

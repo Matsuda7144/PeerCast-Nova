@@ -46,6 +46,41 @@ public sealed class GenesisGuiNextChannelCardTests
         Assert.True(layout.Title.Right < layout.DividerLeft && layout.Metadata.Left > layout.DividerLeft);
     }
 
+    [Theory]
+    [InlineData(96u)]
+    [InlineData(144u)]
+    [InlineData(192u)]
+    public void ChannelsPolishPreservesDenseRowsColumnsAndUnobstructedInformation(uint dpi)
+    {
+        foreach (var size in new[] { (1088, 474), (1120, 650), (1920, 1080) })
+        {
+            Assert.True(GenesisMainWindowLayout.TryResolve(GenesisMainWindowLayout.Scale(size.Item1, dpi), GenesisMainWindowLayout.Scale(size.Item2, dpi), dpi,
+                out _, out _, out var list, out var details));
+            var widths = GenesisGuiNextChannelListStyle.ColumnWidths(list.Width);
+            Assert.Equal(GenesisChannelListPresentation.Columns.Count, widths.Length);
+            Assert.True(widths.All(w => w >= 56));
+            Assert.True(widths[0] >= 200 && widths[1] >= 260);
+            if (list.Width >= 884) Assert.Equal(list.Width - 4, widths.Sum());
+            Assert.InRange(GenesisGuiNextChannelListStyle.RowHeight, GenesisGuiNextDesign.RowImageHeight, 36);
+            var card = new GenesisGuiNextChannelCardLayout(details.Width, true);
+            var regions = new[] { card.Title, card.Description, card.Metadata, card.Identity, card.RecordingStatus, card.RelayStatus }
+                .Concat(Enumerable.Range(0, 5).Select(card.Action)).ToArray();
+            Assert.Equal(22, card.Title.Left); // text uses the left edge; there is no thumbnail slot
+            Assert.True(card.Metadata.Height >= 5 * GenesisGuiNextDesign.BodyFontHeight);
+            foreach (var r in regions)
+                Assert.True(r.Left >= 7 && r.Right <= details.Width - 7 && r.Top >= 7 && r.Bottom <= 218);
+            for (var i = 0; i < regions.Length; i++)
+                for (var j = i + 1; j < regions.Length; j++)
+                    Assert.True(regions[i].Right <= regions[j].Left || regions[j].Right <= regions[i].Left ||
+                        regions[i].Bottom <= regions[j].Top || regions[j].Bottom <= regions[i].Top);
+        }
+        foreach (var tab in Enum.GetValues<GenesisGuiNextTab>())
+        {
+            Assert.False(GenesisGuiNextChannelListStyle.Applies(false, tab));
+            Assert.Equal(tab == GenesisGuiNextTab.Channels, GenesisGuiNextChannelListStyle.Applies(true, tab));
+        }
+    }
+
     [Fact]
     public void DisabledActionsDoNotShowActivePlaybackRecordingOrHoverAccents()
     {

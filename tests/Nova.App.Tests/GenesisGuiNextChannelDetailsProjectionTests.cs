@@ -3,6 +3,21 @@ namespace PeerCast.Nova.App.Tests;
 public sealed class GenesisGuiNextChannelDetailsProjectionTests
 {
     [Fact]
+    public void MetadataLinesUseOnlySelectedProjectionValuesAndKeepUnknownsHonest()
+    {
+        Assert.Empty(GenesisChannelDetailsPresentation.Empty.MetadataLines);
+        var item = new GenesisChannelItem("name", "pcp://tracker.invalid/channel", Listeners: 12, ChannelId: "A0123456789ABCDEF0123456789ABCDEF");
+        var details = GenesisGuiNextChannelDetailsProjection.FromChannel(item);
+        Assert.Contains("12 / —", details.MetadataLines);
+        Assert.Contains("ビットレート: —", details.MetadataLines);
+        Assert.Contains("形式: —", details.MetadataLines);
+        Assert.Equal(5, details.MetadataLines.Split("\r\n").Length);
+        Assert.Contains(item.ChannelId!, details.IdentityText);
+        Assert.Contains(item.Source, details.CopyText);
+        Assert.DoesNotContain("—", details.CopyText); // display placeholders are not invented source facts
+    }
+
+    [Fact]
     public void SelectedChannelProjectsKnownMetadataAndIdentity()
     {
         var channel = new GenesisChannelItem(

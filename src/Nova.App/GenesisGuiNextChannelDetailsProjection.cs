@@ -52,6 +52,10 @@ internal sealed record GenesisChannelDetailsPresentation(
         }
     }
 
+    // Same projection values, arranged for the Modern Channels metadata column.
+    public string MetadataLines => IsEmpty ? string.Empty :
+        $"リスナー / リレー: {FormatUnknown(Listeners)} / {FormatUnknown(Relays)}\r\nビットレート: {FormatUnknown(Bitrate)}\r\n形式: {FormatUnknown(Format)}\r\n配信時間: {FormatUnknown(Uptime)}\r\nYP: {FormatUnknown(YellowPage)}";
+
     public string IdentityText
     {
         get

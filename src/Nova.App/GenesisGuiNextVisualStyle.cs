@@ -108,6 +108,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             _visualFont = null;
             _cardTitleFont?.Dispose();
             _cardTitleFont = null;
+            _channelNameFont?.Dispose(); _channelNameFont = null;
             if (_rowImages != 0)
             {
                 if (IsWindow(_listView)) _ = SendMessageW(_listView, 0x1003, 1, _originalImages);
@@ -144,14 +145,10 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 _cardTitleFont?.Dispose();
                 _cardTitleFont = titleFont;
             }
-            var images = ImageList_Create(1, GenesisMainWindowLayout.Scale(GenesisGuiNextDesign.RowImageHeight, dpi), 0x0020, 1, 1);
-            if (images != 0)
-            {
-                var previous = SendMessageW(_listView, 0x1003, 1, images); // LVSIL_SMALL sets report-row height.
-                if (_rowImages == 0) _originalImages = previous;
-                else _ = ImageList_Destroy(_rowImages);
-                _rowImages = images;
-            }
+            _channelNameFont?.Dispose();
+            _channelNameFont = GenesisUiFontLease.TryCreate(new SystemUiFontNativeApi(), dpi, 16);
+            SetModernRowHeight(UsesChannelListStyle ? GenesisGuiNextChannelListStyle.RowHeight : GenesisGuiNextDesign.RowImageHeight, dpi);
+            _channelListStyle = null;
             _visualDpi = dpi;
             _searchBox.UpdateItemHeight(dpi);
         }
@@ -289,7 +286,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             {
                 var item = new VisualHeaderItem { Mask = 0x0002 | 0x0004, Text = buffer, TextCharacters = 256 };
                 if (SendHeaderItem(header, 0x120B, draw.ItemSpec, ref item) == 0) return false;
-                var text = Marshal.PtrToStringUni(buffer) ?? string.Empty;
+                var text = UsesChannelListStyle && draw.ItemSpec == 1 ? "詳細" : Marshal.PtrToStringUni(buffer) ?? string.Empty;
                 FillRectangle(draw.DeviceContext, draw.ItemRectangle, GenesisGuiNextDesign.Header);
                 var line = draw.ItemRectangle; line.Top = line.Bottom - Scale(1);
                 FillRectangle(draw.DeviceContext, line, GenesisGuiNextDesign.Border);

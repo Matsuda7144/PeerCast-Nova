@@ -2385,6 +2385,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 return false;
             }
 
+            if (DrawChannelListCell(notificationPointer, out result)) return true;
             var draw = Marshal.PtrToStructure<CustomDraw>(notificationPointer);
             if (draw.DrawStage == CustomDrawStagePrePaint)
             {
@@ -2412,7 +2413,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 // Suppress only native selection painting, never the actual list selection.
                 draw.ItemState &= ~(CustomDrawStateSelected | 0x0010u);
                 Marshal.StructureToPtr(draw, notificationPointer, false);
-                result = (nint)(0x00000002 | CustomDrawNotifyPostPaint);
+                result = (nint)(0x00000002 | CustomDrawNotifyPostPaint | (UsesChannelListStyle ? 0x00000020u : 0u));
                 return true;
             }
 
@@ -2436,7 +2437,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 if (draw.ItemSpec == (nuint)_paintSelectedRow)
                 {
                     var accent = draw.ItemRectangle;
-                    accent.Right = Math.Min(accent.Right, accent.Left + AccentWidth);
+                    if (UsesChannelListStyle) accent.Left = 0;
+                    accent.Right = Math.Min(accent.Right, accent.Left + (UsesChannelListStyle ? Scale(3) : AccentWidth));
                     FillRectangle(draw.DeviceContext, accent, GenesisGuiNextDesign.Accent);
                     if (GetFocus() == _listView)
                     {
@@ -2513,6 +2515,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             }
 
             SynchronizePublishingPageBounds();
+            SynchronizeChannelListStyle();
             SynchronizeFavoriteButtonPresentation();
             SynchronizePlaybackButtonPresentation();
         }
@@ -2787,7 +2790,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 string.IsNullOrWhiteSpace(details.Description)
                     ? string.Empty
                     : $"詳細: {details.Description}");
-            _ = PresentText(_detailsMetadata, details.MetadataText);
+            _ = PresentText(_detailsMetadata, UsesChannelListStyle ? details.MetadataLines : details.MetadataText);
             _ = PresentText(_detailsIdentity, details.IdentityText);
             _ = PresentEnabled(_detailsCopyButton, !details.IsEmpty);
             var recording = row?.ActiveRecording is { } activeRecording
