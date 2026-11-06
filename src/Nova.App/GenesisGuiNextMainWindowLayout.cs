@@ -21,18 +21,18 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private int Scale(int value) => GenesisMainWindowLayout.Scale(value, _layoutDpi);
         private int LogicalWidth(int value) => GenesisMainWindowLayout.Logical(value, _layoutDpi);
 
-        private bool? _footerShowsModes;
         private void PlaceFooter()
         {
             if (!GetClientRect(_owner, out var client)) return;
             var footer = SystemGenesisMainWindowInteractionBridgeFactory.GetStatusWindow(GetParent(_listView));
             var top = LogicalWidth(client.Bottom) - 28;
             var width = LogicalWidth(client.Right) - GenesisMainWindowLayout.ContentLeft - 12;
-            var showModes = !UsesChannelListStyle;
+            // These control the optional internal playback window, not external-player playback.
+            // Keep the existing bridge available, but do not reserve footer space in Modern.
+            var showModes = !IsModern;
             if (!GenesisPlaybackModeButtonBridge.TryResize(_owner, footer,
                 GenesisMainWindowLayout.ContentLeft, top, width, 24, _layoutDpi, showModes))
                 _ = MoveWindow(footer, Scale(GenesisMainWindowLayout.ContentLeft), Scale(top), Scale(width), Scale(24), true);
-            _footerShowsModes = showModes;
         }
 
         internal void ApplyClientLayout()

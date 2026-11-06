@@ -13,6 +13,18 @@ public sealed class GenesisGuiNextChannelCardTests
         }
     }
 
+    [Fact]
+    public void ListFrameIsSharedOnlyByTheModernChannelRecordingAndLogPages()
+    {
+        foreach (var tab in Enum.GetValues<GenesisGuiNextTab>())
+        {
+            Assert.False(GenesisGuiNextChannelListStyle.FrameApplies(false, tab));
+            Assert.Equal(tab is GenesisGuiNextTab.Channels or GenesisGuiNextTab.New or GenesisGuiNextTab.Favorites or
+                GenesisGuiNextTab.Playing or GenesisGuiNextTab.Recording or GenesisGuiNextTab.Logs,
+                GenesisGuiNextChannelListStyle.FrameApplies(true, tab));
+        }
+    }
+
     [Theory]
     [InlineData(1088, 474, 96u)]
     [InlineData(1120, 620, 96u)]

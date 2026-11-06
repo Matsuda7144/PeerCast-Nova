@@ -6,6 +6,9 @@ namespace PeerCast.Nova.App;
 internal static class GenesisGuiNextChannelListStyle
 {
     internal static bool Applies(bool modern, GenesisGuiNextTab tab) => modern && tab == GenesisGuiNextTab.Channels;
+    internal static bool FrameApplies(bool modern, GenesisGuiNextTab tab) => modern &&
+        tab is GenesisGuiNextTab.Channels or GenesisGuiNextTab.New or GenesisGuiNextTab.Favorites or
+            GenesisGuiNextTab.Playing or GenesisGuiNextTab.Recording or GenesisGuiNextTab.Logs;
     internal const int RowHeight = 32;
     internal static int[] ColumnWidths(int width)
     {
@@ -29,7 +32,6 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         {
             if (!IsModern || !GetClientRect(_listView, out var client)) return;
             var channels = UsesChannelListStyle;
-            if (_footerShowsModes != !channels) PlaceFooter();
             var header = SendMessageW(_listView, 0x101F, 0, 0);
             var count = (int)SendMessageW(header, 0x1200, 0, 0);
             var style = (channels, LogicalWidth(client.Right), _layoutDpi, count);
@@ -56,9 +58,9 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             _channelListStyle = style;
         }
 
-        internal void PaintChannelListFrame()
+        internal void PaintModernListFrame()
         {
-            if (!UsesChannelListStyle || !GetWindowRect(_listView, out var bounds)) return;
+            if (!GenesisGuiNextChannelListStyle.FrameApplies(IsModern, _tabs.SelectedTab) || !GetWindowRect(_listView, out var bounds)) return;
             var dc = GetWindowDC(_listView);
             if (dc == 0) return;
             try

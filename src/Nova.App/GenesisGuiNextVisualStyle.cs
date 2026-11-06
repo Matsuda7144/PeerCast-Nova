@@ -29,7 +29,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             if (window == state.ListWindow)
             {
                 var result = DefSubclassProc(window, message, wParam, lParam);
-                if (message is WindowMessagePaint or 0x0085) state.PaintChannelListFrame();
+                if (message is WindowMessagePaint or 0x0085) state.PaintModernListFrame();
                 return result;
             }
             if (message == WindowMessageNotify && state.HandleListViewCustomDraw(lParam, out var drawResult))
