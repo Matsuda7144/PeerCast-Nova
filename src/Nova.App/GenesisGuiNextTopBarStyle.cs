@@ -4,8 +4,30 @@ namespace PeerCast.Nova.App;
 
 internal sealed partial class GenesisGuiNextAppShellBridge
 {
+    internal static void RefreshTopStatus(nint listView)
+    {
+        if (StatesByListView.TryGetValue(listView, out var state)) state.RefreshTopStatus();
+    }
+
     private sealed partial class AppShellState
     {
+        private GenesisGuiNextTopStatusValues _topStatus = GenesisGuiNextTopStatusPresentation.Create(null, null);
+        private bool _topStatusInitialized;
+        internal void RefreshTopStatus()
+        {
+            if (!IsModern || Volatile.Read(ref _detached) != 0) return;
+            // Existing GUI-thread refreshes are serialized; identical captures do not repaint.
+            NovaApplicationNetworkSnapshot? network = null;
+            try { network = _viewModel.NetworkSettingsAdapter?.ReadSnapshot(); }
+            catch { /* Do not retain a last successful Port value after a failed read. */ }
+            var value = GenesisGuiNextTopStatusPresentation.Create(_viewModel.RelayActivation?.Snapshot, network);
+            if (Volatile.Read(ref _detached) != 0 || _topStatusInitialized && value == _topStatus) return;
+            _topStatusInitialized = true;
+            _topStatus = value;
+            _ = SetWindowTextW(TopStatusWindow, value.AccessibleText);
+            _ = InvalidateRect(TopStatusWindow, 0, true);
+        }
+
         private nint TopStatusWindow => FindWindowExW(_statusBar, 0, "STATIC", null);
         private nint[] TopVisualControls => [TopStatusWindow, _searchBox.LabelWindow, _searchBox.EditWindow, _searchBox.FilterWindow];
         internal bool IsTopFilter(nint window) => window == _searchBox.FilterWindow;
@@ -32,8 +54,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                     return true;
                 }
 
-                // The existing STATIC retains its full accessible text. There
-                // are still no measurements: every value remains Unknown.
+                // Draw only the current projection; painting never reads runtimes or performs I/O.
                 var width = LogicalWidth(bounds.Right);
                 for (var i = 0; i < 5; i++)
                 {
@@ -47,8 +68,9 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                     DrawCardLabel(dc, box, label, GenesisGuiNextDesign.SecondaryText, 0, control,
                         DrawTextSingleLine | DrawTextVerticalCenter);
                     box.Left += measured.Right + Scale(4);
-                    DrawCardLabel(dc, box, GenesisGuiNextTopStatusPresentation.UnknownValue,
-                        GenesisGuiNextDesign.Text, 0, control, DrawTextSingleLine | DrawTextVerticalCenter);
+                    var value = _topStatus.Value(i);
+                    DrawCardLabel(dc, box, GenesisGuiNextTopStatusPresentation.Display(value, width < GenesisGuiNextTopBarLayout.FullStatusWidth),
+                        value.Color, 0, control, DrawTextSingleLine | DrawTextVerticalCenter | 0x8000);
                     if (i == 4) continue;
                     using var divider = new VisualPen(dc, Scale(1), GenesisGuiNextDesign.Separator);
                     var x = Scale(cell.Left + cell.Width - 1);

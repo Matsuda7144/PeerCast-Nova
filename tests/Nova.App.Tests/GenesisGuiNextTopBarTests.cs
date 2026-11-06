@@ -2,8 +2,8 @@ namespace PeerCast.Nova.App.Tests;
 
 public sealed class GenesisGuiNextTopBarTests
 {
-    private static readonly string[] CompactLabels = ["接続", "P2P", "↑", "↓", "Port"];
-    private static readonly string[] FullLabels = ["接続", "P2Pノード数", "上り", "下り", "ポート開放"];
+    private static readonly string[] CompactLabels = ["Relay", "P2P", "↑", "↓", "Port"];
+    private static readonly string[] FullLabels = ["PCP Relay", "P2P", "↑", "↓", "Port"];
     [Theory]
     [InlineData(1088, 474, 96u)]
     [InlineData(1120, 620, 96u)]
@@ -21,7 +21,7 @@ public sealed class GenesisGuiNextTopBarTests
             out var status, out var searchLeft, out var searchWidth, out var refresh, out var favorite, true));
         Assert.True(GenesisChannelSearchBoxBridge.TryResolveControlLayout(searchWidth,
             out var inputWidth, out var filterLeft, true));
-        Assert.True(inputWidth >= 160);
+        Assert.True(inputWidth >= GenesisChannelSearchBoxBridge.MinimumSearchEditWidth);
         Assert.Equal(GenesisGuiNextTopBarLayout.Height, top.Height - 4);
         Assert.True(S(8) + S(status) < S(searchLeft));
         Assert.True(S(searchLeft + GenesisGuiNextTopBarLayout.SearchLabelWidth) + S(inputWidth) < S(searchLeft + filterLeft));

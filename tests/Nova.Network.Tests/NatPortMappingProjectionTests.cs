@@ -45,6 +45,7 @@ public sealed class NatPortMappingProjectionTests
         await test.MapAsync();
         var display = Read(test);
         Assert.Equal("NAT-PMP", display.Backend);
+        Assert.Equal(7144, display.InternalPort);
         Assert.Equal(NatDisplayState.Mapped, display.State);
         Assert.Equal(NatDisplayReachability.NotChecked, display.ExternalReachability);
         Assert.Null(display.ExternalAddress);

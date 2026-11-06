@@ -51,7 +51,11 @@ public sealed record NatPortMappingDisplay(
     NatLeaseEvidenceKind LeaseEvidence,
     DateTimeOffset CapturedAt,
     DateTimeOffset? LastObservation,
-    IReadOnlyList<NatDisplayDiagnostic> Diagnostics);
+    IReadOnlyList<NatDisplayDiagnostic> Diagnostics)
+{
+    // Identity of the selected current-network entry, not an assumed match to every registered port.
+    public int? InternalPort { get; init; }
+}
 
 /// <summary>
 /// Pure projection of one coherent capture. Historical results remain diagnostics;
@@ -176,7 +180,8 @@ public static class NatPortMappingStatusProjection
                 : lease.Kind == NatLeaseKind.Unknown ? NatLeaseEvidenceKind.Unknown
                 : lease.ConfirmedLifetimeSeconds is null ? NatLeaseEvidenceKind.RequestedEstimate
                 : NatLeaseEvidenceKind.RouterConfirmedWithEstimatedExpiry,
-            source.CapturedAt, lastObservation, diagnostics.TakeLast(32).ToArray());
+            source.CapturedAt, lastObservation, diagnostics.TakeLast(32).ToArray())
+        { InternalPort = current?.Identity.InternalPort };
 
         void Add(NatMappingDiagnostic item, string code) => diagnostics.Add(new(item.Timestamp, code,
             item.Request is { } request &&

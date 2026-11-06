@@ -11,6 +11,8 @@ public sealed class GenesisGuiNextNativeStatusClockTests
             viewModel,
             EmptyGenesisChannelPresenceNotificationPublisher.Instance);
 
+        Assert.True(SystemGenesisMainWindowInteractionBridgeFactory.RequiresStatusClock(null, modern: true));
+        Assert.False(SystemGenesisMainWindowInteractionBridgeFactory.RequiresStatusClock(null, modern: false));
         Assert.False(
             SystemGenesisMainWindowInteractionBridgeFactory.RequiresStatusClock(
                 legacySession));

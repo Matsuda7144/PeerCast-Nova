@@ -13,7 +13,7 @@ internal static class GenesisGuiNextTopBarLayout
     {
         statusWidth = searchLeft = searchWidth = refreshLeft = favoriteLeft = 0;
         if (width < GenesisMainWindowLayout.MinimumContentWidth) return false;
-        statusWidth = Math.Min(FullStatusWidth, 264 + (width - GenesisMainWindowLayout.MinimumContentWidth) / 3);
+        statusWidth = Math.Min(FullStatusWidth, 312 + (width - GenesisMainWindowLayout.MinimumContentWidth) / 3);
         searchLeft = 8 + statusWidth + 12;
         favoriteLeft = width - GenesisGuiNextAppShellBridge.FavoriteButtonWidth - 8;
         refreshLeft = favoriteLeft - GenesisGuiNextAppShellBridge.FavoriteButtonGap - GenesisGuiNextAppShellBridge.RefreshButtonWidth;
@@ -32,8 +32,8 @@ internal static class GenesisGuiNextTopBarLayout
 
     internal static (int Left, int Width) StatusCell(int width, int index)
     {
-        ReadOnlySpan<int> weights = width < FullStatusWidth ? [60, 52, 40, 40, 72] : [64, 112, 64, 64, 116];
-        var total = width < FullStatusWidth ? 264 : FullStatusWidth;
+        ReadOnlySpan<int> weights = width < FullStatusWidth ? [92, 52, 40, 40, 88] : [124, 52, 50, 50, 144];
+        var total = width < FullStatusWidth ? 312 : FullStatusWidth;
         var left = 0;
         for (var i = 0; i < index; i++) left += weights[i];
         return (left * width / total, (left + weights[index]) * width / total - left * width / total);

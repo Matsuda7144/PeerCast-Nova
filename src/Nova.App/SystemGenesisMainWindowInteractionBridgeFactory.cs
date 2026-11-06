@@ -122,8 +122,8 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
     }
 
     internal static bool RequiresStatusClock(
-        GenesisChannelCatalogSession? channelCatalogSession) =>
-        channelCatalogSession?.GuiNextTabs is not null;
+        GenesisChannelCatalogSession? channelCatalogSession, bool modern = false) =>
+        modern || channelCatalogSession?.GuiNextTabs is not null;
 
     public IAsyncDisposable? Create(long windowToken, GenesisMainViewModel viewModel)
     {
@@ -385,14 +385,14 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
                     _channelCatalogSession.DiagnosticsChanged += OnDiagnosticsChanged;
                 }
 
-                if (RequiresStatusClock(_channelCatalogSession))
-                {
-                    _statusRefreshTimer = new Timer(
-                        static state => ((BridgeState)state!).ObserveStatusTick(),
-                        this,
-                        GuiNextStatusRefreshInterval,
-                        GuiNextStatusRefreshInterval);
-                }
+            }
+            if (RequiresStatusClock(_channelCatalogSession, _viewModel.UsesModernAppearance))
+            {
+                _statusRefreshTimer = new Timer(
+                    static state => ((BridgeState)state!).ObserveStatusTick(),
+                    this,
+                    GuiNextStatusRefreshInterval,
+                    GuiNextStatusRefreshInterval);
             }
         }
 
@@ -517,6 +517,7 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
                 return;
             }
 
+            GenesisGuiNextAppShellBridge.RefreshTopStatus(_channelList);
             var selectedTab = _guiNextTabs?.SelectedTab ?? GenesisGuiNextTab.Channels;
             if (selectedTab == GenesisGuiNextTab.Publishing) _guiNextTabs?.RefreshPublishingStatus();
             if (_guiNextTabs is not null && _channelCatalogSession is not null)

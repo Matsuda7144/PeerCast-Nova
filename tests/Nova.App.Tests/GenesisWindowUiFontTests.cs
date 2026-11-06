@@ -305,6 +305,7 @@ public sealed class GenesisWindowUiFontTests
         var runtimeSources = new[]
         {
             "GenesisChannelSearchBoxBridge.cs",
+            "GenesisGuiNextTopStatusPresentation.cs",
             "GenesisGuiNextAppShellBridge.cs",
             "SystemGenesisMainWindowSurfaceTarget.cs",
             "GenesisGuiNextPlaybackSettingsWindow.cs",
