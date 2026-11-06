@@ -13,7 +13,11 @@ internal sealed partial class GenesisGuiNextAppShellBridge
     {
         if (message == WindowMessageNcDestroy) _ = RemoveWindowSubclass(window, PublishingEditorProcedure, id);
         if (!StatesByOwner.TryGetValue((nint)owner, out var state)) return DefSubclassProc(window, message, wParam, lParam);
-        if (message == 0x0005 && state.IsPublishingAdvancedPane(window)) state.PlacePublishingAdvancedInputs();
+        if (message == 0x0005)
+        {
+            if (state.IsPublishingAdvancedPane(window)) state.PlacePublishingAdvancedInputs();
+            else state.PlacePublishingInlineInputs();
+        }
         if (message == WindowMessageCommand) { state.ProcessCommand(wParam, lParam); return 0; }
         if (message is 0x0115 or 0x020A) { if (state.IsPublishingAdvancedPane(window)) state.ScrollPublishingAdvanced(message, wParam); else state.ScrollPublishingEditor(message, wParam); return 0; }
         if (message is 0x0133 or 0x0134 or 0x0138) return state.PrepareDarkControl(wParam, window);
@@ -32,7 +36,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private GenesisPublishingBasicEditor? _publishingEditor;
         private nint _publishingEditPane, _publishingEdit, _publishingSave, _publishingCancel, _publishingEditNote;
         private nint[] _publishingInputs = [], _publishingInputLabels = [];
-        private bool _publishingWritingInputs;
+        private bool _publishingWritingInputs, _publishingPlacingInputs;
         private int _publishingEditScroll;
         private nint[] PublishingEditorButtons => IsModern ? [_publishingEdit, _publishingSave, _publishingCancel, .. PublishingAdvancedButtons] : [];
         private nint[] PublishingEditorControls => IsModern ? [_publishingEditPane, _publishingEditNote, .. _publishingInputLabels, .. _publishingInputs, .. PublishingEditorButtons, .. PublishingAdvancedControls] : [];
@@ -168,48 +172,46 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private void PlacePublishingInline(GenesisGuiNextPublishingModernLayout layout)
         {
             var box = layout.Basic;
-            if (_publishingAdvancedExpanded)
-            {
-                _ = PresentBounds(_publishingBasic, box.Left, box.Top, box.Width, box.Height, true);
-                _ = PresentBounds(_publishingEdit, box.Left, layout.BasicCard.Bottom - 34, 104, 26, true);
-                PlacePublishingAdvanced(layout);
-                return;
-            }
-            var viewHeight = Math.Max(24, box.Height - 36);
-            _ = PresentBounds(_publishingBasic, box.Left, box.Top, box.Width, viewHeight, true);
-            _ = PresentBounds(_publishingEditPane, box.Left, box.Top, box.Width, viewHeight, true);
-            _ = PresentBounds(_publishingEdit, box.Left, box.Bottom - 28, 64, 26, true);
-            _ = PresentBounds(_publishingSave, box.Left, box.Bottom - 28, 64, 26, true);
-            _ = PresentBounds(_publishingCancel, box.Left + 72, box.Bottom - 28, 100, 26, true);
+            _ = PresentBounds(_publishingBasic, box.Left, box.Top, box.Width, box.Height, true);
+            _ = PresentBounds(_publishingEditPane, box.Left, box.Top, box.Width, box.Height, true);
+            var action = layout.BasicAction;
+            _ = PresentBounds(_publishingEdit, action.Left, action.Top, action.Width, action.Height, true);
+            _ = PresentBounds(_publishingSave, action.Left, action.Top, 88, action.Height, true);
+            _ = PresentBounds(_publishingCancel, action.Left + 100, action.Top, 128, action.Height, true);
             PlacePublishingInlineInputs();
             PlacePublishingAdvanced(layout);
         }
 
-        private void PlacePublishingInlineInputs()
+        internal void PlacePublishingInlineInputs()
         {
-            if (!GetClientRect(_publishingEditPane, out var area)) return;
-            var height = LogicalWidth(area.Bottom);
-            _publishingEditScroll = GenesisPublishingBasicLayout.Clamp(_publishingEditScroll, height);
-            var scroll = new PublishingEditScrollInfo
+            if (_publishingPlacingInputs || !GetClientRect(_publishingEditPane, out var area)) return;
+            _publishingPlacingInputs = true;
+            try
             {
-                Size = (uint)Marshal.SizeOf<PublishingEditScrollInfo>(),
-                Mask = 7,
-                Maximum = GenesisPublishingBasicLayout.ContentHeight - 1,
-                Page = (uint)Math.Max(1, height),
-                Position = _publishingEditScroll
-            };
-            _ = SetPublishingEditScroll(_publishingEditPane, 1, ref scroll, true);
-            _ = GetClientRect(_publishingEditPane, out area);
-            var layout = new GenesisPublishingBasicLayout(LogicalWidth(area.Right), height, _publishingEditScroll);
-            for (var i = 0; i < 6; i++)
-            {
-                var label = layout.Label(i); var input = layout.Input(i);
-                _ = MoveWindow(_publishingInputLabels[i], Scale(label.Left), Scale(label.Top), Scale(label.Width), Scale(label.Height), true);
-                _ = MoveWindow(_publishingInputs[i], Scale(input.Left), Scale(input.Top), Scale(input.Width), Scale(input.Height), true);
+                var height = LogicalWidth(area.Bottom);
+                _publishingEditScroll = GenesisPublishingBasicLayout.Clamp(_publishingEditScroll, height);
+                var scroll = new PublishingEditScrollInfo
+                {
+                    Size = (uint)Marshal.SizeOf<PublishingEditScrollInfo>(),
+                    Mask = 7,
+                    Maximum = GenesisPublishingBasicLayout.ContentHeight - 1,
+                    Page = (uint)Math.Max(1, height),
+                    Position = _publishingEditScroll
+                };
+                _ = SetPublishingEditScroll(_publishingEditPane, 1, ref scroll, true);
+                _ = GetClientRect(_publishingEditPane, out area);
+                var layout = new GenesisPublishingBasicLayout(LogicalWidth(area.Right), height, _publishingEditScroll);
+                for (var i = 0; i < 6; i++)
+                {
+                    var label = layout.Label(i); var input = layout.Input(i);
+                    _ = MoveWindow(_publishingInputLabels[i], Scale(label.Left), Scale(label.Top), Scale(label.Width), Scale(label.Height), true);
+                    _ = MoveWindow(_publishingInputs[i], Scale(input.Left), Scale(input.Top), Scale(input.Width), Scale(input.Height), true);
+                }
+                var note = layout.Note;
+                _ = MoveWindow(_publishingEditNote, Scale(note.Left), Scale(note.Top), Scale(note.Width), Scale(note.Height), true);
+                _ = RedrawWindow(_publishingEditPane, 0, 0, 0x0001 | 0x0004 | 0x0080);
             }
-            var note = layout.Note;
-            _ = MoveWindow(_publishingEditNote, Scale(note.Left), Scale(note.Top), Scale(note.Width), Scale(note.Height), true);
-            _ = RedrawWindow(_publishingEditPane, 0, 0, 0x0001 | 0x0004 | 0x0080);
+            finally { _publishingPlacingInputs = false; }
         }
 
         internal nint PublishingEditBrush => _topBrush;
@@ -225,8 +227,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 _ = GetPublishingEditScroll(_publishingEditPane, 1, ref info);
                 _publishingEditScroll = (int)(value & 0xffff) switch
                 {
-                    0 => _publishingEditScroll - 28,
-                    1 => _publishingEditScroll + 28,
+                    0 => _publishingEditScroll - GenesisPublishingBasicLayout.RowHeight,
+                    1 => _publishingEditScroll + GenesisPublishingBasicLayout.RowHeight,
                     2 => _publishingEditScroll - page,
                     3 => _publishingEditScroll + page,
                     4 or 5 => info.Track,
@@ -273,6 +275,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 _publishingEditScroll = GenesisPublishingBasicLayout.Reveal(_publishingEditScroll, LogicalWidth(area.Bottom), index);
                 PlacePublishingInlineInputs();
             }
+            if (message == 0x020A && IsPublishingAdvancedCombo(window) && SendMessageW(window, 0x0157, 0, 0) != 0) return false;
             if (message == 0x020A) { if (advanced) ScrollPublishingAdvanced(message, key); else ScrollPublishingEditor(message, key); return true; }
             if (message == 0x0100 && key is 0x0D or 0x1B)
             {
@@ -294,11 +297,12 @@ internal sealed partial class GenesisGuiNextAppShellBridge
 
 internal readonly record struct GenesisPublishingBasicLayout(int Width, int Height, int Scroll)
 {
-    internal const int ContentHeight = 236;
-    internal GenesisGuiNextPublishingGuideRectangle Label(int index) => new(2, 4 + index * 30 - Scroll, 116, 26);
-    internal GenesisGuiNextPublishingGuideRectangle Input(int index) => new(120, 4 + index * 30 - Scroll, Math.Max(32, Width - 124), 26);
-    internal GenesisGuiNextPublishingGuideRectangle Note => new(2, 188 - Scroll, Math.Max(32, Width - 6), 44);
+    internal const int RowHeight = 38;
+    internal const int ContentHeight = 288;
+    internal GenesisGuiNextPublishingGuideRectangle Label(int index) => new(2, 4 + index * RowHeight - Scroll, 116, 30);
+    internal GenesisGuiNextPublishingGuideRectangle Input(int index) => new(120, 4 + index * RowHeight - Scroll, Math.Max(32, Width - 124), 30);
+    internal GenesisGuiNextPublishingGuideRectangle Note => new(2, 6 * RowHeight + 8 - Scroll, Math.Max(32, Width - 6), 48);
     internal static int Clamp(int scroll, int height) => Math.Clamp(scroll, 0, Math.Max(0, ContentHeight - height));
     internal static int Reveal(int scroll, int height, int index) => Clamp(
-        index * 30 + 4 < scroll ? index * 30 + 4 : Math.Max(scroll, index * 30 + 30 - height), height);
+        index * RowHeight + 4 < scroll ? index * RowHeight + 4 : Math.Max(scroll, index * RowHeight + 34 - height), height);
 }

@@ -93,11 +93,11 @@ public sealed class GenesisGuiNextPublishingPageSummaryTests
     [Fact]
     public void LargeLayoutCapsInformationWidthAndHeightRatherThanStretchingCards()
     {
-        var medium = new GenesisGuiNextPublishingModernLayout(1320, 720);
+        var medium = new GenesisGuiNextPublishingModernLayout(1440, 960);
         var large = new GenesisGuiNextPublishingModernLayout(2400, 1300);
         Assert.Equal(medium.ObsCard.Width, large.ObsCard.Width);
         Assert.Equal(medium.BasicCard.Height, large.BasicCard.Height);
         Assert.Equal(medium.Start.Top, large.Start.Top);
-        Assert.Equal((2400 - 1320) / 2, large.Title.Left - medium.Title.Left);
+        Assert.Equal((2400 - 1440) / 2, large.Title.Left - medium.Title.Left);
     }
 }

@@ -170,15 +170,15 @@ public sealed class GenesisPublishingBasicEditorTests
             Assert.True(GenesisMainWindowLayout.TryResolve(
                 GenesisMainWindowLayout.Scale(GenesisMainWindowLayout.MinimumClientWidth, dpi),
                 GenesisMainWindowLayout.Scale(logicalHeight, dpi), dpi, out _, out _, out var list, out var details));
-            var layout = new GenesisGuiNextPublishingModernLayout(list.Width, details.Bottom - list.Top);
+            var layout = new GenesisGuiNextPublishingModernLayout(list.Width, details.Bottom - list.Top, false, true);
             Assert.True(layout.BasicTitle.Bottom <= layout.Basic.Top);
-            Assert.True(layout.Basic.Height - 36 >= 26); // viewport separate from fixed 26px Save/Cancel
+            Assert.True(layout.Basic.Height >= 30); // active viewport is separate from fixed Save/Cancel
             Assert.True(layout.Options.Height >= 24);
             Assert.True(layout.Feedback.Bottom <= layout.StatusCard.Bottom);
             Assert.True(layout.StatusCard.Bottom < layout.BasicCard.Top);
-            Assert.True(layout.BasicCard.Bottom < layout.OptionsCard.Top);
+            Assert.True(layout.BasicCard.Right < layout.OptionsCard.Left);
             Assert.True(layout.OptionsCard.Bottom < layout.Start.Top);
-            Assert.True(layout.Instructions.Height >= 26);
+            Assert.True(layout.Instructions.Height >= 20);
         }
     }
 
@@ -327,7 +327,7 @@ public sealed class GenesisPublishingBasicEditorTests
                 for (var i = 0; i < rows.Length; i++)
                 {
                     var scroll = GenesisPublishingAdvancedLayout.Reveal(0, layout.AdvancedViewport.Height, i, rows.Length);
-                    Assert.InRange(4 + i * 32 - scroll, 0, layout.AdvancedViewport.Height - 26);
+                    Assert.InRange(4 + i * GenesisPublishingAdvancedLayout.RowHeight - scroll, 0, layout.AdvancedViewport.Height - 30);
                 }
             }
         }

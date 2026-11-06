@@ -47,7 +47,8 @@ internal static class GenesisGuiNextDesign
         bool start, bool interrupt, bool disabled, bool hot, bool pressed, bool focused)
     {
         var colors = TopButtonColors(start, disabled, hot, pressed, focused);
-        return (colors.Background, interrupt && !disabled && !hot && !pressed && !focused ? Warning : colors.Border, colors.Text);
+        return (start && !disabled && !hot && !pressed ? Selected : colors.Background,
+            start && !disabled ? Accent : interrupt && !disabled && !hot && !pressed && !focused ? Warning : colors.Border, colors.Text);
     }
     internal static int PublishingStatusColor(NovaObsPublishingTone tone) => tone switch
     {

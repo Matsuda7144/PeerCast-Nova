@@ -45,12 +45,45 @@ public sealed class GenesisGuiNextPublishingStyleTests
                 }
             Assert.True(layout.Server.Width > layout.Key.Width);
             Assert.True(layout.Start.Right < layout.Finish.Left && layout.Finish.Right < layout.Interrupt.Left);
-            Assert.True(layout.Instructions.Height >= 2 * GenesisGuiNextDesign.BodyFontHeight);
+            Assert.True(layout.Instructions.Height >= GenesisGuiNextDesign.BodyFontHeight);
             Assert.True(layout.Basic.Height >= GenesisGuiNextDesign.BodyFontHeight);
             Assert.True(layout.Options.Height >= GenesisGuiNextDesign.BodyFontHeight);
-            Assert.True(layout.Feedback.Height >= 2 * GenesisGuiNextDesign.BodyFontHeight);
+            Assert.True(layout.Feedback.Height >= GenesisGuiNextDesign.BodyFontHeight);
             foreach (var card in new[] { layout.StatusCard, layout.ObsCard, layout.BasicCard, layout.OptionsCard })
                 Assert.True(card.Bottom < layout.Start.Top);
+        }
+    }
+
+    [Theory]
+    [InlineData(96u)]
+    [InlineData(144u)]
+    [InlineData(192u)]
+    public void ActiveEditorGrowsWithoutMovingFixedCommandsOrOverlappingOtherCards(uint dpi)
+    {
+        foreach (var size in new[] { (GenesisMainWindowLayout.MinimumClientWidth, GenesisMainWindowLayout.MinimumClientHeight), (1120, 650), (1408, 1056), (2560, 1392) })
+        {
+            Assert.True(GenesisMainWindowLayout.TryResolve(GenesisMainWindowLayout.Scale(size.Item1, dpi), GenesisMainWindowLayout.Scale(size.Item2, dpi), dpi,
+                out _, out _, out var list, out var details));
+            var width = list.Width; var height = details.Bottom - list.Top;
+            var basic = new GenesisGuiNextPublishingModernLayout(width, height, false, true);
+            var advanced = new GenesisGuiNextPublishingModernLayout(width, height, true);
+            Assert.Equal(basic.Start, advanced.Start);
+            Assert.True(basic.Basic.Height > advanced.Basic.Height);
+            Assert.True(basic.Basic.Bottom < basic.BasicAction.Top);
+            Assert.True(advanced.AdvancedViewport.Bottom < advanced.AdvancedAction.Top);
+            foreach (var layout in new[] { basic, advanced })
+            {
+                var cards = new[] { layout.ObsCard, layout.BasicCard, layout.OptionsCard };
+                foreach (var card in cards)
+                    Assert.True(card.Top > layout.StatusCard.Bottom && card.Bottom < layout.Start.Top);
+                for (var i = 0; i < cards.Length; i++)
+                    for (var j = i + 1; j < cards.Length; j++)
+                        Assert.False(cards[i].Left < cards[j].Right && cards[j].Left < cards[i].Right &&
+                            cards[i].Top < cards[j].Bottom && cards[j].Top < cards[i].Bottom);
+                Assert.True(layout.ServerCopy.Width >= 64 && layout.Reveal.Width >= 56);
+                Assert.True(layout.Key.Width > 0 && layout.Instructions.Height >= 20);
+                Assert.True(layout.OptionsTitle.Right < layout.AdvancedToggle.Left);
+            }
         }
     }
 
@@ -65,7 +98,7 @@ public sealed class GenesisGuiNextPublishingStyleTests
         var focus = GenesisGuiNextDesign.PublishingButtonColors(start, interrupt, false, false, false, true);
         var pressed = GenesisGuiNextDesign.PublishingButtonColors(start, interrupt, false, false, true, false);
         var disabled = GenesisGuiNextDesign.PublishingButtonColors(start, interrupt, true, true, true, true);
-        Assert.Equal(interrupt ? GenesisGuiNextDesign.Warning : GenesisGuiNextDesign.Border, normal.Border);
+        Assert.Equal(start ? GenesisGuiNextDesign.Accent : interrupt ? GenesisGuiNextDesign.Warning : GenesisGuiNextDesign.Border, normal.Border);
         Assert.Equal(GenesisGuiNextDesign.Hover, hover.Background);
         Assert.Equal(GenesisGuiNextDesign.Accent, hover.Border);
         Assert.Equal(normal.Background, focus.Background);

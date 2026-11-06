@@ -208,11 +208,10 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         {
             void Place(nint h, GenesisGuiNextPublishingGuideRectangle r) => _ = PresentBounds(h, r.Left, r.Top, r.Width, r.Height, true);
             Place(_publishingAdvancedToggle, layout.AdvancedToggle);
-            if (!_publishingAdvancedExpanded) return;
             Place(_publishingOptions, layout.AdvancedViewport); Place(_publishingAdvancedPane, layout.AdvancedViewport);
             Place(_publishingAdvancedEdit, layout.AdvancedAction);
-            Place(_publishingAdvancedSave, layout.AdvancedAction with { Width = 64 });
-            Place(_publishingAdvancedCancel, layout.AdvancedAction with { Left = layout.AdvancedAction.Left + 72, Width = 140 });
+            Place(_publishingAdvancedSave, layout.AdvancedAction with { Width = 88 });
+            Place(_publishingAdvancedCancel, layout.AdvancedAction with { Left = layout.AdvancedAction.Left + 100, Width = 156 });
             PlacePublishingAdvancedInputs();
         }
 
@@ -237,14 +236,14 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 var width = LogicalWidth(area.Right);
                 for (var row = 0; row < rows.Length; row++)
                 {
-                    var index = rows[row]; var y = 4 + row * 32 - _publishingAdvancedScroll;
-                    _ = MoveWindow(_publishingAdvancedLabels[index], Scale(2), Scale(y), Scale(116), Scale(26), true);
+                    var index = rows[row]; var y = 4 + row * GenesisPublishingAdvancedLayout.RowHeight - _publishingAdvancedScroll;
+                    _ = MoveWindow(_publishingAdvancedLabels[index], Scale(2), Scale(y), Scale(116), Scale(30), true);
                     var combo = index is 0 or 1 or 6;
                     if (combo && SendMessageW(_publishingAdvancedFields[index], 0x0157, 0, 0) != 0) continue; // Moving an open ComboBox closes its native dropdown.
-                    _ = MoveWindow(_publishingAdvancedFields[index], Scale(120), Scale(y), Scale(Math.Max(32, width - 124)), Scale(combo ? 200 : 26), true);
-                    if (combo) _ = SendMessageW(_publishingAdvancedFields[index], 0x0153, nuint.MaxValue, Scale(20));
+                    _ = MoveWindow(_publishingAdvancedFields[index], Scale(120), Scale(y), Scale(Math.Max(32, width - 124)), Scale(combo ? 200 : 30), true);
+                    if (combo) _ = SendMessageW(_publishingAdvancedFields[index], 0x0153, nuint.MaxValue, Scale(24));
                 }
-                _ = MoveWindow(_publishingAdvancedHint, Scale(2), Scale(rows.Length * 32 + 8 - _publishingAdvancedScroll), Scale(Math.Max(32, width - 6)), Scale(100), true);
+                _ = MoveWindow(_publishingAdvancedHint, Scale(2), Scale(rows.Length * GenesisPublishingAdvancedLayout.RowHeight + 8 - _publishingAdvancedScroll), Scale(Math.Max(32, width - 6)), Scale(100), true);
                 _ = RedrawWindow(_publishingAdvancedPane, 0, 0, 0x0001 | 0x0004 | 0x0080);
             }
             finally { _publishingPlacingAdvanced = false; }
@@ -261,8 +260,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 _ = GetPublishingEditScroll(_publishingAdvancedPane, 1, ref info);
                 _publishingAdvancedScroll = (int)(value & 0xffff) switch
                 {
-                    0 => _publishingAdvancedScroll - 32,
-                    1 => _publishingAdvancedScroll + 32,
+                    0 => _publishingAdvancedScroll - GenesisPublishingAdvancedLayout.RowHeight,
+                    1 => _publishingAdvancedScroll + GenesisPublishingAdvancedLayout.RowHeight,
                     2 => _publishingAdvancedScroll - page,
                     3 => _publishingAdvancedScroll + page,
                     4 or 5 => info.Track,
@@ -296,7 +295,8 @@ internal static class GenesisPublishingAdvancedLayout
 {
     internal static int[] Rows(PublishingSettingsInput input) => input.WanEnabled ? (input.AnnounceEnabled ? [0, 1, 2, 3, 4, 5, 6, 7, 8] : [0, 1, 2, 3, 4, 5, 6]) :
         input.LanEnabled ? (input.AnnounceEnabled ? [0, 1, 2, 3, 6, 7, 8] : [0, 1, 2, 3, 6]) : (input.AnnounceEnabled ? [0, 6, 7, 8] : [0, 6]);
-    internal static int ContentHeight(int rows) => rows * 32 + 112;
+    internal const int RowHeight = 38;
+    internal static int ContentHeight(int rows) => rows * RowHeight + 112;
     internal static int Clamp(int scroll, int height, int rows) => Math.Clamp(scroll, 0, Math.Max(0, ContentHeight(rows) - height));
-    internal static int Reveal(int scroll, int height, int row, int rows) => Clamp(row * 32 + 4 < scroll ? row * 32 + 4 : Math.Max(scroll, row * 32 + 30 - height), height, rows);
+    internal static int Reveal(int scroll, int height, int row, int rows) => Clamp(row * RowHeight + 4 < scroll ? row * RowHeight + 4 : Math.Max(scroll, row * RowHeight + 34 - height), height, rows);
 }

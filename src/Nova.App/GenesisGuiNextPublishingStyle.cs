@@ -1,3 +1,5 @@
+using System.Runtime.InteropServices;
+
 namespace PeerCast.Nova.App;
 
 internal sealed partial class GenesisGuiNextAppShellBridge
@@ -14,7 +16,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
 
         private void PlacePublishingPanel(int width)
         {
-            var layout = new GenesisGuiNextPublishingModernLayout(width, GetClientRect(_detailsPane, out var pane) ? LogicalWidth(pane.Bottom) : 384, _publishingAdvancedExpanded);
+            var layout = new GenesisGuiNextPublishingModernLayout(width, GetClientRect(_detailsPane, out var pane) ? LogicalWidth(pane.Bottom) : 384, _publishingAdvancedExpanded, _publishingEditor?.Editing == true && !_publishingEditAdvanced);
             void Place(nint control, GenesisGuiNextPublishingGuideRectangle bounds) =>
                 _ = PresentBounds(control, bounds.Left, bounds.Top, bounds.Width, bounds.Height, true);
             Place(_detailsTitle, layout.Title);
@@ -49,25 +51,16 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         {
             if (!UsesPublishingPanel || pane != _detailsPane || !GetClientRect(pane, out var client)) return false;
             _ = FillRect(dc, ref client, _mainBrush);
-            var layout = new GenesisGuiNextPublishingModernLayout(LogicalWidth(client.Right), LogicalWidth(client.Bottom), _publishingAdvancedExpanded);
-            using var pen = new VisualPen(dc, Scale(1), GenesisGuiNextDesign.Border);
+            var layout = new GenesisGuiNextPublishingModernLayout(LogicalWidth(client.Right), LogicalWidth(client.Bottom), _publishingAdvancedExpanded, _publishingEditor?.Editing == true && !_publishingEditAdvanced);
             foreach (var card in new[] { layout.StatusCard, layout.ObsCard, layout.BasicCard, layout.OptionsCard })
             {
                 var box = new Rectangle { Left = Scale(card.Left), Top = Scale(card.Top), Right = Scale(card.Right), Bottom = Scale(card.Bottom) };
-                _ = FillRect(dc, ref box, _topBrush);
-                _ = GdiRectangle(dc, box.Left, box.Top, box.Right, box.Bottom);
+                DrawPublishingSurface(dc, box, GenesisGuiNextDesign.Panel, GenesisGuiNextDesign.Border, Scale(12));
             }
-            var accent = new Rectangle
-            {
-                Left = Scale(layout.StatusCard.Left),
-                Top = Scale(layout.StatusCard.Top),
-                Right = Scale(layout.StatusCard.Left + 3),
-                Bottom = Scale(layout.StatusCard.Bottom)
-            };
-            FillRectangle(dc, accent, GenesisGuiNextDesign.PublishingStatusColor(_tabs.PublishingConnection.Tone));
             foreach (var area in new[] { (layout.Instructions, _publishingInstructions), (layout.Basic, _publishingBasic),
-                (layout.Options, _publishingOptions), (layout.Feedback, _publishingDiagnostic) })
+                (layout.AdvancedViewport, _publishingOptions), (layout.Feedback, _publishingDiagnostic) })
             {
+                if (!PublishingIsWindowVisible(area.Item2)) continue;
                 using var focus = new VisualPen(dc, Scale(1), GetFocus() == area.Item2 ? GenesisGuiNextDesign.Accent : GenesisGuiNextDesign.Border);
                 _ = GdiRectangle(dc, Scale(area.Item1.Left) - 1, Scale(area.Item1.Top) - 1, Scale(area.Item1.Right) + 1, Scale(area.Item1.Bottom) + 1);
             }
@@ -91,6 +84,11 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                     _ = GdiRectangle(dc, box.Left, box.Top, box.Right, box.Bottom);
                     box.Left += Scale(6); box.Right -= Scale(6);
                 }
+                if (control == _detailsTitle)
+                {
+                    DrawNavigationIcon(dc, 6, new Rectangle { Left = 0, Top = 0, Right = Scale(24), Bottom = Scale(24) }, false);
+                    box.Left += Scale(34);
+                }
                 var title = control == _detailsTitle || PublishingPageTitles.Contains(control) && control != _publishingSubtitle;
                 var feedback = control == _detailsIdentity;
                 // Read the existing STATIC text only. Key disclosure/masking is still owned by the VM.
@@ -110,10 +108,11 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 var colors = GenesisGuiNextDesign.PublishingButtonColors(draw.ControlId == PublishingStartControlId,
                     draw.ControlId == PublishingInterruptControlId, (draw.ItemState & DrawItemDisabled) != 0,
                     _hoverControl == draw.ControlWindow, (draw.ItemState & 1) != 0, (draw.ItemState & DrawItemFocused) != 0);
-                FillRectangle(draw.DeviceContext, draw.ItemRectangle, colors.Background);
-                using var pen = new VisualPen(draw.DeviceContext, Scale(1), colors.Border);
+                var lifecycle = draw.ControlWindow == _publishingStartButton || draw.ControlWindow == _publishingFinishButton ||
+                    draw.ControlWindow == _publishingInterruptButton || draw.ControlWindow == _publishingSettingsButton;
+                FillRectangle(draw.DeviceContext, draw.ItemRectangle, lifecycle ? GenesisGuiNextDesign.Background : GenesisGuiNextDesign.Panel);
+                DrawPublishingSurface(draw.DeviceContext, draw.ItemRectangle, colors.Background, colors.Border, Scale(8));
                 var box = draw.ItemRectangle;
-                _ = GdiRectangle(draw.DeviceContext, box.Left, box.Top, box.Right, box.Bottom);
                 box.Left += Scale(5); box.Right -= Scale(5);
                 DrawCardLabel(draw.DeviceContext, box, ReadCardControlText(draw.ControlWindow), colors.Text,
                     _visualFont?.Handle ?? 0, draw.ControlWindow, GenesisGuiNextPublishingModernLayout.SingleLineFlags | 1);
@@ -127,10 +126,31 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             if (!IsOwnerDrawStatic(draw.ControlType) || draw.ControlId != PublishingConnectionStateControlId) return false;
             _ = FillRect(draw.DeviceContext, ref draw.ItemRectangle, _topBrush);
             var presentation = _tabs.PublishingConnection;
-            DrawCardLabel(draw.DeviceContext, draw.ItemRectangle, presentation.StateText,
+            var stateBox = draw.ItemRectangle;
+            var middle = (stateBox.Top + stateBox.Bottom) / 2;
+            using (var marker = new VisualPen(draw.DeviceContext, Scale(2), GenesisGuiNextDesign.PublishingStatusColor(presentation.Tone)))
+                _ = Ellipse(draw.DeviceContext, stateBox.Left + Scale(2), middle - Scale(7), stateBox.Left + Scale(16), middle + Scale(7));
+            stateBox.Left += Scale(28);
+            DrawCardLabel(draw.DeviceContext, stateBox, presentation.StateText,
                 GenesisGuiNextDesign.PublishingStatusColor(presentation.Tone), _cardTitleFont?.Handle ?? 0,
                 draw.ControlWindow, GenesisGuiNextPublishingModernLayout.SingleLineFlags);
             return true;
         }
+        private void DrawPublishingSurface(nint dc, Rectangle box, int background, int border, int radius)
+        {
+            using var pen = new VisualPen(dc, Scale(1), border);
+            var brush = CreateSolidBrush((uint)background);
+            if (brush == 0) return;
+            var previous = SelectObject(dc, brush);
+            try { _ = PublishingRoundRect(dc, box.Left, box.Top, box.Right, box.Bottom, radius, radius); }
+            finally { _ = SelectObject(dc, previous); _ = DeleteObject(brush); }
+        }
     }
+
+    [DllImport("user32.dll", EntryPoint = "IsWindowVisible")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool PublishingIsWindowVisible(nint window);
+
+    [DllImport("gdi32.dll", EntryPoint = "RoundRect")]
+    private static extern bool PublishingRoundRect(nint dc, int left, int top, int right, int bottom, int ellipseWidth, int ellipseHeight);
 }

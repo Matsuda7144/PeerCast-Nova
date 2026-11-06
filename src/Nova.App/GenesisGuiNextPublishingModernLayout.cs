@@ -1,53 +1,56 @@
 namespace PeerCast.Nova.App;
 
-// Modern uses the retained publishing controls across the content area. Classic keeps its 224px guide.
-internal readonly record struct GenesisGuiNextPublishingModernLayout(int Width, int Height, bool AdvancedExpanded = false)
+// Modern retains the same controls and commands. Only the active editor receives the larger card.
+internal readonly record struct GenesisGuiNextPublishingModernLayout(int Width, int Height, bool AdvancedExpanded = false, bool BasicEditing = false)
 {
     internal static bool Applies(bool modern, GenesisGuiNextTab tab) => modern && tab == GenesisGuiNextTab.Publishing;
-    private int ContentWidth => Math.Min(Width, 1320);
-    private int ContentHeight => Math.Min(Height, 720);
+    private int ContentWidth => Math.Min(Width, 1440);
+    private int ContentHeight => Math.Min(Height, 960);
     private int Offset => (Width - ContentWidth) / 2;
-    private int LeftWidth => (ContentWidth - 44) * 56 / 100;
+    private int LeftWidth => (ContentWidth - 44) / 2;
     private int RightLeft => 28 + LeftWidth;
     private int RightWidth => ContentWidth - RightLeft - 16;
-    private bool Compact => ContentHeight < 480;
-    private int BodyTop => Compact ? 136 : 172;
-    private int BodyHeight => ContentHeight - BodyTop - (Compact ? 48 : 56);
-    private int SmallHeight => Math.Max(Compact ? 114 : 120, (BodyHeight - 12) / 2);
-    private int ExpandedObsHeight => Math.Max(98, (BodyHeight - 12) / 2);
+    private bool Compact => ContentHeight < 600;
+    private int BodyTop => Compact ? 102 : 154;
+    private int BodyHeight => ContentHeight - BodyTop - (Compact ? 48 : 68);
+    private int ObsHeight => Math.Clamp(BodyHeight / 3, 118, 188);
+    private int HeaderSpace => Compact ? 36 : 48;
+    private int FooterSpace => Compact ? 44 : 60;
+    internal int ActionHeight => Compact ? 30 : 36;
     private GenesisGuiNextPublishingGuideRectangle Box(int x, int y, int width, int height) => new(Offset + x, y, width, height);
-    internal GenesisGuiNextPublishingGuideRectangle Title => Box(16, 12, ContentWidth - 32, Compact ? 24 : 28);
-    internal GenesisGuiNextPublishingGuideRectangle Subtitle => Box(16, Compact ? 40 : 44, ContentWidth - 32, Compact ? 16 : 20);
-    internal GenesisGuiNextPublishingGuideRectangle StatusCard => Box(16, Compact ? 60 : 76, ContentWidth - 32, Compact ? 64 : 84);
-    internal GenesisGuiNextPublishingGuideRectangle State => Box(28, Compact ? 66 : 86, ContentWidth - 56, Compact ? 20 : 26);
-    internal GenesisGuiNextPublishingGuideRectangle Feedback => Box(28, Compact ? 88 : 118, ContentWidth - 56, 32);
-    internal GenesisGuiNextPublishingGuideRectangle ObsCard => Box(16, BodyTop, LeftWidth, AdvancedExpanded ? ExpandedObsHeight : BodyHeight);
-    internal GenesisGuiNextPublishingGuideRectangle ObsTitle => Box(28, BodyTop + (AdvancedExpanded ? 6 : 10), LeftWidth - 24, AdvancedExpanded ? 18 : 22);
-    internal GenesisGuiNextPublishingGuideRectangle ServerLabel => Box(28, BodyTop + (AdvancedExpanded ? 28 : 38), 88, AdvancedExpanded ? 20 : 24);
-    internal GenesisGuiNextPublishingGuideRectangle Server => Box(120, BodyTop + (AdvancedExpanded ? 28 : 38), LeftWidth - 184, AdvancedExpanded ? 20 : 24);
-    internal GenesisGuiNextPublishingGuideRectangle ServerCopy => Box(LeftWidth - 60, BodyTop + (AdvancedExpanded ? 28 : 38), 64, AdvancedExpanded ? 20 : 24);
-    internal GenesisGuiNextPublishingGuideRectangle KeyLabel => Box(28, BodyTop + (AdvancedExpanded ? 50 : 68), 88, AdvancedExpanded ? 20 : 24);
-    internal GenesisGuiNextPublishingGuideRectangle Key => Box(120, BodyTop + (AdvancedExpanded ? 50 : 68), LeftWidth - 248, AdvancedExpanded ? 20 : 24);
-    internal GenesisGuiNextPublishingGuideRectangle Reveal => Box(LeftWidth - 124, BodyTop + (AdvancedExpanded ? 50 : 68), 56, AdvancedExpanded ? 20 : 24);
-    internal GenesisGuiNextPublishingGuideRectangle KeyCopy => Box(LeftWidth - 60, BodyTop + (AdvancedExpanded ? 50 : 68), 64, AdvancedExpanded ? 20 : 24);
-    internal GenesisGuiNextPublishingGuideRectangle Instructions => Box(28, BodyTop + (AdvancedExpanded ? 72 : 102), LeftWidth - 24, AdvancedExpanded ? ExpandedObsHeight - 78 : BodyHeight - 114);
-    internal GenesisGuiNextPublishingGuideRectangle BasicCard => AdvancedExpanded
-        ? Box(16, BodyTop + ExpandedObsHeight + 12, LeftWidth, BodyHeight - ExpandedObsHeight - 12)
-        : Box(RightLeft, BodyTop, RightWidth, SmallHeight);
-    internal GenesisGuiNextPublishingGuideRectangle BasicTitle => new(BasicCard.Left + 12, BasicCard.Top + (AdvancedExpanded ? 6 : 10), BasicCard.Width - 24, AdvancedExpanded ? 20 : 22);
-    internal GenesisGuiNextPublishingGuideRectangle Basic => new(BasicCard.Left + 12, BasicCard.Top + (AdvancedExpanded ? 30 : 38), BasicCard.Width - 24, BasicCard.Height - (AdvancedExpanded ? 66 : 50));
-    internal GenesisGuiNextPublishingGuideRectangle OptionsCard => AdvancedExpanded
-        ? Box(RightLeft, BodyTop, RightWidth, BodyHeight)
-        : Box(RightLeft, BodyTop + 12 + SmallHeight, RightWidth, BodyHeight - SmallHeight - 12);
-    internal GenesisGuiNextPublishingGuideRectangle OptionsTitle => new(OptionsCard.Left + 12, OptionsCard.Top + 10, OptionsCard.Width - 118, 22);
-    internal GenesisGuiNextPublishingGuideRectangle Options => new(OptionsCard.Left + 12, OptionsCard.Top + 38, OptionsCard.Width - 24, OptionsCard.Height - 50);
-    internal GenesisGuiNextPublishingGuideRectangle AdvancedToggle => new(OptionsCard.Right - 94, OptionsCard.Top + 8, 82, 26);
-    internal GenesisGuiNextPublishingGuideRectangle AdvancedViewport => new(Options.Left, Options.Top, Options.Width, Math.Max(28, Options.Height - 36));
-    internal GenesisGuiNextPublishingGuideRectangle AdvancedAction => new(Options.Left, Options.Bottom - 28, 140, 26);
-    internal GenesisGuiNextPublishingGuideRectangle Start => Box(ContentWidth - 440, ContentHeight - 44, 104, 32);
-    internal GenesisGuiNextPublishingGuideRectangle Finish => Box(ContentWidth - 328, ContentHeight - 44, 96, 32);
-    internal GenesisGuiNextPublishingGuideRectangle Interrupt => Box(ContentWidth - 224, ContentHeight - 44, 96, 32);
-    internal GenesisGuiNextPublishingGuideRectangle Settings => Box(ContentWidth - 120, ContentHeight - 44, 104, 32);
+    internal GenesisGuiNextPublishingGuideRectangle Title => Box(16, Compact ? 6 : 12, ContentWidth - 32, Compact ? 20 : 28);
+    internal GenesisGuiNextPublishingGuideRectangle Subtitle => Box(16, Compact ? 30 : 44, ContentWidth - 32, Compact ? 14 : 20);
+    internal GenesisGuiNextPublishingGuideRectangle StatusCard => Box(16, Compact ? 46 : 76, ContentWidth - 32, Compact ? 48 : 64);
+    internal GenesisGuiNextPublishingGuideRectangle State => Box(32, Compact ? 50 : 80, ContentWidth - 64, Compact ? 20 : 26);
+    internal GenesisGuiNextPublishingGuideRectangle Feedback => Box(32, Compact ? 72 : 108, ContentWidth - 64, Compact ? 20 : 28);
+    internal GenesisGuiNextPublishingGuideRectangle ObsCard => Box(BasicEditing ? RightLeft : 16, BodyTop, BasicEditing ? RightWidth : LeftWidth, ObsHeight);
+    internal GenesisGuiNextPublishingGuideRectangle ObsTitle => new(ObsCard.Left + 16, ObsCard.Top + 6, ObsCard.Width - 32, 20);
+    internal GenesisGuiNextPublishingGuideRectangle ServerLabel => new(ObsCard.Left + 16, ObsCard.Top + 30, 88, 26);
+    internal GenesisGuiNextPublishingGuideRectangle Server => new(ObsCard.Left + 108, ObsCard.Top + 30, ObsCard.Width - 208, 26);
+    internal GenesisGuiNextPublishingGuideRectangle ServerCopy => new(ObsCard.Right - 92, ObsCard.Top + 30, 76, 26);
+    internal GenesisGuiNextPublishingGuideRectangle KeyLabel => new(ObsCard.Left + 16, ObsCard.Top + 60, 88, 26);
+    internal GenesisGuiNextPublishingGuideRectangle Key => new(ObsCard.Left + 108, ObsCard.Top + 60, ObsCard.Width - 284, 26);
+    internal GenesisGuiNextPublishingGuideRectangle Reveal => new(ObsCard.Right - 164, ObsCard.Top + 60, 64, 26);
+    internal GenesisGuiNextPublishingGuideRectangle KeyCopy => new(ObsCard.Right - 92, ObsCard.Top + 60, 76, 26);
+    internal GenesisGuiNextPublishingGuideRectangle Instructions => new(ObsCard.Left + 16, ObsCard.Top + 90, ObsCard.Width - 32, Math.Max(8, ObsHeight - 98));
+    internal GenesisGuiNextPublishingGuideRectangle BasicCard => BasicEditing
+        ? Box(16, BodyTop, LeftWidth, BodyHeight)
+        : Box(16, BodyTop + ObsHeight + 12, LeftWidth, BodyHeight - ObsHeight - 12);
+    internal GenesisGuiNextPublishingGuideRectangle BasicTitle => new(BasicCard.Left + 16, BasicCard.Top + (Compact ? 8 : 14), BasicCard.Width - 32, Compact ? 20 : 26);
+    internal GenesisGuiNextPublishingGuideRectangle Basic => new(BasicCard.Left + 16, BasicCard.Top + HeaderSpace, BasicCard.Width - 32, Math.Max(20, BasicCard.Height - HeaderSpace - FooterSpace));
+    internal GenesisGuiNextPublishingGuideRectangle BasicAction => new(Basic.Left, BasicCard.Bottom - FooterSpace + 6, 112, ActionHeight);
+    internal GenesisGuiNextPublishingGuideRectangle OptionsCard => BasicEditing
+        ? Box(RightLeft, BodyTop + ObsHeight + 12, RightWidth, BodyHeight - ObsHeight - 12)
+        : Box(RightLeft, BodyTop, RightWidth, BodyHeight);
+    internal GenesisGuiNextPublishingGuideRectangle OptionsTitle => new(OptionsCard.Left + 16, OptionsCard.Top + (Compact ? 8 : 14), OptionsCard.Width - 132, Compact ? 20 : 26);
+    internal GenesisGuiNextPublishingGuideRectangle Options => new(OptionsCard.Left + 16, OptionsCard.Top + HeaderSpace, OptionsCard.Width - 32, Math.Max(20, OptionsCard.Height - HeaderSpace - 12));
+    internal GenesisGuiNextPublishingGuideRectangle AdvancedToggle => new(OptionsCard.Right - 108, OptionsCard.Top + (Compact ? 6 : 10), 92, Compact ? 26 : 32);
+    internal GenesisGuiNextPublishingGuideRectangle AdvancedViewport => new(Options.Left, Options.Top, Options.Width, Math.Max(20, OptionsCard.Height - HeaderSpace - FooterSpace));
+    internal GenesisGuiNextPublishingGuideRectangle AdvancedAction => new(Options.Left, OptionsCard.Bottom - FooterSpace + 6, 152, ActionHeight);
+    internal GenesisGuiNextPublishingGuideRectangle Start => Box(ContentWidth - 516, ContentHeight - (Compact ? 40 : 52), 144, Compact ? 32 : 40);
+    internal GenesisGuiNextPublishingGuideRectangle Finish => Box(ContentWidth - 364, Start.Top, 108, Start.Height);
+    internal GenesisGuiNextPublishingGuideRectangle Interrupt => Box(ContentWidth - 248, Start.Top, 108, Start.Height);
+    internal GenesisGuiNextPublishingGuideRectangle Settings => Box(ContentWidth - 132, Start.Top, 116, Start.Height);
     internal const uint SingleLineFlags = 0x0020 | 0x0004 | 0x8000;
     internal const uint FeedbackFlags = 0x0010 | 0x8000;
 }
