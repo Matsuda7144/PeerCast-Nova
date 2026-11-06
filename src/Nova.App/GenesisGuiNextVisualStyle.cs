@@ -13,6 +13,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             _ = RemoveWindowSubclass(window, VisualProcedure, id);
         else if (StatesByOwner.TryGetValue((nint)owner, out var state))
         {
+            if (window == (nint)owner && message is (0x001A or 0x031A)) state.RefreshWindowChrome();
             if (window == (nint)owner && message == 0x0010 && !state.CanLeavePublishingEditor()) return 0;
             if (state.PublishingInlineControlMessage(window, message, wParam)) return 0;
             if (state.IsPublishingInlineInput(window))
@@ -82,6 +83,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private nint _rowImages, _originalImages;
         private uint _visualDpi;
         private int _visualsDetached;
+        private GenesisGuiNextWindowChrome? _windowChrome;
+        internal void RefreshWindowChrome() => _windowChrome?.Refresh();
         private GenesisUiFontLease? _visualFont;
         private readonly Dictionary<nint, nint> _originalFonts = new();
         private nint[] VisualButtons => [.. _navigationButtons, _refreshButton, _favoriteButton];
@@ -99,11 +102,13 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 _ = SetWindowSubclass(control, VisualProcedure, VisualSubclassId, (nuint)_owner);
             var header = SendMessageW(_listView, 0x101F, 0, 0);
             _ = SetWindowTheme(header, " ", " ");
+            _windowChrome = GenesisGuiNextWindowChrome.TryCreate(_owner, IsModern);
         }
 
         internal void DetachVisuals()
         {
             if (!IsModern || Interlocked.Exchange(ref _visualsDetached, 1) != 0) return;
+            _windowChrome?.Dispose(); _windowChrome = null;
             foreach (var control in VisualSubclassControls)
                 if (IsWindow(control)) _ = RemoveWindowSubclass(control, VisualProcedure, VisualSubclassId);
             foreach (var (control, font) in _originalFonts)
