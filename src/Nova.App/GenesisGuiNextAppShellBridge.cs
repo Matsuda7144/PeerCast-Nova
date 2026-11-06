@@ -1710,6 +1710,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 _ = StatesByOwner.TryRemove(_owner, out _);
                 _publishingEditor?.Dispose();
                 if (IsWindow(_publishingEditPane)) _ = RemoveWindowSubclass(_publishingEditPane, PublishingEditorProcedure, PublishingEditorSubclassId);
+                if (IsWindow(_publishingAdvancedPane)) _ = RemoveWindowSubclass(_publishingAdvancedPane, PublishingEditorProcedure, PublishingEditorSubclassId);
                 DetachVisuals();
                 _generalSettings?.Release();
                 _pathSettings?.Release();
@@ -1757,6 +1758,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             _searchBox.ProcessCommand(wParam, lParam);
             var commandId = (int)(wParam & 0xffff);
             var notificationCode = (int)((wParam >> 16) & 0xffff);
+            if (Volatile.Read(ref _detached) == 0 && ProcessPublishingAdvancedInput(commandId, notificationCode, lParam)) return;
             if (Volatile.Read(ref _detached) == 0 && ProcessPublishingInlineInput(commandId, notificationCode, lParam)) return;
             if (Volatile.Read(ref _detached) == 0 && ProcessSettingsPathInput(commandId, notificationCode, lParam)) return;
             if (Volatile.Read(ref _detached) == 0 && ProcessNetworkSettingsInput(commandId, notificationCode, lParam)) return;
@@ -2467,7 +2469,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
         public nint PrepareDarkControl(nuint deviceContext, nint pane)
         {
             _ = SetBkMode((nint)deviceContext, 2);
-            if (IsSettingsPane(pane) || pane == _publishingEditPane && IsModern)
+            if (IsSettingsPane(pane) || (pane == _publishingEditPane || pane == _publishingAdvancedPane) && IsModern)
             {
                 _ = SetBkColor((nint)deviceContext, GenesisGuiNextDesign.Input);
                 _ = SetTextColor((nint)deviceContext, GenesisGuiNextDesign.Text);

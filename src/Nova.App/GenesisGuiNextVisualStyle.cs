@@ -21,7 +21,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 if (message is WindowMessagePaint or 0x0085)
                 {
                     var painted = DefSubclassProc(window, message, wParam, lParam);
-                    state.PaintPublishingInlineInput(window);
+                    if (state.IsPublishingAdvancedCombo(window)) state.PaintTopInputFrame(window);
+                    else state.PaintPublishingInlineInput(window);
                     return painted;
                 }
             }

@@ -72,6 +72,25 @@ public sealed class GenesisGuiNextPublishingPageSummaryTests
     }
 
     [Fact]
+    public void SavedWanAndYpRemainUnverifiedAndSeparateFromPreviouslyAppliedLoopback()
+    {
+        var saved = PublishingSettingsSnapshot.Default with
+        {
+            Values = PublishingChannelPreferences.Default with
+            {
+                Wan = new(true, "saved-nic", "192.168.1.20", 7144, "8.8.8.8", 7145),
+                Announce = new(true, "saved YP", "pcp://tracker.invalid:7144"),
+            },
+        };
+        var page = GenesisGuiNextPublishingPageSummary.Create(saved, PublishingSettingsSnapshot.Default, false, Status(), "", "");
+        Assert.Contains("saved-nic / 192.168.1.20:7144", page.Options);
+        Assert.Contains("8.8.8.8:7145（到達性未確認）", page.Options);
+        Assert.Contains("ON設定（掲載未確認） / saved YP / pcp://tracker.invalid:7144", page.Options);
+        Assert.Contains("保存値と異なります / 適用モード: このPCのみ", page.Options);
+        Assert.Contains("保存だけでは通信しません", page.Options);
+    }
+
+    [Fact]
     public void LargeLayoutCapsInformationWidthAndHeightRatherThanStretchingCards()
     {
         var medium = new GenesisGuiNextPublishingModernLayout(1320, 720);

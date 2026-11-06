@@ -9,12 +9,12 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private nint[] PublishingButtons => [_publishingStartButton, _publishingFinishButton, _publishingInterruptButton,
             _publishingSettingsButton, _publishingServerCopy, _publishingKeyReveal, _publishingKeyCopy, .. PublishingEditorButtons];
         private nint[] PublishingGuideTexts => [_publishingServerLabel, _publishingServerValue, _publishingKeyLabel, _publishingKeyValue];
-        private nint[] PublishingTexts => [_detailsTitle, _detailsIdentity, .. PublishingGuideTexts, .. PublishingPageTitles, .. _publishingInputLabels, _publishingEditNote];
-        private nint[] PublishingVisualControls => [.. PublishingButtons, .. PublishingGuideTexts, _publishingInstructions, .. PublishingPageControls];
+        private nint[] PublishingTexts => [_detailsTitle, _detailsIdentity, .. PublishingGuideTexts, .. PublishingPageTitles, .. _publishingInputLabels, _publishingEditNote, .. _publishingAdvancedLabels, _publishingAdvancedHint];
+        private nint[] PublishingVisualControls => ((nint[])[.. PublishingButtons, .. PublishingGuideTexts, _publishingInstructions, .. PublishingPageControls]).Distinct().ToArray();
 
         private void PlacePublishingPanel(int width)
         {
-            var layout = new GenesisGuiNextPublishingModernLayout(width, GetClientRect(_detailsPane, out var pane) ? LogicalWidth(pane.Bottom) : 384);
+            var layout = new GenesisGuiNextPublishingModernLayout(width, GetClientRect(_detailsPane, out var pane) ? LogicalWidth(pane.Bottom) : 384, _publishingAdvancedExpanded);
             void Place(nint control, GenesisGuiNextPublishingGuideRectangle bounds) =>
                 _ = PresentBounds(control, bounds.Left, bounds.Top, bounds.Width, bounds.Height, true);
             Place(_detailsTitle, layout.Title);
@@ -49,7 +49,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         {
             if (!UsesPublishingPanel || pane != _detailsPane || !GetClientRect(pane, out var client)) return false;
             _ = FillRect(dc, ref client, _mainBrush);
-            var layout = new GenesisGuiNextPublishingModernLayout(LogicalWidth(client.Right), LogicalWidth(client.Bottom));
+            var layout = new GenesisGuiNextPublishingModernLayout(LogicalWidth(client.Right), LogicalWidth(client.Bottom), _publishingAdvancedExpanded);
             using var pen = new VisualPen(dc, Scale(1), GenesisGuiNextDesign.Border);
             foreach (var card in new[] { layout.StatusCard, layout.ObsCard, layout.BasicCard, layout.OptionsCard })
             {
@@ -96,7 +96,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 // Read the existing STATIC text only. Key disclosure/masking is still owned by the VM.
                 DrawCardLabel(dc, box, ReadCardControlText(control), title || value ? GenesisGuiNextDesign.Text : GenesisGuiNextDesign.SecondaryText,
                     title ? _cardTitleFont?.Handle ?? 0 : _visualFont?.Handle ?? 0, control,
-                    feedback || control == _publishingEditNote ? GenesisGuiNextPublishingModernLayout.FeedbackFlags : GenesisGuiNextPublishingModernLayout.SingleLineFlags);
+                    feedback || control == _publishingEditNote || control == _publishingAdvancedHint ? GenesisGuiNextPublishingModernLayout.FeedbackFlags : GenesisGuiNextPublishingModernLayout.SingleLineFlags);
                 return true;
             }
             finally { _ = EndCardPaint(control, ref paint); }

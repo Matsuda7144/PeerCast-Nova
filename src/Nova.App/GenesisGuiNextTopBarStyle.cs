@@ -61,7 +61,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
 
         internal void PaintTopInputFrame(nint window)
         {
-            if (!IsTopInput(window) || !GetWindowRect(window, out var windowBounds)) return;
+            if (!(IsTopInput(window) || IsPublishingAdvancedCombo(window)) || !GetWindowRect(window, out var windowBounds)) return;
             var dc = GetWindowDC(window);
             if (dc == 0) return;
             try
@@ -72,7 +72,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 var color = !IsTopControlEnabled(window) ? GenesisGuiNextDesign.Separator :
                     focused || _hoverControl == window ? GenesisGuiNextDesign.Accent : GenesisGuiNextDesign.Border;
                 using var pen = new VisualPen(dc, Scale(1), color);
-                if (IsTopFilter(window))
+                if (IsTopFilter(window) || IsPublishingAdvancedCombo(window))
                 {
                     // Cover only the native recessed edge, keeping the native
                     // field, popup, selection and keyboard behavior intact.

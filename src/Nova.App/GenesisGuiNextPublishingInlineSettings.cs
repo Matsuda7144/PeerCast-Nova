@@ -13,9 +13,10 @@ internal sealed partial class GenesisGuiNextAppShellBridge
     {
         if (message == WindowMessageNcDestroy) _ = RemoveWindowSubclass(window, PublishingEditorProcedure, id);
         if (!StatesByOwner.TryGetValue((nint)owner, out var state)) return DefSubclassProc(window, message, wParam, lParam);
+        if (message == 0x0005 && state.IsPublishingAdvancedPane(window)) state.PlacePublishingAdvancedInputs();
         if (message == WindowMessageCommand) { state.ProcessCommand(wParam, lParam); return 0; }
-        if (message is 0x0115 or 0x020A) { state.ScrollPublishingEditor(message, wParam); return 0; }
-        if (message is 0x0133 or 0x0138) return state.PrepareDarkControl(wParam, window);
+        if (message is 0x0115 or 0x020A) { if (state.IsPublishingAdvancedPane(window)) state.ScrollPublishingAdvanced(message, wParam); else state.ScrollPublishingEditor(message, wParam); return 0; }
+        if (message is 0x0133 or 0x0134 or 0x0138) return state.PrepareDarkControl(wParam, window);
         if (message == 0x0014 && GetClientRect(window, out var area))
         { _ = FillRect((nint)wParam, ref area, state.PublishingEditBrush); return 1; }
         return DefSubclassProc(window, message, wParam, lParam);
@@ -33,8 +34,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private nint[] _publishingInputs = [], _publishingInputLabels = [];
         private bool _publishingWritingInputs;
         private int _publishingEditScroll;
-        private nint[] PublishingEditorButtons => IsModern ? [_publishingEdit, _publishingSave, _publishingCancel] : [];
-        private nint[] PublishingEditorControls => IsModern ? [_publishingEditPane, _publishingEditNote, .. _publishingInputLabels, .. _publishingInputs, .. PublishingEditorButtons] : [];
+        private nint[] PublishingEditorButtons => IsModern ? [_publishingEdit, _publishingSave, _publishingCancel, .. PublishingAdvancedButtons] : [];
+        private nint[] PublishingEditorControls => IsModern ? [_publishingEditPane, _publishingEditNote, .. _publishingInputLabels, .. _publishingInputs, .. PublishingEditorButtons, .. PublishingAdvancedControls] : [];
 
         private void CreatePublishingInlineSettings(nint instance)
         {
@@ -55,6 +56,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             _publishingEdit = CreateRecordingModeButton("編集", _detailsPane, PublishingEditId, 0, instance);
             _publishingSave = CreateRecordingModeButton("保存", _detailsPane, PublishingSaveId, 0, instance);
             _publishingCancel = CreateRecordingModeButton("キャンセル", _detailsPane, PublishingCancelId, 0, instance);
+            CreatePublishingAdvanced(instance);
         }
 
         private bool ProcessPublishingInlineInput(int id, int code, nint control)
@@ -81,15 +83,10 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             if (!IsModern || _publishingEditor is not { } editor) return false;
             if (id == PublishingEditId && control == _publishingEdit)
             {
-                if (editor.Begin() && editor.Input is { } input)
+                if (editor.Editing || editor.Begin())
                 {
-                    _publishingWritingInputs = true;
-                    try
-                    {
-                        var values = new[] { input.ChannelName, input.Genre, input.Description, input.Comment, input.ContactUrl, input.BitrateKbps };
-                        for (var i = 0; i < 6; i++) _ = SetWindowTextW(_publishingInputs[i], values[i]);
-                    }
-                    finally { _publishingWritingInputs = false; }
+                    _publishingEditAdvanced = _publishingAdvancedExpanded = false;
+                    InitializePublishingBasicInputs();
                     _publishingEditScroll = 0;
                     SynchronizeNativeSelection();
                     _ = SetFocus(_publishingInputs[0]);
@@ -116,10 +113,25 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             await save.ConfigureAwait(false);
             PostPublishingUi(() =>
             {
+                if (editor.Editing)
+                {
+                    var basic = Array.IndexOf(BasicFieldNames, editor.Result.Field);
+                    if (basic >= 0)
+                    {
+                        if (_publishingEditAdvanced) InitializePublishingBasicInputs();
+                        _publishingEditAdvanced = _publishingAdvancedExpanded = false;
+                    }
+                    else if (editor.Result.Field is not null || _publishingEditAdvanced || editor.Input is { AnnounceEnabled: true } || editor.Input?.AnnounceEndpoint.Length > 0)
+                    {
+                        if (!_publishingEditAdvanced) InitializePublishingAdvanced();
+                        _publishingEditAdvanced = _publishingAdvancedExpanded = true;
+                    }
+                }
                 SynchronizeNativeSelection();
                 if (!UsesPublishingPanel) return;
                 var index = Array.IndexOf(BasicFieldNames, editor.Result.Field);
-                _ = SetFocus(editor.Editing && index >= 0 ? _publishingInputs[index] : editor.Editing ? _publishingSave : _publishingEdit);
+                _ = SetFocus(editor.Editing && _publishingEditAdvanced ? _publishingAdvancedFields[AdvancedErrorIndex(editor.Result.Field)] :
+                    editor.Editing && index >= 0 ? _publishingInputs[index] : editor.Editing ? _publishingSave : _publishingAdvancedExpanded ? _publishingAdvancedEdit : _publishingEdit);
             });
         }
 
@@ -133,13 +145,13 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 return false;
             }
             if (editor.Dirty && MessageBoxW(_owner,
-                "未保存の基本設定を破棄しますか？\r\n「いいえ」で編集を続け、保存またはキャンセルしてください。", "配信設定", 0x24) != 6) return false;
+                "未保存の配信設定（基本・詳細）をすべて破棄しますか？\r\n「いいえ」で編集を続け、保存またはキャンセルしてください。", "配信設定", 0x24) != 6) return false;
             return editor.Cancel();
         }
 
         private void SynchronizePublishingInline(bool visible)
         {
-            var editing = _publishingEditor?.Editing == true;
+            var editing = _publishingEditor?.Editing == true && !_publishingEditAdvanced;
             _ = PresentVisible(_publishingBasic, visible && !editing ? ShowWindowShowNoActivate : ShowWindowHide);
             foreach (var h in new[] { _publishingEditPane, _publishingEditNote }.Concat(_publishingInputLabels).Concat(_publishingInputs))
                 _ = PresentVisible(h, visible && editing ? ShowWindowShowNoActivate : ShowWindowHide);
@@ -149,11 +161,20 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             foreach (var h in _publishingInputs.Concat(PublishingEditorButtons))
                 _ = PresentEnabled(h, _publishingEditor is { Saving: false });
             _ = PresentText(_publishingBasicTitle, editing ? "基本設定（編集中）" : "基本設定（保存済み）");
+            _ = PresentText(_publishingEdit, _publishingEditor?.Editing == true && _publishingEditAdvanced ? "基本設定へ" : "編集");
+            SynchronizePublishingAdvanced(visible);
         }
 
         private void PlacePublishingInline(GenesisGuiNextPublishingModernLayout layout)
         {
             var box = layout.Basic;
+            if (_publishingAdvancedExpanded)
+            {
+                _ = PresentBounds(_publishingBasic, box.Left, box.Top, box.Width, box.Height, true);
+                _ = PresentBounds(_publishingEdit, box.Left, layout.BasicCard.Bottom - 34, 104, 26, true);
+                PlacePublishingAdvanced(layout);
+                return;
+            }
             var viewHeight = Math.Max(24, box.Height - 36);
             _ = PresentBounds(_publishingBasic, box.Left, box.Top, box.Width, viewHeight, true);
             _ = PresentBounds(_publishingEditPane, box.Left, box.Top, box.Width, viewHeight, true);
@@ -161,6 +182,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             _ = PresentBounds(_publishingSave, box.Left, box.Bottom - 28, 64, 26, true);
             _ = PresentBounds(_publishingCancel, box.Left + 72, box.Bottom - 28, 100, 26, true);
             PlacePublishingInlineInputs();
+            PlacePublishingAdvanced(layout);
         }
 
         private void PlacePublishingInlineInputs()
@@ -219,14 +241,14 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         internal bool MovePublishingInlineTab(nint focus, bool reverse)
         {
             if (!UsesPublishingPanel || _publishingEditor is not { Editing: true, Saving: false }) return false;
-            nint[] order = [.. _publishingInputs, _publishingSave, _publishingCancel];
+            var order = PublishingEditTabOrder;
             var index = Array.IndexOf(order, focus);
             if (index < 0) return false;
             _ = SetFocus(order[GenesisGuiNextMainWindowKeyboardNavigation.ResolveNextIndex(order.Length, index, reverse)]);
             return true;
         }
 
-        internal bool IsPublishingInlineInput(nint window) => IsModern && _publishingInputs.Contains(window);
+        internal bool IsPublishingInlineInput(nint window) => IsModern && (_publishingInputs.Contains(window) || _publishingAdvancedFields.Contains(window));
         internal void PaintPublishingInlineInput(nint window)
         {
             var dc = GetDC(window);
@@ -242,18 +264,21 @@ internal sealed partial class GenesisGuiNextAppShellBridge
 
         internal bool PublishingInlineControlMessage(nint window, uint message, nuint key)
         {
-            if (!UsesPublishingPanel || !_publishingInputs.Concat(PublishingEditorButtons).Contains(window)) return false;
+            if (!UsesPublishingPanel || !_publishingInputs.Concat(_publishingAdvancedFields).Concat(PublishingEditorButtons).Contains(window)) return false;
+            var advanced = _publishingAdvancedFields.Contains(window);
+            if (advanced && message == 0x0007) RevealPublishingAdvanced(window);
             var index = Array.IndexOf(_publishingInputs, window);
             if (message == 0x0007 && index >= 0 && GetClientRect(_publishingEditPane, out var area))
             {
                 _publishingEditScroll = GenesisPublishingBasicLayout.Reveal(_publishingEditScroll, LogicalWidth(area.Bottom), index);
                 PlacePublishingInlineInputs();
             }
-            if (message == 0x020A) { ScrollPublishingEditor(message, key); return true; }
+            if (message == 0x020A) { if (advanced) ScrollPublishingAdvanced(message, key); else ScrollPublishingEditor(message, key); return true; }
             if (message == 0x0100 && key is 0x0D or 0x1B)
             {
+                if (IsPublishingAdvancedCombo(window) && SendMessageW(window, 0x0157, 0, 0) != 0) return false;
                 if (key == 0x1B) { if (CanLeavePublishingEditor()) { SynchronizeNativeSelection(); _ = SetFocus(_publishingEdit); } }
-                else if (index >= 0 || window == _publishingSave) _ = SavePublishingInlineAsync();
+                else if (index >= 0 || advanced || window == _publishingSave || window == _publishingAdvancedSave) _ = SavePublishingInlineAsync();
                 else _ = SendMessageW(window, 0x00F5, 0, 0);
                 return true;
             }

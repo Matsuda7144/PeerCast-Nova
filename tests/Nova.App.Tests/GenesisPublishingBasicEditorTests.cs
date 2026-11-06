@@ -1,3 +1,5 @@
+using PeerCast.Nova.Network.Publishing;
+
 namespace PeerCast.Nova.App.Tests;
 
 public sealed class GenesisPublishingBasicEditorTests
@@ -178,6 +180,164 @@ public sealed class GenesisPublishingBasicEditorTests
             Assert.True(layout.OptionsCard.Bottom < layout.Start.Top);
             Assert.True(layout.Instructions.Height >= 26);
         }
+    }
+
+    private static PublishingSettingsInput WanInput(PublishingSettingsInput input) => input with
+    {
+        WanEnabled = true,
+        LanEnabled = false,
+        WanInterfaceId = "fixture-nic",
+        WanAddress = "10.0.0.10",
+        WanPort = "7144",
+        AdvertisedAddress = "8.8.8.8",
+        AdvertisedPort = "7144",
+        AnnounceEnabled = true,
+        AnnounceName = "fixture tracker",
+        AnnounceEndpoint = "pcp://tracker.invalid:7144",
+    };
+
+    [Fact]
+    public async Task BasicAndAdvancedShareDraftAndPreserveSavedAppliedAndExtensions()
+    {
+        var store = new Store();
+        store.Snapshot = store.Snapshot with { Extensions = store.Snapshot.Extensions.Add("future", System.Text.Json.JsonSerializer.SerializeToElement("keep")) };
+        await using var settings = new PublishingSettingsController(store);
+        await settings.LoadAsync(); var original = settings.Saved; settings.MarkApplied(original);
+        using var page = new GenesisPublishingBasicEditor(settings);
+        Assert.True(page.Begin());
+        page.Edit("unsaved basic", "genre", "description", "comment", "https://example.invalid", "1700");
+        Assert.True(page.EditAdvanced(WanInput(page.Input!)));
+        Assert.Equal("unsaved basic", page.Input!.ChannelName);
+        page.Edit("final basic", "genre", "description", "comment", "https://example.invalid", "1700");
+        Assert.True(page.Input.WanEnabled); Assert.True(page.Input.AnnounceEnabled);
+        Assert.False(settings.CanStart); Assert.Equal(0, store.Writes);
+        await page.SaveAsync();
+        Assert.True(page.Result.Saved); Assert.Equal(1, store.Writes);
+        Assert.Equal("final basic", settings.Saved.Values.ChannelName);
+        Assert.Equal("10.0.0.10", settings.Saved.Values.Wan.Address);
+        Assert.Equal("8.8.8.8", settings.Saved.Values.Wan.AdvertisedAddress);
+        Assert.Equal("pcp://tracker.invalid:7144", settings.Saved.Values.Announce.Endpoint);
+        Assert.Equal("keep", settings.Saved.Extensions["future"].GetString());
+        Assert.Same(original, settings.Applied); Assert.Equal(original.SettingsRevision + 1, settings.Saved.SettingsRevision);
+        Assert.True(page.Begin()); page.Edit("cancel both", "", "", "", "", "");
+        Assert.True(page.EditAdvanced(page.Input! with { WanEnabled = false, AnnounceEnabled = false }));
+        Assert.True(page.Cancel()); Assert.True(settings.Saved.Values.Wan.Enabled); Assert.Equal(1, store.Writes);
+    }
+
+    [Theory]
+    [InlineData("http://tracker.invalid/index.txt", "7144", "8.8.8.8", "7144")]
+    [InlineData("pcp://tracker.invalid:7144", "65536", "8.8.8.8", "7144")]
+    [InlineData("pcp://tracker.invalid:7144", "7144", "192.168.1.1", "7144")]
+    [InlineData("pcp://tracker.invalid:7144", "7144", "8.8.8.8", "0")]
+    public async Task AdvancedValidationCannotSaveInvalidPortsAddressesOrHttpYp(string endpoint, string port, string address, string publicPort)
+    {
+        var store = new Store(); await using var settings = new PublishingSettingsController(store);
+        await settings.LoadAsync(); using var page = new GenesisPublishingBasicEditor(settings);
+        Assert.True(page.Begin());
+        Assert.True(page.EditAdvanced(WanInput(page.Input!) with { AnnounceEndpoint = endpoint, WanPort = port, AdvertisedAddress = address, AdvertisedPort = publicPort }));
+        var draft = page.Input;
+        await page.SaveAsync();
+        Assert.False(page.Result.Saved); Assert.True(page.Editing); Assert.Equal(draft, page.Input);
+        Assert.Equal(0, store.Writes); Assert.Equal(PublishingSettingsSnapshot.Default, settings.Saved);
+    }
+
+    [Fact]
+    public async Task ModeChangesPreservePairsAndYpCannotBeNewlyEnabledWithoutWan()
+    {
+        var store = new Store(); await using var settings = new PublishingSettingsController(store);
+        await settings.LoadAsync(); using var page = new GenesisPublishingBasicEditor(settings);
+        Assert.True(page.Begin());
+        Assert.False(page.EditAdvanced(page.Input! with { AnnounceEnabled = true }));
+        Assert.False(page.Input!.AnnounceEnabled); Assert.Equal("AnnounceEnabled", page.Result.Field);
+        Assert.True(page.EditAdvanced(WanInput(page.Input) with { LanInterfaceId = "lan-old", LanAddress = "192.168.1.10", LanPort = "7100" }));
+        var wan = page.Input;
+        Assert.True(page.EditAdvanced(wan! with { WanEnabled = false, LanEnabled = true }));
+        Assert.True(page.Input!.AnnounceEnabled); // Preserve user input; invalid combination must fail closed.
+        await page.SaveAsync(); Assert.False(page.Result.Saved); Assert.Equal(0, store.Writes);
+        Assert.True(page.EditAdvanced(page.Input! with { AnnounceEnabled = false }));
+        await page.SaveAsync(); Assert.True(page.Result.Saved);
+        Assert.True(settings.Saved.Values.Lan.Enabled); Assert.Equal("lan-old", settings.Saved.Values.Lan.InterfaceId);
+        Assert.Equal(wan!.WanAddress, settings.Saved.Values.Wan.Address);
+        Assert.Equal(wan.WanInterfaceId, settings.Saved.Values.Wan.InterfaceId);
+    }
+
+    [Fact]
+    public async Task MissingAmbiguousOrFailedInterfaceReadNeverSelectsAnotherNic()
+    {
+        var store = new Store { Snapshot = PublishingSettingsSnapshot.Default with { Values = PublishingChannelPreferences.Default with { Lan = new(true, "missing", "10.0.0.40", 7144) } } };
+        var interfaces = new Interfaces();
+        interfaces.Values = [new("other", "other", true, "10.0.0.10", "255.255.255.0", 24),
+            new("a", "ambiguous", true, "10.0.0.20", "255.255.255.0", 24), new("b", "ambiguous", true, "10.0.0.20", "255.255.255.0", 24)];
+        await using var settings = new PublishingSettingsController(store, interfaces); await settings.LoadAsync();
+        using var page = new GenesisPublishingBasicEditor(settings); Assert.True(page.Begin());
+        var choices = page.InterfaceChoices();
+        Assert.Equal(2, choices.Count); Assert.DoesNotContain(choices, n => n.Address == "10.0.0.20");
+        var missing = Assert.Single(choices, n => n.Id == "missing");
+        Assert.False(missing.IsUp); Assert.Contains("未確認", missing.Name);
+        Assert.Equal("missing", page.Input!.LanInterfaceId); Assert.Equal("10.0.0.40", page.Input.LanAddress);
+        interfaces.Fail = true;
+        Assert.False(Assert.Single(page.InterfaceChoices()).IsUp);
+        Assert.Equal("missing", page.Input.LanInterfaceId);
+    }
+
+    [Fact]
+    public async Task AdvancedFailedAndPendingSavesRetainOneSharedEditor()
+    {
+        var store = new Store { FailSave = true, Block = true };
+        await using var settings = new PublishingSettingsController(store); await settings.LoadAsync();
+        using var page = new GenesisPublishingBasicEditor(settings); Assert.True(page.Begin());
+        Assert.True(page.EditAdvanced(WanInput(page.Input!)));
+        var draft = page.Input; var save = page.SaveAsync();
+        try
+        {
+            await store.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.False(page.EditAdvanced(page.Input! with { WanEnabled = false }));
+            await page.SaveAsync(); Assert.Equal(1, store.Writes);
+            Assert.False(page.Cancel()); Assert.Equal(draft, page.Input);
+            Assert.Throws<InvalidOperationException>(() => new PublishingSettingsEditor(settings));
+        }
+        finally { store.Release.TrySetResult(); await save; }
+        Assert.False(page.Result.Saved); Assert.Equal(draft, page.Input); Assert.True(page.Editing);
+        Assert.Equal(PublishingSettingsSnapshot.Default, settings.Saved);
+    }
+
+    [Theory]
+    [InlineData(96u)]
+    [InlineData(144u)]
+    [InlineData(192u)]
+    public void ExpandedCardsKeepConnectionControlsAndActionsWithinMinimumAndLargeWindows(uint dpi)
+    {
+        foreach (var h in new[] { GenesisMainWindowLayout.MinimumClientHeight, 620, 1080 })
+        {
+            Assert.True(GenesisMainWindowLayout.TryResolve(GenesisMainWindowLayout.Scale(GenesisMainWindowLayout.MinimumClientWidth, dpi),
+                GenesisMainWindowLayout.Scale(h, dpi), dpi, out _, out _, out var list, out var details));
+            var layout = new GenesisGuiNextPublishingModernLayout(list.Width, details.Bottom - list.Top, true);
+            Assert.True(layout.BasicCard.Right < layout.OptionsCard.Left);
+            Assert.True(layout.ObsCard.Bottom < layout.BasicCard.Top);
+            Assert.True(layout.OptionsTitle.Right < layout.AdvancedToggle.Left);
+            Assert.True(layout.Instructions.Bottom < layout.ObsCard.Bottom);
+            Assert.True(layout.AdvancedViewport.Height >= 28);
+            Assert.True(layout.AdvancedViewport.Bottom < layout.AdvancedAction.Top);
+            Assert.True(layout.AdvancedAction.Bottom < layout.OptionsCard.Bottom);
+            Assert.True(layout.OptionsCard.Bottom < layout.Start.Top);
+            Assert.True(layout.Basic.Height >= 24);
+            foreach (var input in new[] { PublishingSettingsInput.From(PublishingChannelPreferences.Default), WanInput(PublishingSettingsInput.From(PublishingChannelPreferences.Default)) })
+            {
+                var rows = GenesisPublishingAdvancedLayout.Rows(input);
+                for (var i = 0; i < rows.Length; i++)
+                {
+                    var scroll = GenesisPublishingAdvancedLayout.Reveal(0, layout.AdvancedViewport.Height, i, rows.Length);
+                    Assert.InRange(4 + i * 32 - scroll, 0, layout.AdvancedViewport.Height - 26);
+                }
+            }
+        }
+    }
+
+    private sealed class Interfaces : IObsPublishLanInterfaces
+    {
+        internal IReadOnlyList<ObsPublishLanInterface> Values = [];
+        internal bool Fail;
+        public IReadOnlyList<ObsPublishLanInterface> Read() => Fail ? throw new IOException("fixture") : Values;
     }
 
     private sealed class Store : IPublishingPreferencesStore

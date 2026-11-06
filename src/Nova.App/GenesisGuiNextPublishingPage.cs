@@ -58,7 +58,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
 
         private void SynchronizePublishingPage(bool visible)
         {
-            foreach (var h in PublishingPageTitles.Concat(PublishingPageValues.Where(h => h != _publishingBasic)))
+            foreach (var h in PublishingPageTitles.Concat(PublishingPageValues.Where(h => h != _publishingBasic && h != _publishingOptions)))
                 _ = PresentVisible(h, visible && IsModern ? ShowWindowShowNoActivate : ShowWindowHide);
             if (IsModern) SynchronizePublishingInline(visible);
             if (!visible || !IsModern) return;
@@ -68,7 +68,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             _ = PresentText(_publishingBasic, summary.Basic);
             _ = PresentText(_publishingOptions, summary.Options);
             _ = PresentText(_publishingDiagnostic, (_publishingEditor is { } editor ? editor.Result.Message +
-                (editor.Result.Field is { } field && Array.IndexOf(BasicFieldNames, field) is var index && index >= 0 ? "（" + GenesisGuiNextPublishingSettingsWindow.FieldLabels[index] + "）" : "") + "\r\n" : "") + summary.Diagnostic);
+                PublishingInlineErrorLabel(editor.Result.Field) + "\r\n" : "") + summary.Diagnostic);
             _ = PresentVisible(_detailsIdentity, ShowWindowHide);
         }
     }

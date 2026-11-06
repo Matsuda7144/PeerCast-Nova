@@ -1,3 +1,5 @@
+using PeerCast.Nova.Network.Publishing;
+
 namespace PeerCast.Nova.App;
 
 // Modern presentation owns one existing editor, never persistence or runtime application.
@@ -48,6 +50,66 @@ internal sealed class GenesisPublishingBasicEditor(PublishingSettingsController 
                 BitrateKbps = bitrate,
             }); // Preserve all advanced settings captured by this same editor.
         }
+    }
+
+    internal bool EditAdvanced(PublishingSettingsInput fields)
+    {
+        lock (_gate)
+        {
+            if (_released || _saving || _editor is null) return false;
+            var current = _editor.Input;
+            if (fields.AnnounceEnabled && !current.AnnounceEnabled && !fields.WanEnabled)
+            {
+                Result = new(false, "YP Announceの有効化には明示的なWAN設定が必要です。", nameof(fields.AnnounceEnabled));
+                return false;
+            }
+            _editor.Edit(current with
+            {
+                LanEnabled = fields.LanEnabled,
+                LanInterfaceId = fields.LanInterfaceId,
+                LanAddress = fields.LanAddress,
+                LanPort = fields.LanPort,
+                WanEnabled = fields.WanEnabled,
+                WanInterfaceId = fields.WanInterfaceId,
+                WanAddress = fields.WanAddress,
+                WanPort = fields.WanPort,
+                AdvertisedAddress = fields.AdvertisedAddress,
+                AdvertisedPort = fields.AdvertisedPort,
+                AnnounceEnabled = fields.AnnounceEnabled,
+                AnnounceName = fields.AnnounceName,
+                AnnounceEndpoint = fields.AnnounceEndpoint,
+            });
+            Result = new(false, "基本・詳細は同じ未保存Draftです。保存後、次回開始から適用します。保存だけでは通信しません。");
+            return true;
+        }
+    }
+
+    internal IReadOnlyList<ObsPublishLanInterface> InterfaceChoices()
+    {
+        var input = Input;
+        if (input is null) return [];
+        var result = new List<ObsPublishLanInterface>();
+        try
+        {
+            foreach (var group in settings.Interfaces.Read().GroupBy(n => n.Address))
+            {
+                if (group.Count() != 1) continue; // ambiguous addresses cannot identify a bind owner
+                var nic = group.Single();
+                if (!nic.IsUp) continue;
+                if (input.WanEnabled) { if (PublishingIpv4.IsBindAddress(nic.Address)) result.Add(nic); }
+                else
+                {
+                    try { _ = new ObsPublishLanBinding(nic); result.Add(nic); }
+                    catch (ObsPublishLanException) { }
+                }
+            }
+        }
+        catch { result.Clear(); }
+        var id = input.WanEnabled ? input.WanInterfaceId : input.LanInterfaceId;
+        var address = input.WanEnabled ? input.WanAddress : input.LanAddress;
+        if (address.Length > 0 && !result.Any(n => n.Id == id && n.Address == address))
+            result.Add(new(id, "保存済み（利用不可・未確認）", false, address, "", 0));
+        return result;
     }
 
     internal async Task SaveAsync()
