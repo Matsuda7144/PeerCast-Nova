@@ -41,6 +41,9 @@ public sealed class GenesisGuiNextLogTests
         Assert.DoesNotContain("http", row.Content);
         Assert.DoesNotContain("pcp", row.Content);
         Assert.Equal(3, GenesisGuiNextLogProjection.Values(row).Length);
+        var native = new GenesisGuiNextNativeTabRow(new(string.Empty, string.Empty), InteractiveChannel: null, Log: row);
+        Assert.Equal(GenesisGuiNextLogProjection.Values(row),
+            GenesisGuiNextRecordingListPresentation.ModernValues(native, GenesisGuiNextTab.Logs, GenesisGuiNextLogProjection.Columns));
     }
 
     [Fact]

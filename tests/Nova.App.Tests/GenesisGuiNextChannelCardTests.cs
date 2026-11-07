@@ -122,8 +122,28 @@ public sealed class GenesisGuiNextChannelCardTests
         foreach (var tab in Enum.GetValues<GenesisGuiNextTab>())
         {
             Assert.False(GenesisGuiNextChannelListStyle.Applies(false, tab));
-            Assert.Equal(tab == GenesisGuiNextTab.Channels, GenesisGuiNextChannelListStyle.Applies(true, tab));
+            Assert.Equal(tab is GenesisGuiNextTab.Channels or GenesisGuiNextTab.New or GenesisGuiNextTab.Favorites or
+                GenesisGuiNextTab.Playing or GenesisGuiNextTab.Recording or GenesisGuiNextTab.Logs,
+                GenesisGuiNextChannelListStyle.Applies(true, tab));
         }
+    }
+
+    [Theory]
+    [InlineData(96u)]
+    [InlineData(144u)]
+    [InlineData(192u)]
+    public void AddedChannelListsFitBesideNativeScrollbarAtMinimumWidth(uint dpi)
+    {
+        int Scale(int value) => GenesisMainWindowLayout.Scale(value, dpi);
+        Assert.True(GenesisMainWindowLayout.TryResolve(Scale(GenesisMainWindowLayout.MinimumClientWidth),
+            Scale(GenesisMainWindowLayout.MinimumClientHeight), dpi, out _, out _, out var list, out _));
+        const int scrollbarAndEdges = 21;
+        var available = list.Width - scrollbarAndEdges;
+        var columns = GenesisGuiNextChannelListStyle.ColumnWidths(available, fitNarrow: true);
+        Assert.Equal(7, columns.Length);
+        Assert.True(columns[1] >= 180);
+        Assert.True(columns.Sum(Scale) <= Scale(available));
+        Assert.Equal(GenesisGuiNextChannelListStyle.ColumnWidths(available)[2..], columns[2..]);
     }
 
     [Fact]

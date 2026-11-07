@@ -92,6 +92,8 @@ public sealed class GenesisGuiNextNativeTabProjectionTests
         Assert.Equal(savedChannel.Description, row.DisplayChannel.Description);
         Assert.Equal(savedChannel.Type, row.DisplayChannel.Type);
         Assert.Equal(savedChannel.YellowPage, row.DisplayChannel.YellowPage);
+        Assert.Equal(["Saved offline", "Last known description", "—", "—", "—", "FLV", "SP"],
+            ModernValues(row, GenesisGuiNextTab.Favorites));
         Assert.Null(row.InteractiveChannel);
         Assert.False(row.IsInteractive);
     }
@@ -112,6 +114,8 @@ public sealed class GenesisGuiNextNativeTabProjectionTests
         Assert.Equal("pcp://example/current", row.DisplayChannel.Source);
         Assert.Contains(nameof(PlaybackSessionState.Playing), row.DisplayChannel.DetailsText);
         Assert.Contains("pcp://example/current", row.DisplayChannel.DetailsText);
+        Assert.Equal(["pcp://example/current", "Playing · pcp://example/current", "—", "—", "—", "—", "—"],
+            ModernValues(row, GenesisGuiNextTab.Playing));
         Assert.Null(row.InteractiveChannel);
         Assert.False(row.IsInteractive);
     }
@@ -146,9 +150,15 @@ public sealed class GenesisGuiNextNativeTabProjectionTests
         Assert.Contains("状態: 録画中", row.DisplayChannel.Description);
         Assert.Equal(string.Empty, row.DisplayChannel.Source);
         Assert.Same(recording, row.ActiveRecording);
+        Assert.Equal(["Channel A", "状態: 録画中", "—", "—", "—", "手動録画", "—"],
+            ModernValues(row, GenesisGuiNextTab.Recording));
         Assert.Null(row.InteractiveChannel);
         Assert.False(row.IsInteractive);
     }
+
+    private static string[] ModernValues(GenesisGuiNextNativeTabRow row, GenesisGuiNextTab tab) =>
+        GenesisGuiNextRecordingListPresentation.ModernValues(row, tab,
+            GenesisGuiNextRecordingListPresentation.Columns(tab, GenesisGuiNextRecordingPageMode.ActiveRecordings));
 
     [Fact]
     public void RecordingTabProjectsAutomaticSessionAsReadOnlyWithRuleIdentity()

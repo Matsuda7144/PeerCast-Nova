@@ -467,6 +467,12 @@ public sealed class GenesisGuiNextRecordingLibraryTests
         var row = Native(Entry("candidate.flv"));
         Assert.Equal(GenesisRecordingLibraryListPresentation.CreateRowValues(row.RecordingLibrary!),
             GenesisGuiNextRecordingListPresentation.Values(row));
+        Assert.Equal(GenesisGuiNextRecordingListPresentation.Values(row),
+            GenesisGuiNextRecordingListPresentation.ModernValues(row, GenesisGuiNextTab.Recording, library));
+        Assert.False(GenesisGuiNextRecordingListPresentation.UsesChannelColumns(library));
+        Assert.False(GenesisGuiNextRecordingListPresentation.UsesChannelColumns(rules));
+        Assert.False(GenesisGuiNextRecordingListPresentation.UsesChannelColumns(
+            GenesisGuiNextRecordingListPresentation.Columns(GenesisGuiNextTab.Recording, GenesisGuiNextRecordingPageMode.History)));
         Assert.Same(active, GenesisGuiNextRecordingListPresentation.Columns(GenesisGuiNextTab.Channels, GenesisGuiNextRecordingPageMode.Library));
     }
 

@@ -1277,13 +1277,13 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
         return true;
     }
 
-    internal static void SynchronizeRecordingRows(nint listView)
+    internal static void SynchronizeRenderedList(nint listView,
+        IReadOnlyList<GenesisNativeListColumnPresentation>? columns, IReadOnlyList<string[]> values)
     {
-        if (StatesByListView.TryGetValue(listView, out var state) &&
-            state.IsActiveRecordingsPage())
-        {
+        if (!StatesByListView.TryGetValue(listView, out var state)) return;
+        state.UpdateListPaintData(columns, values);
+        if (state.IsActiveRecordingsPage())
             state.SynchronizeNativeSelection();
-        }
     }
 
     internal static string? ResolveRecordingCompletionMessage(
@@ -2406,15 +2406,9 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             if (draw.DrawStage == CustomDrawStageItemPrePaint)
             {
                 var selected = draw.ItemSpec == (nuint)_paintSelectedRow;
-                var textColor = GenesisGuiNextDesign.Text;
-                if (_tabs.SelectedTab == GenesisGuiNextTab.Logs && draw.ItemSpec <= int.MaxValue &&
-                    GenesisChannelListRenderedChannels.FindRow(_listView, (int)draw.ItemSpec)?.Log is { } log)
-                {
-                    textColor = GenesisGuiNextLogProjection.TextColor(log.Kind);
-                }
                 Marshal.WriteInt32(notificationPointer,
                     Marshal.OffsetOf<ListViewCustomDraw>(nameof(ListViewCustomDraw.TextColor)).ToInt32(),
-                    selected ? GenesisGuiNextDesign.Text : textColor);
+                    GenesisGuiNextDesign.Text);
                 Marshal.WriteInt32(notificationPointer,
                     Marshal.OffsetOf<ListViewCustomDraw>(nameof(ListViewCustomDraw.TextBackgroundColor)).ToInt32(),
                     GenesisGuiNextDesign.RowBackground(selected, draw.ItemSpec == (nuint)_hoverRow));

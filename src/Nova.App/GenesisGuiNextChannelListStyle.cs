@@ -5,17 +5,17 @@ namespace PeerCast.Nova.App;
 // Presentation only: retained native rows and their captured identities remain authoritative.
 internal static class GenesisGuiNextChannelListStyle
 {
-    internal static bool Applies(bool modern, GenesisGuiNextTab tab) => modern && tab == GenesisGuiNextTab.Channels;
-    internal static bool FrameApplies(bool modern, GenesisGuiNextTab tab) => modern &&
+    internal static bool Applies(bool modern, GenesisGuiNextTab tab) => modern &&
         tab is GenesisGuiNextTab.Channels or GenesisGuiNextTab.New or GenesisGuiNextTab.Favorites or
             GenesisGuiNextTab.Playing or GenesisGuiNextTab.Recording or GenesisGuiNextTab.Logs;
+    internal static bool FrameApplies(bool modern, GenesisGuiNextTab tab) => Applies(modern, tab);
     internal const int RowHeight = 32;
-    internal static int[] ColumnWidths(int width)
+    internal static int[] ColumnWidths(int width, bool fitNarrow = false)
     {
         // Leave room for the native report-view edge so an exact fit does not add a tiny scrollbar.
         width = Math.Max(0, width - 4);
         var name = Math.Clamp((width - 420) * 40 / 100, 200, 400);
-        return [name, Math.Max(260, width - name - 420), 112, 80, 84, 56, 88];
+        return [name, Math.Max(fitNarrow ? 180 : 260, width - name - 420), 112, 80, 84, 56, 88];
     }
 }
 
@@ -24,38 +24,39 @@ internal sealed partial class GenesisGuiNextAppShellBridge
     private sealed partial class AppShellState
     {
         private bool UsesChannelListStyle => GenesisGuiNextChannelListStyle.Applies(IsModern, _tabs.SelectedTab);
-        private (bool Channels, int Width, uint Dpi, int Columns)? _channelListStyle;
+        private (int Width, uint Dpi, bool FitNarrow)? _channelListStyle;
+        private IReadOnlyList<GenesisNativeListColumnPresentation>? _paintColumns;
+        private IReadOnlyList<string[]> _paintValues = [];
         private int _rowImageHeight;
         private GenesisUiFontLease? _channelNameFont;
 
+        private IReadOnlyList<GenesisNativeListColumnPresentation> SelectedListColumns =>
+            GenesisGuiNextRecordingListPresentation.Columns(_tabs.SelectedTab, _tabs.RecordingPageMode);
+        private bool UsesStyledChannelColumns => UsesChannelListStyle &&
+            GenesisGuiNextRecordingListPresentation.UsesChannelColumns(SelectedListColumns);
+
+        internal void UpdateListPaintData(IReadOnlyList<GenesisNativeListColumnPresentation>? columns, IReadOnlyList<string[]> values)
+        {
+            if (!IsModern) return;
+            if (!ReferenceEquals(_paintColumns, columns)) _channelListStyle = null;
+            _paintColumns = columns;
+            _paintValues = values;
+            SynchronizeChannelListStyle();
+        }
+
         private void SynchronizeChannelListStyle()
         {
-            if (!IsModern || !GetClientRect(_listView, out var client)) return;
-            var channels = UsesChannelListStyle;
-            var header = SendMessageW(_listView, 0x101F, 0, 0);
-            var count = (int)SendMessageW(header, 0x1200, 0, 0);
-            var style = (channels, LogicalWidth(client.Right), _layoutDpi, count);
+            if (!IsModern) return;
+            SetModernRowHeight(UsesChannelListStyle ? GenesisGuiNextChannelListStyle.RowHeight : GenesisGuiNextDesign.RowImageHeight, _layoutDpi);
+            if (!UsesStyledChannelColumns || !ReferenceEquals(_paintColumns, SelectedListColumns) ||
+                !GetClientRect(_listView, out var client)) return;
+            var width = LogicalWidth(client.Right);
+            // The added tabs can give the description a few pixels to fit beside a native vertical scrollbar.
+            var style = (Width: width, Dpi: _layoutDpi, FitNarrow: width < 884 && _tabs.SelectedTab != GenesisGuiNextTab.Channels);
             if (_channelListStyle == style) return;
-            if (channels && count != 7) return; // A tab render may still be replacing its columns.
-            if (channels)
-            {
-                var buffer = Marshal.AllocHGlobal(512);
-                try
-                {
-                    var item = new VisualHeaderItem { Mask = 2, Text = buffer, TextCharacters = 256 };
-                    if (SendHeaderItem(header, 0x120B, 0, ref item) == 0 || Marshal.PtrToStringUni(buffer) != GenesisChannelListPresentation.Columns[0].Header) return;
-                }
-                finally { Marshal.FreeHGlobal(buffer); }
-            }
-            // Dedicated tabs own different columns. Never replace their definitions.
-            if (count == 7 &&
-                (channels || _channelListStyle?.Channels == true && _tabs.SelectedTab is GenesisGuiNextTab.New or GenesisGuiNextTab.Favorites or GenesisGuiNextTab.Playing))
-            {
-                var widths = channels ? GenesisGuiNextChannelListStyle.ColumnWidths(style.Item2) : GenesisChannelListPresentation.Columns.Select(c => c.PreferredWidth).ToArray();
-                for (var i = 0; i < widths.Length; i++) _ = SendMessageW(_listView, 0x101E, (nuint)i, Scale(widths[i]));
-            }
-            SetModernRowHeight(channels ? GenesisGuiNextChannelListStyle.RowHeight : GenesisGuiNextDesign.RowImageHeight, _layoutDpi);
             _channelListStyle = style;
+            var widths = GenesisGuiNextChannelListStyle.ColumnWidths(style.Width, style.FitNarrow);
+            for (var i = 0; i < widths.Length; i++) _ = SendMessageW(_listView, 0x101E, (nuint)i, Scale(widths[i]));
         }
 
         internal void PaintModernListFrame()
@@ -91,11 +92,13 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private bool DrawChannelListCell(nint pointer, out nint result)
         {
             result = 0;
-            if (!UsesChannelListStyle) return false;
+            if (!UsesChannelListStyle || _paintColumns is not { } columns ||
+                !ReferenceEquals(columns, SelectedListColumns)) return false;
             var draw = Marshal.PtrToStructure<ListViewCustomDraw>(pointer);
-            if (draw.Draw.DrawStage != 0x00030001 || draw.Draw.ItemSpec > int.MaxValue || draw.SubItem is < 0 or > 6) return false;
-            var row = GenesisChannelListRenderedChannels.FindRow(_listView, (int)draw.Draw.ItemSpec);
-            if (row is null) return false;
+            if (draw.Draw.DrawStage != 0x00030001 || draw.Draw.ItemSpec >= (nuint)_paintValues.Count ||
+                (uint)draw.SubItem >= (uint)columns.Count) return false;
+            var values = _paintValues[(int)draw.Draw.ItemSpec];
+            if (values.Length != columns.Count) return false;
             var box = new Rectangle { Top = draw.SubItem, Left = 0 };
             if (SendHeaderRectangle(_listView, 0x1038, draw.Draw.ItemSpec, ref box) == 0) return false;
             // Subitem zero's BOUNDS covers the whole row; restrict it to the first column.
@@ -103,11 +106,14 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             var selected = (int)draw.Draw.ItemSpec == _paintSelectedRow;
             FillRectangle(draw.Draw.DeviceContext, box, GenesisGuiNextDesign.RowBackground(selected, (int)draw.Draw.ItemSpec == _hoverRow));
             box.Left += Scale(10); box.Right -= Scale(10);
-            var values = GenesisChannelListPresentation.CreateRowValues(row.DisplayChannel);
-            var numeric = GenesisChannelListPresentation.Columns[draw.SubItem].Alignment == GenesisChannelColumnAlignment.Right;
+            var channelName = draw.SubItem == 0 && GenesisGuiNextRecordingListPresentation.UsesChannelColumns(columns);
+            var numeric = columns[draw.SubItem].Alignment == GenesisChannelColumnAlignment.Right;
+            var color = selected || channelName ? GenesisGuiNextDesign.Text : GenesisGuiNextDesign.SecondaryText;
+            if (!selected && _tabs.SelectedTab == GenesisGuiNextTab.Logs && draw.SubItem == 1 &&
+                GenesisChannelListRenderedChannels.FindRow(_listView, (int)draw.Draw.ItemSpec)?.Log is { Kind: not GenesisGuiNextLogKind.Information } log)
+                color = GenesisGuiNextLogProjection.TextColor(log.Kind);
             DrawCardLabel(draw.Draw.DeviceContext, box, values[draw.SubItem],
-                selected || draw.SubItem == 0 ? GenesisGuiNextDesign.Text : GenesisGuiNextDesign.SecondaryText,
-                draw.SubItem == 0 ? _channelNameFont?.Handle ?? 0 : _visualFont?.Handle ?? 0, _listView,
+                color, channelName ? _channelNameFont?.Handle ?? 0 : _visualFont?.Handle ?? 0, _listView,
                 DrawTextSingleLine | DrawTextVerticalCenter | 0x8000u | (numeric ? 2u : 0u));
             result = 4; // CDRF_SKIPDEFAULT affects pixels only, retaining selection, sorting and activation.
             return true;

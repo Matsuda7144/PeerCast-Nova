@@ -591,14 +591,16 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
                         _renderedRowIdentity = null;
                         GenesisChannelListRenderedChannels.SetRows(_channelList, _renderedRows);
                         _viewModel.SelectedChannel = null;
-                        GenesisGuiNextAppShellBridge.SynchronizeRecordingRows(_channelList);
+                        GenesisGuiNextAppShellBridge.SynchronizeRenderedList(_channelList, null, []);
                         return;
                     }
 
                     _renderedColumns = newColumns;
                 }
 
-                var rowValues = rows.Select(GenesisGuiNextRecordingListPresentation.Values).ToArray();
+                var rowValues = GenesisGuiNextChannelListStyle.Applies(_viewModel.UsesModernAppearance, selectedTab)
+                    ? rows.Select(row => GenesisGuiNextRecordingListPresentation.ModernValues(row, selectedTab, newColumns)).ToArray()
+                    : rows.Select(GenesisGuiNextRecordingListPresentation.Values).ToArray();
                 Interlocked.Exchange(ref _selectionChangesSuppressed, 1);
                 try
                 {
@@ -630,7 +632,7 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
                     {
                         _viewModel.SelectedChannel = null;
                     }
-                    GenesisGuiNextAppShellBridge.SynchronizeRecordingRows(_channelList);
+                    GenesisGuiNextAppShellBridge.SynchronizeRenderedList(_channelList, newColumns, rowsReplaced ? rowValues : []);
                 }
                 finally
                 {

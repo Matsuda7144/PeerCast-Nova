@@ -295,7 +295,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             {
                 var item = new VisualHeaderItem { Mask = 0x0002 | 0x0004, Text = buffer, TextCharacters = 256 };
                 if (SendHeaderItem(header, 0x120B, draw.ItemSpec, ref item) == 0) return false;
-                var text = UsesChannelListStyle && draw.ItemSpec == 1 ? "詳細" : Marshal.PtrToStringUni(buffer) ?? string.Empty;
+                var text = UsesStyledChannelColumns && ReferenceEquals(_paintColumns, SelectedListColumns) && draw.ItemSpec == 1
+                    ? "詳細" : Marshal.PtrToStringUni(buffer) ?? string.Empty;
                 FillRectangle(draw.DeviceContext, draw.ItemRectangle, GenesisGuiNextDesign.Header);
                 var line = draw.ItemRectangle; line.Top = line.Bottom - Scale(1);
                 FillRectangle(draw.DeviceContext, line, GenesisGuiNextDesign.Border);

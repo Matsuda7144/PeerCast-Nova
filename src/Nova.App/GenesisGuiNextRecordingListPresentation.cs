@@ -19,6 +19,9 @@ internal static class GenesisGuiNextRecordingListPresentation
             _ => ChannelColumns,
         };
 
+    internal static bool UsesChannelColumns(IReadOnlyList<GenesisNativeListColumnPresentation>? columns) =>
+        ReferenceEquals(columns, ChannelColumns);
+
     public static string[] Values(GenesisGuiNextNativeTabRow row) =>
         row.Publishing is { } publishing ? GenesisGuiNextPublishingPresentation.Values(publishing) :
         row.Log is { } log ? GenesisGuiNextLogProjection.Values(log)
@@ -26,6 +29,16 @@ internal static class GenesisGuiNextRecordingListPresentation
         : row.RecordingLibrary is { } library ? GenesisRecordingLibraryListPresentation.CreateRowValues(library)
         : row.RecordingRule is { } rule ? GenesisRecordingRulesListPresentation.CreateRowValues(rule)
         : GenesisChannelListPresentation.CreateRowValues(row.DisplayChannel);
+
+    internal static string[] ModernValues(GenesisGuiNextNativeTabRow row, GenesisGuiNextTab tab,
+        IReadOnlyList<GenesisNativeListColumnPresentation> columns)
+    {
+        var values = Values(row);
+        if (tab != GenesisGuiNextTab.Channels && UsesChannelColumns(columns))
+            for (var i = (int)GenesisChannelColumn.ListenerRelay; i < values.Length; i++)
+                if (string.IsNullOrEmpty(values[i])) values[i] = "—";
+        return values;
+    }
 
     // Remove rows before changing their schema. On failure, erase partial columns
     // and leave an inert empty list rather than pairing old payloads with new cells.
