@@ -48,6 +48,8 @@ public sealed record PlaybackWindowsPhysicalRunnerOptions
     public string Title { get; init; } = "PeerCast Nova Controlled Windows Output";
 
     public int MaximumPendingOperations { get; init; } = 8;
+
+    internal string? ApplicationIconPath { get; init; }
 }
 
 public sealed record PlaybackWindowsPhysicalRunnerSnapshot(

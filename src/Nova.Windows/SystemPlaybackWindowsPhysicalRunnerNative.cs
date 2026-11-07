@@ -51,15 +51,21 @@ internal sealed class SystemPlaybackWindowsPhysicalRunnerNative :
             Cursor = LoadCursorW(0, (nint)CursorArrow),
             ClassName = className,
         };
-        var atom = RegisterClassExW(ref windowClass);
-        if (atom == 0)
-        {
-            return PlaybackWindowsPhysicalRunnerNativeRunResult.Faulted;
-        }
-
+        ushort atom = 0;
         nint window = 0;
         try
         {
+            if (options.ApplicationIconPath is { } iconPath)
+            {
+                _ = ExtractIconExW(iconPath, 0, out windowClass.Icon, out windowClass.SmallIcon, 1);
+            }
+
+            atom = RegisterClassExW(ref windowClass);
+            if (atom == 0)
+            {
+                return PlaybackWindowsPhysicalRunnerNativeRunResult.Faulted;
+            }
+
             var rectangle = new WindowRectangle
             {
                 Left = 0,
@@ -139,7 +145,20 @@ internal sealed class SystemPlaybackWindowsPhysicalRunnerNative :
                 DestroyWindow(window);
             }
 
-            UnregisterClassW(className, instance);
+            if (atom != 0)
+            {
+                _ = UnregisterClassW(className, instance);
+            }
+
+            if (windowClass.Icon != 0)
+            {
+                _ = DestroyIcon(windowClass.Icon);
+            }
+
+            if (windowClass.SmallIcon != 0)
+            {
+                _ = DestroyIcon(windowClass.SmallIcon);
+            }
         }
     }
 
@@ -334,4 +353,12 @@ internal sealed class SystemPlaybackWindowsPhysicalRunnerNative :
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern nint LoadCursorW(nint instance, nint cursorName);
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    private static extern uint ExtractIconExW(
+        string fileName, int iconIndex, out nint largeIcon, out nint smallIcon, uint iconCount);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool DestroyIcon(nint icon);
 }

@@ -615,8 +615,16 @@ internal sealed class SystemNovaWindowsStartupHostFactory :
     {
     }
 
-    public INovaWindowsStartupHost Create(PlaybackWindowsPhysicalRunnerOptions options) =>
-        new SystemNovaWindowsStartupHost(new(options));
+    public INovaWindowsStartupHost Create(PlaybackWindowsPhysicalRunnerOptions options)
+    {
+        // The SDK puts the same Win32 icon in the assembly and the Windows apphost.
+        // Use the assembly when Nova runs through dotnet.exe.
+        var assemblyPath = typeof(SystemNovaWindowsStartupHostFactory).Assembly.Location;
+        return new SystemNovaWindowsStartupHost(new(options with
+        {
+            ApplicationIconPath = assemblyPath.Length == 0 ? Environment.ProcessPath : assemblyPath,
+        }));
+    }
 }
 
 internal sealed class SystemNovaWindowsStartupHost :
