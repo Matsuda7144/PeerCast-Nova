@@ -65,9 +65,9 @@ public sealed class GenesisGuiNextSettingsLayoutTests
             }
             else
             {
-                boxes.AddRange([layout.PathRuntime, layout.PathSaved, layout.PathInput(category == (int)GenesisIntegratedSettingsCategory.Playback),
+                boxes.AddRange([layout.PathRuntime, layout.PathSaved, layout.PathInput(true),
                     layout.PathStatus, layout.Reset, layout.Save, layout.Cancel]);
-                if (category == (int)GenesisIntegratedSettingsCategory.Playback) boxes.Add(layout.Browse);
+                boxes.Add(layout.Browse); // Both playback executable and recording directory use Browse.
                 Assert.True(layout.PathStatus.Bottom < layout.Card.Bottom);
             }
             foreach (var b in boxes)
@@ -112,7 +112,15 @@ public sealed class GenesisGuiNextSettingsLayoutTests
             }
             else
             {
-                fields.AddRange([n.ConnectionTitle, n.Ipv6, n.Notice, n.Runtime, n.Saved, n.Status]);
+                fields.AddRange([n.ConnectionTitle, n.Ipv6, n.Notice, n.Runtime, n.Saved, n.Status, n.AutoMapping]);
+                var natStatus = n.NatStatus(layout);
+                if (size.Item2 == GenesisMainWindowLayout.MinimumClientHeight)
+                {
+                    Assert.True(natStatus.Top > layout.Card.Bottom);
+                    Assert.True(natStatus.Left > layout.Back.Right && natStatus.Right < layout.Cancel.Left);
+                    boxes.Add(natStatus);
+                }
+                else fields.Add(natStatus);
                 for (var j = 0; j < 6; j++) fields.AddRange([n.ConnectionInput(j), n.ConnectionLabel(j)]);
             }
             foreach (var b in fields) Assert.True(b.Top >= layout.Card.Top && b.Bottom < layout.Card.Bottom);

@@ -10,8 +10,11 @@ internal sealed record GuiNextNetworkSettingsPresentation(
     GuiNextNetworkTone ListenerTone, GuiNextNetworkTone MappingTone,
     NovaApplicationNetworkFailure Failure)
 {
+    internal const string AutoMappingUnavailable = "ポート自動開放設定：利用不可";
+    public string IntegratedSettings { get; init; } = AutoMappingUnavailable;
+
     public static GuiNextNetworkSettingsPresentation Unavailable(string reason) =>
-        new(false, false, "ポート自動開放設定：利用不可", "公開PCP listener：状態未確認",
+        new(false, false, AutoMappingUnavailable, "公開PCP listener：状態未確認",
             "NAT mapping：状態未確認\r\n外部到達性：未確認", string.Empty, reason,
             GuiNextNetworkTone.Orange, GuiNextNetworkTone.Orange, GuiNextNetworkTone.Orange,
             NovaApplicationNetworkFailure.NotInitialized);
@@ -84,7 +87,14 @@ internal sealed record GuiNextNetworkSettingsPresentation(
                 result?.Status == NovaApplicationNetworkPersistenceStatus.Saved ? GuiNextNetworkTone.Green : GuiNextNetworkTone.Blue,
             snapshot.PublicListenerAvailability == NovaApplicationPublicListenerAvailability.Failed ? GuiNextNetworkTone.Orange : GuiNextNetworkTone.Blue,
             nat?.State == NatDisplayState.Mapped && nat.LeaseEvidence is NatLeaseEvidenceKind.RouterConfirmedWithEstimatedExpiry or NatLeaseEvidenceKind.RouterConfirmedPermanent
-                ? GuiNextNetworkTone.Green : GuiNextNetworkTone.Orange, failure);
+                ? GuiNextNetworkTone.Green : GuiNextNetworkTone.Orange, failure)
+        {
+            IntegratedSettings = "チェックは即時反映・非同期で自動保存（共通の保存・キャンセルとは別）\r\n" +
+                $"実行中の設定：{OnOff(snapshot.RuntimeDesiredEnabled)}    保存済み：{OnOff(snapshot.SavedAutoPortMapping)}    {save}" +
+                (snapshot.StartupEnvironmentOverride
+                    ? $"\r\nNOVA_AUTO_PORT_MAPPING={OnOff(snapshot.StartupEnvironmentEnabled)}（優先）    次回起動時：{OnOff(snapshot.NextStartEffectiveEnabled)}"
+                    : string.Empty),
+        };
     }
 
     private static string OnOff(bool? value) => value switch { true => "ON", false => "OFF", _ => "未確認" };

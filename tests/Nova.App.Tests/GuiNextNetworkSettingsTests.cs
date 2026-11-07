@@ -18,6 +18,7 @@ public sealed class GuiNextNetworkSettingsTests
         Assert.True(view.CanEdit);
         Assert.Contains("runtime desired：" + (enabled ? "ON" : "OFF"), view.Settings);
         Assert.Contains("保存済み：" + (enabled ? "OFF" : "ON"), view.Settings);
+        Assert.DoesNotContain("NOVA_AUTO_PORT_MAPPING", view.IntegratedSettings);
         Assert.Empty(adapter.Calls);
     }
 
@@ -38,6 +39,9 @@ public sealed class GuiNextNetworkSettingsTests
         Assert.Contains("override：" + (environment ? "ON" : "OFF"), view.Settings);
         Assert.Contains("次回起動時：" + (environment ? "ON" : "OFF"), view.Settings);
         Assert.Contains("環境変数 NOVA_AUTO_PORT_MAPPING が優先", view.Settings);
+        Assert.Contains($"実行中の設定：{(saved ? "ON" : "OFF")}    保存済み：{(saved ? "ON" : "OFF")}", view.IntegratedSettings);
+        Assert.Contains($"NOVA_AUTO_PORT_MAPPING={(environment ? "ON" : "OFF")}（優先）    次回起動時：{(environment ? "ON" : "OFF")}",
+            view.IntegratedSettings);
     }
 
     [Theory]
@@ -152,6 +156,36 @@ public sealed class GuiNextNetworkSettingsTests
         adapter.Complete(0);
         await task;
         Assert.Contains("保存成功", current.Refresh().Settings);
+    }
+
+    [Theory]
+    [InlineData(true, "保存成功")]
+    [InlineData(false, "保存失敗")]
+    public async Task IntegratedPaneShowsSaveCompletedAfterReturningToConnection(bool succeeds, string expected)
+    {
+        // The connection and YP drafts are closed on category changes. NAT belongs to the pane.
+        var native = Source("GenesisGuiNextNetworkSettingsCategories.cs");
+        var closeDrafts = native.IndexOf("private void CloseNetworkSettingsPages()", StringComparison.Ordinal);
+        var closeNat = native.IndexOf("private void CloseNatSettingsPage()", StringComparison.Ordinal);
+        Assert.True(closeDrafts >= 0 && closeNat > closeDrafts);
+        Assert.DoesNotContain("_natSettingsPage", native[closeDrafts..closeNat]);
+        Assert.Contains("ConnectionCategory && _natSettingsPage?.CanAcceptCallback(generation) == true", native);
+
+        var adapter = new Adapter();
+        var callbacks = new List<long>();
+        var pane = new GuiNextNetworkSettingsViewModel(adapter, callbacks.Add);
+        var save = pane.SetEnabledAsync(true);
+        Assert.Empty(callbacks);
+        // Re-enter while the App-owned write is still pending.
+        var pending = pane.Refresh();
+        Assert.Contains("即時反映・非同期で自動保存（共通の保存・キャンセルとは別）", pending.IntegratedSettings);
+        Assert.Contains("実行中の設定：ON    保存済み：OFF    保存中", pending.IntegratedSettings);
+        adapter.Complete(0, succeeds ? NovaApplicationNetworkFailure.None : NovaApplicationNetworkFailure.PersistenceFailed);
+        await save;
+        Assert.True(pane.CanAcceptCallback(Assert.Single(callbacks)));
+        var complete = pane.Refresh();
+        Assert.Contains(expected, complete.IntegratedSettings);
+        Assert.Contains($"実行中の設定：ON    保存済み：{(succeeds ? "ON" : "OFF")}", complete.IntegratedSettings);
     }
 
     [Theory]

@@ -1408,6 +1408,11 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             state.CompleteNetworkSettingsSave(wParam);
             return 0;
         }
+        if (message == NatSettingsSaveCompleted)
+        {
+            state.CompleteNatSettingsSave(wParam, (long)lParam);
+            return 0;
+        }
         if (message == WindowMessageCommand)
         {
             state.ProcessCommand(wParam, lParam);
@@ -1716,6 +1721,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 DetachVisuals();
                 _generalSettings?.Release();
                 _pathSettings?.Release();
+                CloseNatSettingsPage();
                 CloseNetworkSettingsPages();
                 _settingsCategory = null;
                 _detailsUpdates.Close();

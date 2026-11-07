@@ -53,6 +53,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
 
         internal void DestroyIntegratedSettings()
         {
+            CloseNatSettingsPage();
             CloseNetworkSettingsPages();
             _generalSettings?.Release();
             _generalSettings = null;
@@ -197,7 +198,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             PaintNetworkSettingsFrames(dc);
             if (PathCategory)
             {
-                var input = new GenesisGuiNextSettingsLayout(LogicalWidth(client.Right), LogicalWidth(client.Bottom)).PathInput(_settingsCategory == GenesisIntegratedSettingsCategory.Playback);
+                var input = new GenesisGuiNextSettingsLayout(LogicalWidth(client.Right), LogicalWidth(client.Bottom)).PathInput(true);
                 using var focus = new VisualPen(dc, Scale(1), GetFocus() == _settingsPath ? GenesisGuiNextDesign.Accent : GenesisGuiNextDesign.Border);
                 _ = GdiRectangle(dc, Scale(input.Left) - 1, Scale(input.Top) - 1, Scale(input.Right) + 1, Scale(input.Bottom) + 1);
             }
@@ -215,11 +216,11 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 if (dc == 0 || !GetClientRect(control, out var box)) return true;
                 _ = FillRect(dc, ref box, control == _settingsTitle ? _mainBrush : _topBrush);
                 var title = control == _settingsTitle || control == _generalTitle;
-                var color = control == _generalStatus && SettingsError ? GenesisGuiNextDesign.Warning :
+                var color = (control == _generalStatus && SettingsError || control == _natSettingsStatus && _natSettingsError) ? GenesisGuiNextDesign.Warning :
                     title ? GenesisGuiNextDesign.Text : GenesisGuiNextDesign.SecondaryText;
                 DrawCardLabel(dc, box, ReadCardControlText(control), color,
                     title ? _cardTitleFont?.Handle ?? 0 : _visualFont?.Handle ?? 0, control,
-                    control == _generalNotice || control == _generalStatus ? 0x0010u | 0x8000 : DrawTextSingleLine | DrawTextVerticalCenter | 0x8000);
+                    control == _generalNotice || control == _generalStatus || control == _natSettingsStatus ? 0x0010u | 0x8000 : DrawTextSingleLine | DrawTextVerticalCenter | 0x8000);
                 return true;
             }
             finally { _ = EndCardPaint(control, ref paint); }

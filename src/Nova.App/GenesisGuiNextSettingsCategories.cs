@@ -18,7 +18,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private bool _updatingSettingsPath, _notificationError;
         private string _notificationMessage = string.Empty;
         private nint[] AdditionalSettingsButtons => [_playbackCategory, _recordingCategory, _notificationsCategory, _settingsBrowse, _settingsReset, _testSound, .. NetworkSettingsButtons];
-        private nint[] SettingsChecks => [_notifyNew, _notifyFavorite, _notifySound, _connectionIpv6, _ypEnabled];
+        private nint[] SettingsChecks => [_notifyNew, _notifyFavorite, _notifySound, _connectionIpv6, _connectionAutoMapping, _ypEnabled];
         private bool PathCategory => _settingsCategory is GenesisIntegratedSettingsCategory.Playback or GenesisIntegratedSettingsCategory.Recording;
         private bool SettingsError => _settingsCategory == GenesisIntegratedSettingsCategory.General ? _generalSettings?.IsError == true :
             PathCategory ? _pathSettings?.IsError == true : NetworkCategory ? NetworkSettingsError : _notificationError;
@@ -79,7 +79,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             Show(_generalNotice, true); // YP hides this shared text; restore it for every other category.
             Show(_generalRuntime, !notification); Show(_generalConfigured, !notification);
             Show(_generalSave, !notification); Show(_generalCancel, !notification);
-            Show(_settingsPath, PathCategory); Show(_settingsBrowse, _settingsCategory == GenesisIntegratedSettingsCategory.Playback);
+            Show(_settingsPath, PathCategory); Show(_settingsBrowse, PathCategory);
             Show(_settingsReset, PathCategory); Show(_testSound, notification);
             foreach (var control in new[] { _notifyNew, _notifyFavorite, _notifySound }) Show(control, notification);
             ShowNetworkSettingsCategory();
@@ -119,15 +119,24 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             if (id == PlaybackCategoryId && control == _playbackCategory) SelectSettingsCategory(GenesisIntegratedSettingsCategory.Playback);
             else if (id == RecordingCategoryId && control == _recordingCategory) SelectSettingsCategory(GenesisIntegratedSettingsCategory.Recording);
             else if (id == NotificationsCategoryId && control == _notificationsCategory) SelectSettingsCategory(GenesisIntegratedSettingsCategory.Notifications);
-            else if (id == SettingsBrowseId && control == _settingsBrowse && _settingsCategory == GenesisIntegratedSettingsCategory.Playback)
+            else if (id == SettingsBrowseId && control == _settingsBrowse && PathCategory)
             {
                 if (!ReadSettingsPath(out var text)) { RefreshIntegratedSettings(); return true; }
+                var category = _settingsCategory;
                 var revision = _settingsCategoryRevision;
-                var result = GenesisGuiNextPlaybackSettingsWindow.BrowseForExecutable(_owner, text);
-                if (SettingsPageOpen && _settingsCategory == GenesisIntegratedSettingsCategory.Playback && revision == _settingsCategoryRevision)
+                // Browsing only modifies the current draft; persistence remains behind the Save button.
+                var selectedPath = category == GenesisIntegratedSettingsCategory.Playback
+                    ? GenesisGuiNextPlaybackSettingsWindow.BrowseForExecutable(_owner, text)
+                    : default;
+                var folder = category == GenesisIntegratedSettingsCategory.Recording
+                    ? GenesisRecordingDirectoryPicker.Browse(_owner)
+                    : default;
+                if (SettingsPageOpen && category == _settingsCategory && revision == _settingsCategoryRevision)
                 {
-                    if (result.SelectedPath is { } path) _pathSettings!.Edit(path);
-                    else if (result.Failed) _pathSettings!.ReportInputError(GenesisGuiNextPlaybackSettingsWindow.BrowseFailureText);
+                    var path = category == GenesisIntegratedSettingsCategory.Playback ? selectedPath.SelectedPath : folder.SelectedPath;
+                    var failed = category == GenesisIntegratedSettingsCategory.Playback ? selectedPath.Failed : folder.Failed;
+                    if (path is not null) _pathSettings!.Edit(path);
+                    else if (failed) _pathSettings!.ReportInputError("フォルダーまたはファイルを選択できませんでした。");
                     RefreshIntegratedSettings();
                 }
             }
@@ -205,7 +214,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             if (PathCategory)
             {
                 Place(_generalNotice, layout.PathNotice); Place(_generalRuntime, layout.PathRuntime); Place(_generalConfigured, layout.PathSaved);
-                Place(_settingsPath, layout.PathInput(_settingsCategory == GenesisIntegratedSettingsCategory.Playback)); Place(_generalStatus, layout.PathStatus);
+                Place(_settingsPath, layout.PathInput(true)); Place(_generalStatus, layout.PathStatus);
             }
             else if (_settingsCategory == GenesisIntegratedSettingsCategory.Notifications)
             {

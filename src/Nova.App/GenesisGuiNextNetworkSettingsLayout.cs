@@ -8,7 +8,15 @@ internal readonly record struct GenesisGuiNextNetworkSettingsLayout(int Width)
     internal GenesisGuiNextAppShellPlacement.WindowRectangle Saved => Box(32, 204, Width - 64, 18);
     internal GenesisGuiNextAppShellPlacement.WindowRectangle Status => Box(32, 294, Width - 64, 24);
     internal GenesisGuiNextAppShellPlacement.WindowRectangle Ipv6 => Box(Width - 208, 116, 176, 24);
-    internal GenesisGuiNextAppShellPlacement.WindowRectangle ConnectionTitle => Box(32, 116, Width - 256, 24);
+    internal GenesisGuiNextAppShellPlacement.WindowRectangle ConnectionTitle => Box(32, 116, Width - 592, 24);
+    internal GenesisGuiNextAppShellPlacement.WindowRectangle AutoMapping => Box(Width - 544, 116, 320, 24);
+    internal GenesisGuiNextAppShellPlacement.WindowRectangle NatStatus(GenesisGuiNextSettingsLayout layout)
+    {
+        const int statusHeight = 60;
+        var inCard = Box(32, 330, Width - 64, statusHeight);
+        return inCard.Bottom < layout.Card.Bottom ? inCard :
+            Box(layout.Back.Right + 8, layout.Card.Bottom + 2, layout.Cancel.Left - layout.Back.Right - 16, statusHeight);
+    }
     internal GenesisGuiNextAppShellPlacement.WindowRectangle ConnectionLabel(int index) => Box(32 + index % 3 * ((Width - 64) / 3), 230 + index / 3 * 34, 148, 26);
     internal GenesisGuiNextAppShellPlacement.WindowRectangle ConnectionInput(int index)
     {
