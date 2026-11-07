@@ -32,11 +32,12 @@ public sealed partial class PcpDownstreamChildSessionTests
         listener.Start();
 
         using var timeoutSource = new CancellationTokenSource(TestTimeout);
+        TcpTransportConnection? observed = null;
         var serverTask = AcceptAndRunAsync(
             listener,
             fanout,
             options: null,
-            timeoutSource.Token);
+            timeoutSource.Token, observedConnection: c => observed = c);
         await using var client = await new TcpTransportConnector(
             transportOptions).ConnectAsync(
                 listener.LocalEndPoint.Address.ToString(),
@@ -68,6 +69,8 @@ public sealed partial class PcpDownstreamChildSessionTests
             var channel = await atomReader.ReadNextAsync(
                 timeoutSource.Token);
             AssertChannelPacket(channel, payload);
+            Assert.NotNull(observed);
+            Assert.True(observed.Traffic.IsEstablished);
 
             await client.WriteAsync(
                 EncodeTerminal(PcpKnownAtomNames.Quit),
@@ -83,6 +86,7 @@ public sealed partial class PcpDownstreamChildSessionTests
             Assert.Equal(payload.Length, result.DeliveredByteCount);
             Assert.Equal(0, result.DiscardedPacketCount);
             Assert.Equal(0, fanout.ActiveChildCount);
+            Assert.False(observed.Traffic.IsEstablished);
         }
         finally
         {
@@ -545,9 +549,12 @@ public sealed partial class PcpDownstreamChildSessionTests
         PcpRelayFanout fanout,
         PcpDownstreamChildOptions? options,
         CancellationToken cancellationToken,
-        IPcpDownstreamPacketWriter? packetWriter = null)
+        IPcpDownstreamPacketWriter? packetWriter = null,
+        Action<TcpTransportConnection>? observedConnection = null)
     {
         var connection = await listener.AcceptAsync(cancellationToken);
+        Assert.False(connection.Traffic.IsEstablished);
+        observedConnection?.Invoke(connection);
         await using var session = new PcpDownstreamChildSession(
             connection,
             fanout,
@@ -555,7 +562,9 @@ public sealed partial class PcpDownstreamChildSessionTests
             LocalSessionId,
             options,
             packetWriter);
-        return await session.RunAsync(cancellationToken);
+        var result = await session.RunAsync(cancellationToken);
+        Assert.False(connection.Traffic.IsEstablished);
+        return result;
     }
 
     private static ValueTask<PcpRelayHandshakeResult> NegotiateAsync(

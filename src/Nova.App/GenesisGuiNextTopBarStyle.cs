@@ -13,6 +13,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
     {
         private GenesisGuiNextTopStatusValues _topStatus = GenesisGuiNextTopStatusPresentation.Create(null, null);
         private bool _topStatusInitialized;
+        private readonly GenesisGuiNextTrafficSampler _trafficSampler = new(TimeProvider.System);
         internal void RefreshTopStatus()
         {
             if (!IsModern || Volatile.Read(ref _detached) != 0) return;
@@ -20,7 +21,10 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             NovaApplicationNetworkSnapshot? network = null;
             try { network = _viewModel.NetworkSettingsAdapter?.ReadSnapshot(); }
             catch { /* Do not retain a last successful Port value after a failed read. */ }
-            var value = GenesisGuiNextTopStatusPresentation.Create(_viewModel.RelayActivation?.Snapshot, network);
+            PeerCast.Nova.Network.Transport.PcpTransportSnapshot? traffic = null;
+            try { traffic = PeerCast.Nova.Network.Transport.PcpTransportStatistics.Shared.Capture(); }
+            catch { /* A failed observation clears the sampling baseline. */ }
+            var value = GenesisGuiNextTopStatusPresentation.Create(_viewModel.RelayActivation?.Snapshot, network, _trafficSampler.Sample(traffic));
             if (Volatile.Read(ref _detached) != 0 || _topStatusInitialized && value == _topStatus) return;
             _topStatusInitialized = true;
             _topStatus = value;

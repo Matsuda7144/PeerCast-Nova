@@ -107,7 +107,7 @@ internal sealed class GenesisChannelSearchBoxBridge : IAsyncDisposable
                 ComboBoxStyleDropDownList | (modernAppearance ? 0x0010u | 0x0200u : 0u), // CBS_OWNERDRAWFIXED | CBS_HASSTRINGS
             left + yellowPageFilterLeft,
             2,
-            YellowPageFilterWidth,
+            modernAppearance ? GenesisGuiNextTopBarLayout.FilterWidth : YellowPageFilterWidth,
             YellowPageDropDownHeight,
             statusBar,
             0,
@@ -175,7 +175,7 @@ internal sealed class GenesisChannelSearchBoxBridge : IAsyncDisposable
         var labelWidth = _modernAppearance ? GenesisGuiNextTopBarLayout.SearchLabelWidth : LabelWidth;
         _ = MoveWindow(_label, S(left), 0, S(labelWidth - 4), S(height), true);
         _ = MoveWindow(_edit, S(left + labelWidth), S(2), S(editWidth), S(_modernAppearance ? GenesisGuiNextTopBarLayout.Height : height - 4), true);
-        _ = MoveWindow(_yellowPageFilter, S(left + filterLeft), S(2), S(YellowPageFilterWidth), S(YellowPageDropDownHeight), true);
+        _ = MoveWindow(_yellowPageFilter, S(left + filterLeft), S(2), S(_modernAppearance ? GenesisGuiNextTopBarLayout.FilterWidth : YellowPageFilterWidth), S(YellowPageDropDownHeight), true);
     }
 
     [DllImport("user32.dll")]

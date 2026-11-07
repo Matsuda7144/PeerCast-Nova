@@ -5,15 +5,19 @@ namespace PeerCast.Nova.App;
 internal sealed record GenesisGuiNextTopStatusValue(string Text, string Compact, int Color);
 internal sealed record GenesisGuiNextTopStatusValues(GenesisGuiNextTopStatusValue Connection, GenesisGuiNextTopStatusValue Port)
 {
+    internal GenesisGuiNextTrafficValues Traffic { get; init; } = GenesisGuiNextTrafficValues.Unknown;
     internal GenesisGuiNextTopStatusValue Value(int index) => index switch
     {
         0 => Connection,
+        1 => Traffic.Connections,
+        2 => Traffic.Up,
+        3 => Traffic.Down,
         4 => Port,
         _ => GenesisGuiNextTopStatusPresentation.Unknown,
     };
     // The native STATIC retains scope and the full, unabridged diagnostics for accessibility.
-    internal string AccessibleText => $"PCP Relay接続: {Connection.Text} | P2Pノード数 — | 上り — | 下り — | Port {Port.Text}。" +
-        "接続対象は明示Relayのみ。再生・録画・OBS・YPの接続状態ではありません。Peer数と送受信速度は全体計測未対応。";
+    internal string AccessibleText => $"PCP Relay接続: {Connection.Text} | PCP接続数 {Traffic.Connections.Text} | PCP上り {Traffic.Up.Text} | PCP下り {Traffic.Down.Text} | Port {Port.Text}。" +
+        "接続対象は明示Relayのみ。再生・録画・OBS・YPの接続状態ではありません。計測範囲は成立済みPCPメディア接続のTransport成功Read/Writeのみ。固有Peer数や物理ワイヤ量ではありません。OBS・YP Announce・HTTP等の全体計測未対応。";
 }
 
 internal static class GenesisGuiNextTopStatusPresentation
@@ -24,7 +28,7 @@ internal static class GenesisGuiNextTopStatusPresentation
     internal static string Label(int index, bool compact) => index switch
     {
         0 => compact ? "Relay" : "PCP Relay",
-        1 => "P2P",
+        1 => "PCP",
         2 => "↑",
         3 => "↓",
         4 => "Port",
@@ -35,8 +39,8 @@ internal static class GenesisGuiNextTopStatusPresentation
     public static string FormatUnavailable() =>
         $"接続 {UnknownValue} | P2Pノード数 {UnknownValue} | 上り {UnknownValue} | 下り {UnknownValue} | ポート開放 {UnknownValue}";
 
-    internal static GenesisGuiNextTopStatusValues Create(GenesisRelayActivationSnapshot? relay, NovaApplicationNetworkSnapshot? network) =>
-        new(Connection(relay), Port(network));
+    internal static GenesisGuiNextTopStatusValues Create(GenesisRelayActivationSnapshot? relay, NovaApplicationNetworkSnapshot? network,
+        GenesisGuiNextTrafficValues? traffic = null) => new(Connection(relay), Port(network)) { Traffic = traffic ?? GenesisGuiNextTrafficValues.Unknown };
 
     private static GenesisGuiNextTopStatusValue Value(string text, string compact, bool failure = false, bool confirmed = false) =>
         new(text, compact, failure ? GenesisGuiNextDesign.Warning : confirmed ? GenesisGuiNextDesign.Success : GenesisGuiNextDesign.SecondaryText);
@@ -50,10 +54,10 @@ internal static class GenesisGuiNextTopStatusPresentation
             return Value("エラー", "異常", failure: true);
         return relay.State switch
         {
-            GenesisRelayActivationState.Running when relay.ListenerBound && relay.UpstreamReady && relay.ReceivingReady => Value("接続中", "接続中", confirmed: true),
-            GenesisRelayActivationState.Preparing or GenesisRelayActivationState.Starting => Value("準備中", "準備中"),
-            GenesisRelayActivationState.Stopping => Value("停止中", "停止中"),
-            GenesisRelayActivationState.Stopped when relay.CleanupConfirmed && !relay.ListenerBound => Value("未接続", "未接続"),
+            GenesisRelayActivationState.Running when relay.ListenerBound && relay.UpstreamReady && relay.ReceivingReady => Value("接続中", "接続", confirmed: true),
+            GenesisRelayActivationState.Preparing or GenesisRelayActivationState.Starting => Value("準備中", "準備"),
+            GenesisRelayActivationState.Stopping => Value("停止中", "停止"),
+            GenesisRelayActivationState.Stopped when relay.CleanupConfirmed && !relay.ListenerBound => Value("未接続", "未接"),
             _ => Unknown,
         };
     }
@@ -69,23 +73,23 @@ internal static class GenesisGuiNextTopStatusPresentation
             return Value("エラー", "エラー", failure: true);
         if (network.Nat?.State == NatDisplayState.ResultUnknown)
             return Value("処理結果未確認", "結果?", failure: true);
-        if (network.Disposed) return Value("未待受", "未待受");
-        if (network.Disposing) return Value("停止中", "停止中");
-        if (network.Initializing) return Value("準備中", "準備中");
+        if (network.Disposed) return Value("未待受", "未待");
+        if (network.Disposing) return Value("停止中", "停止");
+        if (network.Initializing) return Value("準備中", "準備");
         if (!network.Initialized) return Unknown;
         if (network.PublicListenerAvailability == NovaApplicationPublicListenerAvailability.Failed)
             return Value("エラー", "エラー", failure: true);
         if (network.PublicListenerAvailability == NovaApplicationPublicListenerAvailability.Starting)
-            return Value("準備中", "準備中");
+            return Value("準備中", "準備");
         if (network.PublicListenerAvailability == NovaApplicationPublicListenerAvailability.Stopping)
-            return Value("停止中", "停止中");
+            return Value("停止中", "停止");
         if (network.PublicListenerAvailability != NovaApplicationPublicListenerAvailability.Listening)
-            return Value("未待受", "未待受");
+            return Value("未待受", "未待");
         var nat = network.Nat;
         // A mapping for another listener must not be borrowed as evidence for this one.
         if (network.PublicRelay is not { State: NovaPublicRelayState.Listening, Endpoint: { } endpoint } || nat is null ||
             nat.InternalPort != endpoint.Port || !nat.RegisteredInternalPorts.Contains(endpoint.Port))
-            return Value("待受中・到達未確認", "待受中");
+            return Value("待受中・到達未確認", "待受");
         if (nat.State is NatDisplayState.Mapped or NatDisplayState.Renewing &&
             nat.LeaseEvidence is NatLeaseEvidenceKind.RouterConfirmedWithEstimatedExpiry or NatLeaseEvidenceKind.RouterConfirmedPermanent)
         {
@@ -93,7 +97,7 @@ internal static class GenesisGuiNextTopStatusPresentation
             {
                 NatDisplayReachability.Reachable => Value("外部到達確認済み", "到達済", confirmed: true),
                 NatDisplayReachability.Unreachable => Value("外部到達不可", "到達NG", failure: true),
-                _ => Value("マッピング済み・外部到達未確認", "割当済?"),
+                _ => Value("マッピング済み・外部到達未確認", "割当?"),
             };
         }
         return nat.State switch
@@ -102,7 +106,7 @@ internal static class GenesisGuiNextTopStatusPresentation
             NatDisplayState.Mapping or NatDisplayState.Unmapping => Value("開放・解除処理中", "処理中"),
             NatDisplayState.ResultUnknown => Value("処理結果未確認", "結果?", failure: true),
             NatDisplayState.Rejected or NatDisplayState.RouterNotFound or NatDisplayState.PortConflict => Value("マッピングエラー", "エラー", failure: true),
-            _ => Value("待受中・到達未確認", "待受中"),
+            _ => Value("待受中・到達未確認", "待受"),
         };
     }
 

@@ -1086,9 +1086,9 @@ public sealed class PcpChannelSessionRedirectTests
                 cancellationToken);
             await resetSignal.Task.WaitAsync(cancellationToken);
 
-            connection.TransportStream.Socket.LingerState =
+            connection.TransportSocket.LingerState =
                 new LingerOption(enable: true, seconds: 0);
-            connection.TransportStream.Socket.Close();
+            connection.TransportSocket.Close();
         }
         finally
         {

@@ -81,7 +81,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 _searchBox.ApplyLayout(searchLeft, searchWidth, status.Height, dpi);
                 var topControlHeight = IsModern ? GenesisGuiNextTopBarLayout.Height : status.Height - 4;
                 Place(_refreshButton, refreshLeft, 2, RefreshButtonWidth, topControlHeight);
-                Place(_favoriteButton, favoriteLeft, 2, FavoriteButtonWidth, topControlHeight);
+                Place(_favoriteButton, favoriteLeft, 2, IsModern ? GenesisGuiNextTopBarLayout.FavoriteWidth : FavoriteButtonWidth, topControlHeight);
 
                 var actions = ResolveDetailsActions(details.Width);
                 _detailsTextWidth = actions.TextWidth;

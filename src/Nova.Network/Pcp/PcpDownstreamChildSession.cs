@@ -598,6 +598,7 @@ public sealed class PcpDownstreamChildSession :
         if (!_initialMetadata.IsEmpty)
             await WriteControlAsync(_initialMetadata, handshakeToken, _packetWriter).ConfigureAwait(false);
 
+        using var trafficObservation = _connection.ObservePcpSession();
         Interlocked.Exchange(ref _handshakeAccepted, 1);
         Interlocked.Exchange(ref _relayActive, 1);
         _wanIngress?.Handshaken();

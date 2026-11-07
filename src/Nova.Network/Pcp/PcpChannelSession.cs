@@ -584,6 +584,7 @@ public sealed class PcpChannelSession : IAsyncDisposable
                 }
 
                 cancellationToken.ThrowIfCancellationRequested();
+                using var trafficObservation = connection.ObservePcpSession();
                 _statusTracker.TransitionTo(ChannelSessionState.Receiving);
                 _negotiation.TrySetResult(new(
                     PcpChannelSessionNegotiationOutcome.Accepted,

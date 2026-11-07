@@ -13,12 +13,14 @@ public sealed class TcpTransportConnection : IAsyncDisposable
 
     private readonly TcpClient _client;
     private readonly NetworkStream _stream;
+    private readonly Stream _observedStream;
+    internal PcpTransportCounter Traffic { get; }
     private readonly Action? _onDisposed;
     private readonly TaskCompletionSource _cleanupCompletion = new(
         TaskCreationOptions.RunContinuationsAsynchronously);
     private int _disposed;
 
-    internal TcpTransportConnection(TcpClient client, Action? onDisposed = null)
+    internal TcpTransportConnection(TcpClient client, Action? onDisposed = null, PcpTransportStatistics? statistics = null)
     {
         ArgumentNullException.ThrowIfNull(client);
 
@@ -33,6 +35,8 @@ public sealed class TcpTransportConnection : IAsyncDisposable
             ?? throw new InvalidOperationException("The TCP connection has no remote endpoint.");
 
         ConnectionId = Interlocked.Increment(ref _nextConnectionId);
+        Traffic = (statistics ?? PcpTransportStatistics.Shared).CreateCounter(ConnectionId);
+        _observedStream = new TransportObservationStream(_stream, Traffic);
     }
 
     public long ConnectionId { get; }
@@ -50,12 +54,16 @@ public sealed class TcpTransportConnection : IAsyncDisposable
     /// </summary>
     public Task CleanupCompletion => _cleanupCompletion.Task;
 
-    internal NetworkStream TransportStream
+    internal IDisposable ObservePcpSession() => Traffic.Establish();
+
+    internal Socket TransportSocket => _stream.Socket;
+
+    internal Stream TransportStream
     {
         get
         {
             ThrowIfDisposed();
-            return _stream;
+            return _observedStream;
         }
     }
 
@@ -64,7 +72,7 @@ public sealed class TcpTransportConnection : IAsyncDisposable
         CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return _stream.ReadAsync(buffer, cancellationToken);
+        return _observedStream.ReadAsync(buffer, cancellationToken);
     }
 
     public ValueTask WriteAsync(
@@ -72,7 +80,7 @@ public sealed class TcpTransportConnection : IAsyncDisposable
         CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
-        return _stream.WriteAsync(buffer, cancellationToken);
+        return _observedStream.WriteAsync(buffer, cancellationToken);
     }
 
     public async ValueTask DisposeAsync()
@@ -101,6 +109,7 @@ public sealed class TcpTransportConnection : IAsyncDisposable
         }
         finally
         {
+            Traffic.Close();
             var transportClosed = false;
             try
             {

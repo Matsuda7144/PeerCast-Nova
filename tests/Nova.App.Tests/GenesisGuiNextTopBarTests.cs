@@ -2,8 +2,8 @@ namespace PeerCast.Nova.App.Tests;
 
 public sealed class GenesisGuiNextTopBarTests
 {
-    private static readonly string[] CompactLabels = ["Relay", "P2P", "↑", "↓", "Port"];
-    private static readonly string[] FullLabels = ["PCP Relay", "P2P", "↑", "↓", "Port"];
+    private static readonly string[] CompactLabels = ["Relay", "PCP", "↑", "↓", "Port"];
+    private static readonly string[] FullLabels = ["PCP Relay", "PCP", "↑", "↓", "Port"];
     [Theory]
     [InlineData(1088, 474, 96u)]
     [InlineData(1120, 620, 96u)]
@@ -25,9 +25,9 @@ public sealed class GenesisGuiNextTopBarTests
         Assert.Equal(GenesisGuiNextTopBarLayout.Height, top.Height - 4);
         Assert.True(S(8) + S(status) < S(searchLeft));
         Assert.True(S(searchLeft + GenesisGuiNextTopBarLayout.SearchLabelWidth) + S(inputWidth) < S(searchLeft + filterLeft));
-        Assert.True(S(searchLeft + filterLeft) + S(GenesisChannelSearchBoxBridge.YellowPageFilterWidth) < S(refresh));
+        Assert.True(S(searchLeft + filterLeft) + S(GenesisGuiNextTopBarLayout.FilterWidth) < S(refresh));
         Assert.True(S(refresh) + S(GenesisGuiNextAppShellBridge.RefreshButtonWidth) < S(favorite));
-        Assert.True(S(favorite) + S(GenesisGuiNextAppShellBridge.FavoriteButtonWidth) <= S(top.Width));
+        Assert.True(S(favorite) + S(GenesisGuiNextTopBarLayout.FavoriteWidth) <= S(top.Width));
         Assert.Equal(28, top.Height);
         Assert.Equal(GenesisGuiNextAppShellPlacement.DetailsHeight, details.Height);
         Assert.True(list.Height >= GenesisGuiNextAppShellPlacement.MinimumListHeight);
