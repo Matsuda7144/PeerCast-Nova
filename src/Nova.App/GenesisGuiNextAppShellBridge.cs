@@ -2649,7 +2649,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             _ = PresentInvalidation(_recordingHistoryRefreshButton, 0, true);
             _ = PresentVisible(_recordingHistoryDetails, isHistoryPage ? ShowWindowShowNoActivate : ShowWindowHide);
             foreach (var textControl in new[] { _detailsTitle, _detailsDescription, _detailsMetadata, _detailsIdentity })
-                _ = PresentVisible(textControl, isHistoryPage ? ShowWindowHide : ShowWindowShowNoActivate);
+                _ = PresentVisible(textControl, isHistoryPage || isLogPage && UsesChannelCard && textControl == _detailsIdentity
+                    ? ShowWindowHide : ShowWindowShowNoActivate);
             MoveDetailsTextControls(isRecordingPage, isLibraryPage || isHistoryPage);
             _ = PresentVisible(
                 _detailsRecordButton,

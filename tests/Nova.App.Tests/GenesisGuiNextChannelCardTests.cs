@@ -3,13 +3,16 @@ namespace PeerCast.Nova.App.Tests;
 public sealed class GenesisGuiNextChannelCardTests
 {
     [Fact]
-    public void ClassicAndDedicatedTabsNeverUseTheChannelCard()
+    public void OnlyModernChannelPlayingAndLogDetailsUseTheCard()
     {
         foreach (var tab in Enum.GetValues<GenesisGuiNextTab>())
         {
             Assert.False(GenesisGuiNextChannelCardLayout.Applies(false, tab));
-            Assert.Equal(tab is GenesisGuiNextTab.Channels or GenesisGuiNextTab.New or GenesisGuiNextTab.Favorites,
+            Assert.Equal(tab is GenesisGuiNextTab.Channels or GenesisGuiNextTab.New or GenesisGuiNextTab.Favorites or
+                GenesisGuiNextTab.Playing or GenesisGuiNextTab.Logs,
                 GenesisGuiNextChannelCardLayout.Applies(true, tab));
+            Assert.Equal(tab is GenesisGuiNextTab.Channels or GenesisGuiNextTab.New or GenesisGuiNextTab.Favorites,
+                GenesisGuiNextChannelCardLayout.StylesSidebarPlayback(tab));
         }
     }
 
@@ -22,6 +25,36 @@ public sealed class GenesisGuiNextChannelCardTests
             Assert.Equal(tab is GenesisGuiNextTab.Channels or GenesisGuiNextTab.New or GenesisGuiNextTab.Favorites or
                 GenesisGuiNextTab.Playing or GenesisGuiNextTab.Recording or GenesisGuiNextTab.Logs,
                 GenesisGuiNextChannelListStyle.FrameApplies(true, tab));
+        }
+    }
+
+    [Theory]
+    [InlineData(96u)]
+    [InlineData(144u)]
+    [InlineData(192u)]
+    public void LogTextAndRelayControlsFitTheCardAtMinimumAndNormalSizes(uint dpi)
+    {
+        int Scale(int value) => GenesisMainWindowLayout.Scale(value, dpi);
+        foreach (var (width, height) in new[] { (1088, 474), (1120, 620) })
+        {
+            Assert.True(GenesisMainWindowLayout.TryResolve(Scale(width), Scale(height), dpi,
+                out _, out _, out _, out var details));
+            var layout = new GenesisGuiNextChannelCardLayout(details.Width);
+            var regions = new[] { layout.LogTitle, layout.LogDescription, layout.LogScope,
+                GenesisGuiNextChannelCardLayout.Record, layout.LogRelayStatus };
+            Assert.Equal(layout.Title.Top, layout.LogTitle.Top);
+            Assert.Equal(layout.Description.Top, layout.LogDescription.Top);
+            Assert.Equal(layout.LogTitle.Right, layout.LogScope.Right);
+            var previousBottom = Scale(6);
+            foreach (var bounds in regions)
+            {
+                Assert.True(Scale(bounds.Top) >= previousBottom);
+                Assert.True(Scale(bounds.Left) > Scale(6));
+                Assert.True(Scale(bounds.Left) + Scale(bounds.Width) < Scale(details.Width - 6));
+                Assert.True(Scale(bounds.Height) >= Scale(GenesisGuiNextDesign.BodyFontHeight));
+                previousBottom = Scale(bounds.Top) + Scale(bounds.Height);
+            }
+            Assert.True(previousBottom < Scale(details.Height - 6));
         }
     }
 

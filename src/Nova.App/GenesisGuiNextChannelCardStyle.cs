@@ -20,6 +20,15 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             var layout = new GenesisGuiNextChannelCardLayout(LogicalWidth(client.Right));
             void Place(nint control, GenesisGuiNextAppShellPlacement.WindowRectangle bounds) =>
                 _ = PresentBounds(control, bounds.Left, bounds.Top, bounds.Width, bounds.Height, true);
+            if (_tabs.SelectedTab == GenesisGuiNextTab.Logs)
+            {
+                Place(_detailsTitle, layout.LogTitle);
+                Place(_detailsDescription, layout.LogDescription);
+                Place(_detailsMetadata, layout.LogScope);
+                Place(_relayStop, GenesisGuiNextChannelCardLayout.Record);
+                Place(_relayStatus, layout.LogRelayStatus);
+                return;
+            }
             Place(_detailsTitle, layout.Title);
             Place(_detailsDescription, layout.Description);
             Place(_detailsMetadata, layout.Metadata);
@@ -39,6 +48,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             card.Left += Scale(6); card.Right -= Scale(6);
             card.Top += Scale(6); card.Bottom -= Scale(6);
             DrawModernSurface(dc, card, GenesisGuiNextDesign.Panel, GenesisGuiNextDesign.Border, Scale(12));
+            if (_tabs.SelectedTab == GenesisGuiNextTab.Logs) return true;
             using var border = new VisualPen(dc, Scale(1), GenesisGuiNextDesign.Border);
             var layout = new GenesisGuiNextChannelCardLayout(LogicalWidth(client.Right));
             Line(dc, Scale(layout.DividerLeft), Scale(18), Scale(layout.DividerLeft), Scale(124));
@@ -59,9 +69,11 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 _ = FillRect(dc, ref bounds, _topBrush);
                 var title = control == _detailsTitle;
                 var wrap = control != _detailsTitle;
+                var useInheritedFont = control == _detailsIdentity ||
+                    control == _detailsMetadata && _tabs.SelectedTab == GenesisGuiNextTab.Logs;
                 DrawCardLabel(dc, bounds, ReadCardControlText(control),
                     title ? GenesisGuiNextDesign.Text : GenesisGuiNextDesign.SecondaryText,
-                    title ? _cardTitleFont?.Handle ?? 0 : control == _detailsIdentity ? 0 : _visualFont?.Handle ?? 0,
+                    title ? _cardTitleFont?.Handle ?? 0 : useInheritedFont ? 0 : _visualFont?.Handle ?? 0,
                     control, wrap ? 0x0010u | 0x8000 : DrawTextSingleLine | 0x8000);
                 return true;
             }
@@ -71,6 +83,9 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private bool DrawChannelCardItem(DrawItem draw)
         {
             if (!UsesChannelCard) return false;
+            if ((draw.ControlWindow == _playButton || draw.ControlWindow == _stopButton) &&
+                !GenesisGuiNextChannelCardLayout.StylesSidebarPlayback(_tabs.SelectedTab))
+                return false;
             if (IsOwnerDrawButton(draw.ControlType) && CardButtons.Contains(draw.ControlWindow))
             {
                 var disabled = (draw.ItemState & DrawItemDisabled) != 0;
