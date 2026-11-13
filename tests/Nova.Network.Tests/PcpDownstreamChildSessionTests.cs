@@ -491,8 +491,10 @@ public sealed partial class PcpDownstreamChildSessionTests
         }
     }
 
-    [Fact]
-    public async Task Session_UncooperativeWriterReturnsAtFiniteCleanupBoundary()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Session_UncooperativeWriterReturnsAtFiniteCleanupBoundary(bool pacing)
     {
         var transportOptions = CreateTransportOptions();
         await using var listener = CreateListener(transportOptions);
@@ -515,7 +517,7 @@ public sealed partial class PcpDownstreamChildSessionTests
             fanout,
             options,
             timeoutSource.Token,
-            packetWriter);
+            packetWriter, pacing: pacing ? new PcpDownstreamPacer(1000) : null);
         await using var client = await new TcpTransportConnector(
             transportOptions).ConnectAsync(
                 listener.LocalEndPoint.Address.ToString(),
@@ -625,7 +627,8 @@ public sealed partial class PcpDownstreamChildSessionTests
         PcpDownstreamChildOptions? options,
         CancellationToken cancellationToken,
         IPcpDownstreamPacketWriter? packetWriter = null,
-        Action<TcpTransportConnection>? observedConnection = null)
+        Action<TcpTransportConnection>? observedConnection = null,
+        PcpDownstreamPacer? pacing = null)
     {
         var connection = await listener.AcceptAsync(cancellationToken);
         Assert.False(connection.Traffic.IsEstablished);
@@ -636,7 +639,7 @@ public sealed partial class PcpDownstreamChildSessionTests
             ChannelId,
             LocalSessionId,
             options,
-            packetWriter);
+            packetWriter, pacing is null ? null : new PacingAdmission(pacing));
         var result = await session.RunAsync(cancellationToken);
         Assert.False(connection.Traffic.IsEstablished);
         return result;

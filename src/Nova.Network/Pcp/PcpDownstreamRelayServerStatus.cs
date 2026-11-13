@@ -124,6 +124,7 @@ public sealed record PcpDownstreamRelayServerSnapshot
     public int AdmissionCleanupPendingCount { get; init; }
     public long AdmissionCleanupFailedCount { get; init; }
     public PcpDownstreamTrafficSnapshot? Traffic { get; init; }
+    public long PacingLimitedCount { get; init; }
 }
 
 public enum PcpRelayQuiescenceOutcome { Drained, TimedOut, Cancelled, DeliveryFailed, CleanupFailed, Failed }

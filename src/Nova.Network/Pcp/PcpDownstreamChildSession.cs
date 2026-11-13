@@ -22,7 +22,7 @@ internal interface IPcpDownstreamWorkerLifetimeObserver
 /// from the shared listener for the duration of the run. The fan-out remains
 /// caller-owned in either mode.
 /// </summary>
-public sealed class PcpDownstreamChildSession :
+public sealed partial class PcpDownstreamChildSession :
     IPcpRelayChildSink,
     IAsyncDisposable
 {
@@ -187,6 +187,8 @@ public sealed class PcpDownstreamChildSession :
         _preRoutedRequest = preRoutedRequest;
         _ownsTransport = ownsTransport;
         _admission = admission;
+        _pacing = connection.RemoteEndPoint.AddressFamily == AddressFamily.InterNetwork || connection.RemoteEndPoint.Address.IsIPv4MappedToIPv6
+            ? (admission as IPcpDownstreamRelayPacing)?.Pacing : null;
         _trafficScope = traffic ?? (admission as IPcpDownstreamRelayTraffic)?.Traffic ?? new();
         _childAdmission = childAdmission;
         _peers = peers;
@@ -290,6 +292,11 @@ public sealed class PcpDownstreamChildSession :
 
         if (_packetWriter is IPcpDownstreamWorkerLifetimeObserver observer)
             observer.ObserveWorkerLifetime(cancellationToken);
+        if (_pacing is { MediaKbps: not null })
+        {
+            await SendPacedAsync(packet, cancellationToken).ConfigureAwait(false);
+            return;
+        }
         using var timeoutSource = new CancellationTokenSource(
             _options.WriteTimeout);
         using var linkedSource =
@@ -384,6 +391,10 @@ public sealed class PcpDownstreamChildSession :
         catch (TimeoutException)
         {
             endReason = PcpDownstreamChildEndReason.WriteTimedOut;
+        }
+        catch (PcpPacingLimitException)
+        {
+            endReason = PcpDownstreamChildEndReason.PacingLimited;
         }
         catch (PcpProtocolException exception)
             when (exception.Error == PcpParseError.UnexpectedEndOfStream)
@@ -851,8 +862,10 @@ public sealed class PcpDownstreamChildSession :
         CancellationToken cancellationToken,
         IPcpDownstreamPacketWriter? writer = null)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        _pacing?.ConsumeControl(bytes.Length);
         using var timeoutSource = new CancellationTokenSource(
-            _options.WriteTimeout);
+            _options.WriteTimeout, _pacing?.Clock ?? TimeProvider.System);
         using var linkedSource =
             CancellationTokenSource.CreateLinkedTokenSource(
                 cancellationToken,
@@ -904,6 +917,9 @@ public sealed class PcpDownstreamChildSession :
                 PcpDownstreamChildEndReason.FanoutStopped,
             PcpRelayChildEndReason.SlowConsumer =>
                 PcpDownstreamChildEndReason.SlowConsumer,
+            PcpRelayChildEndReason.PacingLimited => PcpDownstreamChildEndReason.PacingLimited,
+            PcpRelayChildEndReason.SinkFailed when Volatile.Read(ref _pacingLimited) != 0 =>
+                PcpDownstreamChildEndReason.PacingLimited,
             PcpRelayChildEndReason.SinkFailed
                 when Volatile.Read(ref _writeTimedOut) != 0 =>
                     PcpDownstreamChildEndReason.WriteTimedOut,

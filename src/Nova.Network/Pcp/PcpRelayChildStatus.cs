@@ -14,6 +14,7 @@ public enum PcpRelayChildEndReason
     SlowConsumer,
     SinkFailed,
     UpstreamChanged,
+    PacingLimited,
 }
 
 /// <summary>

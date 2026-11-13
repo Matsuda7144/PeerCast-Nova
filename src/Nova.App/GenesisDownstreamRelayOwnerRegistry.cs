@@ -152,11 +152,13 @@ internal sealed class GenesisDownstreamRelayOwnerRegistry : IDisposable
             var traffic = _policy.Traffic.Snapshot;
             var channelRate = owner is null ? "" : $" / CH書込完了 {Rate(owner.Traffic.Snapshot)} kbps";
             var incomplete = traffic.CumulativeComplete ? "" : "（累積一部不明）";
-            return $"リレー予約 {snapshot.ReservedRelays}/{Limit(snapshot.RelayLimit)}{channel} / IPv4帯域予約 {reserved}/{Limit(snapshot.Ipv4BudgetKbps)} kbps（申告値） / 下流PCP書込完了 {Rate(traffic)} kbps{channelRate}{incomplete}{availability}";
+            var pacing = _policy.Pacing is not { } budget ? " / ペーシング OFF" : budget.MediaKbps is null
+                ? " / ペーシング 制限なし" : $" / 媒体ペーシング {budget.MediaKbps} kbps + 制御最大8 kbps（待機{budget.WaitingRequests}）";
+            return $"リレー予約 {snapshot.ReservedRelays}/{Limit(snapshot.RelayLimit)}{channel} / IPv4帯域予約 {reserved}/{Limit(snapshot.Ipv4BudgetKbps)} kbps（申告値） / 下流PCP書込完了 {Rate(traffic)} kbps{channelRate}{incomplete}{availability}{pacing}";
         }
     }
 
-    internal sealed class Owner : IPcpDownstreamRelayRegistration, IPcpDownstreamRelayCapacity, IPcpDownstreamRelayTraffic
+    internal sealed class Owner : IPcpDownstreamRelayRegistration, IPcpDownstreamRelayCapacity, IPcpDownstreamRelayTraffic, IPcpDownstreamRelayPacing
     {
         private readonly GenesisDownstreamRelayOwnerRegistry _registry;
         internal Owner(GenesisDownstreamRelayOwnerRegistry registry, RelayAdmissionPolicy.Channel scope)
@@ -166,6 +168,7 @@ internal sealed class GenesisDownstreamRelayOwnerRegistry : IDisposable
         }
         internal RelayAdmissionPolicy.Channel Scope { get; }
         public PcpDownstreamTrafficMeter Traffic => Scope.Traffic;
+        public PcpDownstreamPacer? Pacing => Scope.Pacing;
         internal bool Retired { get; set; }
         internal int ActiveReservations { get; set; }
         public bool IsCurrent { get { lock (_registry._gate) return !_registry._disposed && !Retired && Scope.IsCurrent; } }

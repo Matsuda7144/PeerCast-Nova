@@ -94,7 +94,8 @@ internal sealed class PcpRelayChildWorker : IAsyncDisposable
             if (_pendingPacketCount >= _maxPendingPackets ||
                 payloadLength > _maxPendingBytes - _pendingByteCount)
             {
-                BeginStopLocked(PcpRelayChildEndReason.SlowConsumer);
+                BeginStopLocked(_sink is IPcpRelayPacingBackpressure { WaitingForPacing: true }
+                    ? PcpRelayChildEndReason.PacingLimited : PcpRelayChildEndReason.SlowConsumer);
                 _discardedPacketCount = checked(_discardedPacketCount + 1);
                 _discardedByteCount = checked(
                     _discardedByteCount + payloadLength);

@@ -153,7 +153,7 @@ internal sealed partial class GenesisGuiNextPublicChannelComposition : IAsyncDis
             throw new AggregateException("Public channel owner shutdown failed.", failures);
     }
 
-    internal sealed partial class Owner : IPcpDownstreamRelayAdmission, IPcpDownstreamRelayCapacity, IPcpDownstreamRelayTraffic, IAsyncDisposable
+    internal sealed partial class Owner : IPcpDownstreamRelayAdmission, IPcpDownstreamRelayCapacity, IPcpDownstreamRelayTraffic, IPcpDownstreamRelayPacing, IAsyncDisposable
     {
         private readonly object _gate = new();
         private readonly GenesisGuiNextPublicChannelComposition _composition;
@@ -196,6 +196,7 @@ internal sealed partial class GenesisGuiNextPublicChannelComposition : IAsyncDis
         public ChannelStatusSnapshot? UpstreamStatus => _upstreamTracker?.Snapshot;
         public int ReservationCount => _registration?.ReservationCount ?? 0;
         public PcpDownstreamTrafficMeter? Traffic => _registration?.Traffic;
+        public PcpDownstreamPacer? Pacing => _registration?.Pacing;
         internal string CapacityStatusText => _composition.Registry.CapacityStatusText(_registration);
         public bool IsCurrent { get { lock (_gate) return !_retired && _registration?.IsCurrent == true; } }
         public bool CanReserve { get { lock (_gate) return !_retired && _registration?.CanReserve == true; } }

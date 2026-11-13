@@ -26,10 +26,14 @@ internal sealed class PublicChannelTestFixture : IAsyncDisposable
         State = state;
     }
 
-    public static async Task<PublicChannelTestFixture> CreateAsync(GenesisGuiNextConnectionPreferences? preferences = null)
+    public static async Task<PublicChannelTestFixture> CreateAsync(GenesisGuiNextConnectionPreferences? preferences = null, bool pacing = false)
     {
         var store = new MemoryConnectionStore(preferences ?? GenesisGuiNextConnectionPreferences.Default);
-        return new(store, await LoadAsync(store));
+        return new(store, await GenesisGuiNextApplicationState.LoadAsync(
+            name => pacing && name == "NOVA_SMART_RELAY_PACING" ? "1" : null,
+            new FavoriteStore(), new NotificationStore(),
+            DefaultGenesisYellowPageConfigurationStore.Instance, DefaultGenesisGuiNextPlaybackPreferencesStore.Instance,
+            store, new SilentSound()));
     }
 
     public static ValueTask<GenesisGuiNextApplicationState> LoadAsync(MemoryConnectionStore store) =>

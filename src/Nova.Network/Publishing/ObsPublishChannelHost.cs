@@ -603,9 +603,10 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
         return new(_options.Lan.Enabled, ready, endpoint?.Address.ToString(), endpoint?.Port, _lanFailure);
     }
 
-    private sealed class LanAdmission(ObsPublishChannelHost owner) : IPcpDownstreamRelayAdmission, IPcpDownstreamRelayTraffic
+    private sealed class LanAdmission(ObsPublishChannelHost owner) : IPcpDownstreamRelayAdmission, IPcpDownstreamRelayTraffic, IPcpDownstreamRelayPacing
     {
         public PcpDownstreamTrafficMeter? Traffic => (owner._relayRegistration as IPcpDownstreamRelayTraffic)?.Traffic;
+        public PcpDownstreamPacer? Pacing => (owner._relayRegistration as IPcpDownstreamRelayPacing)?.Pacing;
         public ChannelId ChannelId => owner.ChannelId;
         public bool TryReserve(long connectionId, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IDisposable? reservation, CancellationToken cancellationToken = default)
         {

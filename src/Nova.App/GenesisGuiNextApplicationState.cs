@@ -235,14 +235,15 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
         IGenesisYellowPageConfigurationStore yellowPageStore,
         IGenesisGuiNextPlaybackPreferencesStore playbackPreferencesStore,
         GenesisRecordingRuleRepository recordingRuleRepository,
-        GenesisGuiNextApplicationStateLoadFailure loadFailures)
+        GenesisGuiNextApplicationStateLoadFailure loadFailures,
+        Func<string, string?>? readEnvironment = null)
     {
         Favorites = favorites;
         Notifications = notifications;
         YellowPages = yellowPages;
         Playback = playback;
         Connection = connection;
-        NetworkPolicies = GenesisGuiNextNetworkPolicies.Create(connection);
+        NetworkPolicies = GenesisGuiNextNetworkPolicies.Create(connection, readEnvironment);
         DownstreamRelays = new GenesisDownstreamRelayOwnerRegistry(NetworkPolicies.Relays);
         PublicChannels = new GenesisGuiNextPublicChannelComposition(DownstreamRelays);
         PublicChannels.ConfigurePublic(connection.Startup);
@@ -345,6 +346,19 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
             connectionPreferencesStore,
             cancellationToken);
 
+    internal static ValueTask<GenesisGuiNextApplicationState> LoadAsync(
+        Func<string, string?> readEnvironment,
+        IGenesisFavoriteChannelStore favoriteStore,
+        IGenesisChannelNotificationPreferenceStore notificationStore,
+        IGenesisYellowPageConfigurationStore yellowPageStore,
+        IGenesisGuiNextPlaybackPreferencesStore playbackPreferencesStore,
+        IGenesisGuiNextConnectionPreferencesStore connectionPreferencesStore,
+        IGenesisSystemNotificationSoundPlayer soundPlayer,
+        CancellationToken cancellationToken = default) =>
+        LoadCoreAsync(favoriteStore, notificationStore, yellowPageStore, playbackPreferencesStore,
+            soundPlayer, pathSource: null, recordingRuleRepositoryFactory: null,
+            connectionPreferencesStore, cancellationToken, readEnvironment);
+
     internal static ValueTask<GenesisGuiNextApplicationState> LoadWithRecordingRuleRepositoryFactoryAsync(
         IGenesisFavoriteChannelStore favoriteStore,
         IGenesisChannelNotificationPreferenceStore notificationStore,
@@ -388,7 +402,8 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
         GenesisGuiNextPlaybackPathSource? pathSource,
         Func<GenesisRecordingRuleRepository>? recordingRuleRepositoryFactory,
         IGenesisGuiNextConnectionPreferencesStore connectionPreferencesStore,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Func<string, string?>? readEnvironment = null)
     {
         ArgumentNullException.ThrowIfNull(favoriteStore);
         ArgumentNullException.ThrowIfNull(notificationStore);
@@ -498,7 +513,7 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
                 yellowPageStore,
                 playbackPreferencesStore,
                 recordingRuleRepository,
-                loadFailures);
+                loadFailures, readEnvironment);
         }
         catch
         {

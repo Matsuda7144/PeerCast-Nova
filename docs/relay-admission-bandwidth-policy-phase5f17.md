@@ -219,3 +219,89 @@ Managed tests cover completed and failed writes, monotonic rates, concurrent
 aggregation, Owner replacement, cleanup and real loopback TCP byte comparison.
 PeerCastStation physical interoperability, PCRPlayer A/V, GUI layout and external
 WAN acceptance remain unverified; no native application operation is retried.
+
+## Smart Relay Phase E-2: opt-in shared IPv4 pacing
+
+Preflight used main `a3b408578b4ee34fccf10db1e2fe595fad329c39`.
+[Main CI](https://github.com/Matsuda7144/PeerCast-Nova/actions/runs/43493298992)
+initially failed `RelayFull_FailedFirstRedirectMovesToSecondEligibleCandidate`
+at its existing two-second PCP handshake deadline. That test, its upstream
+handshake and redirect code were unchanged by Phase E; the upstream connection
+has no downstream measurement binding. The same-SHA isolated test passed
+(118 ms), then one authorized same-SHA CI retry passed Build/Test/Format.
+This supports a timing-dependent failure; it is not proof of a particular
+scheduler/network cause. No timeout or production fix was made for it.
+
+During E-2 regression tests, the existing HOST runtime test intermittently read
+one already-admitted zero-relay snapshot after the live relay count reached one.
+It now rechecks that live count, pulses the existing update path, and checks the
+next HOST; it still requires the exact count/flags. No YP production code changed.
+
+Default behavior is unchanged. Set `NOVA_SMART_RELAY_PACING=1` **before starting
+Nova** to opt in. Startup reads it once alongside `TotalUpstreamIpv4Kbps`:
+null means unlimited (no pacing), zero denies media, and positive decimal kbps
+supplies `kbps * 125` bytes/second. Saving connection preferences cannot change
+the running budget or restart a relay. Existing numeric-bandwidth LAN/WAN
+publishing startup restrictions remain enforced. IPv6 is not charged to IPv4;
+IPv6 WAN is still unsupported.
+
+One `PcpDownstreamPacer` belongs to the existing `RelayAdmissionPolicy`; its
+Owner registrations forward that same object to viewing loopback, publishing
+loopback and routed shared-listener children across channels and generations.
+There is no second admission ledger or relay engine. Reservation counts and
+declared-bitrate reservations are not discounted by observed speed or pacing.
+
+Media HEAD/DATA (including their PCP framing) uses a shared token bucket. Its
+capacity/maximum quantum is `min(16384, max(1, ceil(bytesPerSecond / 4)))` bytes.
+Bytes are split only inside the existing single-child packet sink: one complete
+packet finishes before another starts, preserving atom bytes and HEAD/DATA
+order. FIFO credit requests prevent later requests bypassing an existing head;
+this is bounded grant fairness, not equal bitrates or playback continuity.
+The bucket bounds issued media credit by `burst + bytesPerSecond * elapsed`.
+Its clock is monotonic. Refill saturates at capacity; multiplication widens to
+double before conversion, including extreme integer budgets. Waits round up to
+whole milliseconds; this may underutilize very high configured rates.
+
+Control replies do not wait behind media. Owner-bound HTTP, OLEH, HOST,
+QUIT, ping replies and initial metadata share a **separate** 1000 B/s (8 decimal
+kbps) bucket with an 8192-byte burst. An oversized reply or exhausted allowance
+ends that connection with `PacingLimited`; it never waits indefinitely or turns
+the refusal into a capacity/BadAgent result. Therefore the configured IPv4
+number caps **media**, not all measured PCP bytes: control has this additional
+finite allowance. For owner-bound credit, the combined envelope is media burst
+plus 8192 bytes, and media rate plus 1000 B/s. Shared-listener pre-route replies
+remain outside the Owner binding and pacing, protected by existing ingress
+limits. No NIC-wide or strict total-stream cap is claimed.
+
+Each budget has at most 128 pending media requests; only the FIFO head owns a
+delay timer, with no await under the shared gate and no polling loop/timer for
+every connection. Connection/worker cancellation removes its request. A paced
+packet has a 30-second processing deadline; expiry stops it as `PacingLimited`
+(a network write already in progress remains bounded by its remaining network
+deadline). Existing finite packet/byte queues and ChildStopTimeout remain.
+Queue exhaustion while intentionally waiting is classified as `PacingLimited`,
+not SlowConsumer; genuine network stalls retain WriteTimedOut/SlowConsumer.
+
+The opt-in media path separately bounds handshake readiness, pacing wait and
+actual writes. Only elapsed network-write time consumes the packet's original
+WriteTimeout allowance across all chunks. Pacing delays cannot trigger it.
+Stop, remote end and Recovery cancel waits through existing lifetime tokens.
+Recovery's partial-atom guard remains set once the first fragment is attempted;
+a partial packet is closed rather than followed by an invalid QUIT atom.
+Cleanup remains proven by transport/worker completion, never a pacing permit.
+
+Credit is consumed before attempting a write. Cancellation while queued spends
+nothing; issued credit is conservatively not refunded, even if cancellation
+prevents the write or partial output is unknown. Phase E still measures only
+successful application writes. Queued/issued credit is not a measured byte and
+failed-write uncertainty is retained. Delayed write completions/OS buffering
+can bunch the observed rate; the envelope applies to credit/submission times,
+not NIC output, ACKs or exact per-window completion rates.
+
+Classic/Modern reuse Phase E's one-second status refresh. Labels distinguish
+OFF, unlimited, and media pacing plus the control allowance and waiting count.
+Managed tests cover shared budgets, clock-controlled rate/fairness/cancellation,
+timeouts, backlog/deadline exits, Recovery cancellation, non-cooperative writers,
+large HEAD/DATA over real loopback/shared TCP, publishing and byte accounting.
+PeerCastStation physical interoperability, A/V, native GUI layout and external
+WAN reachability remain unverified. No physical operation is retried.

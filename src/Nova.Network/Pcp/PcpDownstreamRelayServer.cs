@@ -25,6 +25,7 @@ public sealed partial class PcpDownstreamRelayServer : IAsyncDisposable
     private readonly PcpDownstreamChildOptions _childOptions;
     private readonly IPcpDownstreamRelayAdmission? _admission;
     private readonly PcpDownstreamTrafficMeter _traffic = new();
+    private long _pacingLimitedCount;
     private PcpDownstreamTrafficMeter TrafficScope => (_admission as IPcpDownstreamRelayTraffic)?.Traffic ?? _traffic;
     private readonly ReadOnlyMemory<byte> _initialMetadata;
     private readonly CancellationTokenSource _stopSource = new();
@@ -770,6 +771,9 @@ public sealed partial class PcpDownstreamRelayServer : IAsyncDisposable
                 break;
             case PcpDownstreamChildEndReason.PingCompleted:
                 break;
+            case PcpDownstreamChildEndReason.PacingLimited:
+                _pacingLimitedCount = checked(_pacingLimitedCount + 1);
+                break;
             default:
                 throw new InvalidOperationException(
                     "Unknown downstream child end reason.");
@@ -809,6 +813,7 @@ public sealed partial class PcpDownstreamRelayServer : IAsyncDisposable
             AdmissionCleanupFailedCount = _admissionCleanupFailedCount,
             WanIngress = _wanIngress?.Snapshot,
             Traffic = TrafficScope.Snapshot,
+            PacingLimitedCount = _pacingLimitedCount,
         };
     }
 

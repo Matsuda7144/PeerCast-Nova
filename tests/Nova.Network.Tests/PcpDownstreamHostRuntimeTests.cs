@@ -53,6 +53,14 @@ public sealed partial class PcpDownstreamRelayServerTests
             while (server.ReadRuntimeCapacity().RelayCount != 1) await Task.Delay(5, timeout.Token);
             wire.Advance();
             var relaying = await wire.NextAsync();
+            if (PublishingHostRuntimeTests.Number(relaying, "numr") == 0)
+            {
+                // One HOST may already have been admitted before the runtime
+                // changed. Verify the live count and request the latest snapshot.
+                Assert.Equal(1, server.ReadRuntimeCapacity().RelayCount);
+                wire.Pulse();
+                relaying = await wire.NextAsync();
+            }
             Assert.Equal(1U, PublishingHostRuntimeTests.Number(relaying, "numr"));
             Assert.Equal(0x11, PublishingHostRuntimeTests.Flags(relaying));
             Assert.Equal(1, admission.ReservationCount);

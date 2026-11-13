@@ -17,6 +17,7 @@ public enum PcpDownstreamChildEndReason
     WriteFailed,
     AdmissionClosed,
     PingCompleted,
+    PacingLimited,
 }
 
 /// <summary>

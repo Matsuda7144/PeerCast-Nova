@@ -7,8 +7,10 @@ namespace PeerCast.Nova.App.Tests;
 
 public sealed partial class SmartRelayWanTests
 {
-    [Fact]
-    public async Task PublishingLoopbackAndViewingShareCountsBudgetAndActualCleanup()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PublishingLoopbackAndViewingShareCountsBudgetAndActualCleanup(bool pacing)
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
         var token = timeout.Token;
@@ -18,7 +20,7 @@ public sealed partial class SmartRelayWanTests
             MaxRelaysPerBroadcastChannel = 1,
             MaxRelaysPerViewingChannel = 1,
             TotalUpstreamIpv4Kbps = 1000,
-        });
+        }, pacing: pacing);
         var options = new ObsPublishChannelOptions { Ingest = new() { Port = 0 }, BitrateKbps = 500 };
         await using var host = new ObsPublishChannelHost(options, useLoopbackAdmission: true,
             registerRelay: (id, session, fanout) => state.State.DownstreamRelays.Register(id, session,
@@ -88,7 +90,7 @@ public sealed partial class SmartRelayWanTests
     public async Task StartupBandwidthGatesActualPcpWhilePreservingHeadDataAndFullResponse(
         int? budget, int? bitrate, int expectedStatus)
     {
-        await using var test = await Fixture.Create(ipv4Kbps: budget);
+        await using var test = await Fixture.Create(ipv4Kbps: budget, pacing: true);
         await using var channel = await test.Base.ViewingAsync(test.Token, bitrateKbps: bitrate);
         await channel.Owner.PublicReady;
         await using var peer = await WirePeer.Connect(test.Port, channel.Owner.ChannelId, test.Token);
