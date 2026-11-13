@@ -47,6 +47,7 @@ public sealed class PcpDownstreamChildSession :
     private readonly PcpPeerDirectory? _peers;
     private PcpRelayPeerIdentity? _remotePeer;
     private IDisposable? _peerLease;
+    private int _packetWriteIncomplete;
     private IDisposable? _admissionReservation;
     private Task<bool> _admissionCleanup = Task.FromResult(true);
     private Task? _pingWrite;
@@ -288,6 +289,7 @@ public sealed class PcpDownstreamChildSession :
                 packet,
                 _options.MaxPacketBytes);
 
+            Volatile.Write(ref _packetWriteIncomplete, 1);
             await _packetWriter.WriteAsync(
                 _packetPrefix.AsMemory(0, prefixLength),
                 linkedSource.Token).ConfigureAwait(false);
@@ -298,6 +300,7 @@ public sealed class PcpDownstreamChildSession :
                     packet.Payload,
                     linkedSource.Token).ConfigureAwait(false);
             }
+            Volatile.Write(ref _packetWriteIncomplete, 0);
         }
         catch (OperationCanceledException exception)
             when (timeoutSource.IsCancellationRequested &&
@@ -632,6 +635,15 @@ public sealed class PcpDownstreamChildSession :
 
         if (completed == completionTask)
         {
+            if (_registration.Snapshot.EndReason == PcpRelayChildEndReason.UpstreamChanged &&
+                Volatile.Read(ref _packetWriteIncomplete) == 0)
+            {
+                // Never append a control atom to a canceled partial media atom.
+                // In that case transport close is the only safe terminal signal.
+                var quit = new ArrayBufferWriter<byte>();
+                PcpAtomTreeCodec.Write(quit, PcpQuitCodec.Create(PcpQuitCodec.UnavailableCode));
+                await TryWriteControlAsync(quit.WrittenMemory, operationSource.Token).ConfigureAwait(false);
+            }
             var result = MapRegistrationEndReason(_registration.Snapshot);
             CancelBestEffort(operationSource);
             await IgnoreExpectedCancellationAsync(monitorTask)

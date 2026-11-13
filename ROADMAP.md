@@ -1,5 +1,14 @@
 # Roadmap
 
+## Smart Relay Phase C
+
+[ADR-0494](docs/adr/ADR-0494-opt-in-smart-relay-recovery.md) and
+[PCN-0504](docs/reviews/PCN-0504-OPT-IN-SMART-RELAY-RECOVERY.md) record opt-in
+upstream recovery, bounded discovery, persistent low-frequency retry and safe
+media-generation boundaries in the existing Coordinator/GUI Relay. Default
+behavior stays unchanged; actual Station/physical acceptance and mandatory
+Phase W public-listener/WAN integration remain separate.
+
 ## Smart Relay Phase B
 
 [ADR-0493](docs/adr/ADR-0493-owner-scoped-pcp-host-directory-and-referrals.md)

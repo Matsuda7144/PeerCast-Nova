@@ -18,14 +18,16 @@ internal sealed record GenesisRelayActivationSnapshot(
     GenesisRelayActivationError Error = GenesisRelayActivationError.None,
     long Generation = 0, ChannelId? ChannelId = null, ChannelSessionId? SessionId = null,
     string? EndPoint = null, bool ListenerBound = false, bool UpstreamReady = false, bool ReceivingReady = false,
-    bool CleanupConfirmed = true)
+    bool CleanupConfirmed = true, PcpSmartRelayState Recovery = PcpSmartRelayState.Disabled)
 {
     public string Text => "ローカルRelay: " + (State switch
     {
         GenesisRelayActivationState.Stopped => "停止",
         GenesisRelayActivationState.Preparing => "準備中",
         GenesisRelayActivationState.Starting => UpstreamReady ? "PCP接続済・受信待ち" : ListenerBound ? "待受開始・接続確認中" : "開始中",
-        GenesisRelayActivationState.Running => "受信中",
+        GenesisRelayActivationState.Running => Recovery == PcpSmartRelayState.Degraded ? "メディア待ち" :
+            Recovery is PcpSmartRelayState.Recovering or PcpSmartRelayState.Backoff or PcpSmartRelayState.Discovering or
+                PcpSmartRelayState.Connecting or PcpSmartRelayState.Negotiating ? "上流再接続中" : "受信中",
         GenesisRelayActivationState.Stopping => "停止処理中",
         _ => "失敗",
     }) + (EndPoint is null ? "" : $" ({EndPoint})") + (Error == GenesisRelayActivationError.None ? "" : " — " + ErrorText(Error));
@@ -66,10 +68,18 @@ internal sealed class GenesisGuiNextRelayActivation : IAsyncDisposable
     private Task? _disposeTask;
     private GenesisRelayActivationSnapshot _snapshot = new();
 
-    public GenesisGuiNextRelayActivation(GenesisGuiNextPublicChannelComposition channels)
+    public GenesisGuiNextRelayActivation(GenesisGuiNextPublicChannelComposition channels, PcpSmartRelayOptions? smartRelay = null)
         : this((channel, token) => channels.PrepareViewingAsync(channel, new(IPAddress.Loopback, 0),
-            new PcpRelayCoordinatorOptions { UpstreamSession = new() { MaxReconnectAttempts = 0 } }, token))
+            new PcpRelayCoordinatorOptions { UpstreamSession = new() { MaxReconnectAttempts = 0, SmartRelay = smartRelay } }, token),
+            readinessTimeout: smartRelay is null ? null : Timeout.InfiniteTimeSpan)
     { }
+
+    internal static PcpSmartRelayOptions? RecoveryPolicy(string? value) => value?.Trim().ToLowerInvariant() switch
+    {
+        "limited" => new(),
+        "persistent" => new() { Mode = PcpSmartRelayMode.Persistent },
+        _ => null,
+    };
 
     // Narrow managed lifecycle seam; production always uses the constructor above.
     internal GenesisGuiNextRelayActivation(
@@ -82,7 +92,17 @@ internal sealed class GenesisGuiNextRelayActivation : IAsyncDisposable
     }
 
     public event EventHandler? Changed;
-    public GenesisRelayActivationSnapshot Snapshot { get { lock (_gate) { return _snapshot; } } }
+    public GenesisRelayActivationSnapshot Snapshot
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _snapshot with
+                { Recovery = _current?.Owner?.ViewingRuntime?.SmartRelaySnapshot.State ?? PcpSmartRelayState.Disabled };
+            }
+        }
+    }
     internal GenesisGuiNextPublicChannelComposition.Owner? CurrentOwner { get { lock (_gate) { return _current?.Owner; } } }
     public bool CanStart { get { lock (_gate) { return !_closed && _current is null; } } }
     public bool CanStop { get { lock (_gate) { return _current is not null; } } }
@@ -218,7 +238,8 @@ internal sealed class GenesisGuiNextRelayActivation : IAsyncDisposable
                         if (!operation.StopRequested) _snapshot = _snapshot with { UpstreamReady = true };
                     }
                     Notify();
-                    var first = await Task.WhenAny(runtime.FirstPacketAccepted, run, owner.Retirement)
+                    var mediaReady = runtime.SmartRelayEnabled ? runtime.FirstSmartMediaProgress : runtime.FirstPacketAccepted;
+                    var first = await Task.WhenAny(mediaReady, run, owner.Retirement)
                         .WaitAsync(_readinessTimeout, operation.Cancellation.Token).ConfigureAwait(false);
                     if (owner.IsRetired && runtime.Completion?.IsCompleted != true)
                         error = GenesisRelayActivationError.OwnerSuperseded;
@@ -226,7 +247,7 @@ internal sealed class GenesisGuiNextRelayActivation : IAsyncDisposable
                         error = Classify(owner);
                     else
                     {
-                        await runtime.FirstPacketAccepted.ConfigureAwait(false);
+                        await mediaReady.ConfigureAwait(false);
                         lock (_gate)
                         {
                             if (!operation.StopRequested && !_closed && !operation.Cancellation.IsCancellationRequested && !owner.IsRetired)

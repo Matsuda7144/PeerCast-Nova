@@ -13,6 +13,7 @@ public enum PcpRelayChildEndReason
     FanoutStopped,
     SlowConsumer,
     SinkFailed,
+    UpstreamChanged,
 }
 
 /// <summary>

@@ -215,6 +215,12 @@ internal sealed class GenesisGuiNextPublicChannelComposition : IAsyncDisposable
             _snapshot = snapshot;
             ViewingRuntime = viewingRuntime;
             _upstreamTracker = upstreamTracker;
+            if (viewingRuntime?.SmartRelayEnabled == true)
+                _ = _retirement.Task.ContinueWith(_ =>
+                {
+                    try { viewingRuntime.RequestStop(); }
+                    catch (ObjectDisposedException) { }
+                }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
         }
 
         internal void Bind(GenesisDownstreamRelayOwnerRegistry.Owner registration) => _registration = registration;

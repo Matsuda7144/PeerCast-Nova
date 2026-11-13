@@ -245,7 +245,8 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
         NetworkPolicies = GenesisGuiNextNetworkPolicies.Create(connection);
         DownstreamRelays = new GenesisDownstreamRelayOwnerRegistry(NetworkPolicies.Relays);
         PublicChannels = new GenesisGuiNextPublicChannelComposition(DownstreamRelays);
-        RelayActivation = new GenesisGuiNextRelayActivation(PublicChannels);
+        RelayActivation = new GenesisGuiNextRelayActivation(PublicChannels,
+            GenesisGuiNextRelayActivation.RecoveryPolicy(Environment.GetEnvironmentVariable("NOVA_SMART_RELAY_RECOVERY")));
         ArgumentNullException.ThrowIfNull(recordingRuleRepository);
         _recordingRuleRepository = recordingRuleRepository;
         Tabs = new(favorites, recordingRuleRepository);

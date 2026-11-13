@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+- Smart Relay Phase C: opt-in EOF/Unavailable recovery with owner-scoped peer
+  selection, eight-target/thirty-second waves, four shared negotiation slots,
+  limited/persistent backoff, accepted-DATA cursors and explicit media-generation
+  cleanup. Existing GUI Relay can opt in through NOVA_SMART_RELAY_RECOVERY;
+  default behavior and PCP wire remain unchanged. ADR-0494 / PCN-0504 record
+  managed checks and physical/WAN limits.
+
 - Smart Relay Phase B: added owner-scoped bounded HOST candidates, safe global
   IPv4 filtering and ordered OLEH/HOST/QUIT 1003 capacity referrals on the existing
   PCP relay path. ADR-0493 / PCN-0503 record managed validation and limits;

@@ -26,6 +26,7 @@ public sealed class PcpRelayFanout : IPcpChannelPacketConsumer, IAsyncDisposable
     private RetainedHead? _retainedHead;
     private int _consumeActive;
     private bool _stopping;
+    private bool _recovering;
 
     public PcpRelayFanout(
         PcpRelayFanoutOptions? options = null,
@@ -42,7 +43,7 @@ public sealed class PcpRelayFanout : IPcpChannelPacketConsumer, IAsyncDisposable
     {
         get
         {
-            lock (_gate) return !_stopping && !_completing &&
+            lock (_gate) return !_stopping && !_completing && !_recovering &&
             _knownChildren.Count(child => !child.Completion.IsCompleted) < _options.MaxChildren;
         }
     }
@@ -114,7 +115,7 @@ public sealed class PcpRelayFanout : IPcpChannelPacketConsumer, IAsyncDisposable
             ObjectDisposedException.ThrowIf(_stopping || _completing, this);
             RetireCompletedChildrenLocked();
 
-            if (_knownChildren.Count >= _options.MaxChildren)
+            if (_recovering || _knownChildren.Count >= _options.MaxChildren)
             {
                 registration = null;
                 return false;
@@ -226,6 +227,35 @@ public sealed class PcpRelayFanout : IPcpChannelPacketConsumer, IAsyncDisposable
         {
             payload?.Dispose();
             Volatile.Write(ref _consumeActive, 0);
+        }
+    }
+
+    // Called only after serialized upstream consumption has ceased. Preserve
+    // this fanout/Owner identity, but never replay a previous media epoch's HEAD.
+    internal async Task SuspendForRecoveryAsync(TimeSpan timeout, TimeProvider clock, CancellationToken token)
+    {
+        PcpRelayChildWorker[] children;
+        RetainedHead? head;
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_stopping || _completing, this);
+            _recovering = true;
+            children = [.. _knownChildren];
+            head = _retainedHead;
+            _retainedHead = null;
+        }
+        head?.Payload.Dispose();
+        foreach (var child in children) child.RequestStop(PcpRelayChildEndReason.UpstreamChanged);
+        await Task.WhenAll(children.Select(c => c.Completion)).WaitAsync(timeout, clock, token).ConfigureAwait(false);
+        if (children.Any(c => c.Snapshot.CleanupFailed)) throw new IOException("Media generation cleanup failed.");
+    }
+
+    internal void ResumeAfterRecovery()
+    {
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_stopping || _completing, this);
+            _recovering = false;
         }
     }
 

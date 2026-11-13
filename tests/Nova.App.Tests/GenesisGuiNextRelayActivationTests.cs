@@ -6,7 +6,7 @@ using static PeerCast.Nova.App.Tests.PublicChannelTestFixture;
 
 namespace PeerCast.Nova.App.Tests;
 
-public sealed class GenesisGuiNextRelayActivationTests
+public sealed partial class GenesisGuiNextRelayActivationTests
 {
     private static readonly GenesisChannelItem Valid = new("PCP", "pcp://127.0.0.1:1/channel/11111111111111111111111111111111");
 

@@ -33,6 +33,8 @@ public sealed record PcpChannelSessionOptions
 
     public PcpChannelStreamOptions Stream { get; init; } = new();
 
+    public PcpSmartRelayOptions? SmartRelay { get; init; }
+
     public void Validate()
     {
         if (HandshakeTimeout <= TimeSpan.Zero)
@@ -74,6 +76,7 @@ public sealed record PcpChannelSessionOptions
 
         ArgumentNullException.ThrowIfNull(Stream);
         Stream.Validate();
+        SmartRelay?.Validate();
         CreateHandshakeSettings().Validate();
     }
 

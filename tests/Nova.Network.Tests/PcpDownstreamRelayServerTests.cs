@@ -343,6 +343,17 @@ public sealed partial class PcpDownstreamRelayServerTests
             await using var reader = new PcpAtomPipeMessageReader(_pipeReader);
             return await reader.ReadNextAsync(token);
         }
+        internal async Task<byte[]> ReadWireToEndAsync(CancellationToken token)
+        {
+            using var bytes = new MemoryStream();
+            while (true)
+            {
+                var read = await _pipeReader.ReadAsync(token);
+                foreach (var segment in read.Buffer) bytes.Write(segment.Span);
+                _pipeReader.AdvanceTo(read.Buffer.End);
+                if (read.IsCompleted) return bytes.ToArray();
+            }
+        }
 
         public async Task ReadChannelPayloadAsync(
             CancellationToken cancellationToken)

@@ -10,6 +10,7 @@ public enum PcpChannelSessionEndReason
     ProtocolRejected,
     QuitReceived,
     ConnectionEnded,
+    RecoveryExhausted,
 }
 
 /// <summary>

@@ -111,7 +111,17 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
             statusTracker,
             _ingress,
             copiedOptions.UpstreamSession,
-            _downstreamServer.Peers);
+            _downstreamServer.Peers)
+        {
+            RecoveryReset = copiedOptions.UpstreamSession.SmartRelay is { } recovery ? async token =>
+            {
+                await _fanout.SuspendForRecoveryAsync(recovery.CleanupTimeout, recovery.TimeProvider, token).ConfigureAwait(false);
+                await _downstreamServer.WaitForRecoveryCleanupAsync(recovery.CleanupTimeout, recovery.TimeProvider, token).ConfigureAwait(false);
+            }
+            : null,
+            RecoveryResume = _fanout.ResumeAfterRecovery,
+            RecoveryOwnerIsCurrent = () => admission is null || admission is IPcpDownstreamRelayCapacity { IsCurrent: true },
+        };
     }
 
     public PcpRelayCoordinatorState State
@@ -178,6 +188,10 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
     public PcpRelayFanout DownstreamFanout => _fanout;
 
     public PcpRelayIngressSnapshot IngressSnapshot => _ingress.Snapshot;
+
+    public PcpSmartRelaySnapshot SmartRelaySnapshot => _upstreamSession.SmartRelaySnapshot;
+    public bool SmartRelayEnabled => _upstreamSession.SmartRelayEnabled;
+    public Task FirstSmartMediaProgress => _upstreamSession.FirstSmartMediaProgress;
 
     /// <summary>
     /// Recording reader leases from this coordinator's existing upstream
@@ -645,6 +659,9 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
             {
                 shutdownCompleted = false;
             }
+            if (_upstreamSession.SmartRelayEnabled && (!_upstreamSession.SmartRelayCleanupConfirmed ||
+                _fanout.Evidence.RemainingChildCount != 0 || _fanout.Evidence.CleanupFailedChildCount != 0))
+                shutdownCompleted = false;
 
             lock (_gate)
             {

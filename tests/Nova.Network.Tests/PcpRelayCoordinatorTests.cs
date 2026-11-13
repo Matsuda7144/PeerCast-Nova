@@ -1685,6 +1685,12 @@ public sealed partial class PcpRelayCoordinatorTests
             return payloads.ToArray();
         }
 
+        public async Task<PcpQuitInfo> ReadQuitAsync(CancellationToken token)
+        {
+            await using var atoms = new PcpAtomPipeMessageReader(_pipeReader);
+            return PcpQuitCodec.Parse(await atoms.ReadNextAsync(token));
+        }
+
         public async Task<(uint Type, byte[] Payload)[]> ReadChannelPacketsAsync(
             int count,
             CancellationToken cancellationToken)

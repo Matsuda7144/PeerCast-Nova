@@ -13,7 +13,7 @@ namespace PeerCast.Nova.Network.Pcp;
 /// TCP reconnects. It retains the same Core identity, position adapter, packet
 /// sequence, and consumer while each connection and PipeReader are replaced.
 /// </summary>
-public sealed class PcpChannelSession : IAsyncDisposable
+public sealed partial class PcpChannelSession : IAsyncDisposable
 {
     private readonly object _gate = new();
     private readonly IPcpChannelTransportConnector _connector;
@@ -22,6 +22,7 @@ public sealed class PcpChannelSession : IAsyncDisposable
     private readonly IPcpChannelPacketConsumer _packetConsumer;
     private readonly PcpChannelSessionOptions _options;
     private readonly PcpPeerDirectory? _peers;
+    private readonly bool _ownsPeers;
     private readonly CancellationTokenSource _stopSource = new();
     private readonly TaskCompletionSource<PcpChannelSessionNegotiationResult>
         _negotiation = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -66,6 +67,7 @@ public sealed class PcpChannelSession : IAsyncDisposable
         _options = sourceOptions with
         {
             Stream = sourceOptions.Stream with { },
+            SmartRelay = sourceOptions.SmartRelay is { } smart ? smart with { } : null,
         };
         _options.Validate();
 
@@ -76,7 +78,9 @@ public sealed class PcpChannelSession : IAsyncDisposable
         if (peers is not null && (peers.ChannelId != statusTracker.Snapshot.ChannelId.Value ||
             peers.LocalSessionId != statusTracker.Snapshot.SessionId.Value))
             throw new ArgumentException("Peer directory must belong to this channel owner.", nameof(peers));
-        _peers = peers;
+        _ownsPeers = peers is null && _options.SmartRelay is not null;
+        _peers = peers ?? (_ownsPeers ? new PcpPeerDirectory(statusTracker.Snapshot.ChannelId.Value,
+            statusTracker.Snapshot.SessionId.Value, _options.SmartRelay!.TimeProvider) : null);
     }
 
     /// <summary>
@@ -155,6 +159,8 @@ public sealed class PcpChannelSession : IAsyncDisposable
     public void RequestStop()
     {
         ThrowIfDisposed();
+        if (_options.SmartRelay is not null && SmartRelaySnapshot.State is not (PcpSmartRelayState.Stopped or PcpSmartRelayState.Failed))
+            SmartState(PcpSmartRelayState.Stopping);
         _stopSource.Cancel();
         _negotiation.TrySetCanceled(_stopSource.Token);
     }
@@ -228,6 +234,7 @@ public sealed class PcpChannelSession : IAsyncDisposable
         finally
         {
             TransitionToStopped();
+            if (_ownsPeers) _peers?.Dispose();
             _stopSource.Dispose();
         }
     }
@@ -238,6 +245,8 @@ public sealed class PcpChannelSession : IAsyncDisposable
         long initialStreamPosition,
         CancellationToken callerCancellationToken)
     {
+        if (_options.SmartRelay is not null)
+            return await RunSmartRelayAsync(host, port, initialStreamPosition, callerCancellationToken).ConfigureAwait(false);
         using var linkedSource =
             CancellationTokenSource.CreateLinkedTokenSource(
                 callerCancellationToken,
@@ -505,9 +514,12 @@ public sealed class PcpChannelSession : IAsyncDisposable
         long initialStreamPosition,
         CountingPacketConsumer countingConsumer,
         SessionProgress progress,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        CancellationToken? negotiationCancellation = null,
+        Action<PcpRelayHostEndpoint>? accepted = null)
     {
         TcpTransportConnection connection;
+        var negotiationToken = negotiationCancellation ?? cancellationToken;
 
         try
         {
@@ -515,10 +527,10 @@ public sealed class PcpChannelSession : IAsyncDisposable
                 ? await _connector.ConnectOriginalAsync(
                     host,
                     port,
-                    cancellationToken).ConfigureAwait(false)
+                    negotiationToken).ConfigureAwait(false)
                 : await _connector.ConnectRedirectAsync(
                     redirectEndpoint,
-                    cancellationToken).ConfigureAwait(false);
+                    negotiationToken).ConfigureAwait(false);
         }
         catch (TimeoutException exception)
         {
@@ -543,7 +555,8 @@ public sealed class PcpChannelSession : IAsyncDisposable
             connection.RemoteEndPoint.Address,
             connection.RemoteEndPoint.Port);
 
-        await using (connection.ConfigureAwait(false))
+        await using (IAsyncDisposable lifetime = _options.SmartRelay is { } smart
+            ? new PcpSmartRelayTransportLifetime(connection, smart, () => Interlocked.Exchange(ref _smartCleanupFailed, 1)) : connection)
         {
             var pipeReader = PipeReader.Create(
                 connection.TransportStream,
@@ -556,6 +569,7 @@ public sealed class PcpChannelSession : IAsyncDisposable
             try
             {
                 _statusTracker.TransitionTo(ChannelSessionState.Negotiating);
+                if (_options.SmartRelay is not null) SmartState(PcpSmartRelayState.Negotiating);
 
                 PcpRelayHandshakeResult handshake;
 
@@ -566,21 +580,21 @@ public sealed class PcpChannelSession : IAsyncDisposable
                         pipeReader,
                         host,
                         port,
-                        _statusTracker.Snapshot.StreamPosition ??
+                        _options.SmartRelay is not null ? _smartMedia?.Cursor ?? (_smartMedia?.Generation > 0 ? 0 : initialStreamPosition) : _statusTracker.Snapshot.StreamPosition ??
                             initialStreamPosition,
-                        cancellationToken).ConfigureAwait(false);
+                        negotiationToken).ConfigureAwait(false);
                 }
                 catch (TimeoutException exception)
                 {
                     return AttemptResult.FromRetryableFailure(
                         exception,
-                        ChannelFaultStage.Negotiating);
+                        ChannelFaultStage.Negotiating, connectedEndpoint);
                 }
                 catch (IOException exception)
                 {
                     return AttemptResult.FromRetryableFailure(
                         exception,
-                        ChannelFaultStage.Negotiating);
+                        ChannelFaultStage.Negotiating, connectedEndpoint);
                 }
                 catch (PcpProtocolException exception)
                     when (exception.Error ==
@@ -588,7 +602,7 @@ public sealed class PcpChannelSession : IAsyncDisposable
                 {
                     return AttemptResult.FromRetryableFailure(
                         exception,
-                        ChannelFaultStage.Negotiating);
+                        ChannelFaultStage.Negotiating, connectedEndpoint);
                 }
 
                 progress.ObserveHttpStatus(handshake.HttpStatusCode);
@@ -604,6 +618,7 @@ public sealed class PcpChannelSession : IAsyncDisposable
                 }
 
                 cancellationToken.ThrowIfCancellationRequested();
+                accepted?.Invoke(connectedEndpoint);
                 _peers?.RecordConnectionResult(redirectEndpoint is null ? connectedEndpoint :
                     new(redirectEndpoint.Address, redirectEndpoint.Port), succeeded: true);
                 using var trafficObservation = connection.ObservePcpSession();
@@ -626,7 +641,7 @@ public sealed class PcpChannelSession : IAsyncDisposable
 
                 try
                 {
-                    var stream = await streamReader.ReadToEndAsync(
+                    var stream = await ReadSmartStreamAsync(streamReader,
                         cancellationToken).ConfigureAwait(false);
 
                     return new AttemptResult(
@@ -644,6 +659,11 @@ public sealed class PcpChannelSession : IAsyncDisposable
                         ChannelFaultStage.Receiving,
                         connectedEndpoint,
                         reachedAccepted: true);
+                }
+                catch (PcpChannelConsumerException exception) when (exception.InnerException is PcpSmartRelayDiscontinuityException)
+                {
+                    return AttemptResult.FromRetryableFailure(exception.InnerException, ChannelFaultStage.Receiving,
+                        connectedEndpoint, reachedAccepted: true);
                 }
                 catch (IOException exception)
                 {

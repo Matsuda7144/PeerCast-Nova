@@ -7,6 +7,14 @@ PeerCast Nova は、既存 PeerCast ネットワークとの互換性を保ち�
 Project Founder: **7144**  
 License: **Apache License 2.0**
 
+Smart Relay Phase C adds opt-in upstream recovery, bounded discovery and long
+low-frequency retry: [ADR-0494](docs/adr/ADR-0494-opt-in-smart-relay-recovery.md).
+Default GUI Relay behavior is unchanged. To opt in, set process environment
+`NOVA_SMART_RELAY_RECOVERY=limited` (five-minute limit) or `persistent`
+(low-frequency retry after five minutes), then start Nova and explicitly press
+Relay. It does not start on settings save or enable WAN access. Validation:
+[PCN-0504](docs/reviews/PCN-0504-OPT-IN-SMART-RELAY-RECOVERY.md).
+
 Smart Relay Phase B adds owner-scoped HOST candidate management and bounded
 standard PCP referrals on capacity refusal:
 [ADR-0493](docs/adr/ADR-0493-owner-scoped-pcp-host-directory-and-referrals.md).
@@ -15,7 +23,7 @@ This managed integration does not establish physical or WAN relay acceptance.
 Smart Relay Phase 0 / A-1 adds standard PCP QUIT 1003 capacity replies and typed
 QUIT reasons while preserving current ID/Owner contracts:
 [ADR-0492](docs/adr/ADR-0492-typed-pcp-quit-compatibility-without-identity-migration.md).
-Automatic recovery and WAN integration remain later work.
+Recovery was outside A-1; see Phase C above. WAN integration remains later work.
 
 ## プロジェクトの方針
 

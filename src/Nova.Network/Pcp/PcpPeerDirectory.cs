@@ -5,7 +5,7 @@ namespace PeerCast.Nova.Network.Pcp;
 internal enum PcpPeerSourceKind { UpstreamHandshake, UpstreamStream, DownstreamControl }
 internal readonly record struct PcpPeerSource(PcpPeerSourceKind Kind, long ConnectionId);
 internal sealed record PcpPeerObservation(PcpRelayHostCandidate Host, long ObservedAt,
-    PcpPeerSource Source, int FailureCount, bool HasSucceeded, long? LastFailure);
+    PcpPeerSource Source, int FailureCount, bool HasSucceeded, long? LastFailure, long? LastMediaReceived = null);
 internal sealed record PcpRelayPeerIdentity(Guid? SessionId, PcpRelayHostEndpoint Endpoint,
     PcpRelayHostEndpoint? ListeningEndpoint = null);
 
@@ -61,13 +61,14 @@ internal sealed class PcpPeerDirectory : IDisposable
             var failures = matches.Select(e => e.FailureCount).DefaultIfEmpty().Max();
             var succeeded = matches.Any(e => e.HasSucceeded);
             var lastFailure = matches.Select(e => e.LastFailure).Max();
+            var lastMedia = matches.Select(e => e.LastMediaReceived).Max();
             foreach (var entry in matches) _entries.Remove(entry);
             // A SID-less refresh must not erase a previously learned wire identity.
             if (host.PeerSessionId is null)
                 host = host with { PeerSessionId = matches.Select(e => e.Host.PeerSessionId).FirstOrDefault(s => s is not null) };
             if (_entries.Count == MaximumCandidates)
                 _entries.Remove(_entries.MinBy(e => e.ObservedAt)!);
-            _entries.Add(new(host, now, source, failures, succeeded, lastFailure));
+            _entries.Add(new(host, now, source, failures, succeeded, lastFailure, lastMedia));
             return true;
         }
     }
@@ -88,6 +89,17 @@ internal sealed class PcpPeerDirectory : IDisposable
                     LastFailure = succeeded ? null : _clock.GetTimestamp(),
                 };
             }
+        }
+    }
+
+    internal void RecordMediaProgress(PcpRelayHostEndpoint endpoint)
+    {
+        lock (_gate)
+        {
+            if (_retired) return;
+            for (var i = 0; i < _entries.Count; i++)
+                if (_entries[i].Host.GlobalEndpoint == endpoint)
+                    _entries[i] = _entries[i] with { LastMediaReceived = _clock.GetTimestamp() };
         }
     }
 

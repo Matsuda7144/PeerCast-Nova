@@ -71,6 +71,18 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
     internal PcpRelayQuiescenceObserver? QuiescenceObserver { get; init; }
     internal PcpPeerDirectory Peers { get; }
 
+    internal async Task WaitForRecoveryCleanupAsync(TimeSpan timeout, TimeProvider clock, CancellationToken token)
+    {
+        Task[] sessions;
+        lock (_gate) sessions = _sessions.Select(e => e.Task ?? Task.CompletedTask).ToArray();
+        await Task.WhenAll(sessions).WaitAsync(timeout, clock, token).ConfigureAwait(false);
+        await WaitForAdmissionCleanupAsync(token).WaitAsync(timeout, clock, token).ConfigureAwait(false);
+        var snapshot = Snapshot;
+        if (snapshot.CleanupIncompleteCount != 0 || snapshot.InternalFailureCount != 0 ||
+            snapshot.AdmissionCleanupFailedCount != 0)
+            throw new IOException("Downstream transport/admission cleanup could not be confirmed.");
+    }
+
     internal (bool CanAccept, int RelayCount) ReadRuntimeCapacity()
     {
         lock (_gate) return (_state == PcpDownstreamRelayServerState.Running && !_childAdmission.IsClosed &&

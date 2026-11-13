@@ -22,11 +22,11 @@ internal sealed class RelayActivationTestUpstream : IAsyncDisposable
         Channel = new("Managed PCP upstream", $"pcp://127.0.0.1:{_server.LocalEndPoint.Port}/channel/{sourceId:N}",
             ChannelId: sourceId.ToString("N"));
     }
-    public async Task SendAsync(CancellationToken token)
+    public async Task SendAsync(CancellationToken token, uint packetType = 1)
     {
         await UntilAsync(() => _fanout.ActiveChildCount > 0, token);
         await _fanout.ConsumeAsync(new PcpChannelPacket(ChannelId, new(Guid.NewGuid()),
-            0, 1, 100, 100, new byte[] { 1 }, null), token);
+            0, packetType, 100, 100, new byte[] { 1 }, null), token);
     }
     public Task WaitForIdleAsync(CancellationToken token) => UntilAsync(() => _fanout.ActiveChildCount == 0, token);
     public async ValueTask DisposeAsync()
