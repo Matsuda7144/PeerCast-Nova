@@ -68,17 +68,24 @@ internal sealed class SystemNovaObsPublishingRuntimeFactory : INovaObsPublishing
         IObsPublishLanInterfaces? interfaces = null, bool allowLan = true)
     { _state = state; _interfaces = interfaces ?? SystemObsPublishLanInterfaces.Instance; _allowLan = allowLan; }
 
-    internal GenesisDownstreamRelayOwnerRegistry.Owner Register(ChannelId channel, ChannelSessionId session, PcpRelayFanout fanout)
+    internal GenesisDownstreamRelayOwnerRegistry.Owner Register(ChannelId channel, ChannelSessionId session, PcpRelayFanout fanout) =>
+        Register(channel, session, fanout, null, publicRelay: true);
+
+    private GenesisDownstreamRelayOwnerRegistry.Owner Register(ChannelId channel, ChannelSessionId session, PcpRelayFanout fanout,
+        int? bitrateKbps, bool publicRelay)
     {
-        if (!_allowLan || _state is null || _state.Connection.LoadFailed)
+        if (_state is null || publicRelay && (!_allowLan || _state.Connection.LoadFailed))
             throw new ObsPublishLanException(ObsPublishLanFailure.AdmissionUnavailable);
-        if (_state.NetworkPolicies.Bandwidth.Limits.Ipv4Kbps is not null)
+        if (publicRelay && _state.NetworkPolicies.Bandwidth.Limits.Ipv4Kbps is not null)
             throw new ObsPublishLanException(ObsPublishLanFailure.BandwidthUnsupported);
-        try { return _state.DownstreamRelays.Register(channel, session, RelayChannelKind.Broadcast, fanout); }
+        try { return _state.DownstreamRelays.Register(channel, session, RelayChannelKind.Broadcast, fanout, () => bitrateKbps); }
         catch { throw new ObsPublishLanException(ObsPublishLanFailure.AdmissionUnavailable); }
     }
-    private NovaObsPublishingRuntime Create(ObsPublishChannelOptions options) =>
-        NovaObsPublishingRuntime.ForOwner(new ObsPublishChannelHost(options, interfaces: _interfaces, registerRelay: Register, announceOwner: _state?.AnnounceOwner));
+    internal NovaObsPublishingRuntime Create(ObsPublishChannelOptions options) =>
+        NovaObsPublishingRuntime.ForOwner(new ObsPublishChannelHost(options, interfaces: _interfaces,
+            registerRelay: (channel, session, fanout) => Register(channel, session, fanout, options.BitrateKbps,
+                options.Lan.Enabled || options.Wan.Enabled), announceOwner: _state?.AnnounceOwner,
+            useLoopbackAdmission: _state is not null));
 
     public INovaObsPublishingRuntime Create() => Create(new ObsPublishChannelOptions());
     public INovaObsPublishingRuntime Create(PublishingSettingsSnapshot settings) => Create(settings.Values.ToOptions());

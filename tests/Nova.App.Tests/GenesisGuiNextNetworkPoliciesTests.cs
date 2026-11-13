@@ -36,7 +36,7 @@ public sealed class GenesisGuiNextNetworkPoliciesTests
         var store = new MemoryStore(initial);
         await using var state = await CreateStateAsync(store);
         var policies = state.NetworkPolicies;
-        using var owner = policies.Relays.OpenChannel(new(Guid.NewGuid()), new(Guid.NewGuid()), RelayChannelKind.Viewing);
+        using var owner = policies.Relays.OpenChannel(new(Guid.NewGuid()), new(Guid.NewGuid()), RelayChannelKind.Viewing, () => 500);
         using var reservation = owner.TryReserve(1).Reservation;
         Assert.NotNull(reservation);
         var next = new GenesisGuiNextConnectionPreferences

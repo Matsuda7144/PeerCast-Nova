@@ -1,3 +1,4 @@
+using System.Net;
 using PeerCast.Nova.Core.Channels;
 
 namespace PeerCast.Nova.Network.Policies;
@@ -20,11 +21,19 @@ public enum RelayAdmissionDecision
     ChannelLimitReached,
     DuplicateRelay,
     OwnerRetired,
+    BandwidthLimitReached,
+    BandwidthAccountingUnavailable,
+    BitrateUnavailable,
 }
 
 public sealed record RelayAdmissionResult(
     RelayAdmissionDecision Decision,
     RelayAdmissionPolicy.Reservation? Reservation);
+
+/// <summary>Admission reservations, not measured traffic or a sending-rate limit.</summary>
+public sealed record RelayAdmissionCapacitySnapshot(
+    long ReservedRelays, int? RelayLimit, long? ChannelReservedRelays, int? ChannelRelayLimit,
+    int? Ipv4BudgetKbps, long? ReservedIpv4Kbps);
 
 /// <summary>
 /// Reservations for validated downstream PCP relays only. The caller owns the
@@ -34,13 +43,15 @@ public sealed record RelayAdmissionResult(
 public sealed class RelayAdmissionPolicy : IDisposable
 {
     private readonly object _gate = new();
+    private readonly UpstreamBandwidthPolicy _bandwidth;
     private readonly Dictionary<ChannelId, ChannelState> _channels = [];
     private readonly Dictionary<long, Reservation> _reservations = [];
     private long _reservedCount;
     private bool _disposed;
 
-    public RelayAdmissionPolicy(RelayAdmissionLimits? limits = null)
+    public RelayAdmissionPolicy(RelayAdmissionLimits? limits = null, UpstreamBandwidthPolicy? bandwidth = null)
     {
+        _bandwidth = bandwidth ?? new();
         Limits = limits is null ? new() : limits with { };
         if (Limits.MaxRelaysTotal < 0 ||
             Limits.MaxRelaysPerBroadcastChannel < 0 ||
@@ -52,6 +63,8 @@ public sealed class RelayAdmissionPolicy : IDisposable
     }
 
     public RelayAdmissionLimits Limits { get; }
+    public UpstreamBandwidthLimits BandwidthLimits => _bandwidth.Limits;
+    public RelayAdmissionCapacitySnapshot Snapshot { get { lock (_gate) return ReadSnapshot(null); } }
 
     public long ReservedCount
     {
@@ -64,7 +77,7 @@ public sealed class RelayAdmissionPolicy : IDisposable
     /// Classification must come from the channel owner, not a peer address.
     /// </summary>
     public Channel OpenChannel(ChannelId channelId, ChannelSessionId sessionId,
-        RelayChannelKind kind)
+        RelayChannelKind kind, Func<int?>? readBitrateKbps = null)
     {
         ArgumentNullException.ThrowIfNull(channelId);
         ArgumentNullException.ThrowIfNull(sessionId);
@@ -84,7 +97,7 @@ public sealed class RelayAdmissionPolicy : IDisposable
                 }
                 state.CurrentOwner.Retired = true;
             }
-            var owner = new Channel(this, channelId, sessionId, kind);
+            var owner = new Channel(this, channelId, sessionId, kind, readBitrateKbps);
             if (state is null)
             {
                 _channels.Add(channelId, new ChannelState(owner));
@@ -118,7 +131,19 @@ public sealed class RelayAdmissionPolicy : IDisposable
             if (channelLimit is { } maximum && state.ReservedCount >= maximum)
                 return new(RelayAdmissionDecision.ChannelLimitReached, null);
 
-            var reservation = new Reservation(this, owner, relayId);
+            var bitrate = ReadBitrate(owner);
+            var bandwidth = EvaluateBandwidth(bitrate);
+            if (bandwidth != BandwidthAdmissionDecision.Allowed)
+                return new(bandwidth switch
+                {
+                    BandwidthAdmissionDecision.LimitReached => RelayAdmissionDecision.BandwidthLimitReached,
+                    BandwidthAdmissionDecision.BitrateUnavailable => RelayAdmissionDecision.BitrateUnavailable,
+                    _ => RelayAdmissionDecision.BandwidthAccountingUnavailable,
+                }, null);
+
+            // Count and bandwidth admission share this gate and this reservation.
+            // Neither resource is committed before both checks have succeeded.
+            var reservation = new Reservation(this, owner, relayId, bitrate);
             _reservations.Add(relayId, reservation);
             state.ReservedCount++;
             _reservedCount++;
@@ -167,9 +192,44 @@ public sealed class RelayAdmissionPolicy : IDisposable
                 !ReferenceEquals(state.CurrentOwner, owner)) return false;
             var maximum = owner.Kind == RelayChannelKind.Broadcast ? Limits.MaxRelaysPerBroadcastChannel : Limits.MaxRelaysPerViewingChannel;
             return (Limits.MaxRelaysTotal is null || _reservedCount < Limits.MaxRelaysTotal) &&
-                (maximum is null || state.ReservedCount < maximum);
+                (maximum is null || state.ReservedCount < maximum) &&
+                EvaluateBandwidth(ReadBitrate(owner)) == BandwidthAdmissionDecision.Allowed;
         }
     }
+
+    private static int? ReadBitrate(Channel owner)
+    {
+        var bitrate = owner.ReadBitrateKbps?.Invoke();
+        return bitrate is > 0 ? bitrate : null;
+    }
+
+    private long? ReadReservedIpv4Kbps()
+    {
+        long total = 0;
+        foreach (var reservation in _reservations.Values)
+        {
+            var current = ReadBitrate(reservation.Owner);
+            if (current is null) return null;
+            // A newer, larger declaration increases the estimate used for new
+            // admissions. A smaller declaration never discounts the original
+            // reservation, including a retired generation still cleaning up.
+            total = checked(total + Math.Max(reservation.BitrateKbps ?? 0, current.Value));
+        }
+        return total;
+    }
+
+    private BandwidthAdmissionDecision EvaluateBandwidth(int? bitrate) =>
+        // Current application-owned downstream routes are IPv4 only. IPv6 WAN
+        // and its accounting are deliberately not claimed by this integration.
+        _bandwidth.Evaluate(IPAddress.Loopback,
+            new(_bandwidth.Limits.Ipv4Kbps is null ? null : ReadReservedIpv4Kbps(), null), bitrate);
+
+    private RelayAdmissionCapacitySnapshot ReadSnapshot(Channel? owner) => new(
+        _reservedCount, Limits.MaxRelaysTotal,
+        owner is null ? null : ReadChannelCount(owner.ChannelId),
+        owner?.Kind == RelayChannelKind.Broadcast ? Limits.MaxRelaysPerBroadcastChannel :
+            owner is null ? null : Limits.MaxRelaysPerViewingChannel,
+        _bandwidth.Limits.Ipv4Kbps, ReadReservedIpv4Kbps());
     private long ReadChannelCount(ChannelId channelId)
     {
         lock (_gate)
@@ -196,23 +256,27 @@ public sealed class RelayAdmissionPolicy : IDisposable
         private readonly RelayAdmissionPolicy _policy;
 
         internal Channel(RelayAdmissionPolicy policy, ChannelId channelId,
-            ChannelSessionId sessionId, RelayChannelKind kind)
+            ChannelSessionId sessionId, RelayChannelKind kind, Func<int?>? readBitrateKbps)
         {
             _policy = policy;
             ChannelId = channelId;
             SessionId = sessionId;
             Kind = kind;
+            ReadBitrateKbps = readBitrateKbps;
         }
 
         public ChannelId ChannelId { get; }
         public ChannelSessionId SessionId { get; }
         public RelayChannelKind Kind { get; }
         internal bool Retired { get; set; }
+        // Pure owner metadata observation; never perform I/O or call admission.
+        internal Func<int?>? ReadBitrateKbps { get; }
 
         /// <summary>Outstanding reservations for this channel across all generations.</summary>
         public bool IsCurrent => _policy.ReadIsCurrent(this);
         public bool CanReserve => _policy.ReadCanReserve(this);
         public long ReservedCount => _policy.ReadChannelCount(ChannelId);
+        public RelayAdmissionCapacitySnapshot Snapshot { get { lock (_policy._gate) return _policy.ReadSnapshot(this); } }
 
         /// <summary>
         /// A relay ID is allocated once per connection (for example ConnectionId).
@@ -236,17 +300,19 @@ public sealed class RelayAdmissionPolicy : IDisposable
         private readonly RelayAdmissionPolicy _policy;
         private int _released;
 
-        internal Reservation(RelayAdmissionPolicy policy, Channel owner, long relayId)
+        internal Reservation(RelayAdmissionPolicy policy, Channel owner, long relayId, int? bitrateKbps)
         {
             _policy = policy;
             Owner = owner;
             RelayId = relayId;
+            BitrateKbps = bitrateKbps;
         }
 
         internal Channel Owner { get; }
         public long RelayId { get; }
         public ChannelId ChannelId => Owner.ChannelId;
         public ChannelSessionId SessionId => Owner.SessionId;
+        public int? BitrateKbps { get; }
 
         public void Dispose()
         {

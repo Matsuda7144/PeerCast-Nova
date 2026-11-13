@@ -28,7 +28,7 @@ public sealed partial class PcpRelayCoordinatorTests
         await using var coordinator = new PcpRelayCoordinator(new TcpTransportConnector(transport), tracker, new(IPAddress.Loopback, 0), options);
         var loseParent = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var endParent = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var first = SmartParent(upstream, 0, 100, 0x42, [1, 2, 3], loseParent.Task, unavailable, timeout.Token);
+        var first = SmartParent(upstream, 0, 100, 0x42, [1, 2, 3], loseParent.Task, unavailable, timeout.Token, 512);
         var second = NextParent();
         async Task NextParent()
         {
@@ -42,6 +42,7 @@ public sealed partial class PcpRelayCoordinatorTests
             if (first.IsFaulted) await first;
             if (second.IsFaulted) await second;
             Assert.False(run.IsCompleted, $"{coordinator.SmartRelaySnapshot}; {tracker.Snapshot.Fault}; {run.Exception}");
+            Assert.Equal(512, coordinator.DeclaredBitrateKbps);
             var bound = coordinator.LocalEndPoint;
             await using var child = await ConnectDownstreamAsync(bound, transport, timeout.Token);
             Assert.Equal(new byte[] { 0x42 }, (await child.ReadChannelPacketsAsync(1, timeout.Token))[0].Payload);
@@ -51,8 +52,11 @@ public sealed partial class PcpRelayCoordinatorTests
             Assert.False(run.IsCompleted);
             Assert.Equal(0, coordinator.DownstreamFanout.ActiveChildCount);
             Assert.False(coordinator.DownstreamFanout.HasRetainedHead);
+            Assert.Null(coordinator.DeclaredBitrateKbps);
             clock.Advance(TimeSpan.FromSeconds(1));
             await PcpSmartRelayRecoveryTests.Until(() => coordinator.SmartRelaySnapshot.ResumePosition == 105);
+            Assert.Null(coordinator.DeclaredBitrateKbps);
+            Assert.Equal(512, tracker.Snapshot.Metadata.BitrateKbps);
             Assert.Equal(bound, coordinator.LocalEndPoint);
             Assert.Equal(LocalSessionId, tracker.Snapshot.SessionId);
             Assert.True(coordinator.SmartRelaySnapshot.Discontinuities > 0);
@@ -67,7 +71,7 @@ public sealed partial class PcpRelayCoordinatorTests
     }
 
     private static async Task SmartParent(TcpTransportListener listener, long requestPosition, uint dataPosition,
-        byte head, byte[] data, Task release, bool unavailable, CancellationToken token)
+        byte head, byte[] data, Task release, bool unavailable, CancellationToken token, int? bitrateKbps = null)
     {
         await using var connection = await listener.AcceptAsync(token);
         var pipe = PipeReader.Create(connection.TransportStream, new StreamPipeReaderOptions(leaveOpen: true));
@@ -75,8 +79,10 @@ public sealed partial class PcpRelayCoordinatorTests
         {
             await ReadAndAssertUpstreamRequestAsync(pipe, requestPosition, token);
             await WriteHttpResponseAsync(connection, token); await ReadAndAssertHeloAsync(pipe, token);
-            await WriteAtomsAsync(connection, [CreateOlehAtom(), PcpAtom.Leaf(PcpKnownAtomNames.Okay, PcpWireValueCodec.EncodeUInt32(1)),
-                CreatePacketAtom(0, [head], 0x64616568), CreatePacketAtom(dataPosition, data, 0x61746164)], token);
+            await WriteAtomsAsync(connection, [CreateOlehAtom(), PcpAtom.Leaf(PcpKnownAtomNames.Okay, PcpWireValueCodec.EncodeUInt32(1))], token);
+            if (bitrateKbps is not null)
+                await connection.WriteAsync(PcpInitialChannelMetadata.Encode(ChannelGuid, new(contentType: "FLV", bitrateKbps: bitrateKbps)), token);
+            await WriteAtomsAsync(connection, [CreatePacketAtom(0, [head], 0x64616568), CreatePacketAtom(dataPosition, data, 0x61746164)], token);
             await release.WaitAsync(token);
             if (unavailable) await WriteAtomsAsync(connection, [PcpQuitCodec.Create(1003)], token);
         }

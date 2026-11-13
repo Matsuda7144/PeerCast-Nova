@@ -88,7 +88,8 @@ internal sealed partial class GenesisGuiNextPublicChannelComposition : IAsyncDis
             {
                 ObjectDisposedException.ThrowIf(_disposeTask is not null, this);
                 cancellationToken.ThrowIfCancellationRequested();
-                var registration = _registry.Register(owner.ChannelId, owner.SessionId, owner.Kind, owner.Fanout);
+                var registration = _registry.Register(owner.ChannelId, owner.SessionId, owner.Kind, owner.Fanout,
+                    () => owner.ViewingRuntime?.DeclaredBitrateKbps);
                 owner.Bind(registration);
                 if (_current.TryGetValue(owner.ChannelId, out var previous)) previous.Retire();
                 _current[owner.ChannelId] = owner;
@@ -194,6 +195,7 @@ internal sealed partial class GenesisGuiNextPublicChannelComposition : IAsyncDis
         private ChannelStatusTracker? _upstreamTracker;
         public ChannelStatusSnapshot? UpstreamStatus => _upstreamTracker?.Snapshot;
         public int ReservationCount => _registration?.ReservationCount ?? 0;
+        internal string CapacityStatusText => _composition.Registry.CapacityStatusText(_registration);
         public bool IsCurrent { get { lock (_gate) return !_retired && _registration?.IsCurrent == true; } }
         public bool CanReserve { get { lock (_gate) return !_retired && _registration?.CanReserve == true; } }
         // Disposal completion alone is insufficient: bounded runtime shutdown

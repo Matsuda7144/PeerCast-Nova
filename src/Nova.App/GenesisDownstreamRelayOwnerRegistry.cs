@@ -37,7 +37,7 @@ internal sealed class GenesisDownstreamRelayOwnerRegistry : IDisposable
     }
 
     public Owner Register(ChannelId channelId, ChannelSessionId sessionId,
-        RelayChannelKind kind, PcpRelayFanout? fanout = null)
+        RelayChannelKind kind, PcpRelayFanout? fanout = null, Func<int?>? readBitrateKbps = null)
     {
         lock (_gate)
         {
@@ -45,7 +45,7 @@ internal sealed class GenesisDownstreamRelayOwnerRegistry : IDisposable
             if (fanout is not null && _bindings.TryGetValue(fanout, out _))
                 throw new ArgumentException("A fan-out identity cannot be reused for another owner.", nameof(fanout));
 
-            var scope = _policy.OpenChannel(channelId, sessionId, kind);
+            var scope = _policy.OpenChannel(channelId, sessionId, kind, readBitrateKbps);
             var owner = new Owner(this, scope);
             if (_owners.TryGetValue(channelId, out var previous)) previous.Retired = true;
             _owners[channelId] = owner;
@@ -70,7 +70,7 @@ internal sealed class GenesisDownstreamRelayOwnerRegistry : IDisposable
             var limits = _policy.Limits;
             return _disposed || limits.MaxRelaysTotal is not null ||
                 limits.MaxRelaysPerBroadcastChannel is not null ||
-                limits.MaxRelaysPerViewingChannel is not null
+                limits.MaxRelaysPerViewingChannel is not null || _policy.BandwidthLimits.Ipv4Kbps is not null
                 ? new UnavailableAdmission(channelId) : null;
         }
     }
@@ -86,7 +86,8 @@ internal sealed class GenesisDownstreamRelayOwnerRegistry : IDisposable
             var result = owner.Scope.TryReserve(connectionId, cancellationToken);
             if (result.Reservation is null) return false;
             var lease = new Reservation(this, owner, result.Reservation);
-            _connections.Add(connectionId, lease);
+            try { _connections.Add(connectionId, lease); }
+            catch { result.Reservation.Dispose(); throw; }
             owner.ActiveReservations++;
             reservation = lease;
             return true;
@@ -135,6 +136,19 @@ internal sealed class GenesisDownstreamRelayOwnerRegistry : IDisposable
             // Existing reservations remain until the real connection cleanup.
         }
         GC.SuppressFinalize(this);
+    }
+
+    internal string CapacityStatusText(Owner? owner = null)
+    {
+        lock (_gate)
+        {
+            var snapshot = owner?.Scope.Snapshot ?? _policy.Snapshot;
+            static string Limit(int? value) => value?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "制限なし";
+            var channel = owner is null ? "" : $" / チャンネル予約 {snapshot.ChannelReservedRelays}/{Limit(snapshot.ChannelRelayLimit)}";
+            var reserved = snapshot.ReservedIpv4Kbps?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "Unknown";
+            var availability = owner is null ? "" : owner.CanReserve ? " / 新規予約可" : " / 新規予約不可";
+            return $"リレー予約 {snapshot.ReservedRelays}/{Limit(snapshot.RelayLimit)}{channel} / IPv4帯域予約 {reserved}/{Limit(snapshot.Ipv4BudgetKbps)} kbps（申告値） / 実測 Unknown{availability}";
+        }
     }
 
     internal sealed class Owner : IPcpDownstreamRelayRegistration, IPcpDownstreamRelayCapacity

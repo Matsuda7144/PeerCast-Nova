@@ -161,6 +161,7 @@ public sealed partial class PcpChannelSession
                 current = null;
                 Volatile.Write(ref _smartSnapshot, SmartRelaySnapshot with { ConsecutiveFailures = Math.Min(int.MaxValue - 1, SmartRelaySnapshot.ConsecutiveFailures) + 1 });
                 SmartState(PcpSmartRelayState.Recovering);
+                _stateAdapter.BeginAttempt();
                 await _smartMedia.SuspendAsync(token).ConfigureAwait(false);
                 _statusTracker.TransitionTo(ChannelSessionState.Reconnecting);
             }

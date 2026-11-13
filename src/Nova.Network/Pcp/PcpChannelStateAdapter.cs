@@ -16,6 +16,10 @@ public sealed class PcpChannelStateAdapter
     private PcpStreamPositionTracker _positionTracker = new();
     private bool _dataBaselinePending;
     private long? _coreStreamPositionFloor;
+    private int _declaredBitrateKbps;
+
+    internal int? DeclaredBitrateKbps => Volatile.Read(ref _declaredBitrateKbps) is > 0 and var value ? value : null;
+    internal void BeginAttempt() => Volatile.Write(ref _declaredBitrateKbps, 0);
 
     public PcpChannelStateAdapter(ChannelStatusTracker statusTracker)
     {
@@ -42,7 +46,7 @@ public sealed class PcpChannelStateAdapter
         if (message.Packet is null)
         {
             return new PcpChannelApplyResult(
-                _statusTracker.ApplyObservation(
+                ApplyObservation(message,
                     metadata,
                     streamPosition: null),
                 Packet: null,
@@ -105,7 +109,7 @@ public sealed class PcpChannelStateAdapter
             PcpStreamPositionObservationKind.BackwardDiscontinuity)
         {
             return new PcpChannelApplyResult(
-                _statusTracker.ApplyObservation(
+                ApplyObservation(message,
                     metadata,
                     streamPosition: null),
                 message.Packet,
@@ -116,11 +120,20 @@ public sealed class PcpChannelStateAdapter
         }
 
         return new PcpChannelApplyResult(
-            _statusTracker.ApplyObservation(
+            ApplyObservation(message,
                 metadata,
                 streamPosition),
             message.Packet,
             Discontinuity: null);
+    }
+
+    private ChannelStatusSnapshot ApplyObservation(PcpChannelControlMessage message,
+        ChannelMetadataSnapshot? metadata, long? streamPosition)
+    {
+        var snapshot = _statusTracker.ApplyObservation(metadata, streamPosition);
+        if (message.Info?.BitrateKbps is { } bitrate)
+            Volatile.Write(ref _declaredBitrateKbps, checked((int)bitrate));
+        return snapshot;
     }
 
     private static ChannelMetadataSnapshot MergeMetadata(

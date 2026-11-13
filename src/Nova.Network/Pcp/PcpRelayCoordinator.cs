@@ -46,6 +46,9 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
     private int _callerCanceled;
     private int _disposed;
 
+    /// <summary>Positive CHAN bitrate from this upstream attempt; not measured traffic.</summary>
+    public int? DeclaredBitrateKbps => _upstreamSession.DeclaredBitrateKbps;
+
     public PcpRelayCoordinator(
         TcpTransportConnector upstreamConnector,
         ChannelStatusTracker statusTracker,

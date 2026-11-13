@@ -19,6 +19,7 @@ public sealed partial class PcpChannelSession : IAsyncDisposable
     private readonly IPcpChannelTransportConnector _connector;
     private readonly ChannelStatusTracker _statusTracker;
     private readonly PcpChannelStateAdapter _stateAdapter;
+    internal int? DeclaredBitrateKbps => _stateAdapter.DeclaredBitrateKbps;
     private readonly IPcpChannelPacketConsumer _packetConsumer;
     private readonly PcpChannelSessionOptions _options;
     private readonly PcpPeerDirectory? _peers;
@@ -519,6 +520,9 @@ public sealed partial class PcpChannelSession : IAsyncDisposable
         Action<PcpRelayHostEndpoint>? accepted = null)
     {
         TcpTransportConnection connection;
+        // Admission cannot reuse a previous upstream attempt's declaration.
+        // Existing user-visible metadata and media positions remain untouched.
+        _stateAdapter.BeginAttempt();
         var negotiationToken = negotiationCancellation ?? cancellationToken;
 
         try

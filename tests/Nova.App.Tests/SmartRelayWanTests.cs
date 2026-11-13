@@ -209,12 +209,13 @@ public sealed partial class SmartRelayWanTests
         internal Action? BeforeGet;
         private readonly CancellationTokenSource _timeout = new(TimeSpan.FromSeconds(15));
         internal CancellationToken Token => _timeout.Token;
-        internal static async Task<Fixture> Create(bool wan = true, int? total = null)
+        internal static async Task<Fixture> Create(bool wan = true, int? total = null, int? ipv4Kbps = null)
         {
             using var free = new TcpListener(IPAddress.Loopback, 0); free.Start();
             var port = ((IPEndPoint)free.LocalEndpoint).Port;
             free.Stop();
-            var settings = new GenesisGuiNextConnectionPreferences { ListenPort = port, WanRelayEnabled = wan, MaxRelaysTotal = total };
+            var settings = new GenesisGuiNextConnectionPreferences
+            { ListenPort = port, WanRelayEnabled = wan, MaxRelaysTotal = total, TotalUpstreamIpv4Kbps = ipv4Kbps };
             var test = new Fixture { Base = await PublicChannelTestFixture.CreateAsync(settings), Port = port, Manager = null! };
             test.Manager = new(test.Router, new() { Enabled = true, RequestedLifetimeSeconds = 30 }, test.Clock);
             test.Manager.UpdateNetwork(new(new("192.168.1.1", "fixture"), "192.168.1.2", 1));

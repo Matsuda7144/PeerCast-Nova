@@ -35,6 +35,7 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
     private readonly IObsPublishLanInterfaces _interfaces;
     private readonly Func<ChannelId, ChannelSessionId, PcpRelayFanout, IPcpDownstreamRelayRegistration>? _registerRelay;
     private IPcpDownstreamRelayRegistration? _relayRegistration;
+    private readonly bool _useLoopbackAdmission;
     private ObsPublishLanBinding? _lanBinding;
     private ObsPublishWanBinding? _wanBinding;
     private ObsPublishWanFailure _wanFailure;
@@ -72,8 +73,10 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
         RecordingStreamSourceLeaseRegistry? recordingRegistry = null,
         IObsPublishLanInterfaces? interfaces = null,
         Func<ChannelId, ChannelSessionId, PcpRelayFanout, IPcpDownstreamRelayRegistration>? registerRelay = null,
-        IObsPublishInterfaceChanges? interfaceChanges = null, PublishingAnnounceOwner? announceOwner = null)
-        : this(options, channelId, httpHost, recordingRegistry, null, null, interfaces, registerRelay, interfaceChanges, announceOwner: announceOwner)
+        IObsPublishInterfaceChanges? interfaceChanges = null, PublishingAnnounceOwner? announceOwner = null,
+        bool useLoopbackAdmission = false)
+        : this(options, channelId, httpHost, recordingRegistry, null, null, interfaces, registerRelay, interfaceChanges,
+            announceOwner: announceOwner, useLoopbackAdmission: useLoopbackAdmission)
     {
     }
 
@@ -86,13 +89,15 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
         Func<ChannelId, ChannelSessionId, PcpRelayFanout, IPcpDownstreamRelayRegistration>? registerRelay = null,
         IObsPublishInterfaceChanges? interfaceChanges = null,
         Func<IPEndPoint, IPEndPoint>? bindForTests = null,
-        PcpWanIngressOptions? wanIngressForTests = null, PublishingAnnounceOwner? announceOwner = null, TimeProvider? announceTime = null)
+        PcpWanIngressOptions? wanIngressForTests = null, PublishingAnnounceOwner? announceOwner = null, TimeProvider? announceTime = null,
+        bool useLoopbackAdmission = false)
     {
         _announceTime = announceTime ?? TimeProvider.System;
         _announceOwner = announceOwner;
         _interfaceChanges = interfaceChanges ?? SystemObsPublishInterfaceChanges.Instance;
         _interfaces = interfaces ?? SystemObsPublishLanInterfaces.Instance;
         _registerRelay = registerRelay;
+        _useLoopbackAdmission = useLoopbackAdmission;
         var supplied = options ?? new();
         ArgumentNullException.ThrowIfNull(supplied.Ingest);
         ArgumentNullException.ThrowIfNull(supplied.Http);
@@ -126,7 +131,7 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
         var wanControl = _options.Wan.Enabled ? wanIngressForTests ?? new PcpWanIngressOptions() : null;
         _relay = new PcpDownstreamRelayServer(
             bindForTests?.Invoke(endpoint) ?? endpoint, _fanout, ChannelId, SessionId.Value,
-            initialMetadata: InitialMetadata, admission: _options.Lan.Enabled || _options.Wan.Enabled ? new LanAdmission(this) : null,
+            initialMetadata: InitialMetadata, admission: _options.Lan.Enabled || _options.Wan.Enabled || _useLoopbackAdmission ? new LanAdmission(this) : null,
             acceptRemoteAddress: _options.Wan.Enabled ? address => CanAcceptWan && wanControl!.SourceAllowed(address)
                 : _options.Lan.Enabled ? address => Volatile.Read(ref _lanBinding)?.Accepts(address) == true : null,
             wanOptions: wanControl);
@@ -228,6 +233,9 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
                 // Revalidate at explicit Start before allocating any listener.
                 if (_options.Wan.Enabled) _wanBinding = _options.Wan.Resolve(_interfaces);
                 else _lanBinding = _options.Lan.Resolve(_interfaces);
+            }
+            if (_options.Lan.Enabled || _options.Wan.Enabled || _useLoopbackAdmission)
+            {
                 _relayRegistration = _registerRelay?.Invoke(ChannelId, SessionId, _fanout)
                     ?? throw new ObsPublishLanException(ObsPublishLanFailure.AdmissionUnavailable);
                 if (_relayRegistration.ChannelId != ChannelId || _relayRegistration.SessionId != SessionId)

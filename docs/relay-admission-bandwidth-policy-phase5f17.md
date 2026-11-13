@@ -119,3 +119,38 @@ PcpDownstreamChildSession admission seam and actual cleanup. Verify HTTP
 503/RelayFull plus local playback/recording exclusion. Bandwidth first needs
 complete family accounting and atomic capacity reservations; traffic shaping
 is a separate task. No physical acceptance is claimed by managed tests.
+
+## Smart Relay Phase D integration
+
+The existing `RelayAdmissionPolicy` now evaluates the IPv4 bandwidth model under
+the same gate as total and per-channel relay counts. Both checks commit one
+reservation, so rejection cannot partially reserve either resource. The existing
+Owner registry routes loopback, shared public and publishing children through
+this policy; there is no second ledger. Reservations across retired generations
+remain occupied until their original transport and child cleanup complete.
+
+Positive CHAN bitrate is an admission estimate, not a measured send rate. Each
+reservation retains its initial estimate; new admissions account for the greater
+of that estimate and the Owner's current declaration. Unknown/zero declarations
+or incomplete accounting refuse admission under a positive budget. A zero
+budget refuses new children; a null budget preserves unrestricted bandwidth
+admission. Count limits retain their separate null/zero/positive semantics.
+
+Admission bitrate is cleared on each upstream attempt and on Smart Relay
+recovery. Missing bitrate on a replacement upstream cannot inherit the previous
+attempt's value. Existing user-visible metadata and media positions are preserved.
+Classic/Modern's existing relay status reports total/channel reservations,
+startup limits and estimated IPv4 bandwidth reservations, with measured traffic
+explicitly Unknown. Saving still only changes next-start settings.
+
+The existing numeric-IPv4-budget refusal of LAN/WAN publishing startup remains
+unchanged. Publishing's loopback PCP endpoint explicitly joins the same Broadcast
+Owner admission through the application factory. Internal HTTP and recording
+consumers remain uncounted. Standalone hosts preserve the legacy default unless
+their caller explicitly opts into loopback admission.
+
+Current application-owned downstream routes are IPv4; this does not complete
+IPv6 WAN accounting. Payload counters still do not establish a complete
+measured network-output rate. Strict shaping, dynamic allocation, real
+PeerCastStation compatibility, playback and WAN physical acceptance remain
+unverified or deferred. Standard 503/HELO/OLEH/HOST(0..8)/QUIT 1003 is reused.

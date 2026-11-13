@@ -18,7 +18,8 @@ internal sealed record GenesisRelayActivationSnapshot(
     GenesisRelayActivationError Error = GenesisRelayActivationError.None,
     long Generation = 0, ChannelId? ChannelId = null, ChannelSessionId? SessionId = null,
     string? EndPoint = null, bool ListenerBound = false, bool UpstreamReady = false, bool ReceivingReady = false,
-    bool CleanupConfirmed = true, PcpSmartRelayState Recovery = PcpSmartRelayState.Disabled, string? PublicStatus = null)
+    bool CleanupConfirmed = true, PcpSmartRelayState Recovery = PcpSmartRelayState.Disabled, string? PublicStatus = null,
+    string? CapacityStatus = null)
 {
     public string Text => "ローカルRelay: " + (State switch
     {
@@ -31,7 +32,7 @@ internal sealed record GenesisRelayActivationSnapshot(
         GenesisRelayActivationState.Stopping => "停止処理中",
         _ => "失敗",
     }) + (EndPoint is null ? "" : $" ({EndPoint})") + (Error == GenesisRelayActivationError.None ? "" : " — " + ErrorText(Error)) +
-        (PublicStatus is null ? "" : $" / {PublicStatus}");
+        (PublicStatus is null ? "" : $" / {PublicStatus}") + (CapacityStatus is null ? "" : $" / {CapacityStatus}");
 
     internal static string ErrorText(GenesisRelayActivationError error) => error switch
     {
@@ -68,13 +69,17 @@ internal sealed class GenesisGuiNextRelayActivation : IAsyncDisposable
     private bool _closed;
     private Task? _disposeTask;
     private Func<string>? _publicStatus;
+    private Func<string>? _capacityStatus;
     private GenesisRelayActivationSnapshot _snapshot = new();
 
     public GenesisGuiNextRelayActivation(GenesisGuiNextPublicChannelComposition channels, PcpSmartRelayOptions? smartRelay = null)
         : this((channel, token) => channels.PrepareViewingAsync(channel, new(IPAddress.Loopback, 0),
             new PcpRelayCoordinatorOptions { UpstreamSession = new() { MaxReconnectAttempts = 0, SmartRelay = smartRelay } }, token),
             readinessTimeout: smartRelay is null ? null : Timeout.InfiniteTimeSpan)
-    { _publicStatus = () => channels.PublicStatusText; }
+    {
+        _publicStatus = () => channels.PublicStatusText;
+        _capacityStatus = () => channels.Registry.CapacityStatusText();
+    }
 
     internal static PcpSmartRelayOptions? RecoveryPolicy(string? value) => value?.Trim().ToLowerInvariant() switch
     {
@@ -103,7 +108,8 @@ internal sealed class GenesisGuiNextRelayActivation : IAsyncDisposable
                 return _snapshot with
                 {
                     Recovery = _current?.Owner?.ViewingRuntime?.SmartRelaySnapshot.State ?? PcpSmartRelayState.Disabled,
-                    PublicStatus = _publicStatus?.Invoke()
+                    PublicStatus = _publicStatus?.Invoke(),
+                    CapacityStatus = _current?.Owner?.CapacityStatusText ?? _capacityStatus?.Invoke()
                 };
             }
         }

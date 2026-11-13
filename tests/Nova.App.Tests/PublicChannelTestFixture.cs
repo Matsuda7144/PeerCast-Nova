@@ -53,14 +53,15 @@ internal sealed class PublicChannelTestFixture : IAsyncDisposable
         catch { await fanout.DisposeAsync(); throw; }
     }
 
-    public async Task<Channel> ViewingAsync(CancellationToken token, ChannelId? id = null)
+    public async Task<Channel> ViewingAsync(CancellationToken token, ChannelId? id = null, int? bitrateKbps = null)
     {
         // The real downstream server provides a held synthetic upstream PCP
         // handshake, so exclusion tests cover an actual upstream session.
         var channelId = id ?? new(Guid.NewGuid());
         var fanout = new PcpRelayFanout();
         var upstream = new PcpDownstreamRelayServer(new(IPAddress.Loopback, 0), fanout,
-            channelId, Guid.NewGuid(), Transport);
+            channelId, Guid.NewGuid(), Transport,
+            initialMetadata: bitrateKbps is null ? null : new(contentType: "FLV", bitrateKbps: bitrateKbps));
         var upstreamRun = upstream.RunAsync(token);
         try
         {
@@ -83,6 +84,8 @@ internal sealed class PublicChannelTestFixture : IAsyncDisposable
             await fanout.ConsumeAsync(new PcpChannelPacket(channelId, new(Guid.NewGuid()),
                 0, 1, 100, 100, new byte[] { 1 }, discontinuity: null), token);
             await owner.ViewingRuntime.FirstPacketAccepted.WaitAsync(token);
+            if (bitrateKbps is not null)
+                await UntilAsync(() => owner.ViewingRuntime.DeclaredBitrateKbps == bitrateKbps, token);
             return new(owner, run, fanout, upstream, upstreamRun);
         }
         catch

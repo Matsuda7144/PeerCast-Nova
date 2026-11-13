@@ -6,6 +6,26 @@ namespace PeerCast.Nova.Network.Tests;
 
 public sealed class PcpChannelStateAdapterTests
 {
+    [Fact]
+    public void NewAttemptRequiresFreshAdmissionBitrateWithoutErasingMediaStatus()
+    {
+        var tracker = CreateReceivingTracker();
+        var adapter = new PcpChannelStateAdapter(tracker);
+        adapter.Apply(new(ChannelGuid, null, CreateFullInfo(), null));
+        Assert.Equal(512, adapter.DeclaredBitrateKbps);
+        var before = tracker.Snapshot;
+        adapter.BeginAttempt();
+        Assert.Null(adapter.DeclaredBitrateKbps);
+        Assert.Same(before, tracker.Snapshot);
+        adapter.Apply(new(ChannelGuid, null, CreateFullInfo() with { BitrateKbps = null }, null));
+        Assert.Null(adapter.DeclaredBitrateKbps);
+        Assert.Equal(512, tracker.Snapshot.Metadata.BitrateKbps);
+        adapter.Apply(new(ChannelGuid, null, CreateFullInfo() with { BitrateKbps = 0 }, null));
+        Assert.Null(adapter.DeclaredBitrateKbps);
+        adapter.Apply(new(ChannelGuid, null, CreateFullInfo() with { BitrateKbps = 800 }, null));
+        Assert.Equal(800, adapter.DeclaredBitrateKbps);
+    }
+
     private static readonly Guid ChannelGuid = Guid.ParseExact(
         "531DC8DFC7FB42928AC2C0A626517A87",
         "N");

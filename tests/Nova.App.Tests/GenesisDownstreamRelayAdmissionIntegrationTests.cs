@@ -220,12 +220,12 @@ public sealed class GenesisDownstreamRelayAdmissionIntegrationTests
     public async Task LocalPlaybackRecordingAndUnrelatedTcpDoNotConsumeRelayCapacity()
     {
         using var timeout = TimeoutSource();
-        using var policy = new RelayAdmissionPolicy(new(MaxRelaysTotal: 1));
+        using var policy = new RelayAdmissionPolicy(new(MaxRelaysTotal: 1), new(new(500)));
         using var registry = new GenesisDownstreamRelayOwnerRegistry(policy);
         var id = new ChannelId(Guid.NewGuid());
         var sessionId = new ChannelSessionId(Guid.NewGuid());
         await using var fanout = new PcpRelayFanout(new() { MaxChildren = 3 });
-        using var owner = registry.Register(id, sessionId, RelayChannelKind.Viewing, fanout);
+        using var owner = registry.Register(id, sessionId, RelayChannelKind.Viewing, fanout, () => 500);
         await using var playback = fanout.AddChild(new NoopSink());
         var recordingFactory = new PcpRelayFanoutRecordingStreamSourceLeaseFactory(id, sessionId, fanout);
         recordingFactory.StartAccepting();
@@ -238,6 +238,7 @@ public sealed class GenesisDownstreamRelayAdmissionIntegrationTests
         var run = server.RunAsync(timeout.Token);
         Assert.Equal(2, fanout.ActiveChildCount);
         Assert.Equal(0, registry.ActiveRelayCount);
+        Assert.Equal(0, policy.Snapshot.ReservedIpv4Kbps);
         // A connector/upstream transport has no admission role on its own.
         await using var unrelatedListener = new TcpTransportListener(new(IPAddress.Loopback, 0), Transport);
         unrelatedListener.Start();
@@ -250,15 +251,18 @@ public sealed class GenesisDownstreamRelayAdmissionIntegrationTests
         AssertAccepted(peer);
         Assert.Equal(3, fanout.ActiveChildCount);
         Assert.Equal(1, registry.ActiveRelayCount);
+        Assert.Equal(500, policy.Snapshot.ReservedIpv4Kbps);
         await using var policyDenied = await Peer.ConnectAsync(server.LocalEndPoint, id, timeout.Token);
         AssertRelayFull(policyDenied);
         await peer.QuitAsync(timeout.Token);
         await UntilAsync(() => registry.ActiveRelayCount == 0, timeout.Token);
+        Assert.Equal(0, policy.Snapshot.ReservedIpv4Kbps);
         await using var thirdLocal = fanout.AddChild(new NoopSink());
         await using var fanoutDenied = await Peer.ConnectAsync(server.LocalEndPoint, id, timeout.Token);
         AssertRelayFull(fanoutDenied);
         await UntilAsync(() => server.Snapshot.CompletedConnectionCount == 3, timeout.Token);
         Assert.Equal(0, registry.ActiveRelayCount);
+        Assert.Equal(0, policy.Snapshot.ReservedIpv4Kbps);
         Assert.Equal(3, fanout.ActiveChildCount);
         await server.StopAsync(timeout.Token);
         await run.WaitAsync(timeout.Token);
@@ -331,11 +335,11 @@ public sealed class GenesisDownstreamRelayAdmissionIntegrationTests
     public async Task BorrowedSessionReturningDoesNotReleaseBeforeListenerOwnedTransportCleanup()
     {
         using var timeout = TimeoutSource();
-        using var policy = new RelayAdmissionPolicy(new(MaxRelaysTotal: 1));
+        using var policy = new RelayAdmissionPolicy(new(MaxRelaysTotal: 1), new(new(500)));
         using var registry = new GenesisDownstreamRelayOwnerRegistry(policy);
         var id = new ChannelId(Guid.NewGuid());
         await using var fanout = new PcpRelayFanout();
-        using var owner = registry.Register(id, new(Guid.NewGuid()), RelayChannelKind.Viewing, fanout);
+        using var owner = registry.Register(id, new(Guid.NewGuid()), RelayChannelKind.Viewing, fanout, () => 500);
         await using var listener = new TcpTransportListener(new(IPAddress.Loopback, 0), Transport);
         listener.Start();
         var accept = listener.AcceptAsync(timeout.Token);
@@ -357,12 +361,14 @@ public sealed class GenesisDownstreamRelayAdmissionIntegrationTests
             Assert.False(connection.IsDisposed);
             Assert.False(connection.CleanupCompletion.IsCompleted);
             Assert.Equal(1, registry.ActiveRelayCount);
+            Assert.Equal(500, policy.Snapshot.ReservedIpv4Kbps);
             Assert.False(owner.TryReserve(999, out _));
             await reader.CompleteAsync();
             await connection.DisposeAsync();
             await UntilAsync(() => registry.ActiveRelayCount == 0, timeout.Token);
             await connection.DisposeAsync();
             Assert.Equal(0, policy.ReservedCount);
+            Assert.Equal(0, policy.Snapshot.ReservedIpv4Kbps);
         }
         finally { await reader.CompleteAsync(); }
     }
