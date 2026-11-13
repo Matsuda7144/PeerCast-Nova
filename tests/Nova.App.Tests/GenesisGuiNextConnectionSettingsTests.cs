@@ -10,12 +10,33 @@ public sealed class GenesisGuiNextConnectionSettingsTests
         var value = GenesisGuiNextConnectionPreferences.Default;
         Assert.Equal(new NovaOptions().ListenPort, value.ListenPort);
         Assert.False(value.UseIpv6);
+        Assert.False(value.WanRelayEnabled);
         Assert.Null(value.TotalUpstreamIpv4Kbps);
         Assert.Null(value.TotalUpstreamIpv6Kbps);
         Assert.Null(value.MaxRelaysTotal);
         Assert.Null(value.MaxRelaysPerBroadcastChannel);
         Assert.Null(value.MaxRelaysPerViewingChannel);
         Assert.Equal(string.Empty, GenesisGuiNextConnectionInput.From(value).MaxRelaysTotal);
+    }
+
+    [Fact]
+    public async Task WanOptInPersistsForNextStartupAndOlderDocumentsDefaultOff()
+    {
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "connection.json");
+        var store = new JsonGenesisGuiNextConnectionPreferencesStore(path);
+        await File.WriteAllTextAsync(path, "{\"SchemaVersion\":1,\"ListenPort\":7144}");
+        Assert.False((await store.LoadAsync()).WanRelayEnabled);
+        await using var settings = new GenesisGuiNextConnectionSettings(GenesisGuiNextConnectionPreferences.Default, store);
+        var next = GenesisGuiNextConnectionInput.From(settings.Saved) with { WanRelayEnabled = true, ListenPort = "17144" };
+        Assert.True((await settings.SaveAsync(next)).Saved);
+        Assert.False(settings.Startup.WanRelayEnabled);
+        Assert.True(settings.HasPendingRestart);
+        var saved = await store.LoadAsync();
+        Assert.True(saved.WanRelayEnabled);
+        Assert.Equal(17144, saved.ListenPort);
+        Assert.True(GenesisGuiNextConnectionInput.From(saved).WanRelayEnabled);
+        Assert.False((next with { UseIpv6 = true }).TryValidate(out _, out _));
     }
 
     [Fact]

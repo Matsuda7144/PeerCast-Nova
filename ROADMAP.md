@@ -1,5 +1,16 @@
 # Roadmap
 
+## Smart Relay Phase W
+
+[ADR-0495](docs/adr/ADR-0495-shared-public-smart-relay-owner-and-nat-integration.md)
+and [PCN-0505](docs/reviews/PCN-0505-SHARED-PUBLIC-SMART-RELAY-OWNER-AND-NAT-INTEGRATION.md)
+integrate the existing shared public listener, current Owner/Admission, channel
+directory and central NAT manager with opt-in fixed-port GUI Relay. Recovery
+keeps the public listener but ends old media children before a fresh HEAD.
+Default OFF and next-start connection settings remain explicit. Managed TCP
+coverage is separate from Internet/router/Station/native acceptance:
+**WAN実機受入未確認**. IPv6 WAN, node SID migration and advanced relay GUI remain later work.
+
 ## Smart Relay Phase C
 
 [ADR-0494](docs/adr/ADR-0494-opt-in-smart-relay-recovery.md) and
@@ -7,7 +18,7 @@
 upstream recovery, bounded discovery, persistent low-frequency retry and safe
 media-generation boundaries in the existing Coordinator/GUI Relay. Default
 behavior stays unchanged; actual Station/physical acceptance and mandatory
-Phase W public-listener/WAN integration remain separate.
+Phase W public-listener/WAN integration are recorded separately above.
 
 ## Smart Relay Phase B
 

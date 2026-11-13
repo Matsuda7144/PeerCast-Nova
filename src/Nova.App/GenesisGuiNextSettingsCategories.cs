@@ -18,7 +18,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private bool _updatingSettingsPath, _notificationError;
         private string _notificationMessage = string.Empty;
         private nint[] AdditionalSettingsButtons => [_playbackCategory, _recordingCategory, _notificationsCategory, _settingsBrowse, _settingsReset, _testSound, .. NetworkSettingsButtons];
-        private nint[] SettingsChecks => [_notifyNew, _notifyFavorite, _notifySound, _connectionIpv6, _connectionAutoMapping, _ypEnabled];
+        private nint[] SettingsChecks => [_notifyNew, _notifyFavorite, _notifySound, _connectionIpv6, _connectionWan, _connectionAutoMapping, _ypEnabled];
         private bool PathCategory => _settingsCategory is GenesisIntegratedSettingsCategory.Playback or GenesisIntegratedSettingsCategory.Recording;
         private bool SettingsError => _settingsCategory == GenesisIntegratedSettingsCategory.General ? _generalSettings?.IsError == true :
             PathCategory ? _pathSettings?.IsError == true : NetworkCategory ? NetworkSettingsError : _notificationError;

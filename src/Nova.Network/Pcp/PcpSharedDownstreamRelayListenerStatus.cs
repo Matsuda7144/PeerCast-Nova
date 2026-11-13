@@ -30,7 +30,7 @@ internal sealed record PcpSharedDownstreamRelayListenerSnapshot(
     long NotFoundCount,
     long HandshakeTimedOutCount,
     long HandlerFailureCount,
-    long InternalFailureCount);
+    long InternalFailureCount, long CleanupFailureCount = 0);
 
 internal sealed record PcpSharedDownstreamRelayListenerResult(
     PcpSharedDownstreamRelayListenerEndReason EndReason,

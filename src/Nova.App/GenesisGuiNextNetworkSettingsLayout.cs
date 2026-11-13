@@ -6,7 +6,8 @@ internal readonly record struct GenesisGuiNextNetworkSettingsLayout(int Width)
     internal GenesisGuiNextAppShellPlacement.WindowRectangle Notice => Box(32, 144, Width - 64, 36);
     internal GenesisGuiNextAppShellPlacement.WindowRectangle Runtime => Box(32, 184, Width - 64, 18);
     internal GenesisGuiNextAppShellPlacement.WindowRectangle Saved => Box(32, 204, Width - 64, 18);
-    internal GenesisGuiNextAppShellPlacement.WindowRectangle Status => Box(32, 294, Width - 64, 24);
+    internal GenesisGuiNextAppShellPlacement.WindowRectangle Status => Box(32, 294, Width - 352, 24);
+    internal GenesisGuiNextAppShellPlacement.WindowRectangle Wan => Box(Width - 308, 294, 276, 24);
     internal GenesisGuiNextAppShellPlacement.WindowRectangle Ipv6 => Box(Width - 208, 116, 176, 24);
     internal GenesisGuiNextAppShellPlacement.WindowRectangle ConnectionTitle => Box(32, 116, Width - 592, 24);
     internal GenesisGuiNextAppShellPlacement.WindowRectangle AutoMapping => Box(Width - 544, 116, 320, 24);

@@ -18,7 +18,7 @@ internal sealed record GenesisRelayActivationSnapshot(
     GenesisRelayActivationError Error = GenesisRelayActivationError.None,
     long Generation = 0, ChannelId? ChannelId = null, ChannelSessionId? SessionId = null,
     string? EndPoint = null, bool ListenerBound = false, bool UpstreamReady = false, bool ReceivingReady = false,
-    bool CleanupConfirmed = true, PcpSmartRelayState Recovery = PcpSmartRelayState.Disabled)
+    bool CleanupConfirmed = true, PcpSmartRelayState Recovery = PcpSmartRelayState.Disabled, string? PublicStatus = null)
 {
     public string Text => "ローカルRelay: " + (State switch
     {
@@ -30,7 +30,8 @@ internal sealed record GenesisRelayActivationSnapshot(
                 PcpSmartRelayState.Connecting or PcpSmartRelayState.Negotiating ? "上流再接続中" : "受信中",
         GenesisRelayActivationState.Stopping => "停止処理中",
         _ => "失敗",
-    }) + (EndPoint is null ? "" : $" ({EndPoint})") + (Error == GenesisRelayActivationError.None ? "" : " — " + ErrorText(Error));
+    }) + (EndPoint is null ? "" : $" ({EndPoint})") + (Error == GenesisRelayActivationError.None ? "" : " — " + ErrorText(Error)) +
+        (PublicStatus is null ? "" : $" / {PublicStatus}");
 
     internal static string ErrorText(GenesisRelayActivationError error) => error switch
     {
@@ -66,13 +67,14 @@ internal sealed class GenesisGuiNextRelayActivation : IAsyncDisposable
     private long _generation;
     private bool _closed;
     private Task? _disposeTask;
+    private Func<string>? _publicStatus;
     private GenesisRelayActivationSnapshot _snapshot = new();
 
     public GenesisGuiNextRelayActivation(GenesisGuiNextPublicChannelComposition channels, PcpSmartRelayOptions? smartRelay = null)
         : this((channel, token) => channels.PrepareViewingAsync(channel, new(IPAddress.Loopback, 0),
             new PcpRelayCoordinatorOptions { UpstreamSession = new() { MaxReconnectAttempts = 0, SmartRelay = smartRelay } }, token),
             readinessTimeout: smartRelay is null ? null : Timeout.InfiniteTimeSpan)
-    { }
+    { _publicStatus = () => channels.PublicStatusText; }
 
     internal static PcpSmartRelayOptions? RecoveryPolicy(string? value) => value?.Trim().ToLowerInvariant() switch
     {
@@ -99,7 +101,10 @@ internal sealed class GenesisGuiNextRelayActivation : IAsyncDisposable
             lock (_gate)
             {
                 return _snapshot with
-                { Recovery = _current?.Owner?.ViewingRuntime?.SmartRelaySnapshot.State ?? PcpSmartRelayState.Disabled };
+                {
+                    Recovery = _current?.Owner?.ViewingRuntime?.SmartRelaySnapshot.State ?? PcpSmartRelayState.Disabled,
+                    PublicStatus = _publicStatus?.Invoke()
+                };
             }
         }
     }
@@ -209,6 +214,7 @@ internal sealed class GenesisGuiNextRelayActivation : IAsyncDisposable
             }
             Notify();
             var runtime = owner.ViewingRuntime ?? throw new InvalidOperationException();
+            await owner.PublicReady.WaitAsync(operation.Cancellation.Token).ConfigureAwait(false);
             var readiness = await runtime.WaitForReadinessAsync(operation.Cancellation.Token).ConfigureAwait(false);
             if (readiness != PcpRelayCoordinatorReadinessOutcome.Ready)
             {
@@ -263,7 +269,12 @@ internal sealed class GenesisGuiNextRelayActivation : IAsyncDisposable
                 }
             }
         }
-        catch (OperationCanceledException) { error = GenesisRelayActivationError.Canceled; }
+        catch (GenesisPublicRelayStartException) { error = GenesisRelayActivationError.BindFailed; }
+        catch (OperationCanceledException)
+        {
+            error = operation.Owner?.IsRetired == true && !operation.StopRequested
+            ? GenesisRelayActivationError.OwnerSuperseded : GenesisRelayActivationError.Canceled;
+        }
         catch (TimeoutException) { error = operation.Owner?.UpstreamStatus?.Fault is not null ? Classify(operation.Owner) : GenesisRelayActivationError.ReadinessTimedOut; }
         catch (SocketException) { error = operation.Owner is null ? GenesisRelayActivationError.BindFailed : Classify(operation.Owner); }
         catch (Exception) { error = operation.Owner?.UpstreamStatus?.Fault is not null ? Classify(operation.Owner) : GenesisRelayActivationError.StartFailed; }

@@ -156,6 +156,7 @@ internal sealed class ManualNatTimeProvider : TimeProvider
     public override DateTimeOffset GetUtcNow() { lock (gate) { return now; } }
     public override long GetTimestamp() { lock (gate) { return timestamp; } }
     public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+    public int ActiveTimerCount { get { lock (gate) { return timers.Count(timer => timer.DueTimestamp != long.MaxValue); } } }
 
     public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
     {

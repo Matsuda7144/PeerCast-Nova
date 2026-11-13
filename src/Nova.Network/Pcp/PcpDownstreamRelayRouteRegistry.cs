@@ -112,6 +112,8 @@ internal sealed class PcpDownstreamRelayRouteRegistry
         private PcpDownstreamRelayRouteRegistry? _registry;
         private readonly Guid _channelId;
         private readonly RouteEntry _entry;
+        private readonly object _gate = new();
+        private Task? _disposal;
 
         internal PcpDownstreamRelayRouteRegistration(
             PcpDownstreamRelayRouteRegistry registry,
@@ -130,10 +132,15 @@ internal sealed class PcpDownstreamRelayRouteRegistry
         /// </summary>
         public ValueTask DisposeAsync()
         {
-            var registry = Interlocked.Exchange(ref _registry, null);
-            return registry is null
-                ? ValueTask.CompletedTask
-                : registry.UnregisterAsync(_channelId, _entry);
+            lock (_gate)
+            {
+                if (_disposal is null)
+                {
+                    var registry = Interlocked.Exchange(ref _registry, null);
+                    _disposal = registry?.UnregisterAsync(_channelId, _entry).AsTask() ?? Task.CompletedTask;
+                }
+                return new(_disposal);
+            }
         }
     }
 

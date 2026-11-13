@@ -54,6 +54,7 @@ public sealed class PcpDownstreamRelayRouteRegistryTests
         Assert.Equal(0, registry.Count);
         Assert.False(registry.TryAcquire(FirstChannel.Value, out _));
         Assert.False(unregisterTask.IsCompleted);
+        Assert.Same(unregisterTask, registration.DisposeAsync().AsTask());
 
         lease.Dispose();
         await unregisterTask;

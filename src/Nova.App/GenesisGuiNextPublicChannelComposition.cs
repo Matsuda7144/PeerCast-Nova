@@ -11,9 +11,10 @@ namespace PeerCast.Nova.App;
 /// <summary>
 /// GUI Next's public-channel lifetime, separate from its playback/recording
 /// loopback owners. Construction and preparation perform no network I/O.
-/// The explicit GUI Relay command authorizes loopback/port 0 before RunAsync.
+/// The explicit GUI Relay command activates loopback/port 0. A separate opt-in
+/// startup setting also registers viewing owners with the shared public listener.
 /// </summary>
-internal sealed class GenesisGuiNextPublicChannelComposition : IAsyncDisposable
+internal sealed partial class GenesisGuiNextPublicChannelComposition : IAsyncDisposable
 {
     private readonly object _gate = new();
     private readonly GenesisDownstreamRelayOwnerRegistry _registry;
@@ -115,9 +116,8 @@ internal sealed class GenesisGuiNextPublicChannelComposition : IAsyncDisposable
     private static IPEndPoint CopyEndpoint(IPEndPoint endpoint)
     {
         ArgumentNullException.ThrowIfNull(endpoint);
-        // This phase does not apply saved ListenPort or add IPv6. In particular,
-        // 7144 cannot be selected accidentally. A later activation slice must
-        // explicitly review fixed-port/public-bind ownership.
+        // The channel's original listener remains ephemeral; fixed WAN port
+        // ownership belongs to the shared public listener, never each channel.
         if (endpoint.AddressFamily != AddressFamily.InterNetwork || endpoint.Port != 0)
             throw new ArgumentException("Only explicitly selected IPv4 ephemeral endpoints are supported.", nameof(endpoint));
         return new IPEndPoint(endpoint.Address, endpoint.Port);
@@ -152,7 +152,7 @@ internal sealed class GenesisGuiNextPublicChannelComposition : IAsyncDisposable
             throw new AggregateException("Public channel owner shutdown failed.", failures);
     }
 
-    internal sealed class Owner : IPcpDownstreamRelayAdmission, IPcpDownstreamRelayCapacity, IAsyncDisposable
+    internal sealed partial class Owner : IPcpDownstreamRelayAdmission, IPcpDownstreamRelayCapacity, IAsyncDisposable
     {
         private readonly object _gate = new();
         private readonly GenesisGuiNextPublicChannelComposition _composition;
@@ -215,7 +215,7 @@ internal sealed class GenesisGuiNextPublicChannelComposition : IAsyncDisposable
             _snapshot = snapshot;
             ViewingRuntime = viewingRuntime;
             _upstreamTracker = upstreamTracker;
-            if (viewingRuntime?.SmartRelayEnabled == true)
+            if (viewingRuntime is not null && (viewingRuntime.SmartRelayEnabled || PublicRequired))
                 _ = _retirement.Task.ContinueWith(_ =>
                 {
                     try { viewingRuntime.RequestStop(); }
@@ -258,7 +258,57 @@ internal sealed class GenesisGuiNextPublicChannelComposition : IAsyncDisposable
 
         private async Task RunAndRetireAsync(CancellationToken cancellationToken)
         {
-            try { await _activate!(cancellationToken).ConfigureAwait(false); }
+            try
+            {
+                if (PublicRequired) await Task.CompletedTask.ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
+                Task running;
+                lock (_gate)
+                {
+                    if (_retired) return;
+                    running = _activate!(cancellationToken);
+                }
+                if (PublicRequired)
+                {
+                    try
+                    {
+                        if (await ViewingRuntime!.WaitForReadinessAsync(cancellationToken).ConfigureAwait(false) != PcpRelayCoordinatorReadinessOutcome.Ready)
+                        {
+                            if (IsRetired) throw new OperationCanceledException(cancellationToken);
+                            throw new IOException("Local owner did not start.");
+                        }
+                        CancellationTokenSource publicLifetime;
+                        lock (_gate)
+                        {
+                            if (_retired) throw new OperationCanceledException(cancellationToken);
+                            publicLifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _publicStop.Token);
+                            // Record the complete startup before invoking the provider:
+                            // Stop must join even a delayed provider, not just route acquisition.
+                            _publicAcquisition = Task.Run(() => _composition.GetPublicHost()
+                                .AcquireAsync(BindPublicRoute, publicLifetime.Token), CancellationToken.None);
+                        }
+                        using (publicLifetime) { _publicLease = await _publicAcquisition.ConfigureAwait(false); }
+                        lock (_gate)
+                        {
+                            if (_retired) throw new OperationCanceledException(cancellationToken);
+                            _publicReady.TrySetResult();
+                        }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        _publicReady.TrySetCanceled(cancellationToken);
+                        if (IsRetired || cancellationToken.IsCancellationRequested)
+                        { await running.ConfigureAwait(false); return; }
+                        throw;
+                    }
+                    catch (Exception)
+                    {
+                        var error = new GenesisPublicRelayStartException();
+                        _publicReady.TrySetException(error);
+                        throw error;
+                    }
+                }
+                await running.ConfigureAwait(false);
+            }
             finally { await DisposeAsync().ConfigureAwait(false); }
         }
 
@@ -266,7 +316,11 @@ internal sealed class GenesisGuiNextPublicChannelComposition : IAsyncDisposable
         {
             lock (_gate)
             {
+                if (_retired) return;
                 _retired = true;
+                _publicCancellation = _publicStop.CancelAsync();
+                if (_publicRoute is { } route) _ = route.DisposeAsync().AsTask();
+                _publicReady.TrySetCanceled(CancellationToken.None);
                 _registration?.Dispose();
                 _retirement.TrySetResult();
             }
@@ -285,11 +339,20 @@ internal sealed class GenesisGuiNextPublicChannelComposition : IAsyncDisposable
         {
             // Never call the collection callback while holding the owner lock.
             await Task.CompletedTask.ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
-            try
+            Exception? failure = null;
+            try { if (_runtime is not null) await _runtime.DisposeAsync().ConfigureAwait(false); }
+            catch (Exception error) { failure = error; }
+            try { if (_publicCancellation is not null) await _publicCancellation.ConfigureAwait(false); }
+            catch (Exception error) { failure = error; }
+            if (_publicAcquisition is { } acquiring)
             {
-                if (_runtime is not null) await _runtime.DisposeAsync().ConfigureAwait(false);
+                try { _publicLease = await acquiring.ConfigureAwait(false); }
+                catch { if (_composition.PublicSnapshot?.CleanupFailed == true) failure ??= new IOException("Public startup cleanup failed."); }
             }
-            finally { _composition.Remove(this); }
+            try { if (_publicLease is not null) await _publicLease.DisposeAsync().ConfigureAwait(false); }
+            catch (Exception error) { failure = failure is null ? error : new AggregateException(failure, error); }
+            finally { _publicStop.Dispose(); _composition.Remove(this); }
+            if (failure is not null) throw new InvalidOperationException("Channel owner cleanup failed.", failure);
         }
     }
 }

@@ -9,6 +9,7 @@ internal sealed record GenesisGuiNextConnectionPreferences
     public int SchemaVersion { get; init; } = 1;
     public int ListenPort { get; init; } = new NovaOptions().ListenPort;
     public bool UseIpv6 { get; init; }
+    public bool WanRelayEnabled { get; init; }
     public int? TotalUpstreamIpv4Kbps { get; init; }
     public int? TotalUpstreamIpv6Kbps { get; init; }
     public int? MaxRelaysTotal { get; init; }
@@ -22,6 +23,7 @@ internal sealed record GenesisGuiNextConnectionPreferences
         if (SchemaVersion != 1)
             throw new InvalidDataException("Unsupported connection settings schema.");
         GenesisNetworkListenerSettings.ValidatePort(ListenPort, nameof(ListenPort));
+        if (WanRelayEnabled && UseIpv6) throw new InvalidDataException("WAN relay currently requires IPv4.");
         if (TotalUpstreamIpv4Kbps < 0 || TotalUpstreamIpv6Kbps < 0 || MaxRelaysTotal < 0 ||
             MaxRelaysPerBroadcastChannel < 0 || MaxRelaysPerViewingChannel < 0)
             throw new InvalidDataException("Connection limits cannot be negative.");
@@ -35,19 +37,22 @@ internal sealed record GenesisGuiNextConnectionInput(
     string TotalUpstreamIpv6Kbps,
     string MaxRelaysTotal,
     string MaxRelaysPerBroadcastChannel,
-    string MaxRelaysPerViewingChannel)
+    string MaxRelaysPerViewingChannel,
+    bool WanRelayEnabled = false)
 {
     internal static GenesisGuiNextConnectionInput From(GenesisGuiNextConnectionPreferences value) => new(
         value.ListenPort.ToString(CultureInfo.InvariantCulture), value.UseIpv6,
         Format(value.TotalUpstreamIpv4Kbps), Format(value.TotalUpstreamIpv6Kbps),
         Format(value.MaxRelaysTotal), Format(value.MaxRelaysPerBroadcastChannel),
-        Format(value.MaxRelaysPerViewingChannel));
+        Format(value.MaxRelaysPerViewingChannel), value.WanRelayEnabled);
 
     private static string Format(int? value) => value?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
 
     internal bool TryValidate(out GenesisGuiNextConnectionPreferences? value, out string? error)
     {
         value = null;
+        if (WanRelayEnabled && UseIpv6)
+        { error = "WAN RelayはIPv4の設定で使用してください。"; return false; }
         if (!TryNumber(ListenPort, out var port) || port is < 1 or > 65535)
         {
             error = "ポート番号は1～65535の整数で入力してください。";
@@ -74,6 +79,7 @@ internal sealed record GenesisGuiNextConnectionInput(
         {
             ListenPort = port,
             UseIpv6 = UseIpv6,
+            WanRelayEnabled = WanRelayEnabled,
             TotalUpstreamIpv4Kbps = limits[0],
             TotalUpstreamIpv6Kbps = limits[1],
             MaxRelaysTotal = limits[2],
@@ -98,7 +104,7 @@ internal sealed record GenesisGuiNextConnectionSaveResult(bool Saved, string Mes
 internal sealed class GenesisGuiNextConnectionSettings : IAsyncDisposable
 {
     internal const string NextStartNotice =
-        "保存値は次回起動時に読み込みます。LAN/WAN配信のリレー数上限に適用。待受ポート・IPv6への適用は後続対応。IPv4帯域数値設定時はLAN/WAN配信開始不可。";
+        "保存値は次回起動時に読み込みます。WAN Relayは指定ポートで公開します。自動開放は実行状態で設定。IPv6は後続対応。IPv4帯域数値設定時はLAN/WAN配信開始不可。";
     internal const string LoadFailureMessage =
         "設定を読み込めませんでした。今回は既定値で開始します。保存すると既存の設定を置き換えます。";
     private readonly IGenesisGuiNextConnectionPreferencesStore _store;

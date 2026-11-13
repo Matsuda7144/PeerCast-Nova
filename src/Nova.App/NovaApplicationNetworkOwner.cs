@@ -42,7 +42,7 @@ internal sealed class NovaApplicationPortMappingControl(NovaPortMappingControl c
 /// Construction and reads are inert. Public relay acquisition is explicit and
 /// separate from NAT desired state; listener details stay behind a driver.
 /// </summary>
-internal sealed class NovaApplicationNetworkOwner : INovaApplicationNetworkOwner
+internal sealed class NovaApplicationNetworkOwner : INovaApplicationNetworkOwner, INovaSharedPublicRelayProvider
 {
     private readonly object gate = new();
     private readonly NovaSettingsStore store;
@@ -58,6 +58,31 @@ internal sealed class NovaApplicationNetworkOwner : INovaApplicationNetworkOwner
     private INovaApplicationPortMappingControl? control;
     private NovaSharedPublicRelayOwner? publicRelay;
     private Task? publicRelayShutdown;
+    private GenesisSharedPublicRelay? sharedRelay;
+    private GenesisGuiNextConnectionPreferences? sharedRelaySettings;
+    private Func<PeerCast.Nova.Core.Channels.ChannelId, PeerCast.Nova.Network.Pcp.PcpRelayFanout,
+        PeerCast.Nova.Network.Pcp.PcpRelayCoordinator?>? sharedResolver;
+
+    public GenesisSharedPublicRelay GetSharedRelay(GenesisGuiNextConnectionPreferences settings,
+        Func<PeerCast.Nova.Core.Channels.ChannelId, PeerCast.Nova.Network.Pcp.PcpRelayFanout,
+            PeerCast.Nova.Network.Pcp.PcpRelayCoordinator?> resolveOwner)
+    {
+        lock (gate)
+        {
+            if (!initialized || disposing || disposed || runtime is null) throw new GenesisPublicRelayStartException();
+            var legacy = publicRelay?.ReadSnapshot();
+            if (legacy?.State is NovaPublicRelayState.Starting or NovaPublicRelayState.Listening or NovaPublicRelayState.Stopping ||
+                legacy?.Failure == NovaPublicRelayFailure.CleanupFailed)
+                throw new GenesisPublicRelayStartException();
+            if (sharedRelay is not null && (sharedRelaySettings != settings ||
+                !Equals(sharedResolver, resolveOwner) && sharedRelay.Snapshot.State != GenesisSharedPublicRelayState.Stopped))
+                throw new GenesisPublicRelayStartException();
+            sharedResolver = resolveOwner;
+            sharedRelaySettings = settings;
+            return sharedRelay ??= new(settings, runtime.Manager,
+                (channel, fanout) => Volatile.Read(ref sharedResolver)?.Invoke(channel, fanout));
+        }
+    }
     private bool initialized;
     private bool initializing;
     private bool disposing;
@@ -95,6 +120,7 @@ internal sealed class NovaApplicationNetworkOwner : INovaApplicationNetworkOwner
     {
         lock (gate)
         {
+            if (sharedRelay is not null) return Task.FromResult(new NovaPublicRelayAcquireResult(null, NovaPublicRelayFailure.IncompatibleIdentity));
             if (disposing || disposed || publicRelay is null)
                 return Task.FromResult(new NovaPublicRelayAcquireResult(null,
                     disposing || disposed ? NovaPublicRelayFailure.Closing : NovaPublicRelayFailure.NotInitialized));
@@ -163,12 +189,21 @@ internal sealed class NovaApplicationNetworkOwner : INovaApplicationNetworkOwner
                 NovaPublicRelayState.Failed => NovaApplicationPublicListenerAvailability.Failed,
                 _ => NovaApplicationPublicListenerAvailability.Unavailable,
             };
+            var shared = sharedRelay?.Snapshot;
+            if (shared is not null) availability = shared.State switch
+            {
+                GenesisSharedPublicRelayState.Starting => NovaApplicationPublicListenerAvailability.Starting,
+                GenesisSharedPublicRelayState.Listening => NovaApplicationPublicListenerAvailability.Listening,
+                GenesisSharedPublicRelayState.Stopping => NovaApplicationPublicListenerAvailability.Stopping,
+                GenesisSharedPublicRelayState.Failed => NovaApplicationPublicListenerAvailability.Failed,
+                _ => NovaApplicationPublicListenerAvailability.Unavailable,
+            };
             return new(initialized, initializing, disposing, disposed, revision,
                 nat?.Enabled, savedEnabled, environmentEnabled.HasValue, environmentEnabled,
                 environmentEnabled ?? savedEnabled, saves.Count, lastAcceptedRequestId,
                 lastPersistedRequestId, lastPersistence, initializationFailure, shutdownFailure,
                 shutdownOutcome, nat, availability)
-            { PublicRelay = relay };
+            { PublicRelay = relay, SharedPublicRelay = shared };
         }
     }
 
@@ -179,7 +214,9 @@ internal sealed class NovaApplicationNetworkOwner : INovaApplicationNetworkOwner
             if (disposal is null)
             {
                 // Close public lease admission before publishing app closure.
-                publicRelayShutdown = publicRelay?.DisposeAsync().AsTask();
+                publicRelayShutdown = Task.WhenAll(
+                    sharedRelay?.DisposeAsync().AsTask() ?? Task.CompletedTask,
+                    publicRelay?.DisposeAsync().AsTask() ?? Task.CompletedTask);
                 disposing = true;
                 revision++;
                 disposal = Task.Run(DisposeCoreAsync);

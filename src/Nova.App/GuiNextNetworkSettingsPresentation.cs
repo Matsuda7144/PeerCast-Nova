@@ -61,6 +61,11 @@ internal sealed record GuiNextNetworkSettingsPresentation(
             $"共有参照（要求含む）：{relay?.ReferenceCount.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "未確認"}    ChannelId：{relay?.ChannelId?.ToString() ?? "なし"}" +
             (snapshot.PublicListenerAvailability == NovaApplicationPublicListenerAvailability.Failed ? $"    分類：{relay?.Failure}" : "");
         var nat = snapshot.Nat;
+        if (snapshot.SharedPublicRelay is { } shared)
+            listener = $"公開PCP listener：{shared.ListenerText}    " +
+                (shared.State == GenesisSharedPublicRelayState.Listening ? $"実bound port：{shared.Port}" : "実bound port：なし") +
+                $"\r\nチャンネル数：{shared.Channels}    {shared.MappingText}    {shared.Reachability}" +
+                (shared.Error is null ? "" : $"\r\n{shared.Error}");
         // Reuse the existing coherent projection and Japanese diagnostics.
         // Bounded display only; old network observations remain marked historical.
         var view = nat is null ? null : NovaPortMappingView.Create(nat with
@@ -89,7 +94,9 @@ internal sealed record GuiNextNetworkSettingsPresentation(
             nat?.State == NatDisplayState.Mapped && nat.LeaseEvidence is NatLeaseEvidenceKind.RouterConfirmedWithEstimatedExpiry or NatLeaseEvidenceKind.RouterConfirmedPermanent
                 ? GuiNextNetworkTone.Green : GuiNextNetworkTone.Orange, failure)
         {
-            IntegratedSettings = "チェックは即時反映・非同期で自動保存（共通の保存・キャンセルとは別）\r\n" +
+            IntegratedSettings = (snapshot.SharedPublicRelay is { } current
+                ? $"WAN Relay: {current.ListenerText} / port {current.Port} / {current.MappingText} / {current.Reachability}"
+                : "チェックは即時反映・非同期で自動保存（共通の保存・キャンセルとは別）") + "\r\n" +
                 $"実行中の設定：{OnOff(snapshot.RuntimeDesiredEnabled)}    保存済み：{OnOff(snapshot.SavedAutoPortMapping)}    {save}" +
                 (snapshot.StartupEnvironmentOverride
                     ? $"\r\nNOVA_AUTO_PORT_MAPPING={OnOff(snapshot.StartupEnvironmentEnabled)}（優先）    次回起動時：{OnOff(snapshot.NextStartEffectiveEnabled)}"

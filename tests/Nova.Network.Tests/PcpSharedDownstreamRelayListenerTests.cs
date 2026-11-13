@@ -6,7 +6,7 @@ using PeerCast.Nova.Network.Transport;
 
 namespace PeerCast.Nova.Network.Tests;
 
-public sealed class PcpSharedDownstreamRelayListenerTests
+public sealed partial class PcpSharedDownstreamRelayListenerTests
 {
     private static readonly TimeSpan TestTimeout = TimeSpan.FromSeconds(10);
 

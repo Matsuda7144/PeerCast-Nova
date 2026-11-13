@@ -5,7 +5,7 @@ namespace PeerCast.Nova.App;
 internal sealed partial class GenesisGuiNextAppShellBridge
 {
     private const int ConnectionCategoryId = 1200, YellowPagesCategoryId = 1201, ConnectionIpv6Id = 1202,
-        ConnectionInputId = 1210, ConnectionAutoMappingId = 1216, YpInputId = 1220, YpListId = 1230, YpEnabledId = 1231,
+        ConnectionInputId = 1210, ConnectionAutoMappingId = 1216, ConnectionWanId = 1217, YpInputId = 1220, YpListId = 1230, YpEnabledId = 1231,
         YpNewId = 1232, YpRemoveId = 1233, YpToggleId = 1234;
     private const uint NetworkSettingsSaveCompleted = 0x8730, NatSettingsSaveCompleted = 0x8731;
     private static int _nextNetworkSettingsToken;
@@ -15,7 +15,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private GenesisConnectionSettingsPage? _connectionPage;
         private GenesisYellowPageSettingsPage? _ypPage;
         private GuiNextNetworkSettingsViewModel? _natSettingsPage;
-        private nint _connectionCategory, _yellowPagesCategory, _connectionIpv6, _connectionAutoMapping, _natSettingsStatus, _ypEnabled, _ypList, _ypNew, _ypRemove, _ypToggle;
+        private nint _connectionCategory, _yellowPagesCategory, _connectionIpv6, _connectionWan, _connectionAutoMapping, _natSettingsStatus, _ypEnabled, _ypList, _ypNew, _ypRemove, _ypToggle;
         private readonly nint[] _connectionInputs = new nint[6], _connectionLabels = new nint[6], _ypInputs = new nint[5], _ypLabels = new nint[5];
         private IReadOnlyList<GenesisYellowPageDefinition> _ypShown = [];
         private bool _updatingNetworkSettings, _natSettingsError;
@@ -45,6 +45,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             _connectionCategory = Button("通信", ConnectionCategoryId);
             _yellowPagesCategory = Button("YP", YellowPagesCategoryId);
             _connectionIpv6 = Check("IPv6を使う（次回用）", ConnectionIpv6Id);
+            _connectionWan = Check("WAN Relayを公開（次回用）", ConnectionWanId);
             _connectionAutoMapping = Check(GenesisNetworkSettingsWindow.NatCheckboxLabel, ConnectionAutoMappingId);
             _natSettingsStatus = Control("STATIC", string.Empty, 0, 0);
             _ypEnabled = Check("有効（保存時に反映）", YpEnabledId);
@@ -101,6 +102,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             foreach (var h in _connectionInputs.Concat(_connectionLabels)) Show(h, ConnectionCategory);
             foreach (var h in _ypInputs.Concat(_ypLabels).Concat(new[] { _ypList, _ypNew, _ypRemove, _ypToggle, _ypEnabled })) Show(h, YellowPagesCategory);
             Show(_connectionIpv6, ConnectionCategory);
+            Show(_connectionWan, ConnectionCategory);
             Show(_connectionAutoMapping, ConnectionCategory);
             Show(_natSettingsStatus, ConnectionCategory);
             if (NetworkCategory)
@@ -129,7 +131,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 if (ConnectionCategory)
                 {
                     var v = _connectionInputs.Select(ReadNetworkInput).ToArray();
-                    _connectionPage!.Edit(new(v[0], SendMessageW(_connectionIpv6, 0xF0, 0, 0) == 1, v[1], v[2], v[3], v[4], v[5]));
+                    _connectionPage!.Edit(new(v[0], SendMessageW(_connectionIpv6, 0xF0, 0, 0) == 1, v[1], v[2], v[3], v[4], v[5],
+                        SendMessageW(_connectionWan, 0xF0, 0, 0) == 1));
                 }
                 else if (YellowPagesCategory)
                 {
@@ -166,7 +169,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 if (_natSettingsPage is { } nat && nat.Refresh().CanEdit)
                     _ = nat.SetEnabledAsync(SendMessageW(_connectionAutoMapping, 0xF0, 0, 0) == 1);
             }
-            else if (control == _connectionIpv6 || control == _ypEnabled) ReadNetworkDraft();
+            else if (control == _connectionIpv6 || control == _connectionWan || control == _ypEnabled) ReadNetworkDraft();
             else if (id == GeneralCancelId && control == _generalCancel)
             { _networkInputError = null; if (ConnectionCategory) _connectionPage!.Reload(); else _ypPage!.Cancel(); }
             else if (id == GeneralSaveId && control == _generalSave)
@@ -228,6 +231,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                     for (var i = 0; i < values.Length; i++) { Input(_connectionInputs[i], values[i]); _ = EnableWindow(_connectionInputs[i], !page.IsSaving); }
                     _ = SendMessageW(_connectionIpv6, 0xF1, v.UseIpv6 ? 1u : 0u, 0);
                     _ = EnableWindow(_connectionIpv6, !page.IsSaving);
+                    _ = SendMessageW(_connectionWan, 0xF1, v.WanRelayEnabled ? 1u : 0u, 0);
+                    _ = EnableWindow(_connectionWan, !page.IsSaving);
                     var nat = _natSettingsPage?.Refresh();
                     _natSettingsError = nat?.Failure == NovaApplicationNetworkFailure.PersistenceFailed;
                     _ = EnableWindow(_connectionAutoMapping, nat?.CanEdit == true);
@@ -265,7 +270,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private static string ConnectionSummary(GenesisGuiNextConnectionPreferences v)
         {
             static string N(int? n) => n?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "制限なし";
-            return $"ポート {v.ListenPort} / IPv6 {(v.UseIpv6 ? "ON" : "OFF")} / 上りIPv4 {N(v.TotalUpstreamIpv4Kbps)}・IPv6 {N(v.TotalUpstreamIpv6Kbps)} kbps / リレー 合計 {N(v.MaxRelaysTotal)}・配信毎 {N(v.MaxRelaysPerBroadcastChannel)}・視聴毎 {N(v.MaxRelaysPerViewingChannel)}";
+            return $"WAN Relay {(v.WanRelayEnabled ? "ON" : "OFF")} / ポート {v.ListenPort} / IPv6 {(v.UseIpv6 ? "ON" : "OFF")} / 上りIPv4 {N(v.TotalUpstreamIpv4Kbps)}・IPv6 {N(v.TotalUpstreamIpv6Kbps)} kbps / リレー 合計 {N(v.MaxRelaysTotal)}・配信毎 {N(v.MaxRelaysPerBroadcastChannel)}・視聴毎 {N(v.MaxRelaysPerViewingChannel)}";
         }
         private static string YpListLabel(GenesisYellowPageDefinition e) => $"{(e.IsEnabled ? "有効" : "無効")} · {e.Name} ({e.Id})";
 
@@ -280,6 +285,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 Place(_generalTitle, n.ConnectionTitle); Place(_generalNotice, n.Notice);
                 Place(_generalRuntime, n.Runtime); Place(_generalConfigured, n.Saved); Place(_generalStatus, n.Status);
                 Place(_connectionIpv6, n.Ipv6);
+                Place(_connectionWan, n.Wan);
                 Place(_connectionAutoMapping, n.AutoMapping);
                 Place(_natSettingsStatus, n.NatStatus(layout));
                 for (var i = 0; i < 6; i++) { Place(_connectionInputs[i], n.ConnectionInput(i)); Place(_connectionLabels[i], n.ConnectionLabel(i)); }

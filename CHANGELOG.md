@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+- Smart Relay Phase W: opt-in fixed receiving port on the existing shared PCP
+  listener, exact current Owner routing, shared loopback/public Admission and
+  owner-local referrals. Public children now participate in Coordinator recovery
+  and actual-cleanup accounting. Reused central NAT demand/renewal/compensation;
+  Classic/Modern WAN opt-in defaults OFF and applies at next startup. Mapping and
+  TCP state remain distinct from reachability. ADR-0495 / PCN-0505 record managed
+  TCP integration and **WAN実機受入未確認**; no PCP wire or publishing/YP ID change.
+
 - Smart Relay Phase C: opt-in EOF/Unavailable recovery with owner-scoped peer
   selection, eight-target/thirty-second waves, four shared negotiation slots,
   limited/persistent backoff, accepted-DATA cursors and explicit media-generation

@@ -11,6 +11,10 @@ namespace PeerCast.Nova.Network.Pcp;
 /// </summary>
 internal interface IPcpDownstreamRoutedConnectionHandler
 {
+    ValueTask<PcpDownstreamChildResult> RunWanAsync(TcpTransportConnection connection, PipeReader reader,
+        PcpDownstreamRelayRequest request, PcpRelayFanout fanout, PcpWanIngressPolicy.Lease ingress,
+        CancellationToken cancellationToken) => RunAsync(connection, reader, request, fanout, cancellationToken);
+
     ValueTask<PcpDownstreamChildResult> RunAsync(
         TcpTransportConnection connection,
         PipeReader reader,

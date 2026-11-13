@@ -24,4 +24,7 @@ internal sealed class GuiNextNetworkSettingsAdapter : IGuiNextNetworkSettingsAda
 
     public Task<NovaApplicationNetworkPersistenceResult> SetAutoPortMappingAsync(bool enabled) =>
         owner.SetAutoPortMappingAsync(enabled);
+
+    internal void ConfigurePublicRelay(GenesisGuiNextPublicChannelComposition channels,
+        GenesisGuiNextConnectionPreferences settings) => channels.ConfigurePublic(settings, owner as INovaSharedPublicRelayProvider);
 }

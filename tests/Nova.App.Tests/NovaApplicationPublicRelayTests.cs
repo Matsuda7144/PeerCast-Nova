@@ -9,6 +9,23 @@ namespace PeerCast.Nova.App.Tests;
 
 public sealed class NovaApplicationPublicRelayTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SharedWanModeCannotBypassActiveOrCleanupFailedLegacyOwner(bool failCleanup)
+    {
+        await using var test = new Fixture { FailStop = failCleanup };
+        await test.InitializeAsync();
+        var lease = (await test.Owner.AcquirePublicRelayAsync(Request)).Lease!;
+        var settings = new GenesisGuiNextConnectionPreferences { WanRelayEnabled = true };
+        if (failCleanup) Assert.Equal(NovaPublicRelayFailure.CleanupFailed, await lease.ReleaseAsync());
+        Assert.Throws<GenesisPublicRelayStartException>(() => test.Owner.GetSharedRelay(settings, (_, _) => null));
+        Assert.Null(test.Owner.ReadSnapshot().SharedPublicRelay);
+        Assert.Single(test.Drivers);
+        if (failCleanup) await Assert.ThrowsAsync<InvalidOperationException>(() => test.Owner.DisposeAsync().AsTask());
+        else await lease.ReleaseAsync();
+    }
+
     private static readonly ChannelId Channel = new(Guid.Parse("11111111-1111-1111-1111-111111111111"));
     private static readonly ChannelSessionId Session = new(Guid.Parse("22222222-2222-2222-2222-222222222222"));
     private static NovaPublicRelayRequest Request => new(Channel, Session, $"pcp://example.invalid:7144/channel/{Channel}");

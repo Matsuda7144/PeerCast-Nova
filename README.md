@@ -7,6 +7,17 @@ PeerCast Nova は、既存 PeerCast ネットワークとの互換性を保ち�
 Project Founder: **7144**  
 License: **Apache License 2.0**
 
+Smart Relay Phase W integrates the existing shared public PCP listener with the
+current channel Owner, shared relay limits and application NAT manager:
+[ADR-0495](docs/adr/ADR-0495-shared-public-smart-relay-owner-and-nat-integration.md),
+[PCN-0505](docs/reviews/PCN-0505-SHARED-PUBLIC-SMART-RELAY-OWNER-AND-NAT-INTEGRATION.md).
+WAN Relay defaults OFF. Enable it in Classic/Modern connection settings, choose
+the existing receiving port (1..65535), save and restart Nova, then explicitly
+start Relay. The shared IPv4 listener uses that fixed port; existing automatic
+mapping or manual router forwarding can be used. Saving/startup alone does not
+publish. Recovery opt-in is independent. TCP bind and mapping success do not prove
+external reachability: **WAN実機受入未確認**.
+
 Smart Relay Phase C adds opt-in upstream recovery, bounded discovery and long
 low-frequency retry: [ADR-0494](docs/adr/ADR-0494-opt-in-smart-relay-recovery.md).
 Default GUI Relay behavior is unchanged. To opt in, set process environment
@@ -23,7 +34,7 @@ This managed integration does not establish physical or WAN relay acceptance.
 Smart Relay Phase 0 / A-1 adds standard PCP QUIT 1003 capacity replies and typed
 QUIT reasons while preserving current ID/Owner contracts:
 [ADR-0492](docs/adr/ADR-0492-typed-pcp-quit-compatibility-without-identity-migration.md).
-Recovery was outside A-1; see Phase C above. WAN integration remains later work.
+Recovery was outside A-1; see Phase C and the Phase W integration above.
 
 ## プロジェクトの方針
 

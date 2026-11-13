@@ -72,6 +72,7 @@ internal sealed record NovaApplicationNetworkSnapshot(
 {
     // Has its own revision: the relay progresses independently of settings.
     public NovaPublicRelaySnapshot? PublicRelay { get; init; }
+    public GenesisSharedPublicRelaySnapshot? SharedPublicRelay { get; init; }
 
     public NovaApplicationNetworkFailure SafeFailure =>
         ShutdownFailure != NovaApplicationNetworkFailure.None ? ShutdownFailure :

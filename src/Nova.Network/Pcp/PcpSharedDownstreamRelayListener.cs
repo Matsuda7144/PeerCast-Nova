@@ -1,7 +1,9 @@
 using System.IO.Pipelines;
 using System.Net;
 using System.Net.Sockets;
+using PeerCast.Nova.Core.Channels;
 using PeerCast.Nova.Network.Transport;
+using PeerCast.Nova.Protocol.Pcp;
 
 namespace PeerCast.Nova.Network.Pcp;
 
@@ -9,15 +11,18 @@ namespace PeerCast.Nova.Network.Pcp;
 /// Owns one shared bounded TCP listener, reads one downstream HTTP relay request,
 /// resolves its channel through the current route registry, and delegates an
 /// already-routed connection to a borrowed handler. The listener owns connection
-/// and PipeReader cleanup; route leases remain held until handler completion.
+/// and PipeReader cleanup; route leases remain held until transport cleanup.
 /// </summary>
-internal sealed class PcpSharedDownstreamRelayListener : IAsyncDisposable
+public sealed class PcpSharedDownstreamRelayListener : IAsyncDisposable
 {
     private readonly object _gate = new();
     private readonly TcpTransportListener _listener;
     private readonly PcpDownstreamRelayRouteRegistry _registry;
     private readonly IPcpDownstreamRoutedConnectionHandler _handler;
     private readonly PcpDownstreamChildOptions _childOptions;
+    private readonly PcpWanIngressPolicy? _wanIngress;
+    private readonly Guid _pingSessionId;
+    internal PcpWanIngressSnapshot? WanIngress => _wanIngress?.Snapshot;
     private readonly CancellationTokenSource _stopSource = new();
     private readonly HashSet<SessionEntry> _sessions = [];
 
@@ -35,14 +40,55 @@ internal sealed class PcpSharedDownstreamRelayListener : IAsyncDisposable
     private long _handshakeTimedOutCount;
     private long _handlerFailureCount;
     private long _internalFailureCount;
+    private long _cleanupFailureCount;
     private int _disposed;
 
-    public PcpSharedDownstreamRelayListener(
+    /// <summary>Reuses current Coordinators; construction performs no bind or I/O.</summary>
+    public PcpSharedDownstreamRelayListener(IPEndPoint localEndPoint,
+        Func<ChannelId, PcpRelayFanout, PcpRelayCoordinator?> resolveOwner,
+        TcpTransportOptions? transportOptions = null, PcpWanIngressOptions? wanOptions = null)
+        : this(localEndPoint, new PcpDownstreamRelayRouteRegistry(), CreateOwnerHandler(resolveOwner),
+            transportOptions, wanOptions: wanOptions ?? new())
+    {
+    }
+
+    private static PcpDownstreamChildSessionRoutedConnectionHandler CreateOwnerHandler(
+        Func<ChannelId, PcpRelayFanout, PcpRelayCoordinator?> resolveOwner)
+    {
+        ArgumentNullException.ThrowIfNull(resolveOwner);
+        return new(Guid.NewGuid(), resolveOwner: (channel, fanout) =>
+        {
+            var owner = resolveOwner(channel, fanout);
+            return owner is not null && ReferenceEquals(owner.DownstreamFanout, fanout) ? owner.DownstreamServer : null;
+        });
+    }
+
+    /// <summary>Registers an exact existing fanout. Disposal closes routing immediately and joins its drain.</summary>
+    public IAsyncDisposable Register(ChannelId channelId, PcpRelayFanout fanout)
+    {
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+            if (_stopSource.IsCancellationRequested) throw new InvalidOperationException("Public routing is closed.");
+            return _registry.Register(channelId, fanout);
+        }
+    }
+
+    public int RouteCount => _registry.Count;
+    public long CleanupFailureCount => Snapshot.CleanupFailureCount;
+    internal PcpDownstreamRelayRouteRegistry RouteRegistry => _registry;
+
+    /// <summary>Binds once, then runs the existing bounded accept loop until Stop or cancellation.</summary>
+    public Task StartAsync(CancellationToken cancellationToken = default) => RunAsync(cancellationToken);
+
+    internal PcpSharedDownstreamRelayListener(
         IPEndPoint localEndPoint,
         PcpDownstreamRelayRouteRegistry registry,
         IPcpDownstreamRoutedConnectionHandler handler,
         TcpTransportOptions? transportOptions = null,
-        PcpDownstreamChildOptions? childOptions = null)
+        PcpDownstreamChildOptions? childOptions = null,
+        PcpWanIngressOptions? wanOptions = null,
+        Guid? pingSessionId = null)
     {
         ArgumentNullException.ThrowIfNull(localEndPoint);
         ArgumentNullException.ThrowIfNull(registry);
@@ -63,6 +109,8 @@ internal sealed class PcpSharedDownstreamRelayListener : IAsyncDisposable
             copiedTransportOptions);
         _registry = registry;
         _handler = handler;
+        if (wanOptions is not null) { wanOptions.Validate(); _wanIngress = new(wanOptions); }
+        _pingSessionId = pingSessionId ?? Guid.NewGuid();
     }
 
     public IPEndPoint LocalEndPoint
@@ -82,7 +130,7 @@ internal sealed class PcpSharedDownstreamRelayListener : IAsyncDisposable
         }
     }
 
-    public PcpSharedDownstreamRelayListenerSnapshot Snapshot
+    internal PcpSharedDownstreamRelayListenerSnapshot Snapshot
     {
         get
         {
@@ -93,7 +141,7 @@ internal sealed class PcpSharedDownstreamRelayListener : IAsyncDisposable
         }
     }
 
-    public Task<PcpSharedDownstreamRelayListenerResult> RunAsync(
+    internal Task<PcpSharedDownstreamRelayListenerResult> RunAsync(
         CancellationToken cancellationToken = default)
     {
         lock (_gate)
@@ -142,6 +190,7 @@ internal sealed class PcpSharedDownstreamRelayListener : IAsyncDisposable
             }
         }
 
+        _wanIngress?.Close();
         CancelBestEffort(_stopSource);
 
         if (runTask is not null)
@@ -155,6 +204,7 @@ internal sealed class PcpSharedDownstreamRelayListener : IAsyncDisposable
         ObjectDisposedException.ThrowIf(
             Volatile.Read(ref _disposed) != 0,
             this);
+        _wanIngress?.Close();
         CancelBestEffort(_stopSource);
     }
 
@@ -166,6 +216,7 @@ internal sealed class PcpSharedDownstreamRelayListener : IAsyncDisposable
         }
 
         Task<PcpSharedDownstreamRelayListenerResult>? runTask;
+        _wanIngress?.Close();
         CancelBestEffort(_stopSource);
 
         lock (_gate)
@@ -209,7 +260,8 @@ internal sealed class PcpSharedDownstreamRelayListener : IAsyncDisposable
             {
                 var connection = await _listener.AcceptAsync(
                     operationToken).ConfigureAwait(false);
-                StartSession(connection, operationToken);
+                if (!StartSession(connection, operationToken))
+                    await connection.DisposeAsync().ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException)
@@ -229,6 +281,7 @@ internal sealed class PcpSharedDownstreamRelayListener : IAsyncDisposable
         }
         finally
         {
+            _wanIngress?.Close();
             lock (_gate)
             {
                 _state = PcpSharedDownstreamRelayListenerState.Stopping;
@@ -250,11 +303,14 @@ internal sealed class PcpSharedDownstreamRelayListener : IAsyncDisposable
             Snapshot);
     }
 
-    private void StartSession(
+    private bool StartSession(
         TcpTransportConnection connection,
         CancellationToken cancellationToken)
     {
-        var entry = new SessionEntry(connection);
+        if (cancellationToken.IsCancellationRequested || _stopSource.IsCancellationRequested) return false;
+        var ingress = _wanIngress?.TryAccept(connection.RemoteEndPoint.Address);
+        if (_wanIngress is not null && ingress is null) return false;
+        var entry = new SessionEntry(connection) { WanLease = ingress };
 
         lock (_gate)
         {
@@ -263,7 +319,8 @@ internal sealed class PcpSharedDownstreamRelayListener : IAsyncDisposable
                 _acceptedConnectionCount + 1);
             _activeConnectionCount = checked(
                 _activeConnectionCount + 1);
-            entry.Task = RunSessionAsync(entry, cancellationToken);
+            entry.Task = Task.Run(() => RunSessionAsync(entry, cancellationToken), CancellationToken.None);
+            return true;
         }
     }
 
@@ -279,6 +336,7 @@ internal sealed class PcpSharedDownstreamRelayListener : IAsyncDisposable
         var handshakeTimedOut = false;
         var handlerFailed = false;
         var internalFailure = false;
+        var cleanupFailed = false;
 
         try
         {
@@ -290,7 +348,8 @@ internal sealed class PcpSharedDownstreamRelayListener : IAsyncDisposable
                     leaveOpen: true));
 
             using var timeoutSource = new CancellationTokenSource(
-                _childOptions.HandshakeTimeout);
+                entry.WanLease?.Remaining(_childOptions.HandshakeTimeout) ?? _childOptions.HandshakeTimeout,
+                entry.WanLease?.Clock ?? TimeProvider.System);
             using var ingressSource =
                 CancellationTokenSource.CreateLinkedTokenSource(
                     cancellationToken,
@@ -298,10 +357,23 @@ internal sealed class PcpSharedDownstreamRelayListener : IAsyncDisposable
 
             try
             {
+                if (entry.WanLease is { } lease)
+                {
+                    using var identify = new CancellationTokenSource(lease.Remaining(lease.IdentificationTimeout), lease.Clock);
+                    using var identification = CancellationTokenSource.CreateLinkedTokenSource(ingressSource.Token, identify.Token);
+                    if (await PcpWanProtocolIngress.IsDirectPcpAsync(reader, identification.Token).ConfigureAwait(false))
+                    {
+                        await using var atoms = new PcpAtomPipeMessageReader(reader,
+                            new PcpProtocolLimits { MaxContentLength = 4096, MaxChildCount = 32, MaxNestingDepth = 4 }, 4096);
+                        await PcpWanProtocolIngress.RunPingAsync(atoms, _pingSessionId, lease,
+                            (bytes, token) => entry.Connection.WriteAsync(bytes, token), cancellationToken).ConfigureAwait(false);
+                        return;
+                    }
+                }
                 routing = await PcpDownstreamRelayIngressRouter.ReadAndResolveAsync(
                     reader,
                     _registry,
-                    _childOptions.MaxHttpHeaderBytes,
+                    entry.WanLease is null ? _childOptions.MaxHttpHeaderBytes : Math.Min(4096, _childOptions.MaxHttpHeaderBytes),
                     _childOptions.PcpVersion,
                     ingressSource.Token).ConfigureAwait(false);
             }
@@ -350,7 +422,9 @@ internal sealed class PcpSharedDownstreamRelayListener : IAsyncDisposable
 
             try
             {
-                _ = await _handler.RunAsync(
+                _ = entry.WanLease is { } ingress
+                    ? await _handler.RunWanAsync(entry.Connection, reader, request, fanout, ingress, cancellationToken).ConfigureAwait(false)
+                    : await _handler.RunAsync(
                     entry.Connection,
                     reader,
                     request,
@@ -370,18 +444,20 @@ internal sealed class PcpSharedDownstreamRelayListener : IAsyncDisposable
             when (cancellationToken.IsCancellationRequested)
         {
         }
+        catch (OperationCanceledException) { handshakeTimedOut = true; }
+        catch (Exception exception) when (exception is InvalidDataException or PcpProtocolException)
+        { badRequest = true; }
         catch (Exception exception) when (exception is
             IOException or
             SocketException or
             InvalidOperationException or
             ObjectDisposedException)
         {
-            internalFailure = true;
+            if (_wanIngress is not null) badRequest = true;
+            else internalFailure = true;
         }
         finally
         {
-            routing?.Dispose();
-
             if (reader is not null)
             {
                 try
@@ -392,7 +468,7 @@ internal sealed class PcpSharedDownstreamRelayListener : IAsyncDisposable
                     IOException or
                     ObjectDisposedException)
                 {
-                    internalFailure = true;
+                    internalFailure = true; cleanupFailed = true;
                 }
             }
 
@@ -405,8 +481,16 @@ internal sealed class PcpSharedDownstreamRelayListener : IAsyncDisposable
                 SocketException or
                 ObjectDisposedException)
             {
-                internalFailure = true;
+                internalFailure = true; cleanupFailed = true;
             }
+
+            // Keep route/policy leases until actual transport cleanup.
+            if (entry.Connection.CleanupCompletion.IsCompletedSuccessfully)
+            {
+                routing?.Dispose();
+                entry.WanLease?.Dispose();
+            }
+            else { internalFailure = true; cleanupFailed = true; }
 
             lock (_gate)
             {
@@ -414,6 +498,7 @@ internal sealed class PcpSharedDownstreamRelayListener : IAsyncDisposable
                 _activeConnectionCount--;
                 _completedConnectionCount = checked(
                     _completedConnectionCount + 1);
+                if (cleanupFailed) _cleanupFailureCount++;
 
                 if (routed)
                 {
@@ -509,7 +594,7 @@ internal sealed class PcpSharedDownstreamRelayListener : IAsyncDisposable
             _notFoundCount,
             _handshakeTimedOutCount,
             _handlerFailureCount,
-            _internalFailureCount);
+            _internalFailureCount, _cleanupFailureCount);
     }
 
     private static void CancelBestEffort(CancellationTokenSource source)
@@ -534,5 +619,6 @@ internal sealed class PcpSharedDownstreamRelayListener : IAsyncDisposable
         public TcpTransportConnection Connection { get; }
 
         public Task? Task { get; set; }
+        public PcpWanIngressPolicy.Lease? WanLease { get; init; }
     }
 }

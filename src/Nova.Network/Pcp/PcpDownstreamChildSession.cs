@@ -128,7 +128,11 @@ public sealed class PcpDownstreamChildSession :
         PipeReader? borrowedPipeReader,
         PcpDownstreamRelayRequest? preRoutedRequest,
         bool ownsTransport,
-        IPcpDownstreamRelayAdmission? admission)
+        IPcpDownstreamRelayAdmission? admission,
+        PcpRelayChildAdmission? childAdmission = null,
+        PcpPeerDirectory? peers = null,
+        PcpWanIngressPolicy.Lease? wanIngress = null,
+        ReadOnlyMemory<byte> initialMetadata = default)
     {
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentNullException.ThrowIfNull(fanout);
@@ -178,6 +182,10 @@ public sealed class PcpDownstreamChildSession :
         _preRoutedRequest = preRoutedRequest;
         _ownsTransport = ownsTransport;
         _admission = admission;
+        _childAdmission = childAdmission;
+        _peers = peers;
+        _wanIngress = wanIngress;
+        _initialMetadata = initialMetadata;
     }
 
     internal static PcpDownstreamChildSession CreateRouted(
@@ -188,7 +196,11 @@ public sealed class PcpDownstreamChildSession :
         Guid localSessionId,
         PcpDownstreamChildOptions? options = null,
         IPcpDownstreamPacketWriter? packetWriter = null,
-        IPcpDownstreamRelayAdmission? admission = null)
+        IPcpDownstreamRelayAdmission? admission = null,
+        PcpRelayChildAdmission? childAdmission = null,
+        PcpPeerDirectory? peers = null,
+        PcpWanIngressPolicy.Lease? wanIngress = null,
+        ReadOnlyMemory<byte> initialMetadata = default)
     {
         ArgumentNullException.ThrowIfNull(reader);
         ArgumentNullException.ThrowIfNull(request);
@@ -203,7 +215,7 @@ public sealed class PcpDownstreamChildSession :
             reader,
             request,
             ownsTransport: false,
-            admission);
+            admission, childAdmission, peers, wanIngress, initialMetadata);
     }
 
     internal Task<bool> AdmissionCleanupCompletion => _admissionCleanup;
@@ -471,7 +483,7 @@ public sealed class PcpDownstreamChildSession :
                 handshakeTimeoutSource.Token);
         var handshakeToken = handshakeSource.Token;
 
-        if (_wanIngress is { } ingress)
+        if (_wanIngress is { } ingress && _preRoutedRequest is null)
         {
             using var identify = new CancellationTokenSource(ingress.Remaining(ingress.IdentificationTimeout), ingress.Clock);
             using var identifyLinked = CancellationTokenSource.CreateLinkedTokenSource(handshakeToken, identify.Token);
@@ -715,6 +727,8 @@ public sealed class PcpDownstreamChildSession :
             var helo = await atomReader.ReadNextAsync(
                 cancellationToken).ConfigureAwait(false);
             var peer = PcpHeloCodec.ParseHelo(helo);
+            if (_wanIngress is not null && peer.SessionId == Guid.Empty)
+                return PcpDownstreamChildEndReason.ProtocolRejected;
             _remotePeer = new(peer.SessionId,
                 new(_connection.RemoteEndPoint.Address, _connection.RemoteEndPoint.Port),
                 peer.OpenPort is > 0 ? new(_connection.RemoteEndPoint.Address, peer.OpenPort.Value) : null);

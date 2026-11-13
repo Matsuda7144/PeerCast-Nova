@@ -300,6 +300,8 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
         }
 
         viewModel.PublicChannels = guiNextState?.PublicChannels;
+        if (guiNextState is not null && viewModel.NetworkSettingsAdapter is GuiNextNetworkSettingsAdapter networkAdapter)
+            networkAdapter.ConfigurePublicRelay(guiNextState.PublicChannels, guiNextState.Connection.Startup);
         viewModel.RecordingOutputSettings = _recordingSettings;
         viewModel.PlaybackSettings = guiNextState?.Playback;
         viewModel.NotificationSettings = guiNextState?.Notifications;

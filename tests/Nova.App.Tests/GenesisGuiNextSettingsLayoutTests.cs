@@ -112,7 +112,7 @@ public sealed class GenesisGuiNextSettingsLayoutTests
             }
             else
             {
-                fields.AddRange([n.ConnectionTitle, n.Ipv6, n.Notice, n.Runtime, n.Saved, n.Status, n.AutoMapping]);
+                fields.AddRange([n.ConnectionTitle, n.Ipv6, n.Wan, n.Notice, n.Runtime, n.Saved, n.Status, n.AutoMapping]);
                 var natStatus = n.NatStatus(layout);
                 if (size.Item2 == GenesisMainWindowLayout.MinimumClientHeight)
                 {

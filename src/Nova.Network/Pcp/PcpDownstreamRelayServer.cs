@@ -11,7 +11,7 @@ namespace PeerCast.Nova.Network.Pcp;
 /// sessions. The upstream session and relay fan-out remain caller-owned and
 /// must outlive this server.
 /// </summary>
-public sealed class PcpDownstreamRelayServer : IAsyncDisposable
+public sealed partial class PcpDownstreamRelayServer : IAsyncDisposable
 {
     private readonly object _gate = new();
     private readonly TcpTransportListener _listener;
@@ -675,23 +675,7 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
             if (session is not null) TrackAdmissionCleanup(session.AdmissionCleanupCompletion);
             if (entry.WanLease is { } lease) TrackAdmissionCleanup(ReleaseWanAfterCleanupAsync(lease, entry.Connection.CleanupCompletion,
                 session?.AdmissionCleanupCompletion));
-            lock (_gate)
-            {
-                _sessions.Remove(entry);
-                _activeConnectionCount--;
-                _completedConnectionCount = checked(
-                    _completedConnectionCount + 1);
-
-                if (internalFailure)
-                {
-                    _internalFailureCount = checked(
-                        _internalFailureCount + 1);
-                }
-                else if (result is not null)
-                {
-                    RecordResultLocked(result);
-                }
-            }
+            CompleteSessionEntry(entry, result, internalFailure);
         }
     }
 

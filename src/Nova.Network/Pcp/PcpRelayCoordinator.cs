@@ -186,6 +186,7 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
     /// coordinator retains exclusive fan-out disposal ownership.
     /// </summary>
     public PcpRelayFanout DownstreamFanout => _fanout;
+    internal PcpDownstreamRelayServer DownstreamServer => _downstreamServer;
 
     public PcpRelayIngressSnapshot IngressSnapshot => _ingress.Snapshot;
 
