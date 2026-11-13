@@ -92,6 +92,11 @@ public sealed partial class PcpDownstreamChildSessionTests
             Assert.Equal(1, result.DeliveredPacketCount);
             Assert.Equal(malformed ? (PcpQuitInfo?)null : new PcpQuitInfo(code), result.Quit);
             Assert.Equal(payload.Length, result.DeliveredByteCount);
+            Assert.NotNull(result.Traffic);
+            Assert.True(result.TrafficFinal);
+            Assert.True(result.Traffic.CumulativeComplete);
+            Assert.Equal(Interlocked.Read(ref observed.Traffic.Sent), result.Traffic.CompletedWriteBytes);
+            Assert.True(result.Traffic.CompletedWriteBytes > PcpChannelPacketWireWriter.PrefixLength + payload.Length);
             Assert.Equal(0, result.DiscardedPacketCount);
             Assert.Equal(0, fanout.ActiveChildCount);
             Assert.False(observed.Traffic.IsEstablished);
@@ -433,13 +438,14 @@ public sealed partial class PcpDownstreamChildSessionTests
             WriteTimeout = TimeSpan.FromMilliseconds(150),
         };
         var packetWriter = new BlockingPacketWriter();
+        TcpTransportConnection? observed = null;
         using var timeoutSource = new CancellationTokenSource(TestTimeout);
         var serverTask = AcceptAndRunAsync(
             listener,
             fanout,
             options,
             timeoutSource.Token,
-            packetWriter);
+            packetWriter, observedConnection: c => observed = c);
         await using var client = await new TcpTransportConnector(
             transportOptions).ConnectAsync(
                 listener.LocalEndPoint.Address.ToString(),
@@ -472,6 +478,11 @@ public sealed partial class PcpDownstreamChildSessionTests
             Assert.Equal(1, result.DiscardedPacketCount);
             Assert.Equal(1, result.DiscardedByteCount);
             Assert.Equal(2, packetWriter.CallCount);
+            Assert.NotNull(observed);
+            Assert.NotNull(result.Traffic);
+            // The injected writer completed no transport I/O; queued/discarded
+            // media cannot inflate the successful handshake writes.
+            Assert.Equal(Interlocked.Read(ref observed.Traffic.Sent), result.Traffic.CompletedWriteBytes);
             Assert.Equal(0, fanout.ActiveChildCount);
         }
         finally

@@ -16,6 +16,10 @@ public sealed partial class GenesisMainViewModel
         }
     }
     internal GenesisRelayActivationSnapshot RelaySnapshot => _relayActivation?.Snapshot ?? new();
+    internal void RefreshRelayStatus()
+    {
+        if (_relayActivation is not null) OnPropertyChanged(nameof(RelaySnapshot));
+    }
     private void OnRelayChanged(object? sender, EventArgs args) => OnPropertyChanged(nameof(RelaySnapshot));
 }
 

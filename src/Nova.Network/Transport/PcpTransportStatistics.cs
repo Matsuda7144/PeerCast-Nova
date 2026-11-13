@@ -77,6 +77,7 @@ public sealed class PcpTransportStatistics
 
 internal sealed class PcpTransportCounter(PcpTransportStatistics owner, long id)
 {
+    private PcpDownstreamTrafficMeter? _downstream;
     internal long Sent, Received;
     internal int Invalid, References;
     internal bool Closed;
@@ -85,7 +86,26 @@ internal sealed class PcpTransportCounter(PcpTransportStatistics owner, long id)
     internal IDisposable Establish() => owner.Establish(this);
     internal void Close() => owner.Close(this);
     internal void Invalidate() => Interlocked.Exchange(ref Invalid, 1);
-    internal void AddSent(long value) => Add(ref Sent, value);
+    internal PcpDownstreamTrafficMeter ObserveDownstream(PcpDownstreamTrafficMeter scope)
+    {
+        var connection = scope.CreateChild();
+        if (Interlocked.CompareExchange(ref _downstream, connection, null) is not null)
+            throw new InvalidOperationException("A transport already belongs to a downstream observation.");
+        connection.Observe();
+        return connection;
+    }
+    internal void AddSent(long value)
+    {
+        Add(ref Sent, value);
+        // Keep TX completion evidence independent of the existing combined
+        // RX/TX validity flag (a cancelled read must not erase a later write).
+        Volatile.Read(ref _downstream)?.RecordCompletedWrite(value);
+    }
+    internal void InvalidateSent()
+    {
+        Invalidate();
+        Volatile.Read(ref _downstream)?.RecordUnconfirmedWrite();
+    }
     internal void AddReceived(long value) => Add(ref Received, value);
     private void Add(ref long total, long value)
     {

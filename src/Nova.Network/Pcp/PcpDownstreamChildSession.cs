@@ -40,6 +40,9 @@ public sealed class PcpDownstreamChildSession :
     private readonly PcpDownstreamRelayRequest? _preRoutedRequest;
     private readonly bool _ownsTransport;
     private readonly IPcpDownstreamRelayAdmission? _admission;
+    private readonly PcpDownstreamTrafficMeter _trafficScope;
+    private PcpDownstreamTrafficMeter? _traffic;
+    public PcpDownstreamTrafficSnapshot? TrafficSnapshot => _traffic?.Snapshot;
     private readonly ReadOnlyMemory<byte> _initialMetadata;
     private readonly PcpRelayChildAdmission? _childAdmission;
     private readonly PcpRelayQuiescenceObserver? _quiescenceObserver;
@@ -98,7 +101,8 @@ public sealed class PcpDownstreamChildSession :
         PcpRelayQuiescenceObserver? quiescenceObserver = null,
         ReadOnlyMemory<byte> initialMetadata = default,
         PcpWanIngressPolicy.Lease? wanIngress = null,
-        PcpPeerDirectory? peers = null)
+        PcpPeerDirectory? peers = null,
+        PcpDownstreamTrafficMeter? traffic = null)
         : this(
             connection,
             fanout,
@@ -109,7 +113,7 @@ public sealed class PcpDownstreamChildSession :
             borrowedPipeReader: null,
             preRoutedRequest: null,
             ownsTransport: true,
-            admission)
+            admission, traffic: traffic)
     {
         _childAdmission = childAdmission;
         _quiescenceObserver = quiescenceObserver;
@@ -132,7 +136,8 @@ public sealed class PcpDownstreamChildSession :
         PcpRelayChildAdmission? childAdmission = null,
         PcpPeerDirectory? peers = null,
         PcpWanIngressPolicy.Lease? wanIngress = null,
-        ReadOnlyMemory<byte> initialMetadata = default)
+        ReadOnlyMemory<byte> initialMetadata = default,
+        PcpDownstreamTrafficMeter? traffic = null)
     {
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentNullException.ThrowIfNull(fanout);
@@ -182,6 +187,7 @@ public sealed class PcpDownstreamChildSession :
         _preRoutedRequest = preRoutedRequest;
         _ownsTransport = ownsTransport;
         _admission = admission;
+        _trafficScope = traffic ?? (admission as IPcpDownstreamRelayTraffic)?.Traffic ?? new();
         _childAdmission = childAdmission;
         _peers = peers;
         _wanIngress = wanIngress;
@@ -200,7 +206,8 @@ public sealed class PcpDownstreamChildSession :
         PcpRelayChildAdmission? childAdmission = null,
         PcpPeerDirectory? peers = null,
         PcpWanIngressPolicy.Lease? wanIngress = null,
-        ReadOnlyMemory<byte> initialMetadata = default)
+        ReadOnlyMemory<byte> initialMetadata = default,
+        PcpDownstreamTrafficMeter? traffic = null)
     {
         ArgumentNullException.ThrowIfNull(reader);
         ArgumentNullException.ThrowIfNull(request);
@@ -215,7 +222,7 @@ public sealed class PcpDownstreamChildSession :
             reader,
             request,
             ownsTransport: false,
-            admission, childAdmission, peers, wanIngress, initialMetadata);
+            admission, childAdmission, peers, wanIngress, initialMetadata, traffic);
     }
 
     internal Task<bool> AdmissionCleanupCompletion => _admissionCleanup;
@@ -233,6 +240,7 @@ public sealed class PcpDownstreamChildSession :
                     "A downstream child session can run only once.");
             }
 
+            _traffic = _connection.Traffic.ObserveDownstream(_trafficScope);
             _runTask = RunCoreAsync(cancellationToken);
             return _runTask;
         }
@@ -465,7 +473,12 @@ public sealed class PcpDownstreamChildSession :
             snapshot?.DeliveredByteCount ?? 0,
             snapshot?.DiscardedPacketCount ?? 0,
             snapshot?.DiscardedByteCount ?? 0)
-        { Quit = _remoteQuit };
+        {
+            Quit = _remoteQuit,
+            Traffic = _traffic?.Snapshot,
+            TrafficFinal = _connection.CleanupCompletion.IsCompletedSuccessfully &&
+                (_registration?.Completion.IsCompleted ?? true) && _pingWrite?.IsCompleted != false,
+        };
     }
 
     private async Task<PcpDownstreamChildEndReason>

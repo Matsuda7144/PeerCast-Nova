@@ -238,6 +238,7 @@ public sealed partial class SmartRelayWanTests
     private sealed class WirePeer(TcpTransportConnection connection, PipeReader reader, PcpRelayHandshakeResult handshake) : IAsyncDisposable
     {
         internal PcpRelayHandshakeResult Handshake => handshake;
+        internal long ReceivedBytes => Interlocked.Read(ref connection.Traffic.Received);
         internal static async Task<WirePeer> Connect(int port, ChannelId channel, CancellationToken token, Guid? sid = null)
         {
             var connection = await new TcpTransportConnector(Transport).ConnectAsync("127.0.0.1", port, token);
@@ -257,9 +258,13 @@ public sealed partial class SmartRelayWanTests
         internal ValueTask Quit(CancellationToken token) => Send(PcpQuitCodec.Create(1000), token);
         internal async Task<byte[]> Payload(CancellationToken token)
         {
-            await using var atoms = new PcpAtomPipeMessageReader(reader);
-            var atom = await atoms.ReadNextAsync(token);
+            var atom = await ReadAtom(token);
             return atom.FindFirst(PcpKnownAtomNames.ChannelPacket)!.FindFirst(PcpKnownAtomNames.Data)!.Content.ToArray();
+        }
+        internal async Task<PcpAtom> ReadAtom(CancellationToken token)
+        {
+            await using var atoms = new PcpAtomPipeMessageReader(reader);
+            return await atoms.ReadNextAsync(token);
         }
         internal async Task<uint> ReadQuit(CancellationToken token)
         {

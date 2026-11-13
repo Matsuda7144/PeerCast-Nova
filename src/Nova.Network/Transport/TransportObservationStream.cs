@@ -23,7 +23,7 @@ internal sealed class TransportObservationStream(Stream inner, PcpTransportCount
     public override void Write(byte[] buffer, int offset, int count)
     {
         try { inner.Write(buffer, offset, count); counter.AddSent(count); }
-        catch { counter.Invalidate(); throw; }
+        catch { counter.InvalidateSent(); throw; }
     }
     public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken token = default)
     {
@@ -34,7 +34,7 @@ internal sealed class TransportObservationStream(Stream inner, PcpTransportCount
     public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken token = default)
     {
         try { await inner.WriteAsync(buffer, token).ConfigureAwait(false); counter.AddSent(buffer.Length); }
-        catch { counter.Invalidate(); throw; }
+        catch { counter.InvalidateSent(); throw; }
     }
     public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken token) => WriteAsync(buffer.AsMemory(offset, count), token).AsTask();
     protected override void Dispose(bool disposing)

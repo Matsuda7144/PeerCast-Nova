@@ -32,7 +32,7 @@ public sealed partial class PcpDownstreamRelayServer
             session = PcpDownstreamChildSession.CreateRouted(connection, reader, request, _fanout, _localSessionId,
                 _childOptions, packetWriter: PacketWriterFactory?.Invoke(connection),
                 admission: _admission, childAdmission: _childAdmission, peers: Peers,
-                wanIngress: ingress, initialMetadata: _initialMetadata);
+                wanIngress: ingress, initialMetadata: _initialMetadata, traffic: TrafficScope);
             lock (_gate) entry.Session = session;
             result = await session.RunAsync(lifetime.Token).ConfigureAwait(false);
             return result;

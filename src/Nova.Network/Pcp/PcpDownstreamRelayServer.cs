@@ -24,6 +24,8 @@ public sealed partial class PcpDownstreamRelayServer : IAsyncDisposable
     private readonly Guid _localSessionId;
     private readonly PcpDownstreamChildOptions _childOptions;
     private readonly IPcpDownstreamRelayAdmission? _admission;
+    private readonly PcpDownstreamTrafficMeter _traffic = new();
+    private PcpDownstreamTrafficMeter TrafficScope => (_admission as IPcpDownstreamRelayTraffic)?.Traffic ?? _traffic;
     private readonly ReadOnlyMemory<byte> _initialMetadata;
     private readonly CancellationTokenSource _stopSource = new();
     private readonly CancellationTokenSource _acceptStop = new();
@@ -647,7 +649,8 @@ public sealed partial class PcpDownstreamRelayServer : IAsyncDisposable
                 quiescenceObserver: QuiescenceObserver,
                 initialMetadata: _initialMetadata,
                 wanIngress: entry.WanLease,
-                peers: Peers);
+                peers: Peers,
+                traffic: TrafficScope);
             lock (_gate) entry.Session = session;
             result = await session.RunAsync(
                 cancellationToken).ConfigureAwait(false);
@@ -805,6 +808,7 @@ public sealed partial class PcpDownstreamRelayServer : IAsyncDisposable
             AdmissionCleanupPendingCount = _pendingAdmissionCleanup.Count,
             AdmissionCleanupFailedCount = _admissionCleanupFailedCount,
             WanIngress = _wanIngress?.Snapshot,
+            Traffic = TrafficScope.Snapshot,
         };
     }
 

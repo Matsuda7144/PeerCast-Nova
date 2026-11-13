@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using PeerCast.Nova.Core.Channels;
 using PeerCast.Nova.Network.Pcp;
 using PeerCast.Nova.Network.Policies;
+using PeerCast.Nova.Network.Transport;
 
 namespace PeerCast.Nova.App;
 
@@ -147,11 +148,15 @@ internal sealed class GenesisDownstreamRelayOwnerRegistry : IDisposable
             var channel = owner is null ? "" : $" / チャンネル予約 {snapshot.ChannelReservedRelays}/{Limit(snapshot.ChannelRelayLimit)}";
             var reserved = snapshot.ReservedIpv4Kbps?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "Unknown";
             var availability = owner is null ? "" : owner.CanReserve ? " / 新規予約可" : " / 新規予約不可";
-            return $"リレー予約 {snapshot.ReservedRelays}/{Limit(snapshot.RelayLimit)}{channel} / IPv4帯域予約 {reserved}/{Limit(snapshot.Ipv4BudgetKbps)} kbps（申告値） / 実測 Unknown{availability}";
+            static string Rate(PcpDownstreamTrafficSnapshot value) => value.KilobitsPerSecond?.ToString("F1", System.Globalization.CultureInfo.InvariantCulture) ?? "Unknown";
+            var traffic = _policy.Traffic.Snapshot;
+            var channelRate = owner is null ? "" : $" / CH書込完了 {Rate(owner.Traffic.Snapshot)} kbps";
+            var incomplete = traffic.CumulativeComplete ? "" : "（累積一部不明）";
+            return $"リレー予約 {snapshot.ReservedRelays}/{Limit(snapshot.RelayLimit)}{channel} / IPv4帯域予約 {reserved}/{Limit(snapshot.Ipv4BudgetKbps)} kbps（申告値） / 下流PCP書込完了 {Rate(traffic)} kbps{channelRate}{incomplete}{availability}";
         }
     }
 
-    internal sealed class Owner : IPcpDownstreamRelayRegistration, IPcpDownstreamRelayCapacity
+    internal sealed class Owner : IPcpDownstreamRelayRegistration, IPcpDownstreamRelayCapacity, IPcpDownstreamRelayTraffic
     {
         private readonly GenesisDownstreamRelayOwnerRegistry _registry;
         internal Owner(GenesisDownstreamRelayOwnerRegistry registry, RelayAdmissionPolicy.Channel scope)
@@ -160,6 +165,7 @@ internal sealed class GenesisDownstreamRelayOwnerRegistry : IDisposable
             Scope = scope;
         }
         internal RelayAdmissionPolicy.Channel Scope { get; }
+        public PcpDownstreamTrafficMeter Traffic => Scope.Traffic;
         internal bool Retired { get; set; }
         internal int ActiveReservations { get; set; }
         public bool IsCurrent { get { lock (_registry._gate) return !_registry._disposed && !Retired && Scope.IsCurrent; } }

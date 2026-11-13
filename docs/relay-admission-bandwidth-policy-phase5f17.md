@@ -154,3 +154,68 @@ IPv6 WAN accounting. Payload counters still do not establish a complete
 measured network-output rate. Strict shaping, dynamic allocation, real
 PeerCastStation compatibility, playback and WAN physical acceptance remain
 unverified or deferred. Standard 503/HELO/OLEH/HOST(0..8)/QUIT 1003 is reused.
+
+## Smart Relay Phase E: completed downstream application writes
+
+`TransportObservationStream` already observes a successful stream write after
+the underlying call returns. Phase E reuses that boundary in `PcpTransportCounter`
+and binds it once to the downstream session before its first response. It does
+not change the payload-only Delivered/Discarded counters in the fan-out worker,
+or the older active-PCP-session RX/TX statistics and their validity contract.
+
+The new completed-write byte total includes HTTP responses, handshake, PCP
+framing, CHAN metadata, HEAD/DATA, HOST and QUIT written by an Owner-bound
+downstream session. Application viewing loopback, shared public routes and
+publishing loopback use the same aggregation tree. Shared-listener pre-route
+ping/unknown-channel replies have no channel Owner and are excluded. Upstream
+traffic, OBS RTMP ingress, local HTTP playback/recording consumers, TCP/IP
+headers, retransmissions and NIC traffic are also excluded. A successful stream
+write confirms application API completion, not peer receipt or a TCP ACK.
+
+Queue admission and discarded packets add nothing. Each successful prefix/body
+write contributes its own byte length once, even if the later write fails.
+A failed or cancelled write may have written an unknowable partial buffer:
+its requested length is never added, `UnconfirmedWrites` increases, and the
+cumulative total is explicitly incomplete. The completed-byte total remains a
+lower bound; no partial-byte count is fabricated. Read cancellation does not
+invalidate independent TX completions. Overflow saturates at `long.MaxValue`
+and marks the total incomplete rather than wrapping or throwing.
+
+Each connection, Owner generation and application-wide policy has bounded
+scalar totals and six one-second buckets. A shared short lock updates the
+connection and its ancestors exactly once, with no I/O or await. Parents retain
+no connections or child meters. Closing connections or retiring Owners never
+subtracts history. Late old-generation writes update that generation and the
+global total, never the replacement Owner. Channel metrics describe that Owner
+generation, while the global total also retains retired generations until the
+application policy is replaced. Child results expose a point-in-time snapshot;
+`TrafficFinal` is false while transport/worker cleanup is unconfirmed, including
+a borrowed connection awaiting its lender's cleanup. Live Owner/global totals
+continue observing late completions.
+
+Rates use `TimeProvider.GetTimestamp/GetElapsedTime`, decimal kbps, and up to
+the last five **completed** one-second intervals since each meter's first
+observation. The current partial second is excluded. Unobserved meters and the
+first incomplete interval show Unknown; observed idle intervals show zero and
+old bursts age out. An unconfirmed write makes its window Unknown until it
+ages out, while cumulative incompleteness remains recorded. No timer, all-child
+polling, unbounded history or packet copy is added. The existing Classic/Modern
+Relay status path reads the total and current-channel rates separately from
+declared IPv4 bandwidth reservations; an incomplete cumulative total is labelled.
+Its existing one-second status clock also refreshes Relay presentation, so rates
+age to zero without requiring a connection/state change or a new timer.
+
+Phase D admission, startup settings, original reservation leases, Stop/Recovery
+deadlines and PCP bytes are unchanged. Low measured throughput never discounts
+a reservation. Phase E does **not** pace transmission. The existing packet sink
+starts its bounded write deadline before handshake readiness, then writes prefix
+and body separately. Safely adding a shared pacing budget requires separating
+wait time from network deadlines, bounded progress for large packets, and
+control/media cancellation and fairness design. That work is deferred rather
+than inserting waits into the existing deadline/cleanup contract. No strict
+application or NIC rate cap is claimed.
+
+Managed tests cover completed and failed writes, monotonic rates, concurrent
+aggregation, Owner replacement, cleanup and real loopback TCP byte comparison.
+PeerCastStation physical interoperability, PCRPlayer A/V, GUI layout and external
+WAN acceptance remain unverified; no native application operation is retried.

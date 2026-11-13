@@ -399,6 +399,8 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
         private void ObserveStatusTick()
         {
             if (Volatile.Read(ref _detached) != 0) return;
+            // Reuse the existing one-second UI clock so idle rates age to zero.
+            _viewModel.RefreshRelayStatus();
             if (_guiNextTabs?.IsRecordingHistoryPage == true)
                 _ = _guiNextTabs.RefreshRecordingHistoryAsync();
             PostRefresh();

@@ -1,3 +1,5 @@
+using PeerCast.Nova.Network.Transport;
+
 namespace PeerCast.Nova.Network.Pcp;
 
 public enum PcpDownstreamRelayServerState
@@ -121,6 +123,7 @@ public sealed record PcpDownstreamRelayServerSnapshot
     public long AdmissionCloseFailedCount { get; init; }
     public int AdmissionCleanupPendingCount { get; init; }
     public long AdmissionCleanupFailedCount { get; init; }
+    public PcpDownstreamTrafficSnapshot? Traffic { get; init; }
 }
 
 public enum PcpRelayQuiescenceOutcome { Drained, TimedOut, Cancelled, DeliveryFailed, CleanupFailed, Failed }

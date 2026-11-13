@@ -358,6 +358,9 @@ public sealed class GenesisDownstreamRelayAdmissionIntegrationTests
             var result = await run.WaitAsync(timeout.Token);
             Assert.Equal(PcpDownstreamChildEndReason.QuitReceived, result.EndReason);
             Assert.True(result.CleanupCompleted); // Child cleanup is distinct from borrowed TCP cleanup.
+            Assert.NotNull(result.Traffic);
+            Assert.True(result.Traffic.CompletedWriteBytes > 0);
+            Assert.False(result.TrafficFinal);
             Assert.False(connection.IsDisposed);
             Assert.False(connection.CleanupCompletion.IsCompleted);
             Assert.Equal(1, registry.ActiveRelayCount);

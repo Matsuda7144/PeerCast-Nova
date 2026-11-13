@@ -1,5 +1,6 @@
 using PeerCast.Nova.Network.Policies;
 using PeerCast.Nova.Network.Publishing;
+using PeerCast.Nova.Protocol.Pcp;
 using static PeerCast.Nova.App.Tests.PublicChannelTestFixture;
 
 namespace PeerCast.Nova.App.Tests;
@@ -26,8 +27,11 @@ public sealed partial class SmartRelayWanTests
         await UntilAsync(() => host.PublishingStatus.ListenerReady, token);
         var policy = state.State.NetworkPolicies.Relays;
         Assert.Equal(0, policy.ReservedCount); // The internal HTTP/media child is not a PCP relay.
+        Assert.False(policy.Traffic.Snapshot.HasObservation);
         await using var publishing = await WirePeer.Connect(host.RelayEndPoint.Port, host.ChannelId, token);
         Assert.Equal(200, publishing.Handshake.HttpStatusCode);
+        // The immutable publishing CHAN metadata follows OK and must also be read.
+        Assert.Equal(PcpKnownAtomNames.Channel, (await publishing.ReadAtom(token)).Name);
         await using var broadcastFull = await WirePeer.Connect(host.RelayEndPoint.Port, host.ChannelId, token);
         Assert.Equal(503, broadcastFull.Handshake.HttpStatusCode);
         Assert.Equal(1003U, broadcastFull.Handshake.TerminalCode);
@@ -41,6 +45,10 @@ public sealed partial class SmartRelayWanTests
         await using var full = await WirePeer.Connect(other.Owner.LocalEndPoint.Port, other.Owner.ChannelId, token);
         Assert.Equal(503, full.Handshake.HttpStatusCode);
         Assert.Equal(1003U, full.Handshake.TerminalCode);
+        await UntilAsync(() => policy.Traffic.Snapshot.CompletedWriteBytes ==
+            publishing.ReceivedBytes + broadcastFull.ReceivedBytes + child.ReceivedBytes + full.ReceivedBytes, token);
+        var completed = policy.Traffic.Snapshot.CompletedWriteBytes;
+        Assert.True(completed > 0);
         await publishing.Quit(token);
         await UntilAsync(() => policy.ReservedCount == 1, token);
         await host.DisposeAsync();
@@ -49,6 +57,7 @@ public sealed partial class SmartRelayWanTests
         await child.Quit(token);
         await UntilAsync(() => policy.ReservedCount == 0, token);
         Assert.Equal(0, policy.Snapshot.ReservedIpv4Kbps);
+        Assert.True(policy.Traffic.Snapshot.CompletedWriteBytes >= completed);
     }
 
     [Fact]
@@ -124,7 +133,7 @@ public sealed partial class SmartRelayWanTests
         Assert.False(first.Owner.CanReserve);
         Assert.False(second.Owner.CanReserve);
         Assert.Contains("IPv4帯域予約 1000/1000", first.Owner.CapacityStatusText);
-        Assert.Contains("実測 Unknown", first.Owner.CapacityStatusText);
+        Assert.Contains("下流PCP書込完了", first.Owner.CapacityStatusText);
         var alternative = Host(second.Owner, Guid.NewGuid(), "8.8.8.8", 7145);
         second.Owner.ViewingRuntime!.DownstreamServer.Peers.Observe(alternative, new());
         await using var full = await WirePeer.Connect(test.Port, second.Owner.ChannelId, test.Token);

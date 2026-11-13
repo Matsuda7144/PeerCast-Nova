@@ -1,5 +1,6 @@
 using System.Net;
 using PeerCast.Nova.Core.Channels;
+using PeerCast.Nova.Network.Transport;
 
 namespace PeerCast.Nova.Network.Policies;
 
@@ -63,6 +64,7 @@ public sealed class RelayAdmissionPolicy : IDisposable
     }
 
     public RelayAdmissionLimits Limits { get; }
+    public PcpDownstreamTrafficMeter Traffic { get; } = new();
     public UpstreamBandwidthLimits BandwidthLimits => _bandwidth.Limits;
     public RelayAdmissionCapacitySnapshot Snapshot { get { lock (_gate) return ReadSnapshot(null); } }
 
@@ -263,11 +265,13 @@ public sealed class RelayAdmissionPolicy : IDisposable
             SessionId = sessionId;
             Kind = kind;
             ReadBitrateKbps = readBitrateKbps;
+            Traffic = policy.Traffic.CreateChild();
         }
 
         public ChannelId ChannelId { get; }
         public ChannelSessionId SessionId { get; }
         public RelayChannelKind Kind { get; }
+        public PcpDownstreamTrafficMeter Traffic { get; }
         internal bool Retired { get; set; }
         // Pure owner metadata observation; never perform I/O or call admission.
         internal Func<int?>? ReadBitrateKbps { get; }

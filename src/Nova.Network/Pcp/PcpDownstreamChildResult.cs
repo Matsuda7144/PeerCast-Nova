@@ -1,3 +1,4 @@
+using PeerCast.Nova.Network.Transport;
 using PeerCast.Nova.Protocol.Pcp;
 
 namespace PeerCast.Nova.Network.Pcp;
@@ -33,4 +34,7 @@ public sealed record PcpDownstreamChildResult(
     long DiscardedByteCount)
 {
     public PcpQuitInfo? Quit { get; init; }
+    /// <summary>Point-in-time completed writes; late cleanup may still update owner/global totals.</summary>
+    public PcpDownstreamTrafficSnapshot? Traffic { get; init; }
+    public bool TrafficFinal { get; init; }
 }

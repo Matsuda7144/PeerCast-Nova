@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using PeerCast.Nova.Core.Channels;
+using PeerCast.Nova.Network.Transport;
 
 namespace PeerCast.Nova.Network.Pcp;
 
@@ -29,4 +30,10 @@ public interface IPcpDownstreamRelayCapacity
     bool IsCurrent { get; }
     bool CanReserve { get; }
 
+}
+
+/// <summary>Optional owner-scoped observation; never an admission decision.</summary>
+public interface IPcpDownstreamRelayTraffic
+{
+    PcpDownstreamTrafficMeter? Traffic { get; }
 }
