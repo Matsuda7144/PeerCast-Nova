@@ -1,5 +1,13 @@
 # Roadmap
 
+## Smart Relay Phase B
+
+[ADR-0493](docs/adr/ADR-0493-owner-scoped-pcp-host-directory-and-referrals.md)
+and [PCN-0503](docs/reviews/PCN-0503-OWNER-SCOPED-PCP-HOST-DIRECTORY-AND-REFERRALS.md)
+record owner-scoped PeerDirectory, bounded HOST intake and standard capacity
+referrals through the existing Coordinator/server. Recovery, node SID migration,
+BCST routing and mandatory WAN integration/physical acceptance remain later work.
+
 ## Smart Relay Phase 0 / A-1
 
 [ADR-0492](docs/adr/ADR-0492-typed-pcp-quit-compatibility-without-identity-migration.md)

@@ -14,6 +14,7 @@ internal sealed class PcpChannelStreamSink : IPcpAtomSink, IDisposable
     private readonly MemoryPool<byte> _memoryPool;
     private readonly PcpChannelControlSink _controlSink;
     private readonly List<PcpAtomName> _parents = [];
+    private readonly PcpRelayHostAtomSink? _hosts;
 
     private IMemoryOwner<byte>? _payloadOwner;
     private int _payloadLength;
@@ -24,13 +25,15 @@ internal sealed class PcpChannelStreamSink : IPcpAtomSink, IDisposable
 
     public PcpChannelStreamSink(
         PcpChannelStreamOptions options,
-        MemoryPool<byte>? memoryPool = null)
+        MemoryPool<byte>? memoryPool = null,
+        Action<PcpRelayHostCandidate>? hostObserved = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         options.Validate();
 
         _maxPacketBytes = options.MaxPacketBytes;
         _memoryPool = memoryPool ?? MemoryPool<byte>.Shared;
+        _hosts = hostObserved is null ? null : new PcpRelayHostAtomSink(hostObserved);
         _controlSink = new PcpChannelControlSink(
             CompleteControlMessage,
             options.CreateControlLimits());
@@ -40,6 +43,7 @@ internal sealed class PcpChannelStreamSink : IPcpAtomSink, IDisposable
     {
         ThrowIfDisposed();
         _controlSink.OnParentStarted(atom);
+        _hosts?.OnParentStarted(atom);
         _parents.Add(atom.Header.Name);
 
         if (atom.Depth == 0 && atom.Header.Name == PcpKnownAtomNames.Quit)
@@ -52,6 +56,7 @@ internal sealed class PcpChannelStreamSink : IPcpAtomSink, IDisposable
     {
         ThrowIfDisposed();
         _controlSink.OnLeafAtom(atom);
+        _hosts?.OnLeafAtom(atom);
 
         if (atom.Depth == 0 && atom.Header.Name == PcpKnownAtomNames.Quit)
         {
@@ -81,6 +86,7 @@ internal sealed class PcpChannelStreamSink : IPcpAtomSink, IDisposable
         }
 
         _controlSink.OnParentEnded(atom);
+        _hosts?.OnParentEnded(atom);
         _parents.RemoveAt(_parents.Count - 1);
     }
 

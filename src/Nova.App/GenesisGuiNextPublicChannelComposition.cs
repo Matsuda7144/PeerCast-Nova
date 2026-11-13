@@ -152,7 +152,7 @@ internal sealed class GenesisGuiNextPublicChannelComposition : IAsyncDisposable
             throw new AggregateException("Public channel owner shutdown failed.", failures);
     }
 
-    internal sealed class Owner : IPcpDownstreamRelayAdmission, IAsyncDisposable
+    internal sealed class Owner : IPcpDownstreamRelayAdmission, IPcpDownstreamRelayCapacity, IAsyncDisposable
     {
         private readonly object _gate = new();
         private readonly GenesisGuiNextPublicChannelComposition _composition;
@@ -194,6 +194,8 @@ internal sealed class GenesisGuiNextPublicChannelComposition : IAsyncDisposable
         private ChannelStatusTracker? _upstreamTracker;
         public ChannelStatusSnapshot? UpstreamStatus => _upstreamTracker?.Snapshot;
         public int ReservationCount => _registration?.ReservationCount ?? 0;
+        public bool IsCurrent { get { lock (_gate) return !_retired && _registration?.IsCurrent == true; } }
+        public bool CanReserve { get { lock (_gate) return !_retired && _registration?.CanReserve == true; } }
         // Disposal completion alone is insufficient: bounded runtime shutdown
         // can finish while a real TCP/callback lease remains outstanding.
         private bool DisposalSucceeded { get { lock (_gate) { return _disposeTask?.IsCompletedSuccessfully == true; } } }

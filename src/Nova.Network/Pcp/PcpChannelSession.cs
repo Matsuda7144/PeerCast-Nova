@@ -21,6 +21,7 @@ public sealed class PcpChannelSession : IAsyncDisposable
     private readonly PcpChannelStateAdapter _stateAdapter;
     private readonly IPcpChannelPacketConsumer _packetConsumer;
     private readonly PcpChannelSessionOptions _options;
+    private readonly PcpPeerDirectory? _peers;
     private readonly CancellationTokenSource _stopSource = new();
     private readonly TaskCompletionSource<PcpChannelSessionNegotiationResult>
         _negotiation = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -45,7 +46,8 @@ public sealed class PcpChannelSession : IAsyncDisposable
         IPcpChannelTransportConnector connector,
         ChannelStatusTracker statusTracker,
         IPcpChannelPacketConsumer packetConsumer,
-        PcpChannelSessionOptions? options = null)
+        PcpChannelSessionOptions? options = null,
+        PcpPeerDirectory? peers = null)
     {
         ArgumentNullException.ThrowIfNull(connector);
         ArgumentNullException.ThrowIfNull(statusTracker);
@@ -71,6 +73,10 @@ public sealed class PcpChannelSession : IAsyncDisposable
         _statusTracker = statusTracker;
         _stateAdapter = new PcpChannelStateAdapter(statusTracker);
         _packetConsumer = packetConsumer;
+        if (peers is not null && (peers.ChannelId != statusTracker.Snapshot.ChannelId.Value ||
+            peers.LocalSessionId != statusTracker.Snapshot.SessionId.Value))
+            throw new ArgumentException("Peer directory must belong to this channel owner.", nameof(peers));
+        _peers = peers;
     }
 
     /// <summary>
@@ -267,6 +273,12 @@ public sealed class PcpChannelSession : IAsyncDisposable
                     progress,
                     token).ConfigureAwait(false);
 
+                var observedEndpoint = attemptTarget.RedirectEndpoint is { } redirected
+                    ? new PcpRelayHostEndpoint(redirected.Address, redirected.Port) : attempt.ConnectedEndpoint;
+                if (observedEndpoint is not null)
+                    _peers?.RecordConnectionResult(observedEndpoint,
+                        attempt.RetryableFailure is null && attempt.Handshake?.Outcome == PcpCompatibilityOutcome.Accepted);
+
                 if (attempt.ReachedAccepted)
                 {
                     hasEverAccepted = true;
@@ -362,7 +374,10 @@ public sealed class PcpChannelSession : IAsyncDisposable
 
                         startupRedirectPlan =
                             PcpRelayRedirectPlanner.CreatePlan(
-                                handshake.RelayHostCandidates,
+                                handshake.RelayHostCandidates.Where(h =>
+                                    (h.ChannelId is null || h.ChannelId == _statusTracker.Snapshot.ChannelId.Value) &&
+                                    h.PeerSessionId != _statusTracker.Snapshot.SessionId.Value &&
+                                    _peers?.IsKnownLoop(h) != true).ToImmutableArray(),
                                 attemptedEndpoints);
                         startupRedirectPlanIndex = 0;
                         startupRedirectActive = true;
@@ -589,6 +604,8 @@ public sealed class PcpChannelSession : IAsyncDisposable
                 }
 
                 cancellationToken.ThrowIfCancellationRequested();
+                _peers?.RecordConnectionResult(redirectEndpoint is null ? connectedEndpoint :
+                    new(redirectEndpoint.Address, redirectEndpoint.Port), succeeded: true);
                 using var trafficObservation = connection.ObservePcpSession();
                 _statusTracker.TransitionTo(ChannelSessionState.Receiving);
                 _negotiation.TrySetResult(new(
@@ -603,7 +620,9 @@ public sealed class PcpChannelSession : IAsyncDisposable
                     _options.Stream,
                     completeReader: false,
                     initialPacketSequence: countingConsumer.PacketCount,
-                    progress.ObserveChannelMessage);
+                    progress.ObserveChannelMessage,
+                    hostObserved: _peers is null ? null : host => _peers.Observe(host,
+                        new(PcpPeerSourceKind.UpstreamStream, connection.ConnectionId)));
 
                 try
                 {
@@ -691,7 +710,9 @@ public sealed class PcpChannelSession : IAsyncDisposable
                 streamPosition,
                 _options.PcpVersion,
                 _options.CreateHandshakeSettings(),
-                linkedSource.Token).ConfigureAwait(false);
+                linkedSource.Token,
+                hostObserved: _peers is null ? null : host => _peers.Observe(host,
+                    new(PcpPeerSourceKind.UpstreamHandshake, connection.ConnectionId))).ConfigureAwait(false);
         }
         catch (OperationCanceledException exception)
             when (timeoutSource.IsCancellationRequested &&

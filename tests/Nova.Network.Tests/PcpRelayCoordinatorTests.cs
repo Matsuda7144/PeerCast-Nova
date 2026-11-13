@@ -12,7 +12,7 @@ using PeerCast.Nova.Protocol.Pcp;
 
 namespace PeerCast.Nova.Network.Tests;
 
-public sealed class PcpRelayCoordinatorTests
+public sealed partial class PcpRelayCoordinatorTests
 {
     private static readonly TimeSpan TestTimeout = TimeSpan.FromSeconds(10);
 

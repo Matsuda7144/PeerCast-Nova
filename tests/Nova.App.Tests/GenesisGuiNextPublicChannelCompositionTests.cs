@@ -199,6 +199,9 @@ public sealed class GenesisGuiNextPublicChannelCompositionTests
         await using var otherAccepted = await Peer.ConnectAsync(other.Owner, timeout.Token);
         Accepted(otherAccepted);
         Assert.Equal(3, fixture.State.DownstreamRelays.ActiveRelayCount);
+        // QUIT reception does not await the server's transport/session cleanup.
+        await UntilAsync(() => broadcast.Owner.DownstreamSnapshot.CompletedConnectionCount == 2 &&
+            viewing.Owner.DownstreamSnapshot.CompletedConnectionCount == 1, timeout.Token);
         Assert.Equal(1, broadcast.Owner.DownstreamSnapshot.ActiveConnectionCount);
         Assert.Equal(1, viewing.Owner.DownstreamSnapshot.ActiveConnectionCount);
     }
@@ -459,13 +462,19 @@ public sealed class GenesisGuiNextPublicChannelCompositionTests
         await using var old = await fixture.Channels.PrepareBroadcastAsync(id, new(Guid.NewGuid()), oldFanout, new(IPAddress.Any, 0));
         await using var current = await fixture.Channels.PrepareBroadcastAsync(id, new(Guid.NewGuid()), newFanout, new(IPAddress.Any, 0));
         Assert.True(old.IsRetired);
+        Assert.False(old.IsCurrent);
+        Assert.False(old.CanReserve);
+        Assert.True(current.IsCurrent);
+        Assert.True(current.CanReserve);
         await Assert.ThrowsAsync<InvalidOperationException>(() => old.RunAsync());
         Assert.False(old.ActivationStarted);
         await old.DisposeAsync();
         Assert.Equal(1, fixture.Channels.OwnerCount);
         Assert.False(current.IsRetired);
         Assert.True(current.TryReserve(1, out var lease));
+        Assert.False(current.CanReserve);
         lease.Dispose();
+        Assert.True(current.CanReserve);
     }
 
     [Fact]

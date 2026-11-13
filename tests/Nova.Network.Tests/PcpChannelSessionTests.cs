@@ -9,7 +9,7 @@ using PeerCast.Nova.Protocol.Pcp;
 
 namespace PeerCast.Nova.Network.Tests;
 
-public sealed class PcpChannelSessionTests
+public sealed partial class PcpChannelSessionTests
 {
     private static readonly TimeSpan TestTimeout = TimeSpan.FromSeconds(10);
 
@@ -510,7 +510,8 @@ public sealed class PcpChannelSessionTests
         Guid expectedSessionId,
         IReadOnlyList<PcpAtom> postHandshakeAtoms,
         CancellationToken cancellationToken,
-        int? httpChunkSize = null)
+        int? httpChunkSize = null,
+        IReadOnlyList<PcpAtom>? preOkayAtoms = null)
     {
         await using var connection = await listener.AcceptAsync(
             cancellationToken);
@@ -527,10 +528,9 @@ public sealed class PcpChannelSessionTests
             var atoms = new List<PcpAtom>
             {
                 CreateOlehAtom(),
-                PcpAtom.Leaf(
-                    PcpKnownAtomNames.Okay,
-                    PcpWireValueCodec.EncodeUInt32(1)),
             };
+            if (preOkayAtoms is not null) atoms.AddRange(preOkayAtoms);
+            atoms.Add(PcpAtom.Leaf(PcpKnownAtomNames.Okay, PcpWireValueCodec.EncodeUInt32(1)));
             atoms.AddRange(postHandshakeAtoms);
 
             if (httpChunkSize is { } chunkSize)

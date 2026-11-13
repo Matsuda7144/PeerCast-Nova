@@ -69,6 +69,7 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
     private long _admissionClosedCount;
     internal Func<TcpTransportConnection, IPcpDownstreamPacketWriter?>? PacketWriterFactory { get; init; }
     internal PcpRelayQuiescenceObserver? QuiescenceObserver { get; init; }
+    internal PcpPeerDirectory Peers { get; }
 
     internal (bool CanAccept, int RelayCount) ReadRuntimeCapacity()
     {
@@ -123,6 +124,7 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
         _channelId = channelId;
         _localSessionId = localSessionId;
         _admission = admission;
+        Peers = new PcpPeerDirectory(channelId.Value, localSessionId);
         _acceptRemoteAddress = acceptRemoteAddress;
         if (wanOptions is not null)
         {
@@ -183,6 +185,7 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
 
             _listener.Start();
             _boundEndPoint = _listener.LocalEndPoint;
+            Peers.SetLocalEndpoint(new(_boundEndPoint.Address, _boundEndPoint.Port));
             if (_portMapping is not null &&
                 _boundEndPoint.AddressFamily == AddressFamily.InterNetwork &&
                 !IPAddress.IsLoopback(_boundEndPoint.Address))
@@ -205,6 +208,7 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
             ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
             if (_runTask is null) throw new InvalidOperationException("The relay server has not started.");
             _childAdmission.Close();
+            Peers.Dispose();
             _wanIngress?.Close();
             return _closeAdmissionTask ??= Task.Run(WaitForAdmissionClosedAsync);
         }
@@ -423,6 +427,7 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
             Volatile.Read(ref _disposed) != 0,
             this);
         Interlocked.Exchange(ref _forcedStopRequested, 1);
+        Peers.Dispose();
         CancelBestEffort(_stopSource);
     }
 
@@ -433,6 +438,7 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
             if (_disposal is not null) return new(_disposal);
             _wanIngress?.Close();
             Interlocked.Exchange(ref _disposed, 1);
+            Peers.Dispose();
             Interlocked.Exchange(ref _forcedStopRequested, 1);
             _disposal = Task.Run(DisposeCoreAsync);
             return new(_disposal);
@@ -533,6 +539,7 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
         finally
         {
             _wanIngress?.Close();
+            Peers.Dispose();
             var closed = false;
             try
             {
@@ -627,7 +634,8 @@ public sealed class PcpDownstreamRelayServer : IAsyncDisposable
                 childAdmission: _childAdmission,
                 quiescenceObserver: QuiescenceObserver,
                 initialMetadata: _initialMetadata,
-                wanIngress: entry.WanLease);
+                wanIngress: entry.WanLease,
+                peers: Peers);
             lock (_gate) entry.Session = session;
             result = await session.RunAsync(
                 cancellationToken).ConfigureAwait(false);

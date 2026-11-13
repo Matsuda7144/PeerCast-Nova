@@ -239,7 +239,8 @@ public sealed partial class PcpDownstreamRelayServerTests
     private static async Task<TestPeer> ConnectPeerAsync(
         IPEndPoint endPoint,
         TcpTransportOptions transportOptions,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Guid? peerSessionId = null)
     {
         var connection = await new TcpTransportConnector(
             transportOptions).ConnectAsync(
@@ -258,7 +259,7 @@ public sealed partial class PcpDownstreamRelayServerTests
                 endPoint.Address.ToString(),
                 endPoint.Port,
                 ChannelId.Value,
-                Guid.NewGuid(),
+                peerSessionId ?? Guid.NewGuid(),
                 streamPosition: 0,
                 pcpVersion: 1,
                 new PcpRelayHandshakeSettings(
@@ -331,6 +332,12 @@ public sealed partial class PcpDownstreamRelayServerTests
         public PcpRelayHandshakeResult Handshake { get; }
 
         public byte[]? LastPayload { get; private set; }
+        internal ValueTask SendHostAsync(PcpAtom host, CancellationToken token)
+        {
+            var writer = new ArrayBufferWriter<byte>();
+            PcpAtomTreeCodec.Write(writer, host);
+            return _connection.WriteAsync(writer.WrittenMemory, token);
+        }
         internal async Task<PcpAtom> ReadAtomAsync(CancellationToken token)
         {
             await using var reader = new PcpAtomPipeMessageReader(_pipeReader);

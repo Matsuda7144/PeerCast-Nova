@@ -11,6 +11,7 @@ internal enum PcpRelayRedirectEligibilityReason
     NonIpv4Address,
     SpecialPurposeAddress,
     MulticastAddress,
+    InvalidPort,
 }
 
 internal readonly record struct PcpRelayRedirectEligibility(
@@ -40,6 +41,9 @@ internal static class PcpRelayRedirectPolicy
         }
 
         ArgumentNullException.ThrowIfNull(entry);
+
+        if (entry.Endpoint.Port is < 1 or > 65535)
+            return Ineligible(PcpRelayRedirectEligibilityReason.InvalidPort);
 
         if (entry.Role == PcpRelayRedirectEndpointRole.Local)
         {

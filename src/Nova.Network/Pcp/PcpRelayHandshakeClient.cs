@@ -24,7 +24,8 @@ internal static class PcpRelayHandshakeClient
         long streamPosition,
         int pcpVersion,
         PcpRelayHandshakeSettings settings,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Action<PcpRelayHostCandidate>? hostObserved = null)
     {
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentNullException.ThrowIfNull(pipeReader);
@@ -103,6 +104,7 @@ internal static class PcpRelayHandshakeClient
                 PcpRelayHostCandidateParser.TryParse(atom) is { } hostCandidate)
             {
                 relayHostCandidates.Add(hostCandidate);
+                hostObserved?.Invoke(hostCandidate);
             }
 
             if (remotePeer is null)

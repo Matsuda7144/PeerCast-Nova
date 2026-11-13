@@ -7,6 +7,8 @@ internal static class PcpRelayHostCandidateParser
 {
     internal const int MaximumCandidates = 8;
     internal const int MaximumEndpointsPerCandidate = 2;
+    internal const int MaximumFields = 32;
+    internal const int MaximumHostBytes = 1024;
 
     private static readonly PcpAtomName Ip = PcpAtomName.FromAscii("ip");
 
@@ -17,6 +19,52 @@ internal static class PcpRelayHostCandidateParser
         if (!atom.IsParent || atom.Name != PcpKnownAtomNames.Host)
         {
             return null;
+        }
+
+        if (atom.Children.Count > MaximumFields ||
+            atom.Children.Sum(c => 8L + c.Content.Length) + 8 > MaximumHostBytes)
+            return null;
+
+        Guid? channelId = null;
+        Guid? peerId = null;
+        byte? flags = null;
+        uint? relayCount = null;
+        IPAddress? upstreamAddress = null;
+        int? upstreamPort = null;
+        var seen = new HashSet<string>();
+        foreach (var field in atom.Children)
+        {
+            var name = field.Name.ToString();
+            if (name is not ("cid" or "id" or "flg1" or "numr" or "upip" or "uppt"))
+                continue;
+            if (field.IsParent || !seen.Add(name)) return null;
+            var length = field.Content.Length;
+            if (name is "cid" or "id")
+            {
+                if (length != 16) return null;
+                var id = PcpWireValueCodec.DecodeGuid(field.Content.Span);
+                if (id == Guid.Empty) return null;
+                if (name == "cid") channelId = id; else peerId = id;
+            }
+            else if (name == "flg1")
+            {
+                if (length != 1) return null;
+                flags = field.Content.Span[0];
+            }
+            else if (name == "numr")
+            {
+                if (length != 4) return null;
+                relayCount = PcpWireValueCodec.DecodeUInt32(field.Content.Span);
+            }
+            else if (name == "upip")
+            {
+                if (!TryDecodeAddress(field.Content.Span, out upstreamAddress)) return null;
+            }
+            else
+            {
+                if (!TryDecodePort(field.Content.Span, out var port)) return null;
+                upstreamPort = port;
+            }
         }
 
         var addressSlots = new IPAddress?[MaximumEndpointsPerCandidate];
@@ -76,7 +124,15 @@ internal static class PcpRelayHostCandidateParser
             return null;
         }
 
-        return new(globalEndpoint, localEndpoint);
+        return new(globalEndpoint, localEndpoint)
+        {
+            ChannelId = channelId,
+            PeerSessionId = peerId,
+            Flags = flags,
+            RelayCount = relayCount,
+            UpstreamEndpoint = upstreamAddress is not null && upstreamPort is { } upstreamPortValue
+                ? new(upstreamAddress, upstreamPortValue) : null,
+        };
     }
 
     private static bool TryDecodeAddress(

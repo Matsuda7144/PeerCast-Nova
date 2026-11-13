@@ -19,6 +19,7 @@ public sealed class PcpChannelStreamReader
     private readonly bool _completeReader;
     private readonly long _initialPacketSequence;
     private readonly Action? _channelMessageObserved;
+    private readonly Action<PcpRelayHostCandidate>? _hostObserved;
     private int _started;
 
     public PcpChannelStreamReader(
@@ -64,7 +65,8 @@ public sealed class PcpChannelStreamReader
         PcpChannelStreamOptions options,
         bool completeReader,
         long initialPacketSequence,
-        Action channelMessageObserved)
+        Action channelMessageObserved,
+        Action<PcpRelayHostCandidate>? hostObserved = null)
         : this(
             reader,
             stateAdapter,
@@ -75,6 +77,7 @@ public sealed class PcpChannelStreamReader
     {
         ArgumentNullException.ThrowIfNull(channelMessageObserved);
         _channelMessageObserved = channelMessageObserved;
+        _hostObserved = hostObserved;
     }
 
     public async Task<PcpChannelStreamResult> ReadToEndAsync(
@@ -91,7 +94,7 @@ public sealed class PcpChannelStreamReader
         long packetCount = 0;
         long payloadByteCount = 0;
         var sequence = _initialPacketSequence;
-        var sink = new PcpChannelStreamSink(_options);
+        var sink = new PcpChannelStreamSink(_options, hostObserved: _hostObserved);
 
         try
         {

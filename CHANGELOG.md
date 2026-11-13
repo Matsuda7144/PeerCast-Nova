@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Smart Relay Phase B: added owner-scoped bounded HOST candidates, safe global
+  IPv4 filtering and ordered OLEH/HOST/QUIT 1003 capacity referrals on the existing
+  PCP relay path. ADR-0493 / PCN-0503 record managed validation and limits;
+  no automatic recovery, ID migration, BCST routing or WAN readiness is claimed.
+
 - Smart Relay Phase 0 / A-1: documented current ID/Owner contracts, corrected
   capacity refusal to OLEH/QUIT 1003, preserved legacy 503/OLEH/QUIT 0 handling,
   and retained typed QUIT reasons without masking explicit protocol/auth errors.

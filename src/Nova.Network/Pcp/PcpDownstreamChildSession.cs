@@ -44,6 +44,9 @@ public sealed class PcpDownstreamChildSession :
     private readonly PcpRelayChildAdmission? _childAdmission;
     private readonly PcpRelayQuiescenceObserver? _quiescenceObserver;
     private readonly PcpWanIngressPolicy.Lease? _wanIngress;
+    private readonly PcpPeerDirectory? _peers;
+    private PcpRelayPeerIdentity? _remotePeer;
+    private IDisposable? _peerLease;
     private IDisposable? _admissionReservation;
     private Task<bool> _admissionCleanup = Task.FromResult(true);
     private Task? _pingWrite;
@@ -93,7 +96,8 @@ public sealed class PcpDownstreamChildSession :
         PcpRelayChildAdmission? childAdmission = null,
         PcpRelayQuiescenceObserver? quiescenceObserver = null,
         ReadOnlyMemory<byte> initialMetadata = default,
-        PcpWanIngressPolicy.Lease? wanIngress = null)
+        PcpWanIngressPolicy.Lease? wanIngress = null,
+        PcpPeerDirectory? peers = null)
         : this(
             connection,
             fanout,
@@ -110,6 +114,7 @@ public sealed class PcpDownstreamChildSession :
         _quiescenceObserver = quiescenceObserver;
         _initialMetadata = initialMetadata;
         _wanIngress = wanIngress;
+        _peers = peers;
     }
 
     private PcpDownstreamChildSession(
@@ -425,6 +430,9 @@ public sealed class PcpDownstreamChildSession :
                         _registration?.Completion ?? Task.CompletedTask);
                 if (_pingWrite is { } pingWrite)
                     _admissionCleanup = ObservePingCleanupAsync(pingWrite, _connection.CleanupCompletion);
+                if (Interlocked.Exchange(ref _peerLease, null) is { } peerLease)
+                    _admissionCleanup = ReleasePeerAfterCleanupAsync(
+                        peerLease, _connection.CleanupCompletion, _admissionCleanup);
             }
         }
 
@@ -591,6 +599,8 @@ public sealed class PcpDownstreamChildSession :
             return heloEndReason;
         }
 
+        if (_peers is not null && _remotePeer is not null)
+            _peerLease = _peers.TrackDownstream(_connection.ConnectionId, _remotePeer);
         await WriteControlAsync(
             EncodeHandshakeReply(accepted: true),
             handshakeToken).ConfigureAwait(false);
@@ -683,7 +693,7 @@ public sealed class PcpDownstreamChildSession :
         return true;
     }
 
-    private static async Task<PcpDownstreamChildEndReason>
+    private async Task<PcpDownstreamChildEndReason>
         ReadAndValidateHeloAsync(
         PcpAtomPipeMessageReader atomReader,
         CancellationToken cancellationToken)
@@ -692,7 +702,10 @@ public sealed class PcpDownstreamChildSession :
         {
             var helo = await atomReader.ReadNextAsync(
                 cancellationToken).ConfigureAwait(false);
-            _ = PcpHeloCodec.ParseHelo(helo);
+            var peer = PcpHeloCodec.ParseHelo(helo);
+            _remotePeer = new(peer.SessionId,
+                new(_connection.RemoteEndPoint.Address, _connection.RemoteEndPoint.Port),
+                peer.OpenPort is > 0 ? new(_connection.RemoteEndPoint.Address, peer.OpenPort.Value) : null);
             return PcpDownstreamChildEndReason.Stopped;
         }
         catch (PcpProtocolException exception)
@@ -727,6 +740,9 @@ public sealed class PcpDownstreamChildSession :
                     _remoteQuit = PcpQuitCodec.Parse(atom);
                     return PcpDownstreamChildEndReason.QuitReceived;
                 }
+                if (CanUsePeers && atom.Name == PcpKnownAtomNames.Host &&
+                    PcpRelayHostCandidateParser.TryParse(atom) is { } host)
+                    _peers!.Observe(host, new(PcpPeerSourceKind.DownstreamControl, _connection.ConnectionId));
             }
             catch (InvalidDataException)
             {
@@ -745,6 +761,23 @@ public sealed class PcpDownstreamChildSession :
         }
     }
 
+    private static async Task<bool> ReleasePeerAfterCleanupAsync(
+        IDisposable lease, Task transportCleanup, Task<bool> previousCleanup)
+    {
+        try
+        {
+            await transportCleanup.ConfigureAwait(false);
+            if (!await previousCleanup.ConfigureAwait(false)) return false;
+            lease.Dispose();
+            return true;
+        }
+        catch { return false; }
+    }
+
+    private bool CanUsePeers => _peers?.IsActive == true &&
+        !_operationToken.IsCancellationRequested && _childAdmission?.IsClosed != true &&
+        (_admission is null || _admission is IPcpDownstreamRelayCapacity { IsCurrent: true });
+
     private byte[] EncodeHandshakeReply(bool accepted)
     {
         var writer = new ArrayBufferWriter<byte>();
@@ -754,6 +787,9 @@ public sealed class PcpDownstreamChildSession :
                 _options.UserAgent,
                 _localSessionId,
                 _options.ServantVersion));
+        if (!accepted && CanUsePeers && _remotePeer is not null)
+            foreach (var peer in PcpReferralPlanner.Select(_peers!, _remotePeer))
+                PcpAtomTreeCodec.Write(writer, PcpReferralPlanner.CreateHost(peer));
         PcpAtomTreeCodec.Write(
             writer,
             accepted

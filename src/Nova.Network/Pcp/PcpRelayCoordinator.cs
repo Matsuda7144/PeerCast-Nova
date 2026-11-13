@@ -97,11 +97,6 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
                     ? TryAcquireConsumerLease
                     : null);
         _ingress = new RelayIngressConsumer(_fanout, _firstPacketAcceptedSource);
-        _upstreamSession = new PcpChannelSession(
-            upstreamConnector,
-            statusTracker,
-            _ingress,
-            copiedOptions.UpstreamSession);
         _downstreamServer = new PcpDownstreamRelayServer(
             downstreamEndPoint,
             _fanout,
@@ -111,6 +106,12 @@ public sealed class PcpRelayCoordinator : IAsyncDisposable
             copiedOptions.DownstreamChild,
             portMapping,
             admission);
+        _upstreamSession = new PcpChannelSession(
+            new TcpTransportConnectorAdapter(upstreamConnector),
+            statusTracker,
+            _ingress,
+            copiedOptions.UpstreamSession,
+            _downstreamServer.Peers);
     }
 
     public PcpRelayCoordinatorState State

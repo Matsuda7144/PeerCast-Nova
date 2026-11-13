@@ -9,7 +9,7 @@ using PeerCast.Nova.Protocol.Pcp;
 
 namespace PeerCast.Nova.Network.Tests;
 
-public sealed class PcpChannelSessionRedirectTests
+public sealed partial class PcpChannelSessionRedirectTests
 {
     private static readonly Guid ChannelGuid = Guid.ParseExact(
         "531DC8DFC7FB42928AC2C0A626517A87",
