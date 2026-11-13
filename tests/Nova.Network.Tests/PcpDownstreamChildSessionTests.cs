@@ -23,8 +23,15 @@ public sealed partial class PcpDownstreamChildSessionTests
         "102132435465768798a9babbdcddedef",
         "N");
 
-    [Fact]
-    public async Task Session_NegotiatesWritesChanAndHandlesRemoteQuit()
+    [Theory]
+    [InlineData(0U, false)]
+    [InlineData(1000U, false)]
+    [InlineData(1003U, false)]
+    [InlineData(1005U, false)]
+    [InlineData(1007U, false)]
+    [InlineData(1234U, false)]
+    [InlineData(1003U, true)]
+    public async Task Session_NegotiatesWritesChanAndHandlesRemoteQuit(uint code, bool malformed)
     {
         var transportOptions = CreateTransportOptions();
         await using var listener = CreateListener(transportOptions);
@@ -73,16 +80,17 @@ public sealed partial class PcpDownstreamChildSessionTests
             Assert.True(observed.Traffic.IsEstablished);
 
             await client.WriteAsync(
-                EncodeTerminal(PcpKnownAtomNames.Quit),
+                EncodeTerminal(PcpKnownAtomNames.Quit, code, malformed),
                 timeoutSource.Token);
 
             var result = await serverTask.WaitAsync(timeoutSource.Token);
             Assert.Equal(
-                PcpDownstreamChildEndReason.QuitReceived,
+                malformed ? PcpDownstreamChildEndReason.ProtocolRejected : PcpDownstreamChildEndReason.QuitReceived,
                 result.EndReason);
             Assert.Equal(200, result.HttpStatusCode);
             Assert.True(result.HandshakeAccepted);
             Assert.Equal(1, result.DeliveredPacketCount);
+            Assert.Equal(malformed ? (PcpQuitInfo?)null : new PcpQuitInfo(code), result.Quit);
             Assert.Equal(payload.Length, result.DeliveredByteCount);
             Assert.Equal(0, result.DiscardedPacketCount);
             Assert.Equal(0, fanout.ActiveChildCount);
@@ -133,6 +141,9 @@ public sealed partial class PcpDownstreamChildSessionTests
             Assert.Equal(503, handshake.HttpStatusCode);
             Assert.Equal(PcpKnownAtomNames.Oleh, handshake.ReceivedAtomNames[0]);
             Assert.Equal(PcpKnownAtomNames.Quit, handshake.TerminalAtom);
+            Assert.Equal(1003U, handshake.TerminalCode);
+            Assert.Equal(PcpQuitReason.Unavailable, handshake.Quit!.Value.Reason);
+            Assert.Equal(2, handshake.ReceivedAtomNames.Length);
             Assert.Equal(
                 PcpDownstreamChildEndReason.RelayFull,
                 result.EndReason);
@@ -143,6 +154,59 @@ public sealed partial class PcpDownstreamChildSessionTests
         finally
         {
             await pipeReader.CompleteAsync();
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Session_MalformedHeloIsNotCapacityRefusal(bool full)
+    {
+        var transportOptions = CreateTransportOptions();
+        await using var listener = CreateListener(transportOptions);
+        await using var fanout = new PcpRelayFanout(new PcpRelayFanoutOptions { MaxChildren = 1 });
+        await using var occupied = full ? fanout.AddChild(new NoopRelaySink()) : null;
+        listener.Start();
+        using var timeout = new CancellationTokenSource(TestTimeout);
+        var server = AcceptAndRunAsync(listener, fanout, null, timeout.Token);
+        await using var client = await new TcpTransportConnector(transportOptions).ConnectAsync(
+            listener.LocalEndPoint.Address.ToString(), listener.LocalEndPoint.Port, timeout.Token);
+        var pipe = PipeReader.Create(client.TransportStream, new StreamPipeReaderOptions(leaveOpen: true));
+        try
+        {
+            await client.WriteAsync(new PcpRelayRequest
+            {
+                ChannelId = ChannelId.Value,
+                Host = "localhost",
+            }.Encode(), timeout.Token);
+            var http = await PcpHttpHeaderBlockReader.ReadResponseAsync(pipe, 32 * 1024, timeout.Token);
+            Assert.Equal(full ? 503 : 200, http.StatusCode);
+            var bytes = new ArrayBufferWriter<byte>();
+            PcpAtomTreeCodec.Write(bytes, PcpAtom.Parent(PcpKnownAtomNames.Helo));
+            await client.WriteAsync(bytes.WrittenMemory, timeout.Token);
+            var result = await server.WaitAsync(timeout.Token);
+            Assert.Equal(PcpDownstreamChildEndReason.ProtocolRejected, result.EndReason);
+            Assert.False(result.HandshakeAccepted);
+            Assert.True(result.CleanupCompleted);
+            Assert.Equal(full ? 1 : 0, fanout.ActiveChildCount);
+            await using var atoms = new PcpAtomPipeMessageReader(pipe);
+            if (full)
+            {
+                var error = await Assert.ThrowsAsync<PcpProtocolException>(async () =>
+                {
+                    _ = await atoms.ReadNextAsync(timeout.Token);
+                });
+                Assert.Equal(PcpParseError.UnexpectedEndOfStream, error.Error);
+            }
+            else
+            {
+                var quit = PcpQuitCodec.Parse(await atoms.ReadNextAsync(timeout.Token));
+                Assert.Equal(PcpQuitReason.Unspecified, quit.Reason);
+            }
+        }
+        finally
+        {
+            await pipe.CompleteAsync();
         }
     }
 
@@ -605,14 +669,14 @@ public sealed partial class PcpDownstreamChildSessionTests
             discontinuity: null);
     }
 
-    private static byte[] EncodeTerminal(PcpAtomName name)
+    private static byte[] EncodeTerminal(PcpAtomName name, uint code = 0, bool malformed = false)
     {
         var writer = new ArrayBufferWriter<byte>();
         PcpAtomTreeCodec.Write(
             writer,
             PcpAtom.Leaf(
                 name,
-                PcpWireValueCodec.EncodeUInt32(0)));
+                PcpWireValueCodec.EncodeUInt32(code).AsSpan(0, malformed ? 3 : 4)));
         return writer.WrittenSpan.ToArray();
     }
 

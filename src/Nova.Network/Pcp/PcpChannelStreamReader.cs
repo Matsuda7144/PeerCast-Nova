@@ -194,13 +194,14 @@ public sealed class PcpChannelStreamReader
                             }
                         }
 
-                        if (sink.TakeQuitReceived())
+                        if (sink.TakeQuit() is { } quit)
                         {
                             return new PcpChannelStreamResult(
                                 PcpChannelStreamEndReason.QuitReceived,
                                 channelMessageCount,
                                 packetCount,
-                                payloadByteCount);
+                                payloadByteCount)
+                            { Quit = quit };
                         }
 
                         continue;

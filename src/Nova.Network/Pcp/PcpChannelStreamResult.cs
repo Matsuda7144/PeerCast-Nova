@@ -1,3 +1,5 @@
+using PeerCast.Nova.Protocol.Pcp;
+
 namespace PeerCast.Nova.Network.Pcp;
 
 public enum PcpChannelStreamEndReason
@@ -10,4 +12,7 @@ public sealed record PcpChannelStreamResult(
     PcpChannelStreamEndReason EndReason,
     long ChannelMessageCount,
     long PacketCount,
-    long PayloadByteCount);
+    long PayloadByteCount)
+{
+    public PcpQuitInfo? Quit { get; init; }
+}

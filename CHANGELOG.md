@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- Smart Relay Phase 0 / A-1: documented current ID/Owner contracts, corrected
+  capacity refusal to OLEH/QUIT 1003, preserved legacy 503/OLEH/QUIT 0 handling,
+  and retained typed QUIT reasons without masking explicit protocol/auth errors.
+  ADR-0492 / PCN-0502 record the managed scope; no SID migration, recovery or WAN
+  readiness is claimed.
+
 - Added headless local publish channel ownership over existing OBS ingest, relay fanout/PCP TCP server, HTTP-FLV source and recording registration tokens. Added bounded drain/cancellation cleanup and managed early/late localhost RTMP-to-relay/HTTP-to-parser roundtrips. HTTP bootstrap now emits AVC before AAC for the existing managed parser. Real OBS interoperability and physical A/V remain unverified.
 
 - Added the one-generation IPv4 loopback OBS RTMP/AMF0 ingest foundation for classic AVC and AAC-LC, with bounded FLV bootstrap, initial IDR admission, awaited PCP HEAD/DATA delivery and terminal cleanup. ADR-0491 / PCN-0501 document the managed library boundary; application broadcast hosting and actual OBS/physical acceptance remain subsequent work.

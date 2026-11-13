@@ -54,6 +54,7 @@ public sealed class PcpDownstreamChildSession :
         new byte[PcpChannelPacketWireWriter.PrefixLength];
 
     private Task<PcpDownstreamChildResult>? _runTask;
+    private PcpQuitInfo? _remoteQuit;
     private PcpRelayChildRegistration? _registration;
     private CancellationToken _operationToken;
     private int _httpStatusCode;
@@ -440,7 +441,8 @@ public sealed class PcpDownstreamChildSession :
             snapshot?.DeliveredPacketCount ?? 0,
             snapshot?.DeliveredByteCount ?? 0,
             snapshot?.DiscardedPacketCount ?? 0,
-            snapshot?.DiscardedByteCount ?? 0);
+            snapshot?.DiscardedByteCount ?? 0)
+        { Quit = _remoteQuit };
     }
 
     private async Task<PcpDownstreamChildEndReason>
@@ -708,7 +710,7 @@ public sealed class PcpDownstreamChildSession :
         }
     }
 
-    private static async Task<PcpDownstreamChildEndReason>
+    private async Task<PcpDownstreamChildEndReason>
         MonitorRemoteControlAsync(
             PcpAtomPipeMessageReader atomReader,
             CancellationToken cancellationToken)
@@ -722,8 +724,13 @@ public sealed class PcpDownstreamChildSession :
 
                 if (atom.Name == PcpKnownAtomNames.Quit)
                 {
+                    _remoteQuit = PcpQuitCodec.Parse(atom);
                     return PcpDownstreamChildEndReason.QuitReceived;
                 }
+            }
+            catch (InvalidDataException)
+            {
+                return PcpDownstreamChildEndReason.ProtocolRejected;
             }
             catch (PcpProtocolException exception)
                 when (exception.Error ==
@@ -749,12 +756,9 @@ public sealed class PcpDownstreamChildSession :
                 _options.ServantVersion));
         PcpAtomTreeCodec.Write(
             writer,
-            PcpAtom.Leaf(
-                accepted
-                    ? PcpKnownAtomNames.Okay
-                    : PcpKnownAtomNames.Quit,
-                PcpWireValueCodec.EncodeUInt32(
-                    accepted ? AcceptedCode : GenericQuitCode)));
+            accepted
+                ? PcpAtom.Leaf(PcpKnownAtomNames.Okay, PcpWireValueCodec.EncodeUInt32(AcceptedCode))
+                : PcpQuitCodec.Create(PcpQuitCodec.UnavailableCode));
         return writer.WrittenSpan.ToArray();
     }
 
@@ -763,9 +767,7 @@ public sealed class PcpDownstreamChildSession :
         var writer = new ArrayBufferWriter<byte>();
         PcpAtomTreeCodec.Write(
             writer,
-            PcpAtom.Leaf(
-                PcpKnownAtomNames.Quit,
-                PcpWireValueCodec.EncodeUInt32(GenericQuitCode)));
+            PcpQuitCodec.Create(GenericQuitCode));
         return writer.WrittenSpan.ToArray();
     }
 

@@ -328,6 +328,37 @@ public sealed class PcpChannelSessionRedirectTests
         Assert.DoesNotContain(nested, transport.LogicalRedirectEndpoints);
     }
 
+    [Theory]
+    [InlineData(503, 1000U)]
+    [InlineData(503, 1005U)]
+    [InlineData(503, 1007U)]
+    [InlineData(503, 1234U)]
+    [InlineData(401, 0U)]
+    [InlineData(403, 0U)]
+    public async Task RelayFull_RedirectExplicitRejectionIsNotMaskedAsOriginalCapacity(int status, uint code)
+    {
+        await using var transport = new FakeTransport();
+        var first = Endpoint("1.1.1.1", 7144);
+        var listener = transport.AddRedirect(first);
+        using var timeout = new CancellationTokenSource(TestTimeout);
+        await using var session = CreateSession(transport, CreateTracker(),
+            new CollectingPacketConsumer(), maxReconnectAttempts: 0);
+        var original = RunRelayFullPeerAsync(transport.OriginalListener, "original.example:7144", 0,
+            [CreateHost(("1.1.1.1", 7144)), CreateHost(("8.8.8.8", 7145))], timeout.Token);
+        var rejected = status == 503
+            ? RunRelayFullPeerAsync(listener, "1.1.1.1:7144", 0, [], timeout.Token, code)
+            : RunHttpRejectedPeerAsync(listener, "1.1.1.1:7144", status, timeout.Token);
+        var result = await session.RunAsync("original.example", 7144, timeout.Token);
+        await original;
+        await rejected;
+        Assert.Equal(status == 503 ? PcpChannelSessionEndReason.ProtocolRejected :
+            PcpChannelSessionEndReason.HttpRejected, result.EndReason);
+        Assert.Equal(status, result.HttpStatusCode);
+        Assert.Equal(status == 503 ? new PcpQuitInfo(code) : (PcpQuitInfo?)null, result.Quit);
+        Assert.Equal(2, result.AttemptCount);
+        Assert.Equal(new[] { first }, transport.LogicalRedirectEndpoints);
+    }
+
     [Fact]
     public async Task RelayFull_AllRedirectsFailPreservesOriginalEvidence()
     {

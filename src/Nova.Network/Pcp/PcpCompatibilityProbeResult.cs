@@ -21,5 +21,8 @@ public sealed record PcpCompatibilityProbeResult(
     uint? TerminalCode,
     ImmutableArray<PcpAtomName> ReceivedAtomNames)
 {
+    public PcpQuitInfo? Quit => TerminalAtom == PcpKnownAtomNames.Quit &&
+        TerminalCode is { } code ? new(code) : null;
+
     public PcpPostHandshakeObservation? PostHandshakeObservation { get; init; }
 }

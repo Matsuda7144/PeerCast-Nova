@@ -1,5 +1,13 @@
 # Roadmap
 
+## Smart Relay Phase 0 / A-1
+
+[ADR-0492](docs/adr/ADR-0492-typed-pcp-quit-compatibility-without-identity-migration.md)
+and [PCN-0502](docs/reviews/PCN-0502-TYPED-PCP-QUIT-COMPATIBILITY-WITHOUT-IDENTITY-MIGRATION.md)
+record current ID/Owner contracts and the minimal standard PCP QUIT compatibility
+implementation. Phase B referral generation, automatic recovery and mandatory
+WAN integration/physical acceptance remain separate completion gates.
+
 ## Product MVP and current status — Complete
 
 The Version 0.1.0 product MVP is complete and integrated into main. Its accepted scope is playback and relay on the existing PeerCast／PeerCastStation network, with straightforward channel selection, start/stop, connection status, and recoverable errors. A recorder, advanced UI, and a Nova-only mandatory protocol are outside the MVP.

@@ -18,7 +18,7 @@ internal sealed class PcpChannelStreamSink : IPcpAtomSink, IDisposable
     private IMemoryOwner<byte>? _payloadOwner;
     private int _payloadLength;
     private bool _hasPayload;
-    private bool _quitReceived;
+    private PcpQuitInfo? _quit;
     private PcpOwnedChannelFrame? _completedFrame;
     private int _disposed;
 
@@ -44,7 +44,7 @@ internal sealed class PcpChannelStreamSink : IPcpAtomSink, IDisposable
 
         if (atom.Depth == 0 && atom.Header.Name == PcpKnownAtomNames.Quit)
         {
-            _quitReceived = true;
+            throw new InvalidDataException("Expected a PCP QUIT leaf atom.");
         }
     }
 
@@ -55,7 +55,11 @@ internal sealed class PcpChannelStreamSink : IPcpAtomSink, IDisposable
 
         if (atom.Depth == 0 && atom.Header.Name == PcpKnownAtomNames.Quit)
         {
-            _quitReceived = true;
+            if (atom.Payload.Length != sizeof(uint))
+                throw new InvalidDataException("PCP QUIT must contain a four-byte code.");
+            Span<byte> code = stackalloc byte[sizeof(uint)];
+            atom.Payload.CopyTo(code);
+            _quit = PcpQuitCodec.Decode(code);
         }
 
         if (IsPacketData(atom))
@@ -88,11 +92,11 @@ internal sealed class PcpChannelStreamSink : IPcpAtomSink, IDisposable
         return frame;
     }
 
-    public bool TakeQuitReceived()
+    public PcpQuitInfo? TakeQuit()
     {
         ThrowIfDisposed();
-        var received = _quitReceived;
-        _quitReceived = false;
+        var received = _quit;
+        _quit = null;
         return received;
     }
 

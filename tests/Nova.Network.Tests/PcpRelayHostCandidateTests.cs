@@ -377,15 +377,21 @@ public sealed class PcpRelayHostCandidateTests
         Assert.NotNull(candidate.LocalEndpoint);
     }
 
-    [Fact]
-    public async Task Handshake_Non1003QuitKeepsRelayFullClassification()
+    [Theory]
+    [InlineData(0U, PcpCompatibilityOutcome.RelayFull)]
+    [InlineData(1003U, PcpCompatibilityOutcome.RelayFull)]
+    [InlineData(1004U, PcpCompatibilityOutcome.ProtocolRejected)]
+    [InlineData(1005U, PcpCompatibilityOutcome.ProtocolRejected)]
+    [InlineData(1007U, PcpCompatibilityOutcome.ProtocolRejected)]
+    public async Task Handshake_QuitReasonTakesPrecedenceWhileKeepingHostCandidates(
+        uint code, PcpCompatibilityOutcome outcome)
     {
         var result = await NegotiateAsync(
             [CreateHost(("192.0.2.1", 7144))],
-            terminalCode: 1004);
+            terminalCode: code);
 
-        Assert.Equal(PcpCompatibilityOutcome.RelayFull, result.Outcome);
-        Assert.Equal(1004u, result.TerminalCode);
+        Assert.Equal(outcome, result.Outcome);
+        Assert.Equal(code, result.TerminalCode);
         var candidate = Assert.Single(result.RelayHostCandidates);
         Assert.NotNull(candidate.GlobalEndpoint);
         Assert.Null(candidate.LocalEndpoint);

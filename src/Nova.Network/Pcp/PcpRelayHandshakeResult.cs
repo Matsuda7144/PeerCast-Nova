@@ -14,6 +14,9 @@ internal sealed record PcpRelayHandshakeResult(
     ImmutableArray<PcpAtomName> ReceivedAtomNames,
     ImmutableArray<PcpRelayHostCandidate> RelayHostCandidates = default)
 {
+    public PcpQuitInfo? Quit => TerminalAtom == PcpKnownAtomNames.Quit &&
+        TerminalCode is { } code ? new(code) : null;
+
     public PcpCompatibilityProbeResult ToCompatibilityResult()
     {
         return new PcpCompatibilityProbeResult(

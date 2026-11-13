@@ -7,6 +7,11 @@ PeerCast Nova は、既存 PeerCast ネットワークとの互換性を保ち�
 Project Founder: **7144**  
 License: **Apache License 2.0**
 
+Smart Relay Phase 0 / A-1 adds standard PCP QUIT 1003 capacity replies and typed
+QUIT reasons while preserving current ID/Owner contracts:
+[ADR-0492](docs/adr/ADR-0492-typed-pcp-quit-compatibility-without-identity-migration.md).
+Automatic recovery and WAN integration remain later work.
+
 ## プロジェクトの方針
 
 | 方針 | 内容 |

@@ -164,8 +164,15 @@ internal static class PcpRelayHandshakeClient
         ImmutableArray<PcpAtomName> receivedAtomNames,
         ImmutableArray<PcpRelayHostCandidate> relayHostCandidates)
     {
+        var quit = PcpQuitCodec.Parse(atom);
+        // Old Nova emits OLEH + QUIT 0 after a capacity refusal. HTTP 503
+        // alone must not conceal a malformed reply or an explicit PCP error.
+        var relayFull = quit.Reason == PcpQuitReason.Unavailable ||
+            response.StatusCode == 503 && remotePeer is { SessionId: var sessionId } &&
+            sessionId != Guid.Empty &&
+            quit.Reason == PcpQuitReason.Unspecified;
         return new PcpRelayHandshakeResult(
-            response.StatusCode == 503
+            relayFull
                 ? PcpCompatibilityOutcome.RelayFull
                 : PcpCompatibilityOutcome.ProtocolRejected,
             response.StatusCode,
@@ -173,7 +180,7 @@ internal static class PcpRelayHandshakeClient
             response.ContentType,
             remotePeer,
             atom.Name,
-            DecodeOptionalUInt32(atom),
+            quit.Code,
             receivedAtomNames,
             relayHostCandidates);
     }

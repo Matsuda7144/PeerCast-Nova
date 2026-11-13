@@ -20,8 +20,12 @@ public sealed class PcpChannelSessionTests
     private static readonly ChannelSessionId SessionId = new(
         Guid.ParseExact("3F2504E04F8911D39A0C0305E82C3301", "N"));
 
-    [Fact]
-    public async Task Run_CoalescedOkayChannelAndQuitUseSamePipeReader()
+    [Theory]
+    [InlineData(4096, 0U)]
+    [InlineData(1, 1003U)]
+    [InlineData(4096, 1000U)]
+    [InlineData(1, 1007U)]
+    public async Task Run_CoalescedOkayChannelAndQuitUseSamePipeReader(int chunkSize, uint quitCode)
     {
         var (listener, connector) = CreateTransportPair();
         await using var ownedListener = listener;
@@ -32,16 +36,16 @@ public sealed class PcpChannelSessionTests
             connector,
             tracker,
             consumer,
-            CreateOptions(maxReconnectAttempts: 0));
+            CreateOptions(maxReconnectAttempts: 2));
         var serverTask = RunAcceptedAttemptAsync(
             listener,
             expectedPosition: 0,
             SessionId.Value,
             [
                 CreatePacketAtom(100, [0x10, 0x20, 0x30]),
-                CreateQuitAtom(),
+                CreateQuitAtom(quitCode),
             ],
-            timeoutSource.Token);
+            timeoutSource.Token, httpChunkSize: chunkSize);
 
         var result = await session.RunAsync(
             listener.LocalEndPoint.Address.ToString(),
@@ -50,6 +54,8 @@ public sealed class PcpChannelSessionTests
         await serverTask;
 
         Assert.Equal(PcpChannelSessionEndReason.QuitReceived, result.EndReason);
+        Assert.Equal(new PcpQuitInfo(quitCode), result.Quit);
+        Assert.Equal(SessionId, tracker.Snapshot.SessionId);
         Assert.Equal(1, result.AttemptCount);
         Assert.Equal(0, result.ReconnectCount);
         Assert.Equal(1, result.ChannelMessageCount);
@@ -158,8 +164,12 @@ public sealed class PcpChannelSessionTests
         Assert.Empty(consumer.Packets);
     }
 
-    [Fact]
-    public async Task Run_RelayFullIsTerminalWithoutReconnect()
+    [Theory]
+    [InlineData(1003U, PcpChannelSessionEndReason.RelayFull)]
+    [InlineData(0U, PcpChannelSessionEndReason.RelayFull)]
+    [InlineData(1005U, PcpChannelSessionEndReason.ProtocolRejected)]
+    [InlineData(1007U, PcpChannelSessionEndReason.ProtocolRejected)]
+    public async Task Run_HandshakeQuitIsTerminalWithoutReconnect(uint code, PcpChannelSessionEndReason endReason)
     {
         var (listener, connector) = CreateTransportPair();
         await using var ownedListener = listener;
@@ -174,7 +184,7 @@ public sealed class PcpChannelSessionTests
         var serverTask = RunRelayFullPeerAsync(
             listener,
             SessionId.Value,
-            timeoutSource.Token);
+            timeoutSource.Token, code);
 
         var result = await session.RunAsync(
             listener.LocalEndPoint.Address.ToString(),
@@ -182,14 +192,16 @@ public sealed class PcpChannelSessionTests
             timeoutSource.Token);
         await serverTask;
 
-        Assert.Equal(PcpChannelSessionEndReason.RelayFull, result.EndReason);
+        Assert.Equal(endReason, result.EndReason);
+        Assert.Equal(new PcpQuitInfo(code), result.Quit);
         Assert.Equal(1, result.AttemptCount);
         Assert.Equal(0, result.ReconnectCount);
         Assert.Equal(503, result.HttpStatusCode);
         Assert.Equal(ChannelSessionState.Faulted, tracker.Snapshot.State);
         AssertFault(
             tracker,
-            ChannelFaultCategory.RemoteUnavailable,
+            endReason == PcpChannelSessionEndReason.RelayFull
+                ? ChannelFaultCategory.RemoteUnavailable : ChannelFaultCategory.RemoteRejected,
             ChannelFaultStage.Negotiating,
             attemptCount: 1,
             reconnectCount: 0);
@@ -497,7 +509,8 @@ public sealed class PcpChannelSessionTests
         long expectedPosition,
         Guid expectedSessionId,
         IReadOnlyList<PcpAtom> postHandshakeAtoms,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        int? httpChunkSize = null)
     {
         await using var connection = await listener.AcceptAsync(
             cancellationToken);
@@ -511,16 +524,6 @@ public sealed class PcpChannelSessionTests
                 pipeReader,
                 expectedPosition,
                 cancellationToken);
-            await WriteHttpResponseAsync(
-                connection,
-                statusCode: 200,
-                "OK",
-                cancellationToken);
-            await ReadAndAssertHeloAsync(
-                pipeReader,
-                expectedSessionId,
-                cancellationToken);
-
             var atoms = new List<PcpAtom>
             {
                 CreateOlehAtom(),
@@ -530,10 +533,24 @@ public sealed class PcpChannelSessionTests
             };
             atoms.AddRange(postHandshakeAtoms);
 
-            await WriteAtomsAsync(
-                connection,
-                atoms,
-                cancellationToken);
+            if (httpChunkSize is { } chunkSize)
+            {
+                var bytes = new ArrayBufferWriter<byte>();
+                bytes.Write(System.Text.Encoding.ASCII.GetBytes(
+                    "HTTP/1.0 200 OK\r\nContent-Type: application/x-peercast-pcp\r\n\r\n"));
+                foreach (var atom in atoms)
+                    PcpAtomTreeCodec.Write(bytes, atom);
+                for (var offset = 0; offset < bytes.WrittenCount; offset += chunkSize)
+                    await connection.WriteAsync(bytes.WrittenMemory.Slice(offset,
+                        Math.Min(chunkSize, bytes.WrittenCount - offset)), cancellationToken);
+                await ReadAndAssertHeloAsync(pipeReader, expectedSessionId, cancellationToken);
+            }
+            else
+            {
+                await WriteHttpResponseAsync(connection, 200, "OK", cancellationToken);
+                await ReadAndAssertHeloAsync(pipeReader, expectedSessionId, cancellationToken);
+                await WriteAtomsAsync(connection, atoms, cancellationToken);
+            }
         }
         finally
         {
@@ -645,7 +662,8 @@ public sealed class PcpChannelSessionTests
     private static async Task RunRelayFullPeerAsync(
         TcpTransportListener listener,
         Guid expectedSessionId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        uint quitCode = 1003)
     {
         await using var connection = await listener.AcceptAsync(
             cancellationToken);
@@ -672,7 +690,7 @@ public sealed class PcpChannelSessionTests
                 connection,
                 [
                     CreateOlehAtom(),
-                    CreateQuitAtom(code: 1003),
+                    CreateQuitAtom(quitCode),
                 ],
                 cancellationToken);
         }

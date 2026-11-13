@@ -324,7 +324,11 @@ public sealed class PcpChannelSession : IAsyncDisposable
 
                 if (handshake.Outcome != PcpCompatibilityOutcome.Accepted)
                 {
-                    if (!hasEverAccepted && startupRedirectActive)
+                    // Only capacity refusals advance the startup referral plan.
+                    // An explicit protocol/auth rejection must retain its own
+                    // terminal reason instead of becoming the original RelayFull.
+                    if (!hasEverAccepted && startupRedirectActive &&
+                        handshake.Outcome == PcpCompatibilityOutcome.RelayFull)
                     {
                         if (TrySelectNextRedirectTarget(
                                 startupRedirectPlan,
@@ -414,7 +418,8 @@ public sealed class PcpChannelSession : IAsyncDisposable
                         reconnectCount,
                         handshake.HttpStatusCode,
                         progress.ChannelMessageCount,
-                        countingConsumer);
+                        countingConsumer) with
+                    { Quit = stream.Quit };
                 }
 
                 if (CanReconnect(reconnectCount))
@@ -797,7 +802,8 @@ public sealed class PcpChannelSession : IAsyncDisposable
             reconnectCount,
             handshake.HttpStatusCode,
             progress.ChannelMessageCount,
-            countingConsumer);
+            countingConsumer) with
+        { Quit = handshake.Quit };
     }
 
     private static PcpChannelSessionResult CreateResult(

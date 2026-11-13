@@ -1,3 +1,5 @@
+using PeerCast.Nova.Protocol.Pcp;
+
 namespace PeerCast.Nova.Network.Pcp;
 
 public enum PcpDownstreamChildEndReason
@@ -28,4 +30,7 @@ public sealed record PcpDownstreamChildResult(
     long DeliveredPacketCount,
     long DeliveredByteCount,
     long DiscardedPacketCount,
-    long DiscardedByteCount);
+    long DiscardedByteCount)
+{
+    public PcpQuitInfo? Quit { get; init; }
+}

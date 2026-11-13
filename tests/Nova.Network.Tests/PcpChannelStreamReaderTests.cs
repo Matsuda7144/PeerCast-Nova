@@ -188,8 +188,14 @@ public sealed class PcpChannelStreamReaderTests
         Assert.Null(tracker.Snapshot.StreamPosition);
     }
 
-    [Fact]
-    public async Task ReadToEnd_QuitTerminatesWithoutPacketDelivery()
+    [Theory]
+    [InlineData(0U, PcpQuitReason.Unspecified)]
+    [InlineData(1000U, PcpQuitReason.Normal)]
+    [InlineData(1003U, PcpQuitReason.Unavailable)]
+    [InlineData(1005U, PcpQuitReason.NotIdentified)]
+    [InlineData(1007U, PcpQuitReason.BadAgent)]
+    [InlineData(1234U, PcpQuitReason.Other)]
+    public async Task ReadToEnd_QuitTerminatesWithoutPacketDelivery(uint code, PcpQuitReason reason)
     {
         var pipe = new Pipe();
         var tracker = CreateReceivingTracker();
@@ -197,7 +203,7 @@ public sealed class PcpChannelStreamReaderTests
         var reader = CreateReader(pipe, tracker, consumer);
         var quit = PcpAtom.Leaf(
             PcpKnownAtomNames.Quit,
-            PcpWireValueCodec.EncodeUInt32(0));
+            PcpWireValueCodec.EncodeUInt32(code));
         var readTask = reader.ReadToEndAsync();
 
         await pipe.Writer.WriteAsync(Encode(quit));
@@ -205,9 +211,33 @@ public sealed class PcpChannelStreamReaderTests
         var result = await readTask;
 
         Assert.Equal(PcpChannelStreamEndReason.QuitReceived, result.EndReason);
+        Assert.Equal(new PcpQuitInfo(code), result.Quit);
+        Assert.Equal(reason, result.Quit!.Value.Reason);
         Assert.Equal(0, result.ChannelMessageCount);
         Assert.Equal(0, result.PacketCount);
         Assert.Empty(consumer.Packets);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(0)]
+    [InlineData(3)]
+    [InlineData(8)]
+    public async Task ReadToEnd_MalformedQuitDoesNotUndoDeliveredMedia(int length)
+    {
+        var pipe = new Pipe();
+        var tracker = CreateReceivingTracker();
+        var consumer = new CollectingPacketConsumer();
+        var reader = CreateReader(pipe, tracker, consumer);
+        var quit = length < 0 ? PcpAtom.Parent(PcpKnownAtomNames.Quit) :
+            PcpAtom.Leaf(PcpKnownAtomNames.Quit, new byte[length]);
+        var read = reader.ReadToEndAsync();
+        await pipe.Writer.WriteAsync(Encode(CreatePacketAtom(100, [0x11, 0x22]), quit));
+        await pipe.Writer.CompleteAsync();
+        await Assert.ThrowsAsync<InvalidDataException>(() => read);
+        Assert.Equal(new byte[] { 0x11, 0x22 }, Assert.Single(consumer.Packets).Payload);
+        Assert.Equal(100, tracker.Snapshot.StreamPosition);
+        Assert.Equal(SessionId, tracker.Snapshot.SessionId);
     }
 
     [Fact]
