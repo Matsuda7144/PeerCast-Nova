@@ -523,6 +523,7 @@ public sealed partial class PcpChannelSession : IAsyncDisposable
         // Admission cannot reuse a previous upstream attempt's declaration.
         // Existing user-visible metadata and media positions remain untouched.
         _stateAdapter.BeginAttempt();
+        ObserveConnection(null, PcpRelayConnectionPhase.Connecting);
         var negotiationToken = negotiationCancellation ?? cancellationToken;
 
         try
@@ -538,26 +539,36 @@ public sealed partial class PcpChannelSession : IAsyncDisposable
         }
         catch (TimeoutException exception)
         {
+            ObserveConnection(null, PcpRelayConnectionPhase.Disconnected);
             return AttemptResult.FromRetryableFailure(
                 exception,
                 ChannelFaultStage.Connecting);
         }
         catch (SocketException exception)
         {
+            ObserveConnection(null, PcpRelayConnectionPhase.Disconnected);
             return AttemptResult.FromRetryableFailure(
                 exception,
                 ChannelFaultStage.Connecting);
         }
         catch (IOException exception)
         {
+            ObserveConnection(null, PcpRelayConnectionPhase.Disconnected);
             return AttemptResult.FromRetryableFailure(
                 exception,
                 ChannelFaultStage.Connecting);
+        }
+        catch
+        {
+            ObserveConnection(null, PcpRelayConnectionPhase.Disconnected);
+            throw;
         }
 
         var connectedEndpoint = new PcpRelayHostEndpoint(
             connection.RemoteEndPoint.Address,
             connection.RemoteEndPoint.Port);
+
+        using var observation = ObserveConnectionLifetime(connection);
 
         await using (IAsyncDisposable lifetime = _options.SmartRelay is { } smart
             ? new PcpSmartRelayTransportLifetime(connection, smart, () => Interlocked.Exchange(ref _smartCleanupFailed, 1)) : connection)
@@ -626,6 +637,7 @@ public sealed partial class PcpChannelSession : IAsyncDisposable
                 _peers?.RecordConnectionResult(redirectEndpoint is null ? connectedEndpoint :
                     new(redirectEndpoint.Address, redirectEndpoint.Port), succeeded: true);
                 using var trafficObservation = connection.ObservePcpSession();
+                ObserveConnection(connection.ConnectionId, PcpRelayConnectionPhase.Connected);
                 _statusTracker.TransitionTo(ChannelSessionState.Receiving);
                 _negotiation.TrySetResult(new(
                     PcpChannelSessionNegotiationOutcome.Accepted,
@@ -695,6 +707,7 @@ public sealed partial class PcpChannelSession : IAsyncDisposable
             }
             finally
             {
+                ObserveConnection(connection.ConnectionId, PcpRelayConnectionPhase.Closing);
                 try
                 {
                     await pipeReader.CompleteAsync(failure).ConfigureAwait(false);

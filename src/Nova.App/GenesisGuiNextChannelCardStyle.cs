@@ -11,7 +11,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             GenesisGuiNextChannelCardLayout.Applies(IsModern, _tabs.SelectedTab);
         private nint[] CardTexts => [_detailsTitle, _detailsDescription, _detailsMetadata, _detailsIdentity];
         private nint[] CardButtons => [_detailsRecordButton, _detailsStopRecordingButton, _detailsCopyButton,
-            _playButton, _stopButton, _relayStart, _relayStop];
+            _playButton, _stopButton, _relayStart, _relayStop, _relayTreeToggle];
         private nint[] VisualSubclassControls => [.. VisualButtons, .. CardTexts, .. CardButtons, .. TopVisualControls, .. RecordingVisualControls, .. PublishingVisualControls, .. SettingsVisualControls, _listView, GetParent(_listView), _owner];
 
         private void PlaceChannelCard()
@@ -91,7 +91,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 var disabled = (draw.ItemState & DrawItemDisabled) != 0;
                 var pressed = (draw.ItemState & 1) != 0;
                 var recording = draw.ControlId is DetailsRecordControlId or DetailsStopRecordingControlId;
-                var play = draw.ControlId == PlayControlId;
+                var play = draw.ControlId == PlayControlId || draw.ControlId == RelayTreeToggleControlId && _relayTreeOpen;
                 var colors = GenesisGuiNextDesign.CardButtonColors(play, recording, disabled,
                     _hoverControl == draw.ControlWindow, pressed);
                 FillRectangle(draw.DeviceContext, draw.ItemRectangle, GenesisGuiNextDesign.Panel);
@@ -108,6 +108,12 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                     Line(draw.DeviceContext, x - Scale(3), y - Scale(5), x + Scale(5), y);
                     Line(draw.DeviceContext, x + Scale(5), y, x - Scale(3), y + Scale(5));
                     Line(draw.DeviceContext, x - Scale(3), y + Scale(5), x - Scale(3), y - Scale(5));
+                }
+                else if (draw.ControlId == RelayTreeToggleControlId)
+                {
+                    Line(draw.DeviceContext, x, y - Scale(6), x, y + Scale(6));
+                    Line(draw.DeviceContext, x, y - Scale(4), x + Scale(5), y - Scale(4));
+                    Line(draw.DeviceContext, x, y + Scale(4), x + Scale(5), y + Scale(4));
                 }
                 else
                 {

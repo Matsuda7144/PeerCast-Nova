@@ -10,6 +10,13 @@ namespace PeerCast.Nova.Network.Tests;
 
 public sealed partial class PcpDownstreamRelayServerTests
 {
+    [Theory]
+    [InlineData("127.0.0.1", PcpRelayObservedPath.ChannelLoopback)]
+    [InlineData("0.0.0.0", PcpRelayObservedPath.ChannelListener)]
+    [InlineData("192.168.1.1", PcpRelayObservedPath.ChannelListener)]
+    public void ObservedListenerPathDoesNotMislabelWildcardOrLanAsLoopback(string address, PcpRelayObservedPath expected) =>
+        Assert.Equal(expected, PcpDownstreamRelayServer.ClassifyObservedPath(IPAddress.Parse(address)));
+
     private static readonly TimeSpan TestTimeout = TimeSpan.FromSeconds(10);
 
     private static readonly ChannelId ChannelId = new(

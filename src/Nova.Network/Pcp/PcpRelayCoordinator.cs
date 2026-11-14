@@ -16,7 +16,7 @@ namespace PeerCast.Nova.Network.Pcp;
 /// remain owned by their runtime composition; existing recording leases are
 /// completed during owner shutdown.
 /// </remarks>
-public sealed class PcpRelayCoordinator : IAsyncDisposable
+public sealed partial class PcpRelayCoordinator : IAsyncDisposable
 {
     private readonly object _gate = new();
     private readonly PcpRelayFanout _fanout;

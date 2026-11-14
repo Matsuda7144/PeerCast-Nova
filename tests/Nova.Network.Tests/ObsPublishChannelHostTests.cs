@@ -197,6 +197,8 @@ public sealed class ObsPublishChannelHostTests
         await using var host = Create(http, registry);
         Assert.Equal(ChannelSessionState.Created, host.Snapshot.State);
         host.Start();
+        var treeSource = (IPcpRelayTreeSource)host;
+        Assert.False(treeSource.ObserveRelayTree().LocalInputConnected);
         Assert.True(host.IsRegistered);
         Assert.Equal(1, registry.Count);
         Assert.Equal(1, http.ActiveSourceCount);
@@ -204,6 +206,11 @@ public sealed class ObsPublishChannelHostTests
         using var client = await PublishAsync(host);
         await ConfigureAsync(client);
         Assert.True(await host.HeadAvailable.WaitAsync(TimeSpan.FromSeconds(10)));
+        var tree = treeSource.ObserveRelayTree();
+        Assert.True(tree.LocalInputConnected);
+        Assert.Null(tree.Upstream);
+        Assert.Equal(host.ChannelId, tree.ChannelId);
+        Assert.Equal(host.SessionId, tree.OwnerId);
         var late = new CopySink();
         await using var registration = host.Fanout.AddChild(late);
         await late.WaitAsync(1);
@@ -226,6 +233,8 @@ public sealed class ObsPublishChannelHostTests
         Assert.Equal(0, registry.Count);
         Assert.Equal(0, http.ActiveSourceCount);
         Assert.Equal(ChannelSessionState.Stopped, host.Snapshot.State);
+        Assert.False(treeSource.ObserveRelayTree().LocalInputConnected);
+        Assert.False(treeSource.ObserveRelayTree().Running);
         Assert.Throws<InvalidOperationException>(() => host.Start());
     }
 

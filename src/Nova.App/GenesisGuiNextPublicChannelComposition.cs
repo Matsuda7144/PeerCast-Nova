@@ -227,7 +227,11 @@ internal sealed partial class GenesisGuiNextPublicChannelComposition : IAsyncDis
                 }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
         }
 
-        internal void Bind(GenesisDownstreamRelayOwnerRegistry.Owner registration) => _registration = registration;
+        internal void Bind(GenesisDownstreamRelayOwnerRegistry.Owner registration)
+        {
+            _registration = registration;
+            if (_runtime is IPcpRelayTreeSource source) registration.ObserveSource(source);
+        }
 
         public bool TryReserve(long connectionId, [NotNullWhen(true)] out IDisposable? reservation,
             CancellationToken cancellationToken = default)

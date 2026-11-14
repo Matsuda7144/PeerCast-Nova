@@ -12,7 +12,7 @@ namespace PeerCast.Nova.App;
 /// Registration requires an authoritative role and stable owner session.
 /// Routed bindings use the exact fan-out identity, not only ChannelId.
 /// </summary>
-internal sealed class GenesisDownstreamRelayOwnerRegistry : IDisposable
+internal sealed partial class GenesisDownstreamRelayOwnerRegistry : IDisposable
 {
     private readonly object _gate = new();
     private readonly RelayAdmissionPolicy _policy;
@@ -158,7 +158,7 @@ internal sealed class GenesisDownstreamRelayOwnerRegistry : IDisposable
         }
     }
 
-    internal sealed class Owner : IPcpDownstreamRelayRegistration, IPcpDownstreamRelayCapacity, IPcpDownstreamRelayTraffic, IPcpDownstreamRelayPacing
+    internal sealed class Owner : IPcpDownstreamRelayRegistration, IPcpDownstreamRelayCapacity, IPcpDownstreamRelayTraffic, IPcpDownstreamRelayPacing, IPcpRelayTreeRegistration
     {
         private readonly GenesisDownstreamRelayOwnerRegistry _registry;
         internal Owner(GenesisDownstreamRelayOwnerRegistry registry, RelayAdmissionPolicy.Channel scope)
@@ -169,6 +169,14 @@ internal sealed class GenesisDownstreamRelayOwnerRegistry : IDisposable
         internal RelayAdmissionPolicy.Channel Scope { get; }
         public PcpDownstreamTrafficMeter Traffic => Scope.Traffic;
         public PcpDownstreamPacer? Pacing => Scope.Pacing;
+        internal WeakReference<IPcpRelayTreeSource>? TreeSource { get; private set; }
+        public void ObserveSource(IPcpRelayTreeSource source)
+        {
+            lock (_registry._gate)
+            {
+                if (!_registry._disposed && !Retired) TreeSource = new(source);
+            }
+        }
         internal bool Retired { get; set; }
         internal int ActiveReservations { get; set; }
         public bool IsCurrent { get { lock (_registry._gate) return !_registry._disposed && !Retired && Scope.IsCurrent; } }

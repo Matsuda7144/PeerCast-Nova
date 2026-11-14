@@ -1437,6 +1437,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
         }
         else if (message == WindowMessageControlColorStatic)
         {
+            if (state.IsRelayTreeControl(lParam)) return state.PrepareRelayTreeControl(wParam);
             return state.PrepareStaticControl(wParam, window);
         }
         else if (message == WindowMessageControlColorEdit ||
@@ -1697,6 +1698,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             ApplyDefaultFont(_relayStart);
             ApplyDefaultFont(_relayStop);
             ApplyDefaultFont(_relayStatus);
+            CreateRelayTree();
         }
 
         public void Attach()
@@ -1777,6 +1779,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             }
 
             if (ProcessIntegratedSettingsCommand(commandId, lParam)) return;
+            if (ProcessRelayTreeCommand(commandId, lParam)) return;
             if (SettingsPageOpen && commandId == FavoriteControlId) return;
             if (_tabs.SelectedTab == GenesisGuiNextTab.Publishing &&
                 lParam == _publishingStartButton && commandId == PublishingStartControlId)
@@ -2582,6 +2585,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             if (GetClientRect(_detailsPane, out var relayPane))
                 _ = PresentBounds(_relayStatus, 12, RelayStatusTop, RelayStatusWidth(LogicalWidth(relayPane.Right - relayPane.Left)), 40, true);
             _ = PresentInvalidation(_relayStatus, 0, true);
+            var treeShown = SynchronizeRelayTree();
 
             var isRecordingPage = _tabs.SelectedTab == GenesisGuiNextTab.Recording;
             var isRulesPage = IsRulesPageActive();
@@ -2643,7 +2647,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             _ = PresentInvalidation(_recordingHistoryRefreshButton, 0, true);
             _ = PresentVisible(_recordingHistoryDetails, isHistoryPage ? ShowWindowShowNoActivate : ShowWindowHide);
             foreach (var textControl in new[] { _detailsTitle, _detailsDescription, _detailsMetadata, _detailsIdentity })
-                _ = PresentVisible(textControl, isHistoryPage || isLogPage && UsesChannelCard && textControl == _detailsIdentity
+                _ = PresentVisible(textControl, isHistoryPage || treeShown && textControl == _detailsDescription || isLogPage && UsesChannelCard && textControl == _detailsIdentity
                     ? ShowWindowHide : ShowWindowShowNoActivate);
             MoveDetailsTextControls(isRecordingPage, isLibraryPage || isHistoryPage);
             _ = PresentVisible(
@@ -2797,6 +2801,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                     : $"詳細: {details.Description}");
             _ = PresentText(_detailsMetadata, UsesChannelCard ? details.MetadataLines : details.MetadataText);
             _ = PresentText(_detailsIdentity, UsesChannelCard ? details.IdentityLines : details.IdentityText);
+            if (treeShown) PresentRelayTree(row);
             _ = PresentEnabled(_detailsCopyButton, !details.IsEmpty);
             var recording = row?.ActiveRecording is { } activeRecording
                 ? _viewModel.GetActiveRecordingPresentation(activeRecording)

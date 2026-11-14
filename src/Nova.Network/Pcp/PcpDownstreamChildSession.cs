@@ -425,6 +425,7 @@ public sealed partial class PcpDownstreamChildSession :
         {
             try
             {
+                Volatile.Write(ref _observationClosing, 1);
                 Interlocked.Exchange(ref _relayActive, 0);
                 _handshakeReady.TrySetCanceled(operationSource.Token);
                 CancelBestEffort(operationSource);
@@ -572,6 +573,7 @@ public sealed partial class PcpDownstreamChildSession :
 
         // Request format and ChannelId are already validated. A remote loopback
         // address is still a PCP relay role, not an internal media consumer.
+        Volatile.Write(ref _identifiedRelay, 1);
         if (_childAdmission?.IsClosed == true)
             return await RejectClosedAdmissionAsync(handshakeToken).ConfigureAwait(false);
         if (_quiescenceObserver is not null)

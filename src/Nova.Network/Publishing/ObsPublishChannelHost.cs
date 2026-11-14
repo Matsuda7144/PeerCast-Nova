@@ -242,6 +242,7 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
                     ?? throw new ObsPublishLanException(ObsPublishLanFailure.AdmissionUnavailable);
                 if (_relayRegistration.ChannelId != ChannelId || _relayRegistration.SessionId != SessionId)
                     throw new ObsPublishLanException(ObsPublishLanFailure.AdmissionUnavailable);
+                if (_relayRegistration is IPcpRelayTreeRegistration observation) observation.ObserveSource(this);
                 lifetime.Token.ThrowIfCancellationRequested();
             }
             if (_ownsHttp) _http.Start();

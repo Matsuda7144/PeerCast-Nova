@@ -13,7 +13,7 @@ public sealed partial class PcpDownstreamRelayServer
     {
         if (request.ChannelId != _channelId.Value) throw new InvalidOperationException("Routed channel mismatch.");
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var entry = new SessionEntry(connection) { Task = completion.Task };
+        var entry = new SessionEntry(connection) { Task = completion.Task, Shared = true };
         lock (_gate)
         {
             if (_state != PcpDownstreamRelayServerState.Running || _childAdmission.IsClosed ||

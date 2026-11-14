@@ -43,6 +43,9 @@ public sealed partial class PcpRelayCoordinatorTests
             if (second.IsFaulted) await second;
             Assert.False(run.IsCompleted, $"{coordinator.SmartRelaySnapshot}; {tracker.Snapshot.Fault}; {run.Exception}");
             Assert.Equal(512, coordinator.DeclaredBitrateKbps);
+            var observed = coordinator.ObserveRelayTree();
+            Assert.Equal(PcpRelayConnectionPhase.Connected, observed.Upstream!.Phase);
+            Assert.NotNull(observed.Upstream.ConnectionId);
             var bound = coordinator.LocalEndPoint;
             await using var child = await ConnectDownstreamAsync(bound, transport, timeout.Token);
             Assert.Equal(new byte[] { 0x42 }, (await child.ReadChannelPacketsAsync(1, timeout.Token))[0].Payload);
@@ -53,6 +56,10 @@ public sealed partial class PcpRelayCoordinatorTests
             Assert.Equal(0, coordinator.DownstreamFanout.ActiveChildCount);
             Assert.False(coordinator.DownstreamFanout.HasRetainedHead);
             Assert.Null(coordinator.DeclaredBitrateKbps);
+            var recovering = coordinator.ObserveRelayTree();
+            Assert.Equal(PcpSmartRelayState.Backoff, recovering.Recovery);
+            Assert.NotEqual(PcpRelayConnectionPhase.Connected, recovering.Upstream!.Phase);
+            Assert.DoesNotContain(recovering.Downstreams, c => c.Phase == PcpRelayConnectionPhase.Connected);
             clock.Advance(TimeSpan.FromSeconds(1));
             await PcpSmartRelayRecoveryTests.Until(() => coordinator.SmartRelaySnapshot.ResumePosition == 105);
             Assert.Null(coordinator.DeclaredBitrateKbps);
@@ -60,6 +67,10 @@ public sealed partial class PcpRelayCoordinatorTests
             Assert.Equal(bound, coordinator.LocalEndPoint);
             Assert.Equal(LocalSessionId, tracker.Snapshot.SessionId);
             Assert.True(coordinator.SmartRelaySnapshot.Discontinuities > 0);
+            var resumed = coordinator.ObserveRelayTree();
+            Assert.Equal(observed.OwnerId, resumed.OwnerId);
+            Assert.Equal(PcpRelayConnectionPhase.Connected, resumed.Upstream!.Phase);
+            Assert.NotEqual(observed.Upstream.ConnectionId, resumed.Upstream.ConnectionId);
             await using var replacement = await ConnectDownstreamAsync(bound, transport, timeout.Token);
             Assert.Equal(new byte[] { 0x55 }, (await replacement.ReadChannelPacketsAsync(1, timeout.Token))[0].Payload);
         }
@@ -68,6 +79,8 @@ public sealed partial class PcpRelayCoordinatorTests
         await first; await second;
         Assert.True(result.ShutdownCompleted);
         Assert.Equal(0, coordinator.DownstreamSnapshot.AdmissionCleanupPendingCount);
+        Assert.False(coordinator.ObserveRelayTree().Running);
+        Assert.Equal(PcpRelayConnectionPhase.Disconnected, coordinator.ObserveRelayTree().Upstream!.Phase);
     }
 
     private static async Task SmartParent(TcpTransportListener listener, long requestPosition, uint dataPosition,

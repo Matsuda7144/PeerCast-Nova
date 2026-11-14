@@ -199,6 +199,7 @@ public sealed partial class PcpDownstreamRelayServer : IAsyncDisposable
             }
 
             _listener.Start();
+            ObserveBoundChannelPath();
             _boundEndPoint = _listener.LocalEndPoint;
             Peers.SetLocalEndpoint(new(_boundEndPoint.Address, _boundEndPoint.Port));
             if (_portMapping is not null &&
@@ -842,5 +843,6 @@ public sealed partial class PcpDownstreamRelayServer : IAsyncDisposable
         public PcpDownstreamChildSession? Session;
         public Task? Task { get; set; }
         public PcpWanIngressPolicy.Lease? WanLease { get; init; }
+        public bool Shared { get; init; }
     }
 }

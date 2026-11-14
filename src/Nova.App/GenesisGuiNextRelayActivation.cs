@@ -70,6 +70,7 @@ internal sealed class GenesisGuiNextRelayActivation : IAsyncDisposable
     private Task? _disposeTask;
     private Func<string>? _publicStatus;
     private Func<string>? _capacityStatus;
+    private readonly Func<ChannelId, GenesisRelayTreeSnapshot>? _readRelayTree;
     private GenesisRelayActivationSnapshot _snapshot = new();
 
     public GenesisGuiNextRelayActivation(GenesisGuiNextPublicChannelComposition channels, PcpSmartRelayOptions? smartRelay = null)
@@ -79,6 +80,21 @@ internal sealed class GenesisGuiNextRelayActivation : IAsyncDisposable
     {
         _publicStatus = () => channels.PublicStatusText;
         _capacityStatus = () => channels.Registry.CapacityStatusText();
+        _readRelayTree = channels.Registry.ReadRelayTree;
+    }
+
+    internal GenesisRelayTreeSnapshot ReadRelayTree(ChannelId channelId)
+    {
+        var tree = _readRelayTree?.Invoke(channelId) ?? GenesisRelayTreeSnapshot.Empty(channelId);
+        GenesisRelayActivationSnapshot activation;
+        lock (_gate) activation = _snapshot;
+        // A retired owner's cleanup evidence may outlive its registry entry.
+        // Never overlay it on a newer owner of the same channel.
+        if (activation.ChannelId != channelId || tree.OwnerId is { } owner && owner != activation.SessionId) return tree;
+        if (!activation.CleanupConfirmed)
+            return tree with { State = GenesisRelayTreeState.CleanupUnconfirmed };
+        return tree.OwnerId is null && activation.State == GenesisRelayActivationState.Stopped
+            ? tree with { State = GenesisRelayTreeState.Stopped } : tree;
     }
 
     internal static PcpSmartRelayOptions? RecoveryPolicy(string? value) => value?.Trim().ToLowerInvariant() switch
