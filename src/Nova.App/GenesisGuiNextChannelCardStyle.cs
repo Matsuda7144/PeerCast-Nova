@@ -69,8 +69,11 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 _ = FillRect(dc, ref bounds, _topBrush);
                 var title = control == _detailsTitle;
                 var wrap = control != _detailsTitle;
+                // Six tree-summary lines must fit the existing 106px metadata
+                // area. Use the compact native font already used by its body.
                 var useInheritedFont = control == _detailsIdentity ||
-                    control == _detailsMetadata && _tabs.SelectedTab == GenesisGuiNextTab.Logs;
+                    control == _detailsMetadata && (_tabs.SelectedTab == GenesisGuiNextTab.Logs ||
+                        _relayTreeOpen && GenesisGuiNextRelayTreeLayout.Applies(IsModern, _tabs.SelectedTab));
                 DrawCardLabel(dc, bounds, ReadCardControlText(control),
                     title ? GenesisGuiNextDesign.Text : GenesisGuiNextDesign.SecondaryText,
                     title ? _cardTitleFont?.Handle ?? 0 : useInheritedFont ? 0 : _visualFont?.Handle ?? 0,
