@@ -2,6 +2,22 @@ namespace PeerCast.Nova.App.Tests;
 
 public sealed class GuiNextDailyPlaybackSessionControllerTests
 {
+    [Fact]
+    public async Task CatalogMetadataReachesDailyPlaybackOnlyForTheSelectedChannel()
+    {
+        var daily = new RecordingDailyPlaybackController();
+        await using var controller = new GuiNextDailyPlaybackSessionController(daily);
+        var channel = new GenesisChannelItem("metadata test", Source, "details", 10, 2, 1500, Type: "FLV")
+        { ContactUrl = "https://example.test/bbs" };
+        await controller.PlayAsync(new PlaybackSessionRequest(Source, channel.Name) { CatalogChannel = channel });
+        Assert.Equal(channel.ContactUrl, daily.PlayedChannel!.ContactUrl);
+        Assert.Equal(1500, daily.PlayedChannel.BitrateKbps);
+        await controller.StopAsync();
+        await controller.PlayAsync(new PlaybackSessionRequest(Source, channel.Name)
+        { CatalogChannel = channel with { Source = "pcp://other.test:7144/channel/531DC8DFC7FB42928AC2C0A626517A87" } });
+        Assert.Null(daily.PlayedChannel!.ContactUrl);
+    }
+
     private const string Source =
         "pcp://tracker.example:7144/channel/531DC8DFC7FB42928AC2C0A626517A87";
 

@@ -14,6 +14,8 @@ internal sealed record GenesisSharedPcpPlaybackAttachment(
     Task OwnerRetirement)
 {
     internal Func<ChannelFaultSnapshot?>? ReadFault { get; init; }
+    internal Func<ChannelStatusSnapshot>? ReadStatus { get; init; }
+    internal Func<PcpPlayerPeerCounts>? ReadPeerCounts { get; init; }
 }
 
 internal sealed class GenesisSharedPcpRecordingOwnerAttachment : IAsyncDisposable
@@ -165,7 +167,11 @@ internal sealed class GenesisSharedPcpPlaybackRuntime :
                                     "The shared PCP channel owner has not started."),
                                 owner.RetirementTask ?? throw new InvalidOperationException(
                                     "The shared PCP channel owner is not being observed."))
-                            { ReadFault = () => owner.Fault };
+                            {
+                                ReadFault = () => owner.Fault,
+                                ReadStatus = () => owner.Status,
+                                ReadPeerCounts = owner.Coordinator.ReadPlayerPeerCounts,
+                            };
                         }
                     }
                     catch (Exception exception)
@@ -541,6 +547,7 @@ internal sealed class GenesisSharedPcpPlaybackRuntime :
         public PcpRelayCoordinator Coordinator { get; } = coordinator;
 
         public ChannelFaultSnapshot? Fault => tracker.Snapshot.Fault;
+        public ChannelStatusSnapshot Status => tracker.Snapshot;
 
         public Task<PcpRelayCoordinatorResult>? Completion { get; private set; }
 

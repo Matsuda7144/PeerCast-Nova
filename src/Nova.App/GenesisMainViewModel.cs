@@ -648,7 +648,8 @@ public sealed partial class GenesisMainViewModel : INotifyPropertyChanged
                 ? new PlaybackSessionRequest(
                     source,
                     selectedChannel.Name,
-                    selectedChannel.ChannelId)
+                      selectedChannel.ChannelId)
+                { CatalogChannel = selectedChannel }
                 : new PlaybackSessionRequest(source);
 
         SetPlayCommandInFlight(true);

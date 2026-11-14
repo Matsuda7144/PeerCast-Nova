@@ -218,8 +218,12 @@ internal sealed class GuiNextDailyPlaybackSessionController :
 
         try
         {
+            var channel = request.CatalogChannel is { } catalog &&
+                string.Equals(catalog.Source, source, StringComparison.Ordinal) && ChannelIdMatches(catalog.ChannelId, parsed.ChannelId)
+                    ? catalog with { Name = channelName, Source = source, ChannelId = channelId }
+                    : new GenesisChannelItem(channelName, source, ChannelId: channelId);
             await _dailyController.PlayAsync(
-                    new GenesisChannelItem(channelName, source, ChannelId: channelId),
+                    channel,
                     cancellationToken)
                 .ConfigureAwait(false);
 

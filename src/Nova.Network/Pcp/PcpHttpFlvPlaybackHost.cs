@@ -33,6 +33,7 @@ public sealed class PcpHttpFlvPlaybackHost :
     private readonly ConcurrentDictionary<long, TcpTransportConnection> _connections = [];
     private readonly ConcurrentDictionary<long, Task> _clients = [];
     private readonly Action<string>? _streamUrlReady;
+    private readonly Func<Guid, PcpPlayerChannelInfo?>? _playerChannelInfo;
     private IPEndPoint? _localEndPoint;
     private Task? _acceptTask;
     private Task? _disposeTask;
@@ -42,7 +43,8 @@ public sealed class PcpHttpFlvPlaybackHost :
 
     public PcpHttpFlvPlaybackHost(
         PcpHttpFlvPlaybackOptions? options = null,
-        Action<string>? streamUrlReady = null)
+        Action<string>? streamUrlReady = null,
+        Func<Guid, PcpPlayerChannelInfo?>? playerChannelInfo = null)
     {
         _options = options is null
             ? new PcpHttpFlvPlaybackOptions()
@@ -54,6 +56,7 @@ public sealed class PcpHttpFlvPlaybackHost :
             };
         _options.Validate();
         _streamUrlReady = streamUrlReady;
+        _playerChannelInfo = playerChannelInfo;
         _streamSlots = new SemaphoreSlim(
             _options.MaximumConcurrentStreamClients,
             _options.MaximumConcurrentStreamClients);
@@ -128,6 +131,9 @@ public sealed class PcpHttpFlvPlaybackHost :
         return $"http://127.0.0.1:{endpoint.Port}{StreamPrefix}{channelId}";
     }
 
+    public string PlaylistUrlFor(ChannelId channelId) =>
+        $"http://127.0.0.1:{LocalEndPoint.Port}/pls/{channelId}.pls";
+
     public IOwnedPcpChannelPacketConsumer Create(
         ChannelId channelId,
         ChannelSessionId sessionId)
@@ -200,29 +206,6 @@ public sealed class PcpHttpFlvPlaybackHost :
                 return;
             }
 
-            if (!_streamSlots.Wait(0, CancellationToken.None))
-            {
-                try
-                {
-                    // Consume the bounded request before closing so the TCP
-                    // peer can receive the finite rejection response cleanly.
-                    _ = await ReadRequestHeaderAsync(connection, cancellationToken)
-                        .ConfigureAwait(false);
-                    await WriteErrorAsync(connection, 503, "Service Unavailable", cancellationToken)
-                        .ConfigureAwait(false);
-                }
-                catch
-                {
-                    // A rejected client cannot affect the listener or a live stream.
-                }
-                finally
-                {
-                    await connection.DisposeAsync().ConfigureAwait(false);
-                }
-
-                continue;
-            }
-
             var clientId = Interlocked.Increment(ref _nextClientId);
             _connections[clientId] = connection;
             var start = new TaskCompletionSource<bool>(
@@ -251,6 +234,7 @@ public sealed class PcpHttpFlvPlaybackHost :
         PcpRelayChildRegistration? registration = null;
         PcpHttpFlvClientSink? sink = null;
         CancellationTokenSource? disconnectSource = null;
+        var streamSlot = false;
         try
         {
             var request = await ReadRequestHeaderAsync(
@@ -264,10 +248,37 @@ public sealed class PcpHttpFlvPlaybackHost :
                 return;
             }
 
+            if (_playerChannelInfo is not null && request.RequestTarget == "/admin?cmd=viewxml")
+            {
+                PcpHttpFlvPlaybackSession[] sources;
+                lock (_gate) sources = [.. _sources.Values];
+                var channels = sources.Select(s => (Source: s, Info: _playerChannelInfo(s.ChannelIdValue)))
+                    .Where(c => c.Info is not null)
+                    .Select(c => (c.Source.ChannelIdValue, c.Info!, c.Source.ActiveClientCount));
+                await WriteFiniteResponseAsync(connection, "text/xml; charset=utf-8", PcpPlayerViewXml.Encode(channels), cancellationToken)
+                    .ConfigureAwait(false);
+                return;
+            }
+
+            if (_playerChannelInfo is not null && TryResolvePlaylist(request.RequestTarget, out var playlistSource))
+            {
+                var body = Encoding.UTF8.GetBytes("#EXTM3U\r\n" + StreamUrlFor(new ChannelId(playlistSource.ChannelIdValue)) + "\r\n");
+                await WriteFiniteResponseAsync(connection, "audio/x-mpegurl", body, cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
             if (!TryResolveSource(request.RequestTarget, out var source))
             {
                 await WriteErrorAsync(connection, 404, "Not Found", cancellationToken)
                     .ConfigureAwait(false);
+                return;
+            }
+
+            // Metadata queries must remain available while the bounded stream slot is occupied.
+            // The transport still bounds all concurrent HTTP connections.
+            if (!(streamSlot = _streamSlots.Wait(0, CancellationToken.None)))
+            {
+                await WriteErrorAsync(connection, 503, "Service Unavailable", cancellationToken).ConfigureAwait(false);
                 return;
             }
 
@@ -369,8 +380,15 @@ public sealed class PcpHttpFlvPlaybackHost :
                 try { await connection.DisposeAsync().ConfigureAwait(false); }
                 finally
                 {
-                    if (sink is not null)
-                        await sink.DisposeAfterWorkerAsync(registration?.Completion ?? Task.CompletedTask).ConfigureAwait(false);
+                    try
+                    {
+                        if (sink is not null)
+                            await sink.DisposeAfterWorkerAsync(registration?.Completion ?? Task.CompletedTask).ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        if (streamSlot) _streamSlots.Release();
+                    }
                 }
             }
         }
@@ -392,6 +410,15 @@ public sealed class PcpHttpFlvPlaybackHost :
             response,
             _options.WriteTimeout,
             cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task WriteFiniteResponseAsync(TcpTransportConnection connection, string contentType,
+        byte[] body, CancellationToken cancellationToken)
+    {
+        var header = Encoding.ASCII.GetBytes($"HTTP/1.1 200 OK\r\nServer: PeerCastNova\r\nContent-Type: {contentType}\r\n" +
+            $"Content-Length: {body.Length}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n");
+        await WriteWithTimeoutAsync(connection, header, _options.WriteTimeout, cancellationToken).ConfigureAwait(false);
+        await WriteWithTimeoutAsync(connection, body, _options.WriteTimeout, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<PcpHttpRequestHeader> ReadRequestHeaderAsync(
@@ -450,7 +477,6 @@ public sealed class PcpHttpFlvPlaybackHost :
         {
             _connections.TryRemove(clientId, out _);
             _clients.TryRemove(clientId, out _);
-            _streamSlots.Release();
         }
     }
 
@@ -526,6 +552,16 @@ public sealed class PcpHttpFlvPlaybackHost :
         {
             return _sources.TryGetValue(id, out source!);
         }
+    }
+
+    private bool TryResolvePlaylist(string target, out PcpHttpFlvPlaybackSession source)
+    {
+        source = null!;
+        const string prefix = "/pls/";
+        if (!target.StartsWith(prefix, StringComparison.Ordinal)) return false;
+        var id = target[prefix.Length..];
+        if (id.EndsWith(".pls", StringComparison.Ordinal)) id = id[..^4];
+        return TryResolveSource(StreamPrefix + id, out source);
     }
 
     private void RemoveSource(PcpHttpFlvPlaybackSession source)

@@ -37,7 +37,10 @@ public sealed record PlaybackSessionCommandOutcome(
 public sealed record PlaybackSessionRequest(
     string Source,
     string? ChannelName = null,
-    string? ChannelId = null);
+    string? ChannelId = null)
+{
+    public GenesisChannelItem? CatalogChannel { get; init; }
+}
 
 internal interface IPlaybackSessionSnapshotNotifications
 {

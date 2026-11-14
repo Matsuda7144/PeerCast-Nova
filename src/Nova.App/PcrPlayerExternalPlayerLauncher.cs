@@ -53,14 +53,17 @@ internal sealed class PcrPlayerExternalPlayerLauncher
 
     internal static ProcessStartInfo CreateStartInfo(
         string executablePath,
-        string streamUrl)
+        string streamUrl,
+        string? channelName = null,
+        string? contactUrl = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(executablePath);
         ArgumentException.ThrowIfNullOrWhiteSpace(streamUrl);
         if (!Uri.TryCreate(streamUrl, UriKind.Absolute, out var uri) ||
             !string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.Ordinal) ||
             !uri.IsLoopback ||
-            !uri.AbsolutePath.StartsWith("/stream/", StringComparison.Ordinal))
+            uri.UserInfo.Length != 0 || uri.Query.Length != 0 || uri.Fragment.Length != 0 ||
+            !IsPlayerPath(uri.AbsolutePath))
         {
             throw new ArgumentException(
                 "PCRPlayer must receive a loopback HTTP-FLV stream URL.",
@@ -73,16 +76,28 @@ internal sealed class PcrPlayerExternalPlayerLauncher
             UseShellExecute = false,
         };
         startInfo.ArgumentList.Add(streamUrl);
+        if (channelName is not null || contactUrl is not null)
+        {
+            startInfo.ArgumentList.Add(new string((channelName ?? string.Empty).Take(512).Where(c => !char.IsControl(c)).ToArray()));
+            startInfo.ArgumentList.Add(GenesisContactUrl.Normalize(contactUrl) ?? string.Empty);
+        }
         return startInfo;
+    }
+
+    private static bool IsPlayerPath(string path)
+    {
+        var id = path.StartsWith("/stream/", StringComparison.Ordinal) ? path[8..] :
+            path.StartsWith("/pls/", StringComparison.Ordinal) && path.EndsWith(".pls", StringComparison.Ordinal) ? path[5..^4] : string.Empty;
+        return id.Length == 32 && Guid.TryParseExact(id, "N", out var value) && value != Guid.Empty;
     }
 
     public void ValidateConfiguration() => _ = ResolveCurrentExecutablePath();
 
-    public IDailyExternalPlayerLifetime Launch(string streamUrl)
+    public IDailyExternalPlayerLifetime Launch(string streamUrl, string? channelName = null, string? contactUrl = null)
     {
         var process = new Process
         {
-            StartInfo = CreateStartInfo(ResolveCurrentExecutablePath(), streamUrl),
+            StartInfo = CreateStartInfo(ResolveCurrentExecutablePath(), streamUrl, channelName, contactUrl),
         };
         try
         {

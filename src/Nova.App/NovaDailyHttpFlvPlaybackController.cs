@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using PeerCast.Nova.Core.Channels;
 using PeerCast.Nova.Core.Recording;
 using PeerCast.Nova.Network.Pcp;
@@ -97,8 +98,22 @@ internal sealed class NovaDailyHttpFlvPlaybackController :
 
     public ValueTask<GenesisAutomaticRecordingEvaluationSummary> ObserveAsync(
         IReadOnlyList<GenesisChannelItem> channels,
-        CancellationToken cancellationToken = default) =>
-        _automaticRecordingController.ObserveAsync(channels, cancellationToken);
+        CancellationToken cancellationToken = default)
+    {
+        lock (_stateGate)
+        {
+            if (_active is { } active)
+            {
+                var updated = channels.FirstOrDefault(c => DailyPcpPlaybackSourceParser.TryParse(c.Source, out var s) && s?.ChannelId.Value == active.ChannelId);
+                if (updated is not null)
+                {
+                    active.CatalogChannel = updated;
+                    active.CatalogTimestamp = Stopwatch.GetTimestamp();
+                }
+            }
+        }
+        return _automaticRecordingController.ObserveAsync(channels, cancellationToken);
+    }
 
     internal IGenesisAutomaticRecordingUserCommands AutomaticRecordingUserCommands => _automaticRecordingController;
 
@@ -228,9 +243,11 @@ internal sealed class NovaDailyHttpFlvPlaybackController :
 
             var ready = new TaskCompletionSource<string>(
                 TaskCreationOptions.RunContinuationsAsynchronously);
+            ActivePlayback? active = null;
             var host = new PcpHttpFlvPlaybackHost(
-                streamUrlReady: streamUrl => ready.TrySetResult(streamUrl));
-            var active = new ActivePlayback(host);
+                streamUrlReady: streamUrl => ready.TrySetResult(streamUrl),
+                playerChannelInfo: id => ReadPlayerInfo(active, id));
+            active = new ActivePlayback(host) { ChannelId = source.ChannelId.Value, CatalogChannel = channel };
             startingPlayback = active;
             lock (_stateGate)
             {
@@ -247,6 +264,7 @@ internal sealed class NovaDailyHttpFlvPlaybackController :
             active.Consumer = playbackAttachment.Consumer;
             active.Registration = playbackAttachment.Registration;
             active.OwnerTask = playbackAttachment.OwnerCompletion;
+            active.Attachment = playbackAttachment;
 
             _setStatus($"{channel.Name}: FLV streamを準備しています…");
             Task readyOrEnded;
@@ -266,10 +284,12 @@ internal sealed class NovaDailyHttpFlvPlaybackController :
                 throw NovaDailyPlaybackStartupException.FromResult(result, playbackAttachment.ReadFault?.Invoke());
             }
 
-            var streamUrl = await ready.Task.ConfigureAwait(false);
+            _ = await ready.Task.ConfigureAwait(false);
             startupCancellation.Token.ThrowIfCancellationRequested();
             _setStatus($"{channel.Name}: PCRPlayer起動中…");
-            active.Player = _playerLauncher.Launch(streamUrl);
+            var info = ReadPlayerInfo(active, source.ChannelId.Value);
+            active.Player = _playerLauncher.Launch(host.PlaylistUrlFor(source.ChannelId),
+                info?.Metadata.Name ?? channel.Name, info is null ? channel.ContactUrl : info.Metadata.ContactUrl);
             _setStatus($"{channel.Name}: 再生中");
             _ = ObservePlaybackEndAsync(active, channel.Name, channel.Source);
         }
@@ -622,8 +642,24 @@ internal sealed class NovaDailyHttpFlvPlaybackController :
         }
     }
 
+    private PcpPlayerChannelInfo? ReadPlayerInfo(ActivePlayback? active, Guid id)
+    {
+        lock (_stateGate)
+        {
+            if (active is null || !ReferenceEquals(active, _active) || active.ChannelId != id || active.CatalogChannel is null) return null;
+            return GenesisPlayerChannelInfo.Create(active.CatalogChannel, active.Attachment?.ReadStatus?.Invoke(),
+                active.Attachment?.ReadPeerCounts?.Invoke(), Stopwatch.GetElapsedTime(active.StartTimestamp),
+                Stopwatch.GetElapsedTime(active.CatalogTimestamp));
+        }
+    }
+
     private sealed class ActivePlayback(PcpHttpFlvPlaybackHost host)
     {
+        public Guid ChannelId { get; init; }
+        public GenesisChannelItem? CatalogChannel { get; set; }
+        public long StartTimestamp { get; } = Stopwatch.GetTimestamp();
+        public long CatalogTimestamp { get; set; } = Stopwatch.GetTimestamp();
+        public GenesisSharedPcpPlaybackAttachment? Attachment { get; set; }
         public PcpHttpFlvPlaybackHost Host { get; } = host;
 
         public IOwnedPcpChannelPacketConsumer? Consumer { get; set; }
