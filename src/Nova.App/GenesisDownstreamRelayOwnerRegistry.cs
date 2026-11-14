@@ -158,7 +158,7 @@ internal sealed partial class GenesisDownstreamRelayOwnerRegistry : IDisposable
         }
     }
 
-    internal sealed class Owner : IPcpDownstreamRelayRegistration, IPcpDownstreamRelayCapacity, IPcpDownstreamRelayTraffic, IPcpDownstreamRelayPacing, IPcpRelayTreeRegistration
+    internal sealed partial class Owner : IPcpDownstreamRelayRegistration, IPcpDownstreamRelayCapacity, IPcpDownstreamRelayTraffic, IPcpDownstreamRelayPacing, IPcpRelayTreeRegistration
     {
         private readonly GenesisDownstreamRelayOwnerRegistry _registry;
         internal Owner(GenesisDownstreamRelayOwnerRegistry registry, RelayAdmissionPolicy.Channel scope)

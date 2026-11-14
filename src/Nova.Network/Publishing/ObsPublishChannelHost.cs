@@ -604,8 +604,18 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
         return new(_options.Lan.Enabled, ready, endpoint?.Address.ToString(), endpoint?.Port, _lanFailure);
     }
 
-    private sealed class LanAdmission(ObsPublishChannelHost owner) : IPcpDownstreamRelayAdmission, IPcpDownstreamRelayTraffic, IPcpDownstreamRelayPacing
+    private sealed class LanAdmission(ObsPublishChannelHost owner) : IPcpDownstreamRelayAdmission, IPcpDownstreamRelayTraffic, IPcpDownstreamRelayPacing, IPcpDownstreamRelayCommandGate
     {
+        public PcpDownstreamDisconnectRequest AcceptDisconnect(PcpDownstreamDisconnectTarget target,
+            Func<PcpDownstreamDisconnectRequest> accept)
+        {
+            lock (owner._gate)
+            {
+                return owner._disposeTask is not null || owner._stop.IsCancellationRequested ||
+                    owner._relayRegistration is not IPcpDownstreamRelayCommandGate authority
+                    ? new(PcpDownstreamDisconnectOutcome.AlreadyStopping) : authority.AcceptDisconnect(target, accept);
+            }
+        }
         public PcpDownstreamTrafficMeter? Traffic => (owner._relayRegistration as IPcpDownstreamRelayTraffic)?.Traffic;
         public PcpDownstreamPacer? Pacing => (owner._relayRegistration as IPcpDownstreamRelayPacing)?.Pacing;
         public ChannelId ChannelId => owner.ChannelId;

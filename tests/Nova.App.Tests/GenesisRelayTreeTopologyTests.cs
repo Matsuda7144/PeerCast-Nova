@@ -59,7 +59,7 @@ public sealed class GenesisRelayTreeTopologyTests
             RelayTreeHostTestPackets.Host(_channel.Value, Guid.NewGuid(), 7003, 7002),
             RelayTreeHostTestPackets.Host(_channel.Value, Guid.NewGuid(), 7004, 7001)));
         var tree = GenesisRelayTreeTopology.Apply(Tree(new GenesisRelayTreeNode("down-7", "nova", GenesisRelayTreeNodeKind.Downstream,
-            PcpRelayConnectionPhase.Connected, ConnectionId: 7)), directory.ObserveLocalTree());
+            PcpRelayConnectionPhase.Connected, ConnectionId: 7, ChildInstanceId: Guid.NewGuid())), directory.ObserveLocalTree());
         Assert.Equal(5, tree.Nodes.Count);
         var direct = Assert.Single(tree.Nodes, n => n.Kind == GenesisRelayTreeNodeKind.Downstream);
         Assert.Equal("nova", direct.ParentId); Assert.False(direct.ReportedParent);

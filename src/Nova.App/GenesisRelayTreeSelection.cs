@@ -4,14 +4,14 @@ using PeerCast.Nova.Network.Pcp;
 namespace PeerCast.Nova.App;
 
 // Identity is independent of labels, native handles and display order. This is
-// observation only; RT-4 must atomically revalidate in the owning network layer.
+// Network atomically revalidates the scalar identity before accepting a command.
 internal sealed record GenesisRelayTreeSelectionKey(ChannelId? ChannelId, ChannelSessionId? OwnerId,
-    GenesisRelayTreeNodeKind Kind, long? ConnectionId, GenesisRelayTreePath Path, long? ReportId = null);
+    GenesisRelayTreeNodeKind Kind, long? ConnectionId, GenesisRelayTreePath Path, long? ReportId = null, Guid? ChildInstanceId = null);
 
 internal static class GenesisRelayTreeSelection
 {
     internal static GenesisRelayTreeSelectionKey Key(GenesisRelayTreeSnapshot tree, GenesisRelayTreeNode node) =>
-        new(tree.ChannelId, tree.OwnerId, node.Kind, node.ConnectionId, node.Path, node.ReportId);
+        new(tree.ChannelId, tree.OwnerId, node.Kind, node.ConnectionId, node.Path, node.ReportId, node.ChildInstanceId);
 
     internal static GenesisRelayTreeNode? Resolve(GenesisRelayTreeSnapshot tree, GenesisRelayTreeSelectionKey? key)
     {
@@ -24,7 +24,12 @@ internal static class GenesisRelayTreeSelection
         tree.ChannelId is not null && tree.OwnerId is not null && tree.State == GenesisRelayTreeState.Active &&
         Resolve(tree, key) is
         {
-            Kind: GenesisRelayTreeNodeKind.Downstream, ConnectionId: not null,
+            Kind: GenesisRelayTreeNodeKind.Downstream, ConnectionId: not null, ReportId: null,
+            ChildInstanceId: { } instance,
             Phase: PcpRelayConnectionPhase.Connected
-        };
+        } && instance != Guid.Empty;
+
+    internal static PcpDownstreamDisconnectTarget? DisconnectTarget(GenesisRelayTreeSnapshot tree,
+        GenesisRelayTreeSelectionKey? key) => HasDownstreamIdentity(tree, key)
+            ? new(key!.ChannelId!, key.OwnerId!, key.ConnectionId!.Value, key.ChildInstanceId!.Value) : null;
 }

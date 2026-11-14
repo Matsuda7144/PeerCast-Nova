@@ -124,6 +124,7 @@ public sealed partial class PcpRelayCoordinator : IAsyncDisposable
             : null,
             RecoveryResume = _fanout.ResumeAfterRecovery,
             RecoveryOwnerIsCurrent = () => admission is null || admission is IPcpDownstreamRelayCapacity { IsCurrent: true },
+            RecoveryStateChanged = _downstreamServer.ObserveRecoveryForDisconnect,
         };
     }
 

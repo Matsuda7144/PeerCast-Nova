@@ -839,6 +839,9 @@ public sealed partial class PcpDownstreamRelayServer : IAsyncDisposable
         }
 
         public TcpTransportConnection Connection { get; }
+        public Guid ChildInstanceId { get; } = Guid.NewGuid();
+        public PendingDisconnect? Disconnect { get; set; }
+        public bool CleanupConfirmed { get; set; }
 
         public PcpDownstreamChildSession? Session;
         public Task? Task { get; set; }

@@ -9,7 +9,8 @@ namespace PeerCast.Nova.Network.Pcp;
 public enum PcpRelayConnectionPhase { Unknown, Connecting, Negotiating, Connected, Closing, Disconnected }
 public enum PcpRelayObservedPath { Unknown, ChannelListener, SharedPublicListener, ChannelLoopback }
 public sealed record PcpRelayConnectionObservation(long? ConnectionId, PcpRelayConnectionPhase Phase,
-    PcpRelayObservedPath Path = PcpRelayObservedPath.Unknown, PcpDownstreamTrafficSnapshot? Traffic = null);
+    PcpRelayObservedPath Path = PcpRelayObservedPath.Unknown, PcpDownstreamTrafficSnapshot? Traffic = null,
+    Guid? ChildInstanceId = null);
 public sealed record PcpRelayTreeObservation(ChannelId ChannelId, ChannelSessionId OwnerId,
     bool Running, bool CleanupUnconfirmed, PcpRelayConnectionObservation? Upstream, bool? LocalInputConnected,
     PcpSmartRelayState Recovery, IReadOnlyList<PcpRelayConnectionObservation> Downstreams, int OmittedConnections)
@@ -33,7 +34,8 @@ public sealed partial class PcpDownstreamRelayServer : IPcpRelayTreeSource
         {
             var entries = _sessions.Take(MaximumObservedConnections).ToArray();
             var connections = entries.Select(e => e.Session?.ObserveRelayConnection(e.Shared
-                ? PcpRelayObservedPath.SharedPublicListener : _observedChannelPath))
+                ? PcpRelayObservedPath.SharedPublicListener : _observedChannelPath) is { } observation
+                    ? observation with { ChildInstanceId = e.ChildInstanceId } : null)
                 .OfType<PcpRelayConnectionObservation>().OrderBy(e => e.ConnectionId).ToArray();
             return new(_channelId, new(_localSessionId), _state == PcpDownstreamRelayServerState.Running,
                 _pendingAdmissionCleanup.Any(t => !t.IsCompletedSuccessfully || !t.Result) ||

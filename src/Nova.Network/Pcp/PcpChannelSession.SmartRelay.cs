@@ -17,14 +17,19 @@ public sealed partial class PcpChannelSession
     public Task FirstSmartMediaProgress => _firstSmartMediaProgress.Task;
     public bool SmartRelayCleanupConfirmed => Volatile.Read(ref _smartCleanupFailed) == 0;
 
-    private void SmartState(PcpSmartRelayState state) => Volatile.Write(ref _smartSnapshot,
-        SmartRelaySnapshot with
+    internal Action<PcpSmartRelayState>? RecoveryStateChanged { get; init; }
+    private void SmartState(PcpSmartRelayState state)
+    {
+        // Serialize the downstream command boundary before publishing Recovery.
+        RecoveryStateChanged?.Invoke(state);
+        Volatile.Write(ref _smartSnapshot, SmartRelaySnapshot with
         {
             State = state,
             ResumePosition = _smartMedia?.Cursor,
             MediaGeneration = _smartMedia?.Generation ?? 0,
             Discontinuities = _smartMedia?.Discontinuities ?? 0
         });
+    }
 
     private async Task<PcpChannelSessionResult> RunSmartRelayAsync(string host, int port,
         long initialPosition, CancellationToken caller)

@@ -153,7 +153,7 @@ internal sealed partial class GenesisGuiNextPublicChannelComposition : IAsyncDis
             throw new AggregateException("Public channel owner shutdown failed.", failures);
     }
 
-    internal sealed partial class Owner : IPcpDownstreamRelayAdmission, IPcpDownstreamRelayCapacity, IPcpDownstreamRelayTraffic, IPcpDownstreamRelayPacing, IAsyncDisposable
+    internal sealed partial class Owner : IPcpDownstreamRelayAdmission, IPcpDownstreamRelayCapacity, IPcpDownstreamRelayTraffic, IPcpDownstreamRelayPacing, IPcpDownstreamRelayCommandGate, IAsyncDisposable
     {
         private readonly object _gate = new();
         private readonly GenesisGuiNextPublicChannelComposition _composition;
@@ -245,6 +245,17 @@ internal sealed partial class GenesisGuiNextPublicChannelComposition : IAsyncDis
                     return false;
                 }
                 return _registration.TryReserve(connectionId, out reservation, cancellationToken);
+            }
+        }
+
+        public PcpDownstreamDisconnectRequest AcceptDisconnect(PcpDownstreamDisconnectTarget target,
+            Func<PcpDownstreamDisconnectRequest> accept)
+        {
+            lock (_gate)
+            {
+                return _retired || _disposeTask is not null || _registration is null
+                    ? new(PcpDownstreamDisconnectOutcome.OwnerChanged)
+                    : _registration.AcceptDisconnect(target, accept);
             }
         }
 

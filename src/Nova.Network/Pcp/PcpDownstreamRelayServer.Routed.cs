@@ -67,6 +67,7 @@ public sealed partial class PcpDownstreamRelayServer
     {
         lock (_gate)
         {
+            entry.CleanupConfirmed = !failed && result?.CleanupCompleted == true;
             _sessions.Remove(entry);
             _activeConnectionCount--;
             _completedConnectionCount = checked(_completedConnectionCount + 1);

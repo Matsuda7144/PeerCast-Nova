@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using PeerCast.Nova.Core.Channels;
+using PeerCast.Nova.Network.Pcp;
 
 namespace PeerCast.Nova.App;
 
@@ -17,6 +18,9 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private ChannelId? _treeChannelId;
         private GenesisRelayTreeSnapshot _treeSnapshot = GenesisRelayTreeSnapshot.Empty();
         private GenesisRelayTreeSelectionKey? _treeSelected;
+        private Task? _treeDisconnectTask;
+        private sealed record TreeDisconnectStatus(GenesisRelayTreeSelectionKey Key, PcpDownstreamDisconnectOutcome? Outcome);
+        private TreeDisconnectStatus? _treeDisconnectStatus;
         private readonly Dictionary<GenesisRelayTreeSelectionKey, (nint Handle, string Text, string? Parent)> _treeItems = new();
         private (ChannelId?, ChannelSessionId?) _treeDisplayKey;
         private nint[] RelayTreeVisualControls => [_relayTreeBody, _relayTreeTitle, _relayTreeChannels,
@@ -199,7 +203,10 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             }
             finally { _treeUpdating = false; }
             PlaceTreePage();
-            _ = PresentText(_relayTreeSummary, GenesisRelayTreeNodePresentation.Summary(snapshot));
+            var status = Volatile.Read(ref _treeDisconnectStatus);
+            var prefix = status is not null && status.Key.ChannelId == snapshot.ChannelId && status.Key.OwnerId == snapshot.OwnerId
+                ? GenesisRelayTreeDisconnect.Status(status.Outcome) + " / " : "";
+            _ = PresentText(_relayTreeSummary, prefix + GenesisRelayTreeNodePresentation.Summary(snapshot));
             PresentTreeSelection();
         }
 
@@ -263,6 +270,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             {
                 _ = TreeAppendMenu(menu, 0, 1, "ノードの詳細を表示");
                 _ = TreeAppendMenu(menu, 0, 2, "表示IDをコピー");
+                if (_treeDisconnectTask?.IsCompleted != false && GenesisRelayTreeSelection.HasDownstreamIdentity(_treeSnapshot, key))
+                    _ = TreeAppendMenu(menu, 0, 3, "下流を切断...");
                 var command = TreeTrackMenu(menu, 0x0100 | 0x0002, x, y, 0, _owner, 0);
                 // Resolve against a fresh observation after the modal menu.
                 SynchronizeNativeSelection();
@@ -276,9 +285,40 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                     SynchronizeNativeSelection();
                     _ = SetFocus(window);
                 }
+                if (node is not null && command == 3 && key is not null && _treeDisconnectTask?.IsCompleted != false)
+                    ConfirmTreeDisconnect(key);
             }
             finally { _ = TreeDestroyMenu(menu); }
             return true;
+        }
+
+        private void ConfirmTreeDisconnect(GenesisRelayTreeSelectionKey key)
+        {
+            var target = GenesisRelayTreeDisconnect.Confirm(key,
+                () => { SynchronizeNativeSelection(); return _treeSnapshot; },
+                () => Volatile.Read(ref _detached) == 0 && TreePageShown,
+                id => MessageBoxW(_owner,
+                    "選択した下流Peerとの接続を切断しますか？\n\nこのPeerを経由している視聴者にも影響する可能性があります。\n\n切断対象: " + id,
+                    "下流の切断", 0x134) == 6); // Yes/No, default No. Display ID never exposes a masked address.
+            if (target is null) return;
+            Volatile.Write(ref _treeDisconnectStatus, new(key, null));
+            _treeDisconnectTask = Task.Run(async () =>
+            {
+                if (Volatile.Read(ref _detached) != 0) return;
+                PcpDownstreamDisconnectOutcome outcome;
+                try
+                {
+                    var receipt = _viewModel.RelayActivation?.RequestDisconnect(target)
+                        ?? new(PcpDownstreamDisconnectOutcome.NotOwnedDownstream);
+                    Volatile.Write(ref _treeDisconnectStatus, new(key, receipt.Outcome));
+                    outcome = receipt.Completion is { } completion ? await completion.ConfigureAwait(false) : receipt.Outcome;
+                }
+                catch (Exception) { outcome = PcpDownstreamDisconnectOutcome.Failed; }
+                Volatile.Write(ref _treeDisconnectStatus, new(key, outcome));
+                // Existing one-second refresh presents scoped status. No native UI call
+                // from this worker, including after the window has been destroyed.
+            });
+            SynchronizeNativeSelection();
         }
 
         private nint WriteTreeItem(nint handle, nint parent, string text)

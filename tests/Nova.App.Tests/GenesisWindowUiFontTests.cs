@@ -309,6 +309,7 @@ public sealed class GenesisWindowUiFontTests
             "GenesisGuiNextAppShellBridge.cs",
             "GenesisGuiNextAppShellBridge.RelayTree.cs",
             "GenesisRelayTreeNodePresentation.cs",
+            "GenesisRelayTreeDisconnect.cs",
             "SystemGenesisMainWindowSurfaceTarget.cs",
             "GenesisGuiNextPlaybackSettingsWindow.cs",
             "GenesisGuiNextConnectionSettingsWindow.cs",

@@ -71,6 +71,7 @@ internal sealed class GenesisGuiNextRelayActivation : IAsyncDisposable
     private Func<string>? _publicStatus;
     private Func<string>? _capacityStatus;
     private readonly Func<ChannelId, GenesisRelayTreeSnapshot>? _readRelayTree;
+    private readonly Func<PcpDownstreamDisconnectTarget, PcpDownstreamDisconnectRequest>? _disconnectDownstream;
     private GenesisRelayActivationSnapshot _snapshot = new();
 
     public GenesisGuiNextRelayActivation(GenesisGuiNextPublicChannelComposition channels, PcpSmartRelayOptions? smartRelay = null)
@@ -81,6 +82,7 @@ internal sealed class GenesisGuiNextRelayActivation : IAsyncDisposable
         _publicStatus = () => channels.PublicStatusText;
         _capacityStatus = () => channels.Registry.CapacityStatusText();
         _readRelayTree = channels.Registry.ReadRelayTree;
+        _disconnectDownstream = channels.Registry.RequestDisconnect;
     }
 
     internal GenesisRelayTreeSnapshot ReadRelayTree(ChannelId channelId)
@@ -95,6 +97,12 @@ internal sealed class GenesisGuiNextRelayActivation : IAsyncDisposable
             return tree with { State = GenesisRelayTreeState.CleanupUnconfirmed };
         return tree.OwnerId is null && activation.State == GenesisRelayActivationState.Stopped
             ? tree with { State = GenesisRelayTreeState.Stopped } : tree;
+    }
+
+    internal PcpDownstreamDisconnectRequest RequestDisconnect(PcpDownstreamDisconnectTarget target)
+    {
+        lock (_gate) if (_closed) return new(PcpDownstreamDisconnectOutcome.AlreadyStopping);
+        return _disconnectDownstream?.Invoke(target) ?? new(PcpDownstreamDisconnectOutcome.NotOwnedDownstream);
     }
 
     internal static PcpSmartRelayOptions? RecoveryPolicy(string? value) => value?.Trim().ToLowerInvariant() switch
