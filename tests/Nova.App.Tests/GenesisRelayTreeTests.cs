@@ -172,21 +172,34 @@ public sealed class GenesisRelayTreeTests
     private static ChannelId ChannelIdFromNumber(int value) => new(new Guid(value, 0, 0, new byte[8]));
 
     [Fact]
-    public void ModernOnlyLayoutFitsSmallestCardWithoutHidingPrimaryOperations()
+    public void DedicatedModernPageKeepsClassicNavigationAndFitsMinimumContent()
     {
-        Assert.True(GenesisGuiNextRelayTreeLayout.Applies(true, GenesisGuiNextTab.Channels));
+        Assert.True(GenesisGuiNextRelayTreeLayout.Applies(true, GenesisGuiNextTab.RelayTree));
+        Assert.False(GenesisGuiNextRelayTreeLayout.Applies(true, GenesisGuiNextTab.Channels));
         Assert.False(GenesisGuiNextRelayTreeLayout.Applies(false, GenesisGuiNextTab.Channels));
+        Assert.False(GenesisGuiNextRelayTreeLayout.Applies(false, GenesisGuiNextTab.RelayTree));
         Assert.False(GenesisGuiNextRelayTreeLayout.Applies(true, GenesisGuiNextTab.Publishing));
+        Assert.Equal(10, GenesisGuiNextNavigationPresentation.ItemsFor(false).Count);
+        Assert.DoesNotContain("リレーツリー", GenesisGuiNextNavigationPresentation.ItemsFor(false));
+        Assert.Equal("リレーツリー", GenesisGuiNextNavigationPresentation.ItemsFor(true)[10]);
+        Assert.Equal(4, GenesisGuiNextNavigationPresentation.Row(10, true));
+        Assert.True(GenesisGuiNextNavigationPresentation.TryResolveExistingView(10, out var tab));
+        Assert.Equal(GenesisGuiNextTab.RelayTree, tab);
+        var treeControl = GenesisGuiNextAppShellBridge.NavigationControlIdFor(10);
+        Assert.Equal(10, GenesisGuiNextAppShellBridge.NavigationIndexFor(treeControl));
+        Assert.NotEqual(1110, treeControl); // Existing Favorite, not a navigation item.
+        Assert.Equal(-1, GenesisGuiNextAppShellBridge.NavigationIndexFor(1110));
+        Assert.NotEqual(GenesisGuiNextAppShellBridge.RefreshControlId, treeControl);
+        Assert.True(GenesisGuiNextAppShellBridge.IsHistoryNavigationCommand(treeControl));
+        Assert.True(GenesisGuiNextAppShellBridge.IsPublishingNavigationCommand(treeControl));
         foreach (var width in new[] { GenesisMainWindowLayout.MinimumContentWidth, 1400 })
         {
-            var layout = new GenesisGuiNextRelayTreeLayout(width);
-            var card = new GenesisGuiNextChannelCardLayout(width);
-            Assert.True(layout.Body.Top >= card.Title.Bottom);
-            Assert.True(layout.Body.Bottom <= card.RecordingStatus.Top);
-            Assert.True(layout.Body.Right < card.Metadata.Left);
-            Assert.True(GenesisGuiNextRelayTreeLayout.Toggle.Left > GenesisGuiNextChannelCardLayout.RelayStop.Right);
-            Assert.True(GenesisGuiNextRelayTreeLayout.Toggle.Right < card.RelayStatus.Left);
-            Assert.True(GenesisGuiNextRelayTreeLayout.Toggle.Bottom < GenesisGuiNextAppShellPlacement.DetailsHeight);
+            var layout = new GenesisGuiNextRelayTreeLayout(width, 380);
+            Assert.True(layout.Body.Top >= 60);
+            Assert.True(layout.Body.Height >= 200);
+            Assert.Equal(width, layout.Body.Width);
+            Assert.True(layout.Body.Bottom < layout.Details.Top);
+            Assert.True(layout.Details.Height >= 100);
         }
         Assert.Contains("情報未取得", GenesisGuiNextRelayTreePresentation.From(GenesisRelayTreeSnapshot.Empty(Channel)).Tree);
         Assert.Contains("チャンネルを選択", GenesisGuiNextRelayTreePresentation.From(GenesisRelayTreeSnapshot.Empty()).Tree);

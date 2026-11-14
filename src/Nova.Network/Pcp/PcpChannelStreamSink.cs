@@ -26,14 +26,15 @@ internal sealed class PcpChannelStreamSink : IPcpAtomSink, IDisposable
     public PcpChannelStreamSink(
         PcpChannelStreamOptions options,
         MemoryPool<byte>? memoryPool = null,
-        Action<PcpRelayHostCandidate>? hostObserved = null)
+        Action<PcpRelayHostCandidate>? hostObserved = null,
+        PcpBroadcastHostObserver? broadcastHosts = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         options.Validate();
 
         _maxPacketBytes = options.MaxPacketBytes;
         _memoryPool = memoryPool ?? MemoryPool<byte>.Shared;
-        _hosts = hostObserved is null ? null : new PcpRelayHostAtomSink(hostObserved);
+        _hosts = hostObserved is null ? null : new PcpRelayHostAtomSink(hostObserved, broadcastHosts);
         _controlSink = new PcpChannelControlSink(
             CompleteControlMessage,
             options.CreateControlLimits());

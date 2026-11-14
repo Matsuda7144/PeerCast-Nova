@@ -301,12 +301,14 @@ public sealed class GenesisWindowUiFontTests
     [Fact]
     public void CoverageProbeIncludesNavigationAndPublishingLabels()
     {
-        var labels = string.Concat(GenesisGuiNextNavigationPresentation.Items.Concat(JapaneseCoverageLabels));
+        var labels = string.Concat(GenesisGuiNextNavigationPresentation.ItemsFor(true).Concat(JapaneseCoverageLabels));
         var runtimeSources = new[]
         {
             "GenesisChannelSearchBoxBridge.cs",
             "GenesisGuiNextTopStatusPresentation.cs",
             "GenesisGuiNextAppShellBridge.cs",
+            "GenesisGuiNextAppShellBridge.RelayTree.cs",
+            "GenesisRelayTreeNodePresentation.cs",
             "SystemGenesisMainWindowSurfaceTarget.cs",
             "GenesisGuiNextPlaybackSettingsWindow.cs",
             "GenesisGuiNextConnectionSettingsWindow.cs",

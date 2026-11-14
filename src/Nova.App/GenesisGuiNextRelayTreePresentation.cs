@@ -38,9 +38,9 @@ internal sealed record GenesisGuiNextRelayTreePresentation(string Tree, string S
         return new(string.Join("\r\n", lines), summary);
     }
 
-    private static string Rate(double? rate) => rate is { } value && double.IsFinite(value) && value >= 0
+    internal static string Rate(double? rate) => rate is { } value && double.IsFinite(value) && value >= 0
         ? value.ToString("0.0", CultureInfo.InvariantCulture) + " kbps" : "Unknown";
-    private static string State(GenesisRelayTreeState state) => state switch
+    internal static string State(GenesisRelayTreeState state) => state switch
     {
         GenesisRelayTreeState.Active => "稼働中",
         GenesisRelayTreeState.Recovering => "復旧中",
@@ -48,7 +48,7 @@ internal sealed record GenesisGuiNextRelayTreePresentation(string Tree, string S
         GenesisRelayTreeState.CleanupUnconfirmed => "終了処理未確認",
         _ => "情報未取得",
     };
-    private static string Phase(PcpRelayConnectionPhase phase) => phase switch
+    internal static string Phase(PcpRelayConnectionPhase phase) => phase switch
     {
         PcpRelayConnectionPhase.Connecting => "接続試行中",
         PcpRelayConnectionPhase.Negotiating => "PCP交渉中",
@@ -57,7 +57,7 @@ internal sealed record GenesisGuiNextRelayTreePresentation(string Tree, string S
         PcpRelayConnectionPhase.Disconnected => "切断済み",
         _ => "Unknown",
     };
-    private static string Path(GenesisRelayTreePath path) => path switch
+    internal static string Path(GenesisRelayTreePath path) => path switch
     {
         GenesisRelayTreePath.ViewingLoopback => "視聴loopback",
         GenesisRelayTreePath.PublishingLoopback => "配信loopback",
@@ -74,11 +74,10 @@ internal sealed record GenesisGuiNextRelayTreePresentation(string Tree, string S
     };
 }
 
-// Reuses the existing card's body and action row; its primary controls stay put.
-internal sealed record GenesisGuiNextRelayTreeLayout(int Width)
+// Dedicated Modern page. Native coordinates follow the existing DPI scaling.
+internal sealed record GenesisGuiNextRelayTreeLayout(int Width, int Height = 400)
 {
-    internal static bool Applies(bool modern, GenesisGuiNextTab tab) => modern && tab == GenesisGuiNextTab.Channels;
-    internal GenesisGuiNextAppShellPlacement.WindowRectangle Body => new(22, 50,
-        Math.Max(23, new GenesisGuiNextChannelCardLayout(Width).DividerLeft - 14), 120);
-    internal static GenesisGuiNextAppShellPlacement.WindowRectangle Toggle => new(390, 146, 526, 178);
+    internal static bool Applies(bool modern, GenesisGuiNextTab tab) => modern && tab == GenesisGuiNextTab.RelayTree;
+    internal GenesisGuiNextAppShellPlacement.WindowRectangle Body => new(0, 64, Width, Math.Max(144, Height - 116));
+    internal GenesisGuiNextAppShellPlacement.WindowRectangle Details => new(12, Math.Max(156, Height - 104), Width - 12, Height);
 }

@@ -36,7 +36,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private nint[] TopVisualControls => [TopStatusWindow, _searchBox.LabelWindow, _searchBox.EditWindow, _searchBox.FilterWindow];
         internal bool IsTopFilter(nint window) => window == _searchBox.FilterWindow;
         internal bool IsTopInput(nint window) => IsModern && Volatile.Read(ref _detached) == 0 &&
-            (window == _searchBox.EditWindow || IsTopFilter(window));
+            (window == _searchBox.EditWindow || IsTopFilter(window) || window == _relayTreeChannels && window != 0);
 
         internal bool PaintTopStatus(nint control, uint message)
         {
@@ -98,7 +98,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 var color = !IsTopControlEnabled(window) ? GenesisGuiNextDesign.Separator :
                     focused || _hoverControl == window ? GenesisGuiNextDesign.Accent : GenesisGuiNextDesign.Border;
                 using var pen = new VisualPen(dc, Scale(1), color);
-                if (IsTopFilter(window) || IsPublishingAdvancedCombo(window))
+                if (IsTopFilter(window) || IsPublishingAdvancedCombo(window) || window == _relayTreeChannels)
                 {
                     // Cover only the native recessed edge, keeping the native
                     // field, popup, selection and keyboard behavior intact.

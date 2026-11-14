@@ -10,6 +10,9 @@ internal sealed record PcpRelayHostCandidate(
     internal Guid? PeerSessionId { get; init; }
     internal byte? Flags { get; init; }
     internal uint? RelayCount { get; init; }
+    internal uint? DirectCount { get; init; }
+    internal uint? Version { get; init; }
+    internal uint? VersionVp { get; init; }
     internal byte? Hops { get; init; }
     internal PcpRelayHostEndpoint? UpstreamEndpoint { get; init; }
     internal bool? Receiving => Flags is { } value ? (value & 0x10) != 0 : null;

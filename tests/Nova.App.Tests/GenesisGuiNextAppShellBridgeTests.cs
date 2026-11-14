@@ -257,7 +257,7 @@ public sealed class GenesisGuiNextAppShellBridgeTests
     }
 
     [Theory]
-    [InlineData(10)]
+    [InlineData(11)]
     public void FutureNavigationItemsRemainUnavailableUntilTheirViewsExist(int itemIndex)
     {
         Assert.False(GenesisGuiNextNavigationPresentation.IsImplemented(itemIndex));
@@ -275,7 +275,7 @@ public sealed class GenesisGuiNextAppShellBridgeTests
             out var command));
         Assert.Equal("Search", command.ToString());
 
-        foreach (var itemIndex in new[] { 10 })
+        foreach (var itemIndex in new[] { 11 })
         {
             Assert.False(GenesisGuiNextNavigationPresentation.IsImplemented(itemIndex));
             Assert.False(GenesisGuiNextNavigationPresentation.TryResolvePrimaryCommand(

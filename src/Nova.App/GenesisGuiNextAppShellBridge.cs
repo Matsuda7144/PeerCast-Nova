@@ -343,9 +343,14 @@ internal static class GenesisGuiNextNavigationPresentation
     public static IReadOnlyList<string> Items { get; } =
         Array.AsReadOnly(Labels);
 
+    internal static IReadOnlyList<string> ItemsFor(bool modern) => modern ? ModernItems : Items;
+    private static readonly IReadOnlyList<string> ModernItems = Array.AsReadOnly<string>([.. Labels, "リレーツリー"]);
+    internal static int Row(int index, bool modern) => !modern ? index : index == 10 ? 4 : index >= 4 ? index + 1 : index;
+    internal static int RowHeight(bool modern) => modern ? 32 : 36;
+
     public static bool IsImplemented(int itemIndex) =>
         (itemIndex >= (int)GenesisGuiNextTab.Channels &&
-            itemIndex <= (int)GenesisGuiNextTab.Recording) || itemIndex is (int)GenesisGuiNextTab.Logs or (int)GenesisGuiNextTab.Publishing ||
+            itemIndex <= (int)GenesisGuiNextTab.Recording) || itemIndex is (int)GenesisGuiNextTab.Logs or (int)GenesisGuiNextTab.Publishing or (int)GenesisGuiNextTab.RelayTree ||
         TryResolvePrimaryCommand(itemIndex, out _);
 
     public static bool TryResolveExistingView(
@@ -353,7 +358,7 @@ internal static class GenesisGuiNextNavigationPresentation
         out GenesisGuiNextTab selectedTab)
     {
         if ((itemIndex >= (int)GenesisGuiNextTab.Channels &&
-            itemIndex <= (int)GenesisGuiNextTab.Recording) || itemIndex is (int)GenesisGuiNextTab.Logs or (int)GenesisGuiNextTab.Publishing)
+            itemIndex <= (int)GenesisGuiNextTab.Recording) || itemIndex is (int)GenesisGuiNextTab.Logs or (int)GenesisGuiNextTab.Publishing or (int)GenesisGuiNextTab.RelayTree)
         {
             selectedTab = (GenesisGuiNextTab)itemIndex;
             return true;
@@ -473,6 +478,10 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
     internal const int RefreshButtonGap = 8;
     internal const int MinimumStatusTextWidth = 300;
     private const int NavigationControlIdBase = 1100;
+    private const int RelayTreeNavigationControlId = 1142;
+    internal static int NavigationControlIdFor(int index) => index == (int)GenesisGuiNextTab.RelayTree ? RelayTreeNavigationControlId : NavigationControlIdBase + index;
+    internal static int NavigationIndexFor(int id) => id == RelayTreeNavigationControlId ? (int)GenesisGuiNextTab.RelayTree :
+        id >= NavigationControlIdBase && id < NavigationControlIdBase + 10 ? id - NavigationControlIdBase : -1;
     private const int FavoriteControlId = 1110;
     internal const int RefreshControlId = 1111;
     internal const int PlayControlId = 1112;
@@ -613,12 +622,12 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
     internal static bool IsRecordingStatusVisible(bool isRulesPage) => !isRulesPage;
 
     internal static bool IsHistoryNavigationCommand(int id) =>
-        id >= NavigationControlIdBase && id < NavigationControlIdBase + GenesisGuiNextNavigationPresentation.Items.Count ||
+        NavigationIndexFor(id) >= 0 ||
         id is RefreshControlId or ActiveRecordingsModeControlId or RecordingRulesModeControlId or
             RecordingLibraryModeControlId or RecordingHistoryModeControlId or RecordingHistoryRefreshControlId;
 
     internal static bool IsPublishingNavigationCommand(int id) =>
-        id >= NavigationControlIdBase && id < NavigationControlIdBase + GenesisGuiNextNavigationPresentation.Items.Count ||
+        NavigationIndexFor(id) >= 0 ||
         id == RefreshControlId;
 
     internal static (int Top, int Height) RecordingStatusLayout(bool recordingPage, bool libraryPage) =>
@@ -834,23 +843,25 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             return null;
         }
 
-        var navigationButtons = new nint[GenesisGuiNextNavigationPresentation.Items.Count];
+        var navigationItems = GenesisGuiNextNavigationPresentation.ItemsFor(viewModel.UsesModernAppearance);
+        var navigationRowHeight = GenesisGuiNextNavigationPresentation.RowHeight(viewModel.UsesModernAppearance);
+        var navigationButtons = new nint[navigationItems.Count];
         for (var index = 0; index < navigationButtons.Length; index++)
         {
             navigationButtons[index] = CreateWindowExW(
                 0,
                 "BUTTON",
-                GenesisGuiNextNavigationPresentation.Items[index],
+                navigationItems[index],
                 WindowStyleChild |
                     WindowStyleVisible |
                     WindowStyleTabStop |
                     ButtonStyleOwnerDraw,
                 0,
-                NavigationItemTop + (index * NavigationItemHeight),
+                NavigationItemTop + GenesisGuiNextNavigationPresentation.Row(index, viewModel.UsesModernAppearance) * navigationRowHeight,
                 sidebarRectangle.Width,
-                NavigationItemHeight - 2,
+                navigationRowHeight - 2,
                 sidebar,
-                (nint)(NavigationControlIdBase + index),
+                (nint)NavigationControlIdFor(index),
                 instance,
                 0);
             if (navigationButtons[index] == 0)
@@ -1768,6 +1779,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             _searchBox.ProcessCommand(wParam, lParam);
             var commandId = (int)(wParam & 0xffff);
             var notificationCode = (int)((wParam >> 16) & 0xffff);
+            if (Volatile.Read(ref _detached) == 0 && ProcessRelayTreeCommand(commandId, lParam, notificationCode)) return;
             if (Volatile.Read(ref _detached) == 0 && ProcessPublishingAdvancedInput(commandId, notificationCode, lParam)) return;
             if (Volatile.Read(ref _detached) == 0 && ProcessPublishingInlineInput(commandId, notificationCode, lParam)) return;
             if (Volatile.Read(ref _detached) == 0 && ProcessSettingsPathInput(commandId, notificationCode, lParam)) return;
@@ -1779,7 +1791,6 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             }
 
             if (ProcessIntegratedSettingsCommand(commandId, lParam)) return;
-            if (ProcessRelayTreeCommand(commandId, lParam)) return;
             if (SettingsPageOpen && commandId == FavoriteControlId) return;
             if (_tabs.SelectedTab == GenesisGuiNextTab.Publishing &&
                 lParam == _publishingStartButton && commandId == PublishingStartControlId)
@@ -1958,8 +1969,9 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 return;
             }
 
-            var itemIndex = commandId - NavigationControlIdBase;
-            if (itemIndex >= 0 && itemIndex < GenesisGuiNextNavigationPresentation.Items.Count &&
+            var itemIndex = NavigationIndexFor(commandId);
+            if (itemIndex == (int)GenesisGuiNextTab.RelayTree && !IsModern) return;
+            if (itemIndex >= 0 && itemIndex < _navigationButtons.Length &&
                 !(GenesisGuiNextNavigationPresentation.TryResolveExistingView(itemIndex, out var targetTab) && targetTab == GenesisGuiNextTab.Publishing) &&
                 !CanLeavePublishingEditor()) return;
             if (GenesisGuiNextNavigationPresentation.TryResolveExistingView(
@@ -1967,6 +1979,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                     out var selectedTab))
             {
                 CloseIntegratedSettings();
+                if (selectedTab == GenesisGuiNextTab.RelayTree) CaptureTreeChannel();
                 _utilityNavigationSelection.SelectView(_tabs, selectedTab);
                 _ = InvalidateRect(_sidebar, 0, true);
                 if (selectedTab == GenesisGuiNextTab.Recording)
@@ -2137,7 +2150,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 return DrawPlaybackButton(drawItem);
             }
 
-            var itemIndex = (int)drawItem.ControlId - NavigationControlIdBase;
+            var itemIndex = NavigationIndexFor((int)drawItem.ControlId);
             if (!IsOwnerDrawButton(drawItem.ControlType) ||
                 itemIndex < 0 ||
                 itemIndex >= _navigationButtons.Length)
@@ -2169,7 +2182,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             labelRectangle.Right -= Scale(6);
             _ = DrawTextW(
                 drawItem.DeviceContext,
-                GenesisGuiNextNavigationPresentation.Items[itemIndex],
+                GenesisGuiNextNavigationPresentation.ItemsFor(IsModern)[itemIndex],
                 -1,
                 ref labelRectangle,
                 DrawTextSingleLine |
@@ -2586,6 +2599,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 _ = PresentBounds(_relayStatus, 12, RelayStatusTop, RelayStatusWidth(LogicalWidth(relayPane.Right - relayPane.Left)), 40, true);
             _ = PresentInvalidation(_relayStatus, 0, true);
             var treeShown = SynchronizeRelayTree();
+            if (treeShown) { PresentRelayTree(); return; }
 
             var isRecordingPage = _tabs.SelectedTab == GenesisGuiNextTab.Recording;
             var isRulesPage = IsRulesPageActive();
@@ -2647,7 +2661,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             _ = PresentInvalidation(_recordingHistoryRefreshButton, 0, true);
             _ = PresentVisible(_recordingHistoryDetails, isHistoryPage ? ShowWindowShowNoActivate : ShowWindowHide);
             foreach (var textControl in new[] { _detailsTitle, _detailsDescription, _detailsMetadata, _detailsIdentity })
-                _ = PresentVisible(textControl, isHistoryPage || treeShown && textControl == _detailsDescription || isLogPage && UsesChannelCard && textControl == _detailsIdentity
+                _ = PresentVisible(textControl, isHistoryPage || isLogPage && UsesChannelCard && textControl == _detailsIdentity
                     ? ShowWindowHide : ShowWindowShowNoActivate);
             MoveDetailsTextControls(isRecordingPage, isLibraryPage || isHistoryPage);
             _ = PresentVisible(
@@ -2801,7 +2815,6 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                     : $"詳細: {details.Description}");
             _ = PresentText(_detailsMetadata, UsesChannelCard ? details.MetadataLines : details.MetadataText);
             _ = PresentText(_detailsIdentity, UsesChannelCard ? details.IdentityLines : details.IdentityText);
-            if (treeShown) PresentRelayTree(row);
             _ = PresentEnabled(_detailsCopyButton, !details.IsEmpty);
             var recording = row?.ActiveRecording is { } activeRecording
                 ? _viewModel.GetActiveRecordingPresentation(activeRecording)

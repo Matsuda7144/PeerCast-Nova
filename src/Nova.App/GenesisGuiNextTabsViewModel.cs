@@ -15,6 +15,7 @@ internal enum GenesisGuiNextTab
     Recording,
     Publishing = 6,
     Logs = 8,
+    RelayTree = 10,
 }
 
 internal sealed record GenesisGuiNextYellowPageFilterOption(

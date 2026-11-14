@@ -638,6 +638,8 @@ public sealed partial class PcpChannelSession : IAsyncDisposable
                     new(redirectEndpoint.Address, redirectEndpoint.Port), succeeded: true);
                 using var trafficObservation = connection.ObservePcpSession();
                 ObserveConnection(connection.ConnectionId, PcpRelayConnectionPhase.Connected);
+                Volatile.Write(ref _observedLocalConnection, new(connection.ConnectionId,
+                    new(handshake.RemotePeer?.SessionId, PcpLocalRelayEndpoint.Copy(new(connection.RemoteEndPoint.Address, connection.RemoteEndPoint.Port)))));
                 _statusTracker.TransitionTo(ChannelSessionState.Receiving);
                 _negotiation.TrySetResult(new(
                     PcpChannelSessionNegotiationOutcome.Accepted,
@@ -653,7 +655,9 @@ public sealed partial class PcpChannelSession : IAsyncDisposable
                     initialPacketSequence: countingConsumer.PacketCount,
                     progress.ObserveChannelMessage,
                     hostObserved: _peers is null ? null : host => _peers.Observe(host,
-                        new(PcpPeerSourceKind.UpstreamStream, connection.ConnectionId)));
+                        new(PcpPeerSourceKind.UpstreamStream, connection.ConnectionId)),
+                    broadcastHosts: _peers is null ? null : new(_peers.ChannelId, _peers.LocalSessionId,
+                        host => _peers.ObserveReport(host, new(PcpPeerSourceKind.UpstreamStream, connection.ConnectionId))));
 
                 try
                 {

@@ -10,7 +10,7 @@ internal sealed record PcpRelayPeerIdentity(Guid? SessionId, PcpRelayHostEndpoin
     PcpRelayHostEndpoint? ListeningEndpoint = null);
 
 /// <summary>One channel-owner generation; no sockets, timers, media or external callbacks.</summary>
-internal sealed class PcpPeerDirectory : IDisposable
+internal sealed partial class PcpPeerDirectory : IDisposable
 {
     internal const int MaximumCandidates = 256;
     internal static readonly TimeSpan Lifetime = TimeSpan.FromSeconds(120);
@@ -55,6 +55,7 @@ internal sealed class PcpPeerDirectory : IDisposable
             // Bound work as well as retained state, including rejected observations.
             if (_updates++ >= 64) { _updates = 64; return false; }
             Prune(now);
+            ObserveReportCore(host, source, false, now);
             if (!Eligible(host) || Excluded(host, null)) return false;
             var matches = _entries.Where(e => e.Host.GlobalEndpoint == host.GlobalEndpoint ||
                 host.PeerSessionId is { } sid && e.Host.PeerSessionId == sid).ToArray();
@@ -165,7 +166,7 @@ internal sealed class PcpPeerDirectory : IDisposable
 
     public void Dispose()
     {
-        lock (_gate) { _retired = true; _entries.Clear(); _downstreams.Clear(); }
+        lock (_gate) { _retired = true; _entries.Clear(); _downstreams.Clear(); _reports.Clear(); }
     }
 
     private sealed class Lease(Action? release) : IDisposable

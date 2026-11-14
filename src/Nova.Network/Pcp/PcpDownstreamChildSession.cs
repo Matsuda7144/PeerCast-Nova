@@ -795,6 +795,9 @@ public sealed partial class PcpDownstreamChildSession :
                 if (CanUsePeers && atom.Name == PcpKnownAtomNames.Host &&
                     PcpRelayHostCandidateParser.TryParse(atom) is { } host)
                     _peers!.Observe(host, new(PcpPeerSourceKind.DownstreamControl, _connection.ConnectionId));
+                if (CanUsePeers && atom.Name == PcpBroadcastHostReader.Broadcast)
+                    foreach (var reported in PcpBroadcastHostReader.Read(atom, _peers!.ChannelId, _localSessionId))
+                        _peers.ObserveReport(reported, new(PcpPeerSourceKind.DownstreamControl, _connection.ConnectionId));
             }
             catch (InvalidDataException)
             {

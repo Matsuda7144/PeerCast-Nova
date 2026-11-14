@@ -27,6 +27,11 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                     return painted;
                 }
             }
+            if (state.RelayTreeContext(window, message, lParam)) return 0;
+            if (window == GetParent(state.ListWindow) && message == WindowMessageCommand &&
+                state.ProcessRelayTreeCommand((int)(wParam & 0xffff), lParam, (int)((wParam >> 16) & 0xffff))) return 0;
+            if (message == WindowMessageDrawItem && state.DrawRelayTreeControl(lParam)) return 1;
+            if (message == WindowMessageNotify && state.HandleRelayTreeNotify(lParam)) return 1;
             if (window == state.ListWindow)
             {
                 var result = DefSubclassProc(window, message, wParam, lParam);
@@ -88,7 +93,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private GenesisUiFontLease? _visualFont;
         private readonly Dictionary<nint, nint> _originalFonts = new();
         private nint[] VisualButtons => [.. _navigationButtons, _refreshButton, _favoriteButton];
-        private nint[] VisualFontControls => [.. VisualButtons, .. RecordingVisualControls, .. PublishingVisualControls, .. SettingsVisualControls, _publishingConnectionState, _listView, TopStatusWindow, _searchBox.LabelWindow,
+        private nint[] VisualFontControls => [.. VisualButtons, .. RecordingVisualControls, .. PublishingVisualControls, .. SettingsVisualControls, .. RelayTreeVisualControls, _publishingConnectionState, _listView, TopStatusWindow, _searchBox.LabelWindow,
             FindWindowExW(_statusBar, 0, "EDIT", null), FindWindowExW(_statusBar, 0, "COMBOBOX", null)];
 
         internal void AttachVisuals()
@@ -363,6 +368,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                     }
                     break;
                 case 8: Box(2, 0, 16, 18); L(5, 5, 13, 5); L(5, 9, 13, 9); L(5, 13, 11, 13); break;
+                case 10: Box(0, 0, 6, 5); L(3, 5, 3, 15); L(3, 9, 11, 9); L(3, 15, 11, 15); Box(11, 6, 18, 11); Box(11, 13, 18, 18); break;
                 default: Circle(0, 0, 18, 18); L(9, 7, 9, 14); L(9, 3, 9, 4); break;
             }
         }

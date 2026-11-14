@@ -60,6 +60,7 @@ internal static class GenesisGuiNextNativeTabProjection
         return selectedTab switch
         {
             GenesisGuiNextTab.Channels => ProjectChannels(tabs),
+            GenesisGuiNextTab.RelayTree => Array.AsReadOnly(Array.Empty<GenesisGuiNextNativeTabRow>()),
             GenesisGuiNextTab.New => CreateLiveChannels(tabs.VisibleNewChannels),
             GenesisGuiNextTab.Favorites => ProjectFavorites(tabs.VisibleFavoriteChannels),
             GenesisGuiNextTab.Playing => ProjectPlaying(tabs.Playing),

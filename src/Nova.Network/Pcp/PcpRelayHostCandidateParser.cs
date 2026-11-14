@@ -29,13 +29,14 @@ internal static class PcpRelayHostCandidateParser
         Guid? peerId = null;
         byte? flags = null;
         uint? relayCount = null;
+        uint? directCount = null, version = null, versionVp = null;
         IPAddress? upstreamAddress = null;
         int? upstreamPort = null;
         var seen = new HashSet<string>();
         foreach (var field in atom.Children)
         {
             var name = field.Name.ToString();
-            if (name is not ("cid" or "id" or "flg1" or "numr" or "upip" or "uppt"))
+            if (name is not ("cid" or "id" or "flg1" or "numr" or "numl" or "ver" or "vevp" or "upip" or "uppt"))
                 continue;
             if (field.IsParent || !seen.Add(name)) return null;
             var length = field.Content.Length;
@@ -51,10 +52,14 @@ internal static class PcpRelayHostCandidateParser
                 if (length != 1) return null;
                 flags = field.Content.Span[0];
             }
-            else if (name == "numr")
+            else if (name is "numr" or "numl" or "ver" or "vevp")
             {
                 if (length != 4) return null;
-                relayCount = PcpWireValueCodec.DecodeUInt32(field.Content.Span);
+                var value = PcpWireValueCodec.DecodeUInt32(field.Content.Span);
+                if (name == "numr") relayCount = value;
+                else if (name == "numl") directCount = value;
+                else if (name == "ver") version = value;
+                else versionVp = value;
             }
             else if (name == "upip")
             {
@@ -130,6 +135,9 @@ internal static class PcpRelayHostCandidateParser
             PeerSessionId = peerId,
             Flags = flags,
             RelayCount = relayCount,
+            DirectCount = directCount,
+            Version = version,
+            VersionVp = versionVp,
             UpstreamEndpoint = upstreamAddress is not null && upstreamPort is { } upstreamPortValue
                 ? new(upstreamAddress, upstreamPortValue) : null,
         };

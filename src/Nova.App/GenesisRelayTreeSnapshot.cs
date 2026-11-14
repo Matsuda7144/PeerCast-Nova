@@ -7,11 +7,12 @@ using PeerCast.Nova.Network.Transport;
 namespace PeerCast.Nova.App;
 
 internal enum GenesisRelayTreeState { Unobserved, Active, Recovering, Stopped, CleanupUnconfirmed }
-internal enum GenesisRelayTreeNodeKind { LocalNova, Upstream, Downstream, LocalInput }
+internal enum GenesisRelayTreeNodeKind { LocalNova, Upstream, Downstream, LocalInput, ReportedPeer }
 internal enum GenesisRelayTreePath { Unknown, ViewingLoopback, PublishingLoopback, SharedPublicListener }
 internal enum GenesisRelayTreePacing { Unknown, Disabled, Unlimited, Enabled, Blocked }
 internal sealed record GenesisRelayTreeNode(string Id, string? ParentId, GenesisRelayTreeNodeKind Kind,
-    PcpRelayConnectionPhase Phase, GenesisRelayTreePath Path = GenesisRelayTreePath.Unknown, double? WriteKbps = null);
+    PcpRelayConnectionPhase Phase, GenesisRelayTreePath Path = GenesisRelayTreePath.Unknown, double? WriteKbps = null, long? ConnectionId = null,
+    long? ReportId = null, GenesisRelayTreePeerDetails? Details = null, bool ReportedParent = false);
 
 // Only immutable scalar data and copied nodes reach the GUI. Names/URLs/peer
 // metadata are deliberately absent; the existing selected-channel title remains.
@@ -46,11 +47,16 @@ internal sealed partial class GenesisDownstreamRelayOwnerRegistry
             weak = owner.TreeSource;
         }
         PcpRelayTreeObservation? observation = null;
+        PcpLocalRelayTreeObservation? local = null;
         // No source call under the registry gate; sources never receive GUI
         // references and are held weakly rather than extending Owner lifetime.
         if (weak?.TryGetTarget(out var source) == true)
         {
-            try { observation = source.ObserveRelayTree(); }
+            try
+            {
+                observation = source.ObserveRelayTree();
+                if (source is IPcpLocalRelayTreeSource localSource) local = localSource.ObserveLocalRelayTree();
+            }
             catch (ObjectDisposedException) { }
         }
         lock (_gate)
@@ -67,13 +73,13 @@ internal sealed partial class GenesisDownstreamRelayOwnerRegistry
                         ? GenesisRelayTreeState.CleanupUnconfirmed : GenesisRelayTreeState.Unobserved,
                 };
             return ProjectTree(observation, owner.Kind, capacity, owner.Traffic.Snapshot, owner.Pacing,
-                capacity.ChannelReservedRelays > owner.ActiveReservations);
+                capacity.ChannelReservedRelays > owner.ActiveReservations, local);
         }
     }
 
     internal static GenesisRelayTreeSnapshot ProjectTree(PcpRelayTreeObservation observation, RelayChannelKind kind,
         RelayAdmissionCapacitySnapshot capacity, PcpDownstreamTrafficSnapshot? traffic, PcpDownstreamPacer? pacing,
-        bool oldCleanupPending = false)
+        bool oldCleanupPending = false, PcpLocalRelayTreeObservation? local = null)
     {
         var recovering = observation.Recovery is PcpSmartRelayState.Recovering or PcpSmartRelayState.Backoff or
             PcpSmartRelayState.Discovering or PcpSmartRelayState.Connecting or PcpSmartRelayState.Negotiating;
@@ -86,7 +92,7 @@ internal sealed partial class GenesisDownstreamRelayOwnerRegistry
         {
             parent = "up-" + upId.ToString("X", CultureInfo.InvariantCulture);
             nodes.Add(new(parent, null, GenesisRelayTreeNodeKind.Upstream,
-                observation.Running ? upstream.Phase : PcpRelayConnectionPhase.Closing));
+                observation.Running ? upstream.Phase : PcpRelayConnectionPhase.Closing, ConnectionId: upId));
         }
         if (kind == RelayChannelKind.Broadcast && observation.LocalInputConnected is { } input)
         {
@@ -104,12 +110,13 @@ internal sealed partial class GenesisDownstreamRelayOwnerRegistry
                 connection.Path != PcpRelayObservedPath.ChannelLoopback ? GenesisRelayTreePath.Unknown :
                 kind == RelayChannelKind.Broadcast ? GenesisRelayTreePath.PublishingLoopback : GenesisRelayTreePath.ViewingLoopback;
             nodes.Add(new("down-" + id.ToString("X", CultureInfo.InvariantCulture), "nova", GenesisRelayTreeNodeKind.Downstream,
-                observation.Running ? connection.Phase : PcpRelayConnectionPhase.Closing, path, connection.Traffic?.KilobitsPerSecond));
+                observation.Running ? connection.Phase : PcpRelayConnectionPhase.Closing, path, connection.Traffic?.KilobitsPerSecond, id));
         }
-        return new(observation.ChannelId, observation.OwnerId, state, nodes.AsReadOnly(),
+        var tree = new GenesisRelayTreeSnapshot(observation.ChannelId, observation.OwnerId, state, nodes.AsReadOnly(),
             observation.OmittedConnections + Math.Max(0, observation.Downstreams.Count - rows.Length), capacity, traffic,
             pacing is null ? GenesisRelayTreePacing.Disabled : pacing.MediaKbps is null ? GenesisRelayTreePacing.Unlimited :
                 pacing.MediaKbps == 0 ? GenesisRelayTreePacing.Blocked : GenesisRelayTreePacing.Enabled,
             upstream?.Phase ?? PcpRelayConnectionPhase.Unknown);
+        return GenesisRelayTreeTopology.Apply(tree, local);
     }
 }

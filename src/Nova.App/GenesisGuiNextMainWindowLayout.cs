@@ -72,8 +72,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                     PlaceIntegratedSettings(list.Width, details.Bottom - list.Top);
                 }
                 for (var i = 0; i < _navigationButtons.Length; i++)
-                    Place(_navigationButtons[i], 0, NavigationItemTop + i * NavigationItemHeight,
-                        sidebar.Width, NavigationItemHeight - 2);
+                    Place(_navigationButtons[i], 0, NavigationItemTop + GenesisGuiNextNavigationPresentation.Row(i, IsModern) * GenesisGuiNextNavigationPresentation.RowHeight(IsModern),
+                        sidebar.Width, GenesisGuiNextNavigationPresentation.RowHeight(IsModern) - 2);
                 Place(_playButton, playLeft, playbackTop, playbackWidth, playbackHeight);
                 Place(_stopButton, stopLeft, playbackTop, playbackWidth, playbackHeight);
                 var statusLabel = FindWindowExW(_statusBar, 0, "STATIC", null);
