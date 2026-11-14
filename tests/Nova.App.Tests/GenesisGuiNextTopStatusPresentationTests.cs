@@ -86,6 +86,22 @@ public sealed class GenesisGuiNextTopStatusPresentationTests
         Assert.Equal(expected, GenesisGuiNextTopStatusPresentation.Create(null, Network() with { Nat = Mapping() with { State = state } }).Port.Text);
     }
 
+    [Fact]
+    public void SharedStartupListenerShowsOnlyItsOwnConfirmedMapping()
+    {
+        var network = Network() with
+        {
+            PublicRelay = null,
+            SharedPublicRelay = new(GenesisSharedPublicRelayState.Listening, 7100, 0, null, false, null),
+            Nat = Mapping(),
+        };
+        Assert.Equal("マッピング済み・外部到達未確認", GenesisGuiNextTopStatusPresentation.Create(null, network).Port.Text);
+        Assert.Equal("待受中・到達未確認", GenesisGuiNextTopStatusPresentation.Create(null,
+            network with { SharedPublicRelay = network.SharedPublicRelay with { Port = 7101 } }).Port.Text);
+        Assert.Equal("待受中・到達未確認", GenesisGuiNextTopStatusPresentation.Create(null,
+            network with { Nat = network.Nat with { RegisteredInternalPorts = [] } }).Port.Text);
+    }
+
     private static NovaApplicationNetworkSnapshot Network() => new(
         true, false, false, false, 1, false, false, false, null, false, 0, 0, 0, null,
         NovaApplicationNetworkFailure.None, NovaApplicationNetworkFailure.None, null, null,

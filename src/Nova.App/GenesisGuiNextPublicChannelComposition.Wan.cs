@@ -11,6 +11,25 @@ internal sealed partial class GenesisGuiNextPublicChannelComposition
     private GenesisGuiNextConnectionPreferences _publicSettings = GenesisGuiNextConnectionPreferences.Default;
     private INovaSharedPublicRelayProvider? _publicProvider;
     private GenesisSharedPublicRelay? _publicHost;
+    internal async Task<bool> StartPublicAsync()
+    {
+        lock (_gate)
+        {
+            if (_disposeTask is not null) return false;
+            if (!_publicSettings.WanRelayEnabled) return true;
+        }
+        try
+        {
+            await GetPublicHost().StartAsync().ConfigureAwait(false);
+            return true;
+        }
+        catch (Exception)
+        {
+            // A bind failure is retained in the shared host's safe snapshot.
+            // Catalog, settings and private playback remain available.
+            return false;
+        }
+    }
     internal void ConfigurePublic(GenesisGuiNextConnectionPreferences settings, INovaSharedPublicRelayProvider? provider = null)
     {
         settings.Validate();
@@ -23,8 +42,12 @@ internal sealed partial class GenesisGuiNextPublicChannelComposition
     }
     private GenesisSharedPublicRelay GetPublicHost()
     {
-        lock (_gate) return _publicHost ??= (_publicProvider ?? throw new GenesisPublicRelayStartException())
-            .GetSharedRelay(_publicSettings, ResolvePublicOwner);
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposeTask is not null, this);
+            return _publicHost ??= (_publicProvider ?? throw new GenesisPublicRelayStartException())
+                .GetSharedRelay(_publicSettings, ResolvePublicOwner);
+        }
     }
     private PcpRelayCoordinator? ResolvePublicOwner(ChannelId channel, PcpRelayFanout fanout)
     {

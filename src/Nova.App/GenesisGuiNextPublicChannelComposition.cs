@@ -11,8 +11,8 @@ namespace PeerCast.Nova.App;
 /// <summary>
 /// GUI Next's public-channel lifetime, separate from its playback/recording
 /// loopback owners. Construction and preparation perform no network I/O.
-/// The explicit GUI Relay command activates loopback/port 0. A separate opt-in
-/// startup setting also registers viewing owners with the shared public listener.
+/// The explicit GUI Relay command activates loopback/port 0. WAN startup opens
+/// the shared listener independently; viewing owners add/remove their exact routes.
 /// </summary>
 internal sealed partial class GenesisGuiNextPublicChannelComposition : IAsyncDisposable
 {

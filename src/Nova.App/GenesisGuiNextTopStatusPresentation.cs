@@ -87,8 +87,11 @@ internal static class GenesisGuiNextTopStatusPresentation
             return Value("未待受", "未待");
         var nat = network.Nat;
         // A mapping for another listener must not be borrowed as evidence for this one.
-        if (network.PublicRelay is not { State: NovaPublicRelayState.Listening, Endpoint: { } endpoint } || nat is null ||
-            nat.InternalPort != endpoint.Port || !nat.RegisteredInternalPorts.Contains(endpoint.Port))
+        int? boundPort = network.SharedPublicRelay is { State: GenesisSharedPublicRelayState.Listening } shared
+            ? shared.Port : network.PublicRelay is { State: NovaPublicRelayState.Listening, Endpoint: { } endpoint }
+                ? endpoint.Port : null;
+        if (boundPort is null || nat is null ||
+            nat.InternalPort != boundPort || !nat.RegisteredInternalPorts.Contains(boundPort.Value))
             return Value("待受中・到達未確認", "待受");
         if (nat.State is NatDisplayState.Mapped or NatDisplayState.Renewing &&
             nat.LeaseEvidence is NatLeaseEvidenceKind.RouterConfirmedWithEstimatedExpiry or NatLeaseEvidenceKind.RouterConfirmedPermanent)

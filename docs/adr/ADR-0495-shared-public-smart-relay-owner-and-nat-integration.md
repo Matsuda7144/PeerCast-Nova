@@ -14,10 +14,12 @@ NAT runtime, backend selection and mapping reconciliation pump.
 
 Phase W connects these existing components. `WanRelayEnabled` defaults false in
 the existing connection preferences. The saved flag and existing nonzero
-`ListenPort` apply at next startup; saving or launching Nova never starts Relay.
-An explicit GUI Relay operation activates its original Coordinator/loopback
-listener and, when WAN is enabled, registers that Owner on one shared IPv4
-`0.0.0.0:ListenPort` listener. Recovery opt-in remains independent. WAN plus the
+`ListenPort` apply at next startup. Saving never changes the current listener.
+When WAN is enabled, the accepted main-window startup opens one shared IPv4
+`0.0.0.0:ListenPort` listener without connecting an upstream or creating a channel
+Owner. An explicit GUI Relay operation activates its original Coordinator/loopback
+listener and registers that Owner on the already-running public listener.
+Recovery opt-in remains independent. WAN plus the
 unimplemented IPv6 mode is rejected rather than silently ignoring IPv6.
 
 `NovaApplicationNetworkOwner` supplies the shared host with its existing mapping
@@ -52,9 +54,34 @@ not a manager or transport capability.
   Admission. Replacement registration is allowed while the old route drains;
   old completion cannot remove the replacement. Stop joins complete public
   acquisition, including a delayed provider, before disposing the stop token.
-- Last route release stops the shared listener, proves cleanup, then releases
-  its own NAT demand. Unconfirmed route/transport cleanup is sticky failure;
+- Application startup holds the shared listener independently of route count.
+  Last route release removes/drains that route but retains the public listener
+  and its NAT demand until application shutdown. Callers that never request
+  application startup retain the original last-route-release lifetime.
+  Shutdown proves listener cleanup before releasing its own NAT demand.
+  Unconfirmed route/transport cleanup is sticky failure;
   re-acquisition is refused and successful shutdown is never reported.
+
+## Startup lifetime update (2026-11-15)
+
+WAN ON now starts public listening after the native main-window bridge is
+accepted, before the initial YP refresh. Rejected windows and WAN OFF remain
+inert. Classic and Modern use the same startup path; neither needs a Relay
+button to open the port. Repeated startup requests reuse the same bound socket
+and single NAT-demand token. The existing application network owner disposes
+the shared host before its NAT runtime, including a late successful mapping.
+
+Startup bind failure leaves the application available and publishes a safe
+failure snapshot; no mapping demand is registered for a failed bind. No random
+port fallback, firewall change, automatic channel selection, upstream connection,
+publishing start or YP announcement is performed. Auto mapping OFF permits
+manual router configuration while TCP listening remains active. Top status
+recognizes the shared listener's exact bound port, retaining the distinction
+between router mapping and external reachability.
+
+Normal playback/recording remain separate private owners. Automatically
+registering normal playback with public routes is subsequent work; opening the
+startup port alone does not make every viewing channel available downstream.
 
 ## NAT and status
 

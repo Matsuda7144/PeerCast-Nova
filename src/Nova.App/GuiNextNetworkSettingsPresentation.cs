@@ -85,7 +85,7 @@ internal sealed record GuiNextNetworkSettingsPresentation(
         var notice = failure != NovaApplicationNetworkFailure.None ? $"Network分類：{failure}" :
             snapshot.RuntimeDesiredEnabled == true && snapshot.PublicListenerAvailability == NovaApplicationPublicListenerAvailability.Unavailable
                 ? "ポート自動開放：有効（公開listener待機中）。この画面は公開listenerを開始しません。"
-                : "ポート自動開放設定と公開listenerの開始は別操作です。この画面から公開開始・到達検査は行いません。";
+                : "WAN Relayが起動時にONなら公開待受を開始し、Nova終了まで維持します。自動開放ONならルーターへ開放を要求します。外部到達検査は行いません。";
         return new(snapshot.RuntimeDesiredEnabled == true, canEdit, settings, listener, mapping,
             view?.Diagnostics ?? string.Empty, notice,
             failure != NovaApplicationNetworkFailure.None ? GuiNextNetworkTone.Orange :

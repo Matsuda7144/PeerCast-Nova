@@ -61,6 +61,7 @@ internal sealed class GenesisSharedPublicRelay : IAsyncDisposable
     private bool _cleanupFailed;
     private string? _error;
     private int _references;
+    private bool _applicationStarted;
     private int _closed;
     private readonly object _disposeGate = new();
     private Task? _disposal;
@@ -88,6 +89,48 @@ internal sealed class GenesisSharedPublicRelay : IAsyncDisposable
     }
     internal IPEndPoint? LocalEndPoint => _listener?.LocalEndPoint;
 
+    // Startup owns the listener independently of channel routes. No upstream is opened.
+    internal async Task StartAsync()
+    {
+        await _serial.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _closed) != 0, this);
+            await StartListenerAsync().ConfigureAwait(false);
+            _applicationStarted = true;
+        }
+        finally { _serial.Release(); }
+    }
+
+    private async Task StartListenerAsync()
+    {
+        if (_cleanupFailed) throw new InvalidOperationException("Shared relay cleanup is unconfirmed.");
+        if (_run is not null)
+        {
+            if (_run.IsCompleted) throw new IOException("Public listener ended.");
+            return;
+        }
+        _listener ??= new(new(IPAddress.Any, _settings.ListenPort), _resolveOwner,
+            new TcpTransportOptions { MaxConcurrentConnections = 128 }, wanOptions: _wan);
+        _state = GenesisSharedPublicRelayState.Starting;
+        _error = null;
+        try
+        {
+            _run = _listener.StartAsync(CancellationToken.None);
+            var bound = _listener.LocalEndPoint;
+            if (bound.Port == 0 || bound.Port != _settings.ListenPort) throw new IOException("Invalid public port.");
+            _mappingLease = _mapping.AcquirePublicTcpListener(bound);
+            _state = GenesisSharedPublicRelayState.Listening;
+        }
+        catch
+        {
+            _error = "TCP待受を開始できません。ポート設定や他のアプリとの競合を確認してください。";
+            await StopListenerAsync().ConfigureAwait(false);
+            _state = GenesisSharedPublicRelayState.Failed;
+            throw;
+        }
+    }
+
     internal async Task<Lease> AcquireAsync(Func<PcpSharedDownstreamRelayListener, IAsyncDisposable> register, CancellationToken token)
     {
         await _serial.WaitAsync(token).ConfigureAwait(false);
@@ -102,27 +145,7 @@ internal sealed class GenesisSharedPublicRelay : IAsyncDisposable
                 new TcpTransportOptions { MaxConcurrentConnections = 128 }, wanOptions: _wan);
             route = register(_listener);
             token.ThrowIfCancellationRequested();
-            if (_run is null)
-            {
-                _state = GenesisSharedPublicRelayState.Starting;
-                _error = null;
-                try
-                {
-                    _run = _listener.StartAsync(CancellationToken.None);
-                    var bound = _listener.LocalEndPoint;
-                    if (bound.Port == 0 || bound.Port != _settings.ListenPort) throw new IOException("Invalid public port.");
-                    _mappingLease = _mapping.AcquirePublicTcpListener(bound);
-                    _state = GenesisSharedPublicRelayState.Listening;
-                }
-                catch
-                {
-                    _state = GenesisSharedPublicRelayState.Failed;
-                    _error = "TCP待受を開始できません。ポート設定を確認してください。";
-                    await StopListenerAsync().ConfigureAwait(false);
-                    _state = GenesisSharedPublicRelayState.Failed;
-                    throw;
-                }
-            }
+            await StartListenerAsync().ConfigureAwait(false);
             try
             {
                 ObjectDisposedException.ThrowIf(Volatile.Read(ref _closed) != 0, this);
@@ -130,11 +153,11 @@ internal sealed class GenesisSharedPublicRelay : IAsyncDisposable
                 _references++;
                 return new(this, route);
             }
-            catch { if (_references == 0) await StopListenerAsync().ConfigureAwait(false); throw; }
+            catch { if (_references == 0 && !_applicationStarted) await StopListenerAsync().ConfigureAwait(false); throw; }
         }
         catch
         {
-            if (_references == 0) await StopListenerAsync().ConfigureAwait(false);
+            if (_references == 0 && !_applicationStarted) await StopListenerAsync().ConfigureAwait(false);
             if (route is not null) await route.DisposeAsync().ConfigureAwait(false);
             throw;
         }
@@ -149,7 +172,7 @@ internal sealed class GenesisSharedPublicRelay : IAsyncDisposable
         try
         {
             _references--;
-            if (_references == 0) await StopListenerAsync().ConfigureAwait(false);
+            if (_references == 0 && !_applicationStarted) await StopListenerAsync().ConfigureAwait(false);
         }
         finally { _serial.Release(); }
     }

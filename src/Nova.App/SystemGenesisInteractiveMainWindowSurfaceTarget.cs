@@ -416,6 +416,11 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
             return null;
         }
 
+        // The application network owner is initialized before opening this surface.
+        // Start only after the bridge is accepted, so rejected windows never publish.
+        if (guiNextState is not null && viewModel.NetworkSettingsAdapter is GuiNextNetworkSettingsAdapter)
+            await guiNextState.PublicChannels.StartPublicAsync().ConfigureAwait(false);
+
         catalogSession.StartInitialRefresh();
         catalogSession.StartAutoRefresh(_autoRefreshInterval);
 
