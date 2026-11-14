@@ -151,6 +151,39 @@ public sealed class GuiNextDailyPlaybackSessionControllerTests
     }
 
     [Fact]
+    public async Task TypedStartupFailureRetainsSafeHttpAndQuitClassification()
+    {
+        var upstream = new PeerCast.Nova.Network.Pcp.PcpChannelSessionResult(
+            PeerCast.Nova.Network.Pcp.PcpChannelSessionEndReason.HttpRejected, 1, 0, 403, 0, 0, 0)
+        { Quit = new(1007) };
+        var result = new PeerCast.Nova.Network.Pcp.PcpRelayCoordinatorResult(
+            PeerCast.Nova.Network.Pcp.PcpRelayCoordinatorEndReason.UpstreamEnded,
+            PeerCast.Nova.Network.Pcp.PcpRelayDrainOutcome.Completed, new(0, 0), upstream, null, true);
+        var daily = new RecordingDailyPlaybackController
+        { PlayAsyncException = NovaDailyPlaybackStartupException.FromResult(result, null) };
+        await using var controller = new GuiNextDailyPlaybackSessionController(daily);
+        var outcome = await controller.PlayAsync(Source);
+        Assert.Equal(PlaybackSessionCommandResult.Faulted, outcome.Result);
+        Assert.Equal("PCP startup failed: HttpRejected; HTTP 403; QUIT 1007.", outcome.Snapshot.ErrorMessage);
+        Assert.DoesNotContain("tracker.example", outcome.Snapshot.ErrorMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MissingUpstreamResultRetainsConnectionStageAndHeaderTimeoutIsDistinct()
+    {
+        var result = new PeerCast.Nova.Network.Pcp.PcpRelayCoordinatorResult(
+            PeerCast.Nova.Network.Pcp.PcpRelayCoordinatorEndReason.UpstreamFailed,
+            PeerCast.Nova.Network.Pcp.PcpRelayDrainOutcome.Completed, new(0, 0), null, null, true);
+        var fault = new PeerCast.Nova.Core.Channels.ChannelFaultSnapshot(
+            PeerCast.Nova.Core.Channels.ChannelFaultCategory.ConnectionFailed,
+            PeerCast.Nova.Core.Channels.ChannelFaultStage.Connecting, 1, 0);
+        Assert.Equal("PCP startup failed: UpstreamFailed (ConnectionFailed/Connecting).",
+            NovaDailyPlaybackStartupException.FromResult(result, fault).Message);
+        Assert.Equal("FLV header was not received within 30 seconds.",
+            NovaDailyPlaybackStartupException.HeaderTimeout().Message);
+    }
+
+    [Fact]
     public async Task StopFailureIsMappedWithoutExposingRawException()
     {
         var daily = new RecordingDailyPlaybackController

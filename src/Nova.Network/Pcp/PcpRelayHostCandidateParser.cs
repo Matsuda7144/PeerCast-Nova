@@ -67,8 +67,21 @@ internal static class PcpRelayHostCandidateParser
             }
             else
             {
-                if (!TryDecodePort(field.Content.Span, out var port)) return null;
-                upstreamPort = port;
+                // HOST uppt is a 32-bit integer in PeerCastStation. It is not
+                // the 16-bit HOST port field used for the relay endpoint.
+                // Retain the previously accepted 16-bit form for compatibility.
+                if (length == sizeof(ushort))
+                {
+                    if (!TryDecodePort(field.Content.Span, out var port)) return null;
+                    upstreamPort = port;
+                }
+                else if (length == sizeof(uint))
+                {
+                    var port = PcpWireValueCodec.DecodeUInt32(field.Content.Span);
+                    if (port is 0 or > ushort.MaxValue) return null;
+                    upstreamPort = (int)port;
+                }
+                else return null;
             }
         }
 

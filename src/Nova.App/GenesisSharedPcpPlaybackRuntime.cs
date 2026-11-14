@@ -11,7 +11,10 @@ internal sealed record GenesisSharedPcpPlaybackAttachment(
     IOwnedPcpChannelPacketConsumer Consumer,
     PcpRelayConsumerRegistration Registration,
     Task<PcpRelayCoordinatorResult> OwnerCompletion,
-    Task OwnerRetirement);
+    Task OwnerRetirement)
+{
+    internal Func<ChannelFaultSnapshot?>? ReadFault { get; init; }
+}
 
 internal sealed class GenesisSharedPcpRecordingOwnerAttachment : IAsyncDisposable
 {
@@ -161,7 +164,8 @@ internal sealed class GenesisSharedPcpPlaybackRuntime :
                                 owner.Completion ?? throw new InvalidOperationException(
                                     "The shared PCP channel owner has not started."),
                                 owner.RetirementTask ?? throw new InvalidOperationException(
-                                    "The shared PCP channel owner is not being observed."));
+                                    "The shared PCP channel owner is not being observed."))
+                            { ReadFault = () => owner.Fault };
                         }
                     }
                     catch (Exception exception)
@@ -482,7 +486,7 @@ internal sealed class GenesisSharedPcpPlaybackRuntime :
             tracker,
             new IPEndPoint(IPAddress.Loopback, 0),
             stopWhenNoConsumers: true);
-        return new(source.Host, source.Port, sessionId, coordinator);
+        return new(source.Host, source.Port, sessionId, coordinator, tracker);
     }
 
     private async Task RetireOwnerAsync(
@@ -522,7 +526,8 @@ internal sealed class GenesisSharedPcpPlaybackRuntime :
         string host,
         int port,
         ChannelSessionId sessionId,
-        PcpRelayCoordinator coordinator)
+        PcpRelayCoordinator coordinator,
+        ChannelStatusTracker tracker)
     {
         private readonly object _releaseGate = new();
         private Task? _releaseTask;
@@ -534,6 +539,8 @@ internal sealed class GenesisSharedPcpPlaybackRuntime :
         public ChannelSessionId SessionId { get; } = sessionId;
 
         public PcpRelayCoordinator Coordinator { get; } = coordinator;
+
+        public ChannelFaultSnapshot? Fault => tracker.Snapshot.Fault;
 
         public Task<PcpRelayCoordinatorResult>? Completion { get; private set; }
 

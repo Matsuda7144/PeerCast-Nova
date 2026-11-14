@@ -21,7 +21,7 @@ internal static class RelayTreeHostTestPackets
         if (parent is { } up)
         {
             fields.Add(Field("upip", PcpWireValueCodec.EncodeLegacyIpv4(IPAddress.Parse(ip))));
-            fields.Add(Field("uppt", PcpWireValueCodec.EncodeUInt16((ushort)up)));
+            fields.Add(Field("uppt", PcpWireValueCodec.EncodeUInt32((uint)up)));
         }
         return PcpAtom.Parent(PcpKnownAtomNames.Host, fields);
     }

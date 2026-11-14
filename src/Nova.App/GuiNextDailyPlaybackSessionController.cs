@@ -274,9 +274,12 @@ internal sealed class GuiNextDailyPlaybackSessionController :
         }
         catch (Exception exception)
         {
-            var message = exception is PcrPlayerExecutableResolutionException
-                ? PlayerUnavailableMessage
-                : PlaybackFailedMessage;
+            var message = exception switch
+            {
+                PcrPlayerExecutableResolutionException => PlayerUnavailableMessage,
+                NovaDailyPlaybackStartupException startup => startup.Message,
+                _ => PlaybackFailedMessage,
+            };
             var failed = new PlaybackSessionSnapshot(
                 PlaybackSessionState.Faulted,
                 source,

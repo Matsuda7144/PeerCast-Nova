@@ -249,14 +249,21 @@ internal sealed class NovaDailyHttpFlvPlaybackController :
             active.OwnerTask = playbackAttachment.OwnerCompletion;
 
             _setStatus($"{channel.Name}: FLV streamを準備しています…");
-            var readyOrEnded = await Task.WhenAny(ready.Task, active.OwnerTask)
-                .WaitAsync(BootstrapTimeout, startupCancellation.Token)
-                .ConfigureAwait(false);
+            Task readyOrEnded;
+            try
+            {
+                readyOrEnded = await Task.WhenAny(ready.Task, active.OwnerTask)
+                    .WaitAsync(BootstrapTimeout, startupCancellation.Token)
+                    .ConfigureAwait(false);
+            }
+            catch (TimeoutException)
+            {
+                throw NovaDailyPlaybackStartupException.HeaderTimeout();
+            }
             if (ReferenceEquals(readyOrEnded, active.OwnerTask))
             {
                 var result = await active.OwnerTask.ConfigureAwait(false);
-                throw new InvalidOperationException(
-                    $"The shared PCP channel owner ended before an FLV header arrived ({result.EndReason}).");
+                throw NovaDailyPlaybackStartupException.FromResult(result, playbackAttachment.ReadFault?.Invoke());
             }
 
             var streamUrl = await ready.Task.ConfigureAwait(false);
