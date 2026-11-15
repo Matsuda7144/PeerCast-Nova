@@ -77,6 +77,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             void Show(nint control, bool visible) => _ = ShowWindow(control, visible ? ShowWindowShowNoActivate : ShowWindowHide);
             Show(_classicChoice, general); Show(_modernChoice, general);
             Show(_generalNotice, true); // YP hides this shared text; restore it for every other category.
+            Show(_generalStatus, true);
             Show(_generalRuntime, !notification); Show(_generalConfigured, !notification);
             Show(_generalSave, !notification); Show(_generalCancel, !notification);
             Show(_settingsPath, PathCategory); Show(_settingsBrowse, PathCategory);

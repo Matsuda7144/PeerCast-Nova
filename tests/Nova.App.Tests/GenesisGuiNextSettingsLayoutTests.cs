@@ -88,6 +88,8 @@ public sealed class GenesisGuiNextSettingsLayoutTests
     [Theory]
     [InlineData(false, 96u)]
     [InlineData(true, 96u)]
+    [InlineData(false, 120u)]
+    [InlineData(true, 120u)]
     [InlineData(false, 144u)]
     [InlineData(true, 144u)]
     [InlineData(false, 192u)]
@@ -112,16 +114,8 @@ public sealed class GenesisGuiNextSettingsLayoutTests
             }
             else
             {
-                fields.AddRange([n.ConnectionTitle, n.Ipv6, n.Wan, n.Notice, n.Runtime, n.Saved, n.Status, n.AutoMapping]);
-                var natStatus = n.NatStatus(layout);
-                if (size.Item2 == GenesisMainWindowLayout.MinimumClientHeight)
-                {
-                    Assert.True(natStatus.Top > layout.Card.Bottom);
-                    Assert.True(natStatus.Left > layout.Back.Right && natStatus.Right < layout.Cancel.Left);
-                    boxes.Add(natStatus);
-                }
-                else fields.Add(natStatus);
-                for (var j = 0; j < 6; j++) fields.AddRange([n.ConnectionInput(j), n.ConnectionLabel(j)]);
+                fields.AddRange([n.ConnectionTitle, n.Ipv6, n.AutoMapping, n.Body(layout)]);
+                Assert.True(n.Body(layout).Height > 0);
             }
             foreach (var b in fields) Assert.True(b.Top >= layout.Card.Top && b.Bottom < layout.Card.Bottom);
             boxes.AddRange(fields);

@@ -16,6 +16,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             if (window == (nint)owner && message is (0x001A or 0x031A)) state.RefreshWindowChrome();
             if (window == (nint)owner && message == 0x0010 && !state.CanLeavePublishingEditor()) return 0;
             if (state.PublishingInlineControlMessage(window, message, wParam)) return 0;
+            if (state.ConnectionBodyControlMessage(window, message, wParam)) return 0;
             if (state.IsPublishingInlineInput(window))
             {
                 if (message is 0x0007 or 0x0008) _ = RedrawWindow(window, 0, 0, 0x0001);

@@ -216,11 +216,11 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 if (dc == 0 || !GetClientRect(control, out var box)) return true;
                 _ = FillRect(dc, ref box, control == _settingsTitle ? _mainBrush : _topBrush);
                 var title = control == _settingsTitle || control == _generalTitle;
-                var color = (control == _generalStatus && SettingsError || control == _natSettingsStatus && _natSettingsError) ? GenesisGuiNextDesign.Warning :
+                var color = ((control == _generalStatus || control == _connectionStatus) && SettingsError || control == _natSettingsStatus && _natSettingsError) ? GenesisGuiNextDesign.Warning :
                     title ? GenesisGuiNextDesign.Text : GenesisGuiNextDesign.SecondaryText;
                 DrawCardLabel(dc, box, ReadCardControlText(control), color,
                     title ? _cardTitleFont?.Handle ?? 0 : _visualFont?.Handle ?? 0, control,
-                    control == _generalNotice || control == _generalStatus || control == _natSettingsStatus ? 0x0010u | 0x8000 : DrawTextSingleLine | DrawTextVerticalCenter | 0x8000);
+                    control == _generalNotice || control == _generalStatus || control == _natSettingsStatus || ConnectionCategory && ConnectionBodyTexts.Contains(control) ? 0x0010u | 0x8000 : DrawTextSingleLine | DrawTextVerticalCenter | 0x8000);
                 return true;
             }
             finally { _ = EndCardPaint(control, ref paint); }

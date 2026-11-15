@@ -25,7 +25,7 @@ internal sealed class GenesisConnectionSettingsPage(GenesisGuiNextConnectionSett
         Input = GenesisGuiNextConnectionInput.From(_baseline);
         Conflict = false;
         IsError = settings.LoadFailed;
-        Message = IsError ? GenesisGuiNextConnectionSettings.LoadFailureMessage : "未保存の入力はカテゴリ移動・キャンセルで破棄します。";
+        Message = IsError ? GenesisGuiNextConnectionSettings.LoadFailureMessage : "未保存の変更は、移動またはキャンセルで破棄されます。";
     }
     internal void Refresh()
     {

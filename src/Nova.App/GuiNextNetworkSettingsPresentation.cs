@@ -95,11 +95,11 @@ internal sealed record GuiNextNetworkSettingsPresentation(
                 ? GuiNextNetworkTone.Green : GuiNextNetworkTone.Orange, failure)
         {
             IntegratedSettings = (snapshot.SharedPublicRelay is { } current
-                ? $"WAN Relay: {current.ListenerText} / port {current.Port} / {current.MappingText} / {current.Reachability}"
-                : "チェックは即時反映・非同期で自動保存（共通の保存・キャンセルとは別）") + "\r\n" +
-                $"実行中の設定：{OnOff(snapshot.RuntimeDesiredEnabled)}    保存済み：{OnOff(snapshot.SavedAutoPortMapping)}    {save}" +
+                ? $"WAN Relay: {current.ListenerText} / Port {current.Port}\r\nNAT: {current.MappingText.Replace("NAT mapping", string.Empty, StringComparison.Ordinal)} / 外部到達: {current.Reachability.Replace("外部到達性", string.Empty, StringComparison.Ordinal)}"
+                : "自動開放は即時反映・自動保存（保存・キャンセルとは別）") + "\r\n" +
+                $"自動開放: 実行中 {OnOff(snapshot.RuntimeDesiredEnabled)} / 保存済み {OnOff(snapshot.SavedAutoPortMapping)} / {save.Replace("runtime設定は戻しません", "実行中の設定は維持", StringComparison.Ordinal)}" +
                 (snapshot.StartupEnvironmentOverride
-                    ? $"\r\nNOVA_AUTO_PORT_MAPPING={OnOff(snapshot.StartupEnvironmentEnabled)}（優先）    次回起動時：{OnOff(snapshot.NextStartEffectiveEnabled)}"
+                    ? $"\r\nNOVA_AUTO_PORT_MAPPING={OnOff(snapshot.StartupEnvironmentEnabled)}（優先） / 次回起動 {OnOff(snapshot.NextStartEffectiveEnabled)}"
                     : string.Empty),
         };
     }

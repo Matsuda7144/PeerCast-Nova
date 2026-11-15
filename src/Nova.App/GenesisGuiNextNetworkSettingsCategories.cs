@@ -23,7 +23,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private readonly nuint _networkSettingsToken = unchecked((nuint)Interlocked.Increment(ref _nextNetworkSettingsToken));
         private Task<GenesisGuiNextConnectionSaveResult>? _connectionSave;
         private nint[] NetworkSettingsInputs => [.. _connectionInputs, .. _ypInputs];
-        private nint[] NetworkSettingsTexts => [.. _connectionLabels, .. _ypLabels, _natSettingsStatus];
+        private nint[] NetworkSettingsTexts => [.. _connectionLabels, .. _ypLabels, _natSettingsStatus, .. ConnectionBodyTexts];
         private nint[] NetworkSettingsButtons => [_connectionCategory, _yellowPagesCategory, _ypNew, _ypRemove, _ypToggle];
         private bool NetworkCategory => _settingsCategory is GenesisIntegratedSettingsCategory.Connection or GenesisIntegratedSettingsCategory.YellowPages;
         private bool ConnectionCategory => _settingsCategory == GenesisIntegratedSettingsCategory.Connection;
@@ -44,10 +44,13 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             }
             _connectionCategory = Button("通信", ConnectionCategoryId);
             _yellowPagesCategory = Button("YP", YellowPagesCategoryId);
+            CreateConnectionBody(instance);
             _connectionIpv6 = Check("IPv6を使う（次回用）", ConnectionIpv6Id);
-            _connectionWan = Check("WAN Relayを公開（次回用）", ConnectionWanId);
+            _connectionWan = Check("WAN Relayを公開（次回起動）", ConnectionWanId);
+            _ = SetConnectionParent(_connectionWan, _connectionBody);
             _connectionAutoMapping = Check(GenesisNetworkSettingsWindow.NatCheckboxLabel, ConnectionAutoMappingId);
             _natSettingsStatus = Control("STATIC", string.Empty, 0, 0);
+            _ = SetConnectionParent(_natSettingsStatus, _connectionBody);
             _ypEnabled = Check("有効（保存時に反映）", YpEnabledId);
             _ypNew = Button("新規", YpNewId); _ypRemove = Button("削除…", YpRemoveId); _ypToggle = Button("有効 / 無効", YpToggleId);
             _ypList = Control("LISTBOX", "登録YP", YpListId, WindowStyleTabStop | 0x00200000 | 0x0010 | 0x0040 | 1); // native fixed owner draw, no sorting
@@ -58,6 +61,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             {
                 _connectionLabels[i] = Control("STATIC", connectionLabels[i], 0, 0);
                 _connectionInputs[i] = Control("EDIT", "", ConnectionInputId + i, WindowStyleTabStop | 0x80);
+                _ = SetConnectionParent(_connectionLabels[i], _connectionBody);
+                _ = SetConnectionParent(_connectionInputs[i], _connectionBody);
                 _ = SendMessageW(_connectionInputs[i], 0x00C5, 32, 0);
             }
             for (var i = 0; i < _ypInputs.Length; i++)
@@ -105,10 +110,13 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             Show(_connectionWan, ConnectionCategory);
             Show(_connectionAutoMapping, ConnectionCategory);
             Show(_natSettingsStatus, ConnectionCategory);
+            Show(_connectionBody, ConnectionCategory);
+            _connectionScroll = 0;
             if (NetworkCategory)
             {
-                Show(_generalRuntime, ConnectionCategory); Show(_generalConfigured, ConnectionCategory);
-                Show(_generalNotice, ConnectionCategory); Show(_generalSave, true); Show(_generalCancel, true);
+                Show(_generalRuntime, false); Show(_generalConfigured, false);
+                Show(_generalNotice, false); Show(_generalStatus, !ConnectionCategory);
+                Show(_generalSave, true); Show(_generalCancel, true);
             }
             _ = EnableWindow(_connectionCategory, _connectionPage is not null);
             _ = EnableWindow(_yellowPagesCategory, _ypPage is not null);
@@ -222,10 +230,10 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 {
                     var page = _connectionPage!; page.Refresh();
                     Text(_generalTitle, "接続・帯域・リレー設定");
-                    Text(_generalNotice, GenesisGuiNextConnectionSettings.NextStartNotice + "\r\n帯域・リレー数：空欄は制限なし、0は上限0。半角整数で入力します。");
-                    Text(_generalRuntime, "起動時の読込値: " + ConnectionSummary(page.Startup));
-                    Text(_generalConfigured, "保存済み（次回起動）: " + ConnectionSummary(page.Saved));
-                    Text(_generalStatus, page.Message);
+                    Text(_connectionNotice, ConnectionNotice);
+                    Text(_connectionRuntime, "起動時: " + ConnectionSummary(page.Startup));
+                    Text(_connectionSaved, "保存済み: " + ConnectionSummary(page.Saved));
+                    Text(_connectionStatus, page.Message);
                     var v = page.Input;
                     var values = new[] { v.ListenPort, v.TotalUpstreamIpv4Kbps, v.TotalUpstreamIpv6Kbps, v.MaxRelaysTotal, v.MaxRelaysPerBroadcastChannel, v.MaxRelaysPerViewingChannel };
                     for (var i = 0; i < values.Length; i++) { Input(_connectionInputs[i], values[i]); _ = EnableWindow(_connectionInputs[i], !page.IsSaving); }
@@ -263,14 +271,14 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                     _ = EnableWindow(_ypToggle, page.SelectedId is not null && !page.Conflict);
                     _ = EnableWindow(_ypRemove, page.SelectedId is not null && !page.Conflict);
                 }
-                if (_networkInputError is { } error) { Text(_generalStatus, error); _ = EnableWindow(_generalSave, false); }
+                if (_networkInputError is { } error) { Text(ConnectionCategory ? _connectionStatus : _generalStatus, error); _ = EnableWindow(_generalSave, false); }
+                if (ConnectionCategory) PlaceConnectionBody();
             }
             finally { _updatingNetworkSettings = false; }
         }
         private static string ConnectionSummary(GenesisGuiNextConnectionPreferences v)
         {
-            static string N(int? n) => n?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "制限なし";
-            return $"WAN Relay {(v.WanRelayEnabled ? "ON" : "OFF")} / ポート {v.ListenPort} / IPv6 {(v.UseIpv6 ? "ON" : "OFF")} / 上りIPv4 {N(v.TotalUpstreamIpv4Kbps)}・IPv6 {N(v.TotalUpstreamIpv6Kbps)} kbps / リレー 合計 {N(v.MaxRelaysTotal)}・配信毎 {N(v.MaxRelaysPerBroadcastChannel)}・視聴毎 {N(v.MaxRelaysPerViewingChannel)}";
+            return GenesisConnectionSettingsText.Summary(v);
         }
         private static string YpListLabel(GenesisYellowPageDefinition e) => $"{(e.IsEnabled ? "有効" : "無効")} · {e.Name} ({e.Id})";
 
@@ -282,13 +290,11 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             var n = new GenesisGuiNextNetworkSettingsLayout(layout.Width);
             if (ConnectionCategory)
             {
-                Place(_generalTitle, n.ConnectionTitle); Place(_generalNotice, n.Notice);
-                Place(_generalRuntime, n.Runtime); Place(_generalConfigured, n.Saved); Place(_generalStatus, n.Status);
+                Place(_generalTitle, n.ConnectionTitle);
                 Place(_connectionIpv6, n.Ipv6);
-                Place(_connectionWan, n.Wan);
                 Place(_connectionAutoMapping, n.AutoMapping);
-                Place(_natSettingsStatus, n.NatStatus(layout));
-                for (var i = 0; i < 6; i++) { Place(_connectionInputs[i], n.ConnectionInput(i)); Place(_connectionLabels[i], n.ConnectionLabel(i)); }
+                Place(_connectionBody, n.Body(layout));
+                PlaceConnectionBody();
             }
             else
             {
@@ -300,7 +306,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         }
         private void PaintNetworkSettingsFrames(nint dc)
         {
-            if (!NetworkCategory) return;
+            if (!YellowPagesCategory) return;
             foreach (var h in ConnectionCategory ? _connectionInputs : _ypInputs)
             {
                 if (!GetWindowRect(h, out var b)) continue;

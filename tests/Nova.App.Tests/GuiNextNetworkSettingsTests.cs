@@ -39,8 +39,8 @@ public sealed class GuiNextNetworkSettingsTests
         Assert.Contains("override：" + (environment ? "ON" : "OFF"), view.Settings);
         Assert.Contains("次回起動時：" + (environment ? "ON" : "OFF"), view.Settings);
         Assert.Contains("環境変数 NOVA_AUTO_PORT_MAPPING が優先", view.Settings);
-        Assert.Contains($"実行中の設定：{(saved ? "ON" : "OFF")}    保存済み：{(saved ? "ON" : "OFF")}", view.IntegratedSettings);
-        Assert.Contains($"NOVA_AUTO_PORT_MAPPING={(environment ? "ON" : "OFF")}（優先）    次回起動時：{(environment ? "ON" : "OFF")}",
+        Assert.Contains($"自動開放: 実行中 {(saved ? "ON" : "OFF")} / 保存済み {(saved ? "ON" : "OFF")}", view.IntegratedSettings);
+        Assert.Contains($"NOVA_AUTO_PORT_MAPPING={(environment ? "ON" : "OFF")}（優先） / 次回起動 {(environment ? "ON" : "OFF")}",
             view.IntegratedSettings);
     }
 
@@ -178,14 +178,14 @@ public sealed class GuiNextNetworkSettingsTests
         Assert.Empty(callbacks);
         // Re-enter while the App-owned write is still pending.
         var pending = pane.Refresh();
-        Assert.Contains("即時反映・非同期で自動保存（共通の保存・キャンセルとは別）", pending.IntegratedSettings);
-        Assert.Contains("実行中の設定：ON    保存済み：OFF    保存中", pending.IntegratedSettings);
+        Assert.Contains("即時反映・自動保存（保存・キャンセルとは別）", pending.IntegratedSettings);
+        Assert.Contains("実行中 ON / 保存済み OFF / 保存中", pending.IntegratedSettings);
         adapter.Complete(0, succeeds ? NovaApplicationNetworkFailure.None : NovaApplicationNetworkFailure.PersistenceFailed);
         await save;
         Assert.True(pane.CanAcceptCallback(Assert.Single(callbacks)));
         var complete = pane.Refresh();
         Assert.Contains(expected, complete.IntegratedSettings);
-        Assert.Contains($"実行中の設定：ON    保存済み：{(succeeds ? "ON" : "OFF")}", complete.IntegratedSettings);
+        Assert.Contains($"実行中 ON / 保存済み {(succeeds ? "ON" : "OFF")}", complete.IntegratedSettings);
     }
 
     [Theory]
@@ -525,6 +525,23 @@ public sealed class GuiNextNetworkSettingsTests
         true, false, false, false, 0, true, false, false, null, false, 0, 0, 0, null,
         NovaApplicationNetworkFailure.None, NovaApplicationNetworkFailure.None, null, null,
         NovaApplicationPublicListenerAvailability.Unavailable);
+
+    [Theory]
+    [InlineData("Failed", "設定エラー")]
+    [InlineData("Listening", "TCP待受中")]
+    [InlineData("Off", "公開OFF")]
+    public void IntegratedStatusKeepsListenerMappingAndReachabilitySeparate(string state, string text)
+    {
+        var nat = new NatPortMappingReadState(true, 1, null, 120, DateTimeOffset.UnixEpoch, [], [], []);
+        var view = GuiNextNetworkSettingsPresentation.Create(Snapshot() with
+        {
+            SharedPublicRelay = new(Enum.Parse<GenesisSharedPublicRelayState>(state), 7144, 0, nat, false, null),
+        });
+        Assert.Contains($"WAN Relay: {text} / Port 7144\r\nNAT: 未作成 / 外部到達: 未確認", view.IntegratedSettings);
+        Assert.Contains("保存操作なし", view.IntegratedSettings);
+        Assert.DoesNotContain("到達不可", view.IntegratedSettings);
+        Assert.DoesNotContain("変更: なし", view.IntegratedSettings);
+    }
 
     private static NatPortMappingDisplay Nat() => new(
         true, 1, "NAT-PMP", null, NatMappingProtocol.Tcp, [], NatDisplayState.Mapping,
