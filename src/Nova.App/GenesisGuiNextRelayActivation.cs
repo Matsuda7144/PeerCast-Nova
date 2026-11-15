@@ -93,7 +93,10 @@ internal sealed class GenesisGuiNextRelayActivation : IAsyncDisposable
         // A retired owner's cleanup evidence may outlive its registry entry.
         // Never overlay it on a newer owner of the same channel.
         if (activation.ChannelId != channelId || tree.OwnerId is { } owner && owner != activation.SessionId) return tree;
-        if (!activation.CleanupConfirmed)
+        // A live Running owner has not been disposed yet. Its lifecycle cleanup
+        // flag is not evidence of a cleanup problem; retain the Network tree's
+        // own recovery/cleanup state. Terminal and stopping owners still fail closed.
+        if (!activation.CleanupConfirmed && activation.State != GenesisRelayActivationState.Running)
             return tree with { State = GenesisRelayTreeState.CleanupUnconfirmed };
         return tree.OwnerId is null && activation.State == GenesisRelayActivationState.Stopped
             ? tree with { State = GenesisRelayTreeState.Stopped } : tree;

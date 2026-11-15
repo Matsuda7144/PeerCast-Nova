@@ -47,10 +47,21 @@ public sealed class GenesisGuiNextRelayRuntimeTests
         await using var peer = await Peer.ConnectAsync(owner, timeout.Token);
         Assert.Equal(PcpCompatibilityOutcome.Accepted, peer.Handshake.Outcome);
         Assert.Equal(1, owner.ReservationCount);
+        // The lifecycle flag stays false until this live Owner has stopped. It
+        // must not hide the active child's manual-disconnect menu in the GUI.
+        await UntilAsync(() => model.ReadRelayTree(upstream.Channel).Nodes.Any(n =>
+            n.Kind == GenesisRelayTreeNodeKind.Downstream && n.Phase == PcpRelayConnectionPhase.Connected), timeout.Token);
+        Assert.False(model.RelaySnapshot.CleanupConfirmed);
+        var tree = model.ReadRelayTree(upstream.Channel);
+        Assert.Equal(GenesisRelayTreeState.Active, tree.State);
+        Assert.Equal(owner.SessionId, tree.OwnerId);
+        var child = Assert.Single(tree.Nodes, n => n.Kind == GenesisRelayTreeNodeKind.Downstream);
+        Assert.True(GenesisRelayTreeSelection.HasDownstreamIdentity(tree, GenesisRelayTreeSelection.Key(tree, child)));
         var registry = fixture.State.DownstreamRelays;
         await GenesisGuiNextRelayCommandDispatch.StopAsync(model).WaitAsync(timeout.Token);
         Assert.Equal(GenesisRelayActivationState.Stopped, model.RelaySnapshot.State);
         Assert.True(model.RelaySnapshot.CleanupConfirmed);
+        Assert.Equal(GenesisRelayTreeState.Stopped, model.ReadRelayTree(upstream.Channel).State);
         Assert.False(model.RelaySnapshot.ListenerBound);
         Assert.Null(model.RelaySnapshot.EndPoint);
         Assert.True(owner.CleanupConfirmed);
@@ -238,6 +249,7 @@ public sealed class GenesisGuiNextRelayRuntimeTests
             await activation.StopAsync().WaitAsync(timeout.Token);
             Assert.Equal(GenesisRelayActivationState.Failed, activation.Snapshot.State);
             Assert.False(activation.Snapshot.CleanupConfirmed);
+            Assert.Equal(GenesisRelayTreeState.CleanupUnconfirmed, activation.ReadRelayTree(upstream.ChannelId).State);
             Assert.Equal(1, fixture.State.DownstreamRelays.ActiveRelayCount);
             await activation.StopAsync();
             Assert.Equal(GenesisRelayActivationState.Failed, activation.Snapshot.State);
