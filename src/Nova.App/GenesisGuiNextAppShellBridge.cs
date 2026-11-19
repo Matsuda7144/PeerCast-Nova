@@ -1449,6 +1449,9 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
         else if (message == WindowMessageControlColorStatic)
         {
             if (state.IsRelayTreeControl(lParam)) return state.PrepareRelayTreeControl(wParam);
+            // Win32 read-only EDIT controls send WM_CTLCOLORSTATIC too. Their
+            // text and scroll repaints need the same opaque fill as other edits.
+            if (state.IsReadOnlyDetailsEdit(window, lParam)) return state.PrepareDarkControl(wParam, window);
             return state.PrepareStaticControl(wParam, window);
         }
         else if (message == WindowMessageControlColorEdit ||
@@ -2471,6 +2474,12 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
 
             return false;
         }
+
+        internal bool IsReadOnlyDetailsEdit(nint pane, nint control) =>
+            pane == _detailsPane && control != 0 &&
+            ((UsesRecordingPanel && control == _recordingHistoryDetails) ||
+             (UsesPublishingPanel && (control == _publishingInstructions || control == _publishingBasic ||
+                control == _publishingOptions || control == _publishingDiagnostic)));
 
         public nint PrepareStaticControl(nuint deviceContext, nint pane)
         {
