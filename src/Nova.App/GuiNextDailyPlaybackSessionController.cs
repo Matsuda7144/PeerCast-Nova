@@ -21,7 +21,8 @@ internal sealed class GuiNextDailyPlaybackSessionController :
     private const string PlaybackFailedMessage =
         "The playback source could not be started.";
     private const string PlayerUnavailableMessage =
-        "PCRPlayer64.exe is unavailable. Check Playback Settings or clear the path to use NOVA_PCRPLAYER_EXE or PATH.";
+        "The external player is unavailable. Check Playback Settings, --pcrplayer-executable, or NOVA_PCRPLAYER_EXE. " +
+        "If no path is configured, check PATH for PCRPlayer64.exe.";
     private const string StopFailedMessage =
         "The playback session could not be stopped.";
     private const string EndedUnexpectedlyMessage =

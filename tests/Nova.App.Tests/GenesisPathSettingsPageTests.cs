@@ -4,10 +4,10 @@ public sealed class GenesisPathSettingsPageTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "NovaSettingsCategories-" + Guid.NewGuid().ToString("N"));
     private string SettingsFile => Path.Combine(_root, "settings.json");
-    private string Executable(string name)
+    private string Executable(string name, string fileName = "PCRPlayer64.exe")
     {
         var directory = Directory.CreateDirectory(Path.Combine(_root, name)).FullName;
-        var path = Path.Combine(directory, "PCRPlayer64.exe");
+        var path = Path.Combine(directory, fileName);
         File.WriteAllBytes(path, []); // Validation fixture, never executed.
         return path;
     }
@@ -15,7 +15,7 @@ public sealed class GenesisPathSettingsPageTests : IDisposable
     [Fact]
     public void PlaybackCancelAndSaveReuseValidationPersistenceAndNextPlaySource()
     {
-        var first = Executable("first"); var next = Executable("next");
+        var first = Executable("first"); var next = Executable("next", "OtherPlayer.exe");
         var source = new GenesisGuiNextPlaybackPathSource();
         var settings = new GenesisGuiNextPlaybackSettings(new(first), source);
         string? saved = null;

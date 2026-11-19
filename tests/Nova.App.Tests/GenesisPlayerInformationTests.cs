@@ -32,12 +32,28 @@ public sealed class GenesisPlayerInformationTests
     public void PlayerArgumentsPreserveQuotedNamesAndOnlyAcceptSafeContactUrls()
     {
         const string url = "http://127.0.0.1:57133/pls/531DC8DFC7FB42928AC2C0A626517A87.pls";
-        var start = PcrPlayerExternalPlayerLauncher.CreateStartInfo("PCRPlayer64.exe", url, "船長 \"test\"", "https://example.test/?a=1&b=2");
+        var pcrPlayerPath = Path.Combine("Player Tools", "pcrplayer64.EXE");
+        var start = PcrPlayerExternalPlayerLauncher.CreateStartInfo(pcrPlayerPath, url, "船長 \"test\"", "https://example.test/?a=1&b=2");
         Assert.False(start.UseShellExecute);
         Assert.Equal(new[] { url, "船長 \"test\"", "https://example.test/?a=1&b=2" }, start.ArgumentList);
         start = PcrPlayerExternalPlayerLauncher.CreateStartInfo("PCRPlayer64.exe", url, "test\0", "file:///C:/private");
         Assert.Equal(new[] { url, "test", "" }, start.ArgumentList);
         Assert.Throws<ArgumentException>(() => PcrPlayerExternalPlayerLauncher.CreateStartInfo("PCRPlayer64.exe", "http://example.test/pls/531DC8DFC7FB42928AC2C0A626517A87.pls"));
         Assert.Throws<ArgumentException>(() => PcrPlayerExternalPlayerLauncher.CreateStartInfo("PCRPlayer64.exe", url + "?cmd=stop"));
+    }
+
+    [Theory]
+    [InlineData("PCRBrowser.exe", "/stream/531DC8DFC7FB42928AC2C0A626517A87")]
+    [InlineData("OtherPlayer.exe", "/pls/531DC8DFC7FB42928AC2C0A626517A87.pls")]
+    public void OtherPlayerArgumentsContainOnlyTheValidatedPlaybackUrl(string executable, string playbackPath)
+    {
+        var url = "http://127.0.0.1:57133" + playbackPath;
+        var start = PcrPlayerExternalPlayerLauncher.CreateStartInfo(executable, url, "channel name", "https://example.test/contact");
+
+        Assert.Equal(executable, start.FileName);
+        Assert.False(start.UseShellExecute);
+        Assert.Equal([url], start.ArgumentList);
+        Assert.Throws<ArgumentException>(() =>
+            PcrPlayerExternalPlayerLauncher.CreateStartInfo(executable, "http://example.test" + playbackPath));
     }
 }

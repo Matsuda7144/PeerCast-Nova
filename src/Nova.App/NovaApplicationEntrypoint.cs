@@ -4,12 +4,14 @@ internal static class NovaApplicationEntrypoint
 {
     private const string Usage =
         "Usage: Nova.App [--help | --about] [--pcrplayer-executable <path>]";
+    private const string PlayerExecutableHelp =
+        "  --pcrplayer-executable <path>  Configure the external player with an absolute .exe path.";
 
     internal static async ValueTask<int> RunAsync(
         string[] args,
         TextWriter output,
         TextWriter error,
-        Func<CancellationToken, ValueTask<NovaWindowsStartupResult>> runApplication,
+        Func<string?, CancellationToken, ValueTask<NovaWindowsStartupResult>> runApplication,
         CancellationToken cancellationToken,
         Func<string, CancellationToken, ValueTask<NovaWindowsStartupResult>>? runValidationApplication = null)
     {
@@ -37,18 +39,6 @@ internal static class NovaApplicationEntrypoint
             return 1;
         }
 
-        if (args.Length == 0)
-        {
-            var result = await runApplication(cancellationToken).ConfigureAwait(false);
-            return result switch
-            {
-                NovaWindowsStartupResult.Completed => 0,
-                NovaWindowsStartupResult.Cancelled => 0,
-                NovaWindowsStartupResult.PlatformUnsupported => 2,
-                _ => 1,
-            };
-        }
-
         if (args.Length == 1 && args[0] is "--help" or "-h")
         {
             await output.WriteLineAsync(Usage).ConfigureAwait(false);
@@ -56,6 +46,7 @@ internal static class NovaApplicationEntrypoint
                 .ConfigureAwait(false);
             await output.WriteLineAsync("  --about  Show legal and external-runtime information.")
                 .ConfigureAwait(false);
+            await output.WriteLineAsync(PlayerExecutableHelp).ConfigureAwait(false);
             await output.WriteLineAsync("  --validation-profile <absolute-path>  Isolated network-settings validation; media/router operations blocked.")
                 .ConfigureAwait(false);
             return 0;
@@ -75,8 +66,21 @@ internal static class NovaApplicationEntrypoint
             return 0;
         }
 
-        await error.WriteLineAsync(Usage).ConfigureAwait(false);
-        return 2;
+        if (!NovaDailyPlaybackCommandLine.TryParse(args, out var executablePath, out var applicationArguments) ||
+            applicationArguments.Length != 0)
+        {
+            await error.WriteLineAsync(Usage).ConfigureAwait(false);
+            return 2;
+        }
+
+        var startupResult = await runApplication(executablePath, cancellationToken).ConfigureAwait(false);
+        return startupResult switch
+        {
+            NovaWindowsStartupResult.Completed => 0,
+            NovaWindowsStartupResult.Cancelled => 0,
+            NovaWindowsStartupResult.PlatformUnsupported => 2,
+            _ => 1,
+        };
     }
 
     internal static async ValueTask<int> RunDailyAsync(
@@ -121,9 +125,7 @@ internal static class NovaApplicationEntrypoint
                 .ConfigureAwait(false);
             await output.WriteLineAsync("  --about  Show legal and external-runtime information.")
                 .ConfigureAwait(false);
-            await output.WriteLineAsync(
-                    "  --pcrplayer-executable <path>  Configure PCRPlayer64.exe.")
-                .ConfigureAwait(false);
+            await output.WriteLineAsync(PlayerExecutableHelp).ConfigureAwait(false);
             await output.WriteLineAsync("  " + NovaAcceptanceRelayOptions.Usage).ConfigureAwait(false);
             return 0;
         }

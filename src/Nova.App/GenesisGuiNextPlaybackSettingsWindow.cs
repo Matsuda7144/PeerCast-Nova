@@ -107,7 +107,7 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
         var window = CreateWindowExW(
             0,
             className,
-            appearance is not null ? "外観設定" : recordingSettings is null ? "Playback / PCRPlayer" : "録画保存先",
+            appearance is not null ? "外観設定" : recordingSettings is null ? "Playback / External Player" : "録画保存先",
             WindowStyleCaption |
                 WindowStyleSysMenu |
                 WindowStyleClipChildren |
@@ -226,7 +226,7 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
                 Filter = "Executable files (*.exe)\0*.exe\0All files (*.*)\0*.*\0\0",
                 File = fileBuffer,
                 MaximumFile = BrowseFileCapacity,
-                Title = "PCRPlayer executable",
+                Title = "外部プレイヤーの実行ファイルを選択",
                 Flags = FileMustExist | PathMustExist | NoChangeDirectory,
                 DefaultExtension = "exe",
             };
@@ -267,7 +267,7 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
     {
         try
         {
-            reportFailure($"PCRPlayer browse failed: {diagnostic}.");
+            reportFailure($"External player browse failed: {diagnostic}.");
         }
         catch (Exception exception) when (exception is IOException or ObjectDisposedException)
         {
@@ -283,9 +283,9 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
             GenesisGuiNextPlaybackSettingsUpdateResult.PersistenceFailed =>
                 "設定を保存できませんでした。保存場所を確認してください。",
             GenesisGuiNextPlaybackSettingsUpdateResult.InvalidPath =>
-                "絶対パスを入力してください。",
-            GenesisGuiNextPlaybackSettingsUpdateResult.UnsupportedExecutableName =>
-                "ファイル名は PCRPlayer64.exe にしてください。",
+                "有効な絶対パスを入力してください。",
+            GenesisGuiNextPlaybackSettingsUpdateResult.UnsupportedExecutableExtension =>
+                ".exeファイルを指定してください。",
             GenesisGuiNextPlaybackSettingsUpdateResult.ExecutableNotFound =>
                 "指定した実行ファイルが見つかりません。",
             GenesisGuiNextPlaybackSettingsUpdateResult.DirectorySelected =>
@@ -295,13 +295,13 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
             GenesisGuiNextPlaybackSettingsUpdateResult.PathCheckFailed =>
                 "実行ファイルを確認できません。パスを確認してください。",
             GenesisGuiNextPlaybackSettingsUpdateResult.Unchanged when
-                string.IsNullOrWhiteSpace(requestedPath) =>
-                "PCRPlayer設定は未設定です。次の再生では環境変数またはPATHを使います。",
+                GenesisGuiNextPlaybackSettings.NormalizePath(requestedPath) is null =>
+                "外部プレイヤーは未設定です。次の再生では環境変数またはPATHを使います。",
             GenesisGuiNextPlaybackSettingsUpdateResult.Unchanged =>
-                "PCRPlayer設定は既に保存されています。次の再生から使用します。",
-            _ when string.IsNullOrWhiteSpace(requestedPath) =>
+                "外部プレイヤーの設定は既に保存されています。次の再生から使用します。",
+            _ when GenesisGuiNextPlaybackSettings.NormalizePath(requestedPath) is null =>
                 "未設定に戻しました。次の再生では環境変数またはPATHを使います。",
-            _ => "PCRPlayer設定を保存しました。次の再生から使用します。",
+            _ => "外部プレイヤーの設定を保存しました。次の再生から使用します。",
         };
 
     private static Controls? CreateAppearanceControls(nint window, nint instance)
@@ -326,7 +326,7 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
 
     private static Controls? CreateControls(nint window, nint instance, bool recordingMode)
     {
-        var label = CreateControl(window, instance, "STATIC", recordingMode ? "録画保存先 (絶対パス)" : "PCRPlayer 実行ファイル", 16, 16, 580, 20, 0);
+        var label = CreateControl(window, instance, "STATIC", recordingMode ? "録画保存先 (絶対パス)" : "外部プレイヤーの実行ファイルパス", 16, 16, 580, 20, 0);
         var path = CreateControl(
             window,
             instance,
@@ -349,7 +349,7 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
             instance,
             "STATIC",
             recordingMode ? GenesisRecordingOutputDirectorySettings.NextStartNotice :
-                "空欄では既存の NOVA_PCRPLAYER_EXE または PATH を使います。保存した設定は次のPlayから反映されます。",
+                ".exeファイルの絶対パスを指定します。保存した設定は次の再生から使用します。\r\n空欄では環境変数またはPATHを使います。",
             16,
             recordingMode ? 142 : 78,
             610,

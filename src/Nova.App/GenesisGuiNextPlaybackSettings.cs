@@ -20,7 +20,7 @@ internal enum GenesisGuiNextPlaybackSettingsUpdateResult
     Saved,
     Unchanged,
     InvalidPath,
-    UnsupportedExecutableName,
+    UnsupportedExecutableExtension,
     ExecutableNotFound,
     DirectorySelected,
     AccessDenied,
@@ -103,17 +103,23 @@ internal sealed class GenesisGuiNextPlaybackSettings
             path,
             Path.IsPathFullyQualified,
             Path.GetFileName,
-            File.GetAttributes);
+            File.GetAttributes,
+            static candidatePath =>
+            {
+                using var file = File.Open(candidatePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            });
 
     internal static GenesisGuiNextPlaybackSettingsUpdateResult? ValidateExecutablePath(
         string path,
         Func<string, bool> isPathFullyQualified,
         Func<string, string> getFileName,
-        Func<string, FileAttributes> getAttributes)
+        Func<string, FileAttributes> getAttributes,
+        Action<string> checkReadable)
     {
         ArgumentNullException.ThrowIfNull(isPathFullyQualified);
         ArgumentNullException.ThrowIfNull(getFileName);
         ArgumentNullException.ThrowIfNull(getAttributes);
+        ArgumentNullException.ThrowIfNull(checkReadable);
 
         try
         {
@@ -122,12 +128,10 @@ internal sealed class GenesisGuiNextPlaybackSettings
                 return GenesisGuiNextPlaybackSettingsUpdateResult.InvalidPath;
             }
 
-            if (!string.Equals(
-                    getFileName(path),
-                    PcrPlayerExternalPlayerLauncher.ExecutableFileName,
-                    StringComparison.OrdinalIgnoreCase))
+            var fileName = getFileName(path);
+            if (fileName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
             {
-                return GenesisGuiNextPlaybackSettingsUpdateResult.UnsupportedExecutableName;
+                return GenesisGuiNextPlaybackSettingsUpdateResult.InvalidPath;
             }
 
             var attributes = getAttributes(path);
@@ -136,6 +140,12 @@ internal sealed class GenesisGuiNextPlaybackSettings
                 return GenesisGuiNextPlaybackSettingsUpdateResult.DirectorySelected;
             }
 
+            if (!string.Equals(Path.GetExtension(fileName), ".exe", StringComparison.OrdinalIgnoreCase))
+            {
+                return GenesisGuiNextPlaybackSettingsUpdateResult.UnsupportedExecutableExtension;
+            }
+
+            checkReadable(path);
             return null;
         }
         catch (FileNotFoundException)

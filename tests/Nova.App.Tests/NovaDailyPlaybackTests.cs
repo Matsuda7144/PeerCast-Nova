@@ -43,8 +43,8 @@ public sealed class NovaDailyPlaybackTests
         var explicitDirectory = directory.CreateSubdirectory("explicit");
         var environmentDirectory = directory.CreateSubdirectory("environment");
         var pathDirectory = directory.CreateSubdirectory("path");
-        var explicitPath = TemporaryDirectory.CreateFile(explicitDirectory, "PCRPlayer64.exe");
-        var environmentPath = TemporaryDirectory.CreateFile(environmentDirectory, "PCRPlayer64.exe");
+        var explicitPath = TemporaryDirectory.CreateFile(explicitDirectory, "PCRBrowser.exe");
+        var environmentPath = TemporaryDirectory.CreateFile(environmentDirectory, "OtherPlayer.exe");
         var pathPlayer = TemporaryDirectory.CreateFile(pathDirectory, "PCRPlayer64.exe");
 
         Assert.Equal(
@@ -65,23 +65,44 @@ public sealed class NovaDailyPlaybackTests
                 null,
                 null,
                 pathDirectory));
+        Assert.Equal(
+            pathPlayer,
+            PcrPlayerExternalPlayerLauncher.ResolveExecutablePath("PCRPlayer64.exe", environmentPath, pathDirectory));
+        Assert.Throws<PcrPlayerExecutableResolutionException>(() =>
+            PcrPlayerExternalPlayerLauncher.ResolveExecutablePath(null, null, environmentDirectory));
     }
 
-    [Fact]
-    public void PcrPlayerExecutableResolution_InvalidExplicitPathDoesNotFallback()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PcrPlayerExecutableResolution_InvalidConfiguredPathDoesNotFallback(bool useEnvironment)
     {
         using var directory = new TemporaryDirectory();
+        var pathDirectory = directory.CreateSubdirectory("path");
         var environmentPath = TemporaryDirectory.CreateFile(
-            directory.CreateSubdirectory("environment"),
+            pathDirectory,
             "PCRPlayer64.exe");
+        var missingPath = Path.Combine(directory.Path, "missing", "OtherPlayer.exe");
 
         var exception = Assert.Throws<PcrPlayerExecutableResolutionException>(() =>
             PcrPlayerExternalPlayerLauncher.ResolveExecutablePath(
-                Path.Combine(directory.Path, "missing", "PCRPlayer64.exe"),
-                environmentPath,
-                null));
+                useEnvironment ? null : missingPath,
+                useEnvironment ? missingPath : environmentPath,
+                pathDirectory));
 
         Assert.Contains("no fallback was attempted", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PcrPlayerExecutableResolution_RejectsNonExeAndRelativeOverrides()
+    {
+        using var directory = new TemporaryDirectory();
+        var nonExe = TemporaryDirectory.CreateFile(directory.CreateSubdirectory("player"), "OtherPlayer.cmd");
+
+        Assert.Throws<PcrPlayerExecutableResolutionException>(() =>
+            PcrPlayerExternalPlayerLauncher.ResolveExecutablePath(nonExe, null, null));
+        Assert.Throws<PcrPlayerExecutableResolutionException>(() =>
+            PcrPlayerExternalPlayerLauncher.ResolveExecutablePath(null, Path.Combine("tools", "OtherPlayer.exe"), null));
     }
 
     [Fact]

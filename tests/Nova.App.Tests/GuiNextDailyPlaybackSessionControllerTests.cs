@@ -141,7 +141,8 @@ public sealed class GuiNextDailyPlaybackSessionControllerTests
         Assert.Equal(PlaybackSessionCommandResult.Faulted, outcome.Result);
         Assert.Equal(PlaybackSessionState.Faulted, outcome.Snapshot.State);
         Assert.Equal(
-            "PCRPlayer64.exe is unavailable. Check Playback Settings or clear the path to use NOVA_PCRPLAYER_EXE or PATH.",
+            "The external player is unavailable. Check Playback Settings, --pcrplayer-executable, or NOVA_PCRPLAYER_EXE. " +
+            "If no path is configured, check PATH for PCRPlayer64.exe.",
             outcome.Snapshot.ErrorMessage);
     }
 

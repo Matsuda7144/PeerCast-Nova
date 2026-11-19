@@ -68,13 +68,14 @@ Nova 内の managed decoder、scheduler、Windows output を使う playback の�
 
 [Headless publish channel foundation](docs/headless-obs-publish-channel.md) は同じchannel generationを既存relayとHTTP-FLVへ接続します。managed localhost roundtripまでが検証範囲で、実OBS相互運用は未検証です。
 
-MVP の再生要件を満たす採用済み経路は external-player handoff です。PCRPlayer と DSPlayer を含む対応 player に PCP 入力を loopback 限定の HTTP-FLV で渡します。現在の `Nova.App` で PCRPlayer を使う場合は、実行ファイルを次の順で解決します。
+MVP の再生要件を満たす採用済み経路は external-player handoff です。PCRPlayer と DSPlayer を含む対応 player に PCP 入力を loopback 限定の HTTP-FLV で渡します。Modern の「設定 → 再生」では、実在する読み取り可能な `.exe` の絶対パスを保存できます。実行ファイルは次の順で解決します。
 
 1. `--pcrplayer-executable <path>`
-2. `NOVA_PCRPLAYER_EXE`
-3. PATH 上の `PCRPlayer64.exe`
+2. GUI に保存したパス
+3. `NOVA_PCRPLAYER_EXE`
+4. PATH 上の `PCRPlayer64.exe`
 
-明示した実行ファイルが無効な場合はエラーを表示し、別の player へ自動で切り替えません。
+CLI と環境変数でも実行ファイルの絶対パスを指定します。互換性のため、従来の `PCRPlayer64.exe` という名前だけの指定は PATH から解決します。明示した設定が無効な場合はエラーを表示します。`PCRPlayer64.exe` は従来の追加引数を使い、ほかの実行ファイルには再生URLだけを渡します。
 
 ## 公開 Relay のポート自動開放
 

@@ -913,7 +913,7 @@ internal sealed class GenesisChannelNotificationSettingsButtonBridge : IAsyncDis
                     !AppendSetting(
                         menu,
                         GenesisChannelNotificationSettingsCommand.Playback,
-                        "Playback / PCRPlayer...",
+                        "Playback / External Player...",
                         isChecked: false))
                 {
                     return null;

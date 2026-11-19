@@ -286,7 +286,7 @@ internal sealed class NovaDailyHttpFlvPlaybackController :
 
             _ = await ready.Task.ConfigureAwait(false);
             startupCancellation.Token.ThrowIfCancellationRequested();
-            _setStatus($"{channel.Name}: PCRPlayer起動中…");
+            _setStatus($"{channel.Name}: 外部プレイヤー起動中…");
             var info = ReadPlayerInfo(active, source.ChannelId.Value);
             active.Player = _playerLauncher.Launch(host.PlaylistUrlFor(source.ChannelId),
                 info?.Metadata.Name ?? channel.Name, info is null ? channel.ContactUrl : info.Metadata.ContactUrl);

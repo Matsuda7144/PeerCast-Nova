@@ -30,6 +30,7 @@ public sealed record NovaWindowsStartupOptions
     internal IGenesisNetworkSettingsController NetworkSettingsController { get; init; } =
         GenesisUnavailableNetworkSettingsController.Instance;
     internal NovaValidationProfile? ValidationProfile { get; init; }
+    internal string? PlayerExecutablePath { get; init; }
 }
 
 /// <summary>
@@ -90,7 +91,7 @@ public sealed class NovaWindowsStartupComposition
                 new NovaApplicationNetworkOwner(NovaSettingsStore.CreateDefault()));
         _genesisPlaybackControllerFactory = playbackControllerFactory is null
             ? (paths, settings) => _options.ValidationProfile is { } profile ? profile.CreatePlaybackController(paths) :
-                CreateDefaultGenesisPlaybackController(paths, settings)
+                CreateDefaultGenesisPlaybackController(paths, settings, explicitPlayerPath: _options.PlayerExecutablePath)
             : (_, _) => playbackControllerFactory();
     }
 
@@ -261,11 +262,12 @@ public sealed class NovaWindowsStartupComposition
     internal static GuiNextDailyPlaybackSessionController CreateDefaultGenesisPlaybackController(
         GenesisGuiNextPlaybackPathSource pathSource,
         GenesisRecordingOutputDirectorySettings? recordingSettings = null,
-        GenesisRecordingHistoryStore? historyStore = null)
+        GenesisRecordingHistoryStore? historyStore = null,
+        string? explicitPlayerPath = null)
     {
         ArgumentNullException.ThrowIfNull(pathSource);
         return GuiNextDailyPlaybackSessionController.CreateSystemWithPathProvider(
-            () => pathSource.Current, recordingSettings, historyStore);
+            () => explicitPlayerPath ?? pathSource.Current, recordingSettings, historyStore);
     }
 
     internal async ValueTask<NovaWindowsStartupResult> RunGenesisAsync(

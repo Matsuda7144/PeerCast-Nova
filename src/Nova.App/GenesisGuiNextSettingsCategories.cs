@@ -177,9 +177,9 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 var recording = _settingsCategory == GenesisIntegratedSettingsCategory.Recording;
                 _ = SetWindowTextW(_generalTitle, recording ? "録画・保存先設定" : "再生設定");
                 _ = SetWindowTextW(_generalNotice, recording ? GenesisRecordingOutputDirectorySettings.NextStartNotice + " 既存writerの保存先は変わりません。\r\n「既定値に戻す」は即時保存します。フォルダーや録画ファイルは作成・移動しません。" :
-                    "PCRPlayer64.exeのパスを設定します。保存した設定は次の再生から使用します。\r\n空欄・「未設定に戻す」では環境変数またはPATHを使用します。戻す操作は即時保存です。");
+                    "外部プレイヤーの実行ファイル（.exe）を指定します。保存した設定は次の再生から使用します。\r\n空欄・「未設定に戻す」では環境変数またはPATHを使用します。戻す操作は即時保存です。");
                 _ = SetWindowTextW(_generalRuntime, recording ? "現在起動中: " + page.RuntimeDirectory : "保存値: " + (page.Saved.Length == 0 ? "未設定" : page.Saved));
-                _ = SetWindowTextW(_generalConfigured, recording ? "次回起動用: " + page.EffectiveDirectory + (page.Saved.Length == 0 ? "（既定）" : string.Empty) : "PCRPlayer実行ファイルパス（未保存の入力はカテゴリ移動で破棄）");
+                _ = SetWindowTextW(_generalConfigured, recording ? "次回起動用: " + page.EffectiveDirectory + (page.Saved.Length == 0 ? "（既定）" : string.Empty) : "外部プレイヤーの実行ファイルパス（未保存の入力はカテゴリ移動で破棄）");
                 _updatingSettingsPath = true;
                 try
                 {

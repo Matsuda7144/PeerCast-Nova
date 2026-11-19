@@ -15,7 +15,7 @@ public sealed class NovaApplicationEntrypointTests
             [argument],
             output,
             error,
-            _ =>
+            (_, _) =>
             {
                 launches++;
                 return ValueTask.FromResult(NovaWindowsStartupResult.Completed);
@@ -25,6 +25,7 @@ public sealed class NovaApplicationEntrypointTests
         Assert.Equal(0, exitCode);
         Assert.Equal(0, launches);
         Assert.StartsWith("Usage: Nova.App [--help | --about]", output.ToString());
+        Assert.Contains("--pcrplayer-executable <path>", output.ToString(), StringComparison.Ordinal);
         Assert.Empty(error.ToString());
     }
 
@@ -40,7 +41,7 @@ public sealed class NovaApplicationEntrypointTests
             ["--about"],
             output,
             error,
-            _ =>
+            (_, _) =>
             {
                 launches++;
                 return ValueTask.FromResult(NovaWindowsStartupResult.Completed);
@@ -60,6 +61,8 @@ public sealed class NovaApplicationEntrypointTests
     [Theory]
     [InlineData("--unknown")]
     [InlineData("--help", "--about")]
+    [InlineData("--pcrplayer-executable")]
+    [InlineData("--pcrplayer-executable", "first.exe", "--pcrplayer-executable", "second.exe")]
     public async Task InvalidArgumentsFailBeforeStartingApplication(params string[] args)
     {
         var output = new StringWriter();
@@ -70,7 +73,7 @@ public sealed class NovaApplicationEntrypointTests
             args,
             output,
             error,
-            _ =>
+            (_, _) =>
             {
                 launches++;
                 return ValueTask.FromResult(NovaWindowsStartupResult.Completed);
@@ -83,6 +86,26 @@ public sealed class NovaApplicationEntrypointTests
         Assert.Equal(
             $"Usage: Nova.App [--help | --about] [--pcrplayer-executable <path>]{Environment.NewLine}",
             error.ToString());
+    }
+
+    [Fact]
+    public async Task PlayerOptionPassesTheExecutablePathToGuiStartup()
+    {
+        const string path = @"C:\Player Tools\PCRBrowser.exe";
+        string? received = null;
+        var exitCode = await NovaApplicationEntrypoint.RunAsync(
+            ["--pcrplayer-executable", path],
+            TextWriter.Null,
+            TextWriter.Null,
+            (playerPath, _) =>
+            {
+                received = playerPath;
+                return ValueTask.FromResult(NovaWindowsStartupResult.Completed);
+            },
+            CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(path, received);
     }
 
     [Theory]
@@ -101,8 +124,9 @@ public sealed class NovaApplicationEntrypointTests
             [],
             TextWriter.Null,
             TextWriter.Null,
-            _ =>
+            (playerPath, _) =>
             {
+                Assert.Null(playerPath);
                 launches++;
                 return ValueTask.FromResult(result);
             },

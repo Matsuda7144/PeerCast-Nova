@@ -24,7 +24,7 @@ public sealed class NovaValidationProfileTests
     {
         var normal = 0; var validation = 0;
         var result = await NovaApplicationEntrypoint.RunAsync([], new StringWriter(), new StringWriter(),
-            _ => { normal++; return ValueTask.FromResult(NovaWindowsStartupResult.Completed); },
+            (_, _) => { normal++; return ValueTask.FromResult(NovaWindowsStartupResult.Completed); },
             CancellationToken.None, (_, _) => { validation++; throw new InvalidOperationException(); });
         Assert.Equal(0, result); Assert.Equal(1, normal); Assert.Equal(0, validation);
     }
@@ -36,7 +36,7 @@ public sealed class NovaValidationProfileTests
         var normal = 0; string? selected = null;
         var result = await NovaApplicationEntrypoint.RunAsync(["--validation-profile", temp.Root],
             new StringWriter(), new StringWriter(),
-            _ => { normal++; throw new InvalidOperationException(); }, CancellationToken.None,
+            (_, _) => { normal++; throw new InvalidOperationException(); }, CancellationToken.None,
             (root, _) => { selected = root; return ValueTask.FromResult(NovaWindowsStartupResult.Completed); });
         Assert.Equal(0, result); Assert.Equal(temp.Root, selected); Assert.Equal(0, normal);
         Assert.False(Directory.Exists(temp.Root));
@@ -52,7 +52,7 @@ public sealed class NovaValidationProfileTests
         var normal = 0; var validation = 0;
         Assert.Equal(2, await NovaApplicationEntrypoint.RunAsync(["--validation-profile", root],
             new StringWriter(), new StringWriter(),
-            _ => { normal++; throw new InvalidOperationException(); }, CancellationToken.None,
+            (_, _) => { normal++; throw new InvalidOperationException(); }, CancellationToken.None,
             (_, _) => { validation++; throw new InvalidOperationException(); }));
         Assert.Equal(0, normal); Assert.Equal(0, validation);
     }
@@ -254,7 +254,7 @@ public sealed class NovaValidationProfileTests
         var normal = 0;
         var error = new StringWriter();
         Assert.Equal(1, await NovaApplicationEntrypoint.RunAsync(["--validation-profile", temp.Root],
-            new StringWriter(), error, _ => { normal++; throw new InvalidOperationException(); },
+            new StringWriter(), error, (_, _) => { normal++; throw new InvalidOperationException(); },
             CancellationToken.None, (_, _) => throw new IOException("private details")));
         Assert.Equal(0, normal);
         Assert.DoesNotContain("private details", error.ToString(), StringComparison.Ordinal);

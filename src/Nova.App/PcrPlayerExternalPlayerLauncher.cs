@@ -66,7 +66,7 @@ internal sealed class PcrPlayerExternalPlayerLauncher
             !IsPlayerPath(uri.AbsolutePath))
         {
             throw new ArgumentException(
-                "PCRPlayer must receive a loopback HTTP-FLV stream URL.",
+                "The external player must receive a loopback HTTP-FLV playback URL.",
                 nameof(streamUrl));
         }
 
@@ -76,7 +76,8 @@ internal sealed class PcrPlayerExternalPlayerLauncher
             UseShellExecute = false,
         };
         startInfo.ArgumentList.Add(streamUrl);
-        if (channelName is not null || contactUrl is not null)
+        if (string.Equals(Path.GetFileName(executablePath), ExecutableFileName, StringComparison.OrdinalIgnoreCase) &&
+            (channelName is not null || contactUrl is not null))
         {
             startInfo.ArgumentList.Add(new string((channelName ?? string.Empty).Take(512).Where(c => !char.IsControl(c)).ToArray()));
             startInfo.ArgumentList.Add(GenesisContactUrl.Normalize(contactUrl) ?? string.Empty);
@@ -103,7 +104,7 @@ internal sealed class PcrPlayerExternalPlayerLauncher
         {
             if (!process.Start())
             {
-                throw new InvalidOperationException("PCRPlayer did not start.");
+                throw new InvalidOperationException("The external player did not start.");
             }
 
             return new SystemPcrPlayerProcessLifetime(process);
@@ -123,24 +124,15 @@ internal sealed class PcrPlayerExternalPlayerLauncher
 
     private static string ResolveConfiguredPath(string configuredPath, string? searchPath)
     {
-        if (string.IsNullOrWhiteSpace(configuredPath))
+        var normalized = GenesisGuiNextPlaybackSettings.NormalizePath(configuredPath);
+        if (normalized is null)
         {
             throw new PcrPlayerExecutableResolutionException(
-                "The configured PCRPlayer path is empty. Specify " +
+                "The configured external player path is empty. Specify " +
                 "--pcrplayer-executable <path> or remove the invalid override.");
         }
 
-        var normalized = configuredPath.Trim();
-        if (!string.Equals(
-                Path.GetFileName(normalized),
-                ExecutableFileName,
-                StringComparison.OrdinalIgnoreCase))
-        {
-            throw new PcrPlayerExecutableResolutionException(
-                "The configured executable must be PCRPlayer64.exe. Correct " +
-                "--pcrplayer-executable or NOVA_PCRPLAYER_EXE; no fallback was attempted.");
-        }
-
+        // Preserve the legacy override that requests PCRPlayer by name on PATH.
         if (string.Equals(normalized, ExecutableFileName, StringComparison.OrdinalIgnoreCase))
         {
             return FindOnPath(normalized, searchPath) ??
@@ -149,24 +141,23 @@ internal sealed class PcrPlayerExternalPlayerLauncher
                     "executable path; no fallback was attempted.");
         }
 
-        string absolutePath;
-        try
+        if (GenesisGuiNextPlaybackSettings.ValidateExecutablePath(normalized) is { } failure)
         {
-            absolutePath = Path.GetFullPath(normalized);
-        }
-        catch (Exception exception) when (
-            exception is ArgumentException or NotSupportedException or PathTooLongException)
-        {
+            var reason = failure switch
+            {
+                GenesisGuiNextPlaybackSettingsUpdateResult.UnsupportedExecutableExtension => "must specify an .exe file",
+                GenesisGuiNextPlaybackSettingsUpdateResult.ExecutableNotFound => "does not exist",
+                GenesisGuiNextPlaybackSettingsUpdateResult.DirectorySelected => "points to a directory",
+                GenesisGuiNextPlaybackSettingsUpdateResult.AccessDenied => "is not accessible",
+                GenesisGuiNextPlaybackSettingsUpdateResult.InvalidPath => "must be a valid absolute path",
+                _ => "could not be checked",
+            };
             throw new PcrPlayerExecutableResolutionException(
-                "The configured PCRPlayer path is invalid. Correct " +
-                "--pcrplayer-executable or NOVA_PCRPLAYER_EXE; no fallback was attempted.");
+                $"The configured external player path {reason}. Correct the path in Playback Settings, " +
+                "--pcrplayer-executable, or NOVA_PCRPLAYER_EXE; no fallback was attempted.");
         }
 
-        return File.Exists(absolutePath)
-            ? absolutePath
-            : throw new PcrPlayerExecutableResolutionException(
-                "The configured PCRPlayer executable was not found. Correct " +
-                "--pcrplayer-executable or NOVA_PCRPLAYER_EXE; no fallback was attempted.");
+        return Path.GetFullPath(normalized);
     }
 
     private static string? FindOnPath(string executableFileName, string? searchPath)
