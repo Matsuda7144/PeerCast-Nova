@@ -52,8 +52,15 @@ public sealed class GenesisGuiNextFavoriteYellowPageRestartTests
             var row = Assert.Single(
                 GenesisGuiNextNativeTabProjection.Create(secondState.Tabs));
             Assert.Equal("Updated", row.DisplayChannel.Name);
-            Assert.Equal("SP, Other", row.DisplayChannel.YellowPageText);
+            // Last-known YP survives the restart in storage, but is not current
+            // observed metadata and must not be displayed as such.
+            Assert.True(row.IsUnobservedFavorite);
+            Assert.Empty(row.DisplayChannel.YellowPageText);
             Assert.False(row.IsInteractive);
+            var details = GenesisGuiNextChannelDetailsProjection.FromSelection([row], 0);
+            Assert.Empty(details.YellowPage);
+            Assert.Empty(details.Source);
+            Assert.Empty(details.ChannelId);
 
             secondState.Tabs.SearchText = "other";
             Assert.Single(

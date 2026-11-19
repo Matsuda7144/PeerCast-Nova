@@ -154,7 +154,7 @@ public sealed class GenesisGuiNextChannelDetailsProjectionTests
     }
 
     [Fact]
-    public void OfflineFavoriteDetailsUseOnlySavedProjectionMetadata()
+    public void UnobservedFavoriteDetailsHideHistoricalMetadata()
     {
         var saved = new GenesisChannelItem(
             "Offline favorite",
@@ -177,14 +177,18 @@ public sealed class GenesisGuiNextChannelDetailsProjectionTests
         var details = GenesisGuiNextChannelDetailsProjection.FromSelection(rows, 0);
 
         Assert.False(rows[0].IsInteractive);
+        Assert.True(rows[0].IsUnobservedFavorite);
         Assert.False(details.IsEmpty);
         Assert.Equal(saved.Name, details.Name);
-        Assert.Equal(saved.Description, details.Description);
-        Assert.Equal(saved.ChannelId, details.ChannelId);
-        Assert.Equal(saved.Source, details.Source);
-        Assert.Equal("Saved YP", details.YellowPage);
+        Assert.Equal("現在の詳細は未取得", details.Description);
+        Assert.Empty(details.ChannelId);
+        Assert.Empty(details.Source);
+        Assert.Empty(details.YellowPage);
+        Assert.Empty(details.Format);
         Assert.Empty(details.Listeners);
         Assert.Empty(details.Relays);
+        Assert.DoesNotContain(saved.Source, details.CopyText, StringComparison.Ordinal);
+        Assert.DoesNotContain(saved.Description!, details.CopyText, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -147,9 +147,15 @@ public sealed class GenesisGuiNextFavoritePresencePublisherIntegrationTests
             GenesisGuiNextNativeTabProjection.Create(tabs));
         Assert.Equal(initial.Name, endedRow.DisplayChannel.Name);
         Assert.Equal(initial.Source, endedRow.DisplayChannel.Source);
-        Assert.Equal(initial.Description, endedRow.DisplayChannel.Description);
+        Assert.Equal("現在の詳細は未取得", endedRow.DisplayChannel.Description);
+        Assert.Null(endedRow.DisplayChannel.Type);
+        Assert.True(endedRow.IsUnobservedFavorite);
         Assert.Null(endedRow.InteractiveChannel);
         Assert.False(endedRow.IsInteractive);
+        var endedDetails = GenesisGuiNextChannelDetailsProjection.FromSelection([endedRow], 0);
+        Assert.Empty(endedDetails.Source);
+        Assert.Empty(endedDetails.ChannelId);
+        Assert.Equal("現在の詳細は未取得", endedDetails.Description);
 
         Assert.Equal(
             GenesisChannelCatalogRefreshResult.Completed,
@@ -172,6 +178,9 @@ public sealed class GenesisGuiNextFavoritePresencePublisherIntegrationTests
         Assert.Same(returned, returnedRow.DisplayChannel);
         Assert.Same(returned, returnedRow.InteractiveChannel);
         Assert.True(returnedRow.IsInteractive);
+        Assert.False(returnedRow.IsUnobservedFavorite);
+        Assert.Equal(returned.Description,
+            GenesisGuiNextChannelDetailsProjection.FromSelection([returnedRow], 0).Description);
         var lastKnownFavorite = Assert.Single(favorites.Snapshot);
         Assert.Equal(returned.Name, lastKnownFavorite.Name);
         Assert.Equal(returned.Source, lastKnownFavorite.LastKnownSource);

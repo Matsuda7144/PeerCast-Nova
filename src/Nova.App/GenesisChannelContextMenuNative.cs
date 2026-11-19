@@ -321,7 +321,7 @@ internal static class GenesisChannelContextMenuNative
                     (nuint)GenesisChannelContextMenuCommand.CopyContact, "コンタクトURLをコピー") ||
                 !AppendMenuW(
                     menu,
-                    MenuFlagString,
+                    actions is not null && string.IsNullOrWhiteSpace(actions.SourceToCopy) ? MenuFlagGrayed : MenuFlagString,
                     (nuint)GenesisChannelContextMenuCommand.CopySource,
                     "ソースURLをコピー\tCtrl+C") ||
                 (actions?.DetailsText is { Length: > 0 } && !AppendMenuW(menu, MenuFlagString,

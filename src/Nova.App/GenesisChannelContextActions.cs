@@ -27,6 +27,7 @@ internal sealed record GenesisChannelContextTarget(
     bool CanRecord, ChannelId? ChannelId, RecordingSessionId? SessionId, string? RecordingDirectory)
 {
     public string? DetailsText { get; init; }
+    public string SourceToCopy { get; init; } = string.Empty;
     public string RecordingLabel => StopRecording ? "録画停止" : "録画開始";
 }
 
@@ -49,11 +50,15 @@ internal static class GenesisChannelContextActions
         var manual = channel is null ? null : viewModel.ActiveManualRecordings.FirstOrDefault(recording =>
             GenesisRecordingCandidateAdapter.TryGetChannelId(channel, out var id) && recording.ChannelId == id);
         var stop = presentation.IsRecording && (manual is not null || presentation.CanStop);
+        var details = GenesisGuiNextChannelDetailsProjection.FromRow(row);
         return new(GenesisContactUrl.Normalize(channel?.ContactUrl), channel, stop,
             stop ? presentation.CanStop && manual is not null : presentation.CanRecord,
             manual?.ChannelId, manual?.SessionId,
             viewModel.RecordingOutputSettings?.CurrentRuntimeDirectory)
-        { DetailsText = viewModel.UsesModernAppearance ? GenesisGuiNextChannelDetailsProjection.FromChannel(row.DisplayChannel).CopyText : null };
+        {
+            DetailsText = viewModel.UsesModernAppearance ? details.CopyText : null,
+            SourceToCopy = details.Source,
+        };
     }
 
     public static bool IsAction(GenesisChannelContextMenuCommand command) => command is

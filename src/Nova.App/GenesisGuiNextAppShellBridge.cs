@@ -2803,8 +2803,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 return;
             }
 
-            var details = GenesisGuiNextChannelDetailsProjection.FromChannel(
-                row?.DisplayChannel);
+            var details = GenesisGuiNextChannelDetailsProjection.FromRow(row);
             _ = PresentText(
                 _detailsTitle,
                 details.IsEmpty ? details.EmptyStateText : details.Name);
@@ -2920,7 +2919,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 nuint.MaxValue,
                 (nint)ListViewNextItemSelected).ToInt32();
             var row = GenesisChannelListRenderedChannels.FindRow(_listView, selectedRow);
-            return GenesisGuiNextChannelDetailsProjection.FromChannel(row?.DisplayChannel);
+            return GenesisGuiNextChannelDetailsProjection.FromRow(row);
         }
 
         private void SynchronizePlaybackButtonPresentation()

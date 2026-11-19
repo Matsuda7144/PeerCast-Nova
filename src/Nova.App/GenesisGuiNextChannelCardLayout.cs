@@ -15,7 +15,9 @@ internal sealed record GenesisGuiNextChannelCardLayout(int Width)
     internal GenesisGuiNextAppShellPlacement.WindowRectangle Description => Bounds(22, 52, DividerLeft - 36, 64);
     internal GenesisGuiNextAppShellPlacement.WindowRectangle Metadata => Bounds(DividerLeft + 12, 18, MetadataWidth, 106);
     internal GenesisGuiNextAppShellPlacement.WindowRectangle RecordingStatus => Bounds(22, 124, DividerLeft - 36, 18);
-    internal GenesisGuiNextAppShellPlacement.WindowRectangle Identity => Bounds(22, 184, DividerLeft - 36, 28);
+    // Reserve two complete native message-font lines, including DPI rounding,
+    // between the action buttons and the card's bottom border.
+    internal GenesisGuiNextAppShellPlacement.WindowRectangle Identity => Bounds(22, 179, DividerLeft - 36, 38);
     internal static GenesisGuiNextAppShellPlacement.WindowRectangle Record => Bounds(22, 146, 106, 32);
     internal static GenesisGuiNextAppShellPlacement.WindowRectangle Stop => Bounds(136, 146, 106, 32);
     internal static GenesisGuiNextAppShellPlacement.WindowRectangle RelayStop => Bounds(250, 146, 132, 32);

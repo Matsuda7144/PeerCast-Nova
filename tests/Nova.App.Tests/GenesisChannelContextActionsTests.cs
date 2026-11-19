@@ -111,6 +111,50 @@ public sealed class GenesisChannelContextActionsTests
     }
 
     [Fact]
+    public async Task CopyingFavoriteDetailsUsesOnlyCurrentlyObservedMetadata()
+    {
+        const string channelId = "0123456789ABCDEF0123456789ABCDEF";
+        var saved = new GenesisChannelItem(
+            "Station", "pcp://old.example/channel", Description: "old details", ChannelId: channelId);
+        var current = saved with { Source = "pcp://current.example/channel", Description = "current details" };
+        var favorites = new GenesisFavoriteChannelCollection([GenesisFavoriteChannel.FromChannel(saved)]);
+        var tabs = new GenesisGuiNextTabsViewModel(favorites) { SelectedTab = GenesisGuiNextTab.Favorites };
+        var model = new GenesisMainViewModel(new FakePlaybackSessionController());
+        var effects = new Effects();
+        var root = Directory.CreateTempSubdirectory("Nova-favorite-copy-");
+        try
+        {
+            var store = new NovaSettingsStore(Path.Combine(root.FullName, "settings.json"));
+            await store.UpdateAsync(settings => settings with { GuiMode = PeerCast.Nova.Foundation.Configuration.NovaGuiMode.Modern });
+            model.AppearanceSettings = new GenesisAppearanceSettings(store);
+
+            var unobserved = Assert.Single(GenesisGuiNextNativeTabProjection.Create(tabs));
+            var target = GenesisChannelContextActions.Capture(model, unobserved);
+            Assert.Empty(target.SourceToCopy);
+            await GenesisChannelContextActions.ExecuteAsync(model, target, GenesisChannelContextMenuCommand.CopyDetails, effects);
+
+            var copied = Assert.IsType<string>(effects.CopiedDetails);
+            Assert.Contains("現在の詳細は未取得", copied, StringComparison.Ordinal);
+            Assert.DoesNotContain(saved.Source, copied, StringComparison.Ordinal);
+            Assert.DoesNotContain(channelId, copied, StringComparison.Ordinal);
+
+            var catalog = new GenesisChannelCatalogSnapshot([current]);
+            tabs.ApplyChannelViews(GenesisChannelViewProjectionSnapshot.FromCatalog(catalog));
+            var observed = Assert.Single(GenesisGuiNextNativeTabProjection.Create(tabs));
+            target = GenesisChannelContextActions.Capture(model, observed);
+            Assert.Equal(current.Source, target.SourceToCopy);
+            await GenesisChannelContextActions.ExecuteAsync(model, target, GenesisChannelContextMenuCommand.CopyDetails, effects);
+
+            copied = Assert.IsType<string>(effects.CopiedDetails);
+            Assert.Contains(current.Description!, copied, StringComparison.Ordinal);
+            Assert.Contains(current.Source, copied, StringComparison.Ordinal);
+            Assert.Contains(channelId, copied, StringComparison.Ordinal);
+            Assert.DoesNotContain(saved.Source, copied, StringComparison.Ordinal);
+        }
+        finally { root.Delete(recursive: true); }
+    }
+
+    [Fact]
     public async Task FolderUsesRuntimeSnapshotAndDoesNotCreateMissingDirectory()
     {
         var root = Path.Combine(Path.GetTempPath(), "Nova-context-tests", Guid.NewGuid().ToString("N"));

@@ -467,7 +467,7 @@ internal sealed class GenesisChannelContextMenuBridge : IAsyncDisposable
             if (virtualKey == VirtualKeyC && IsControlPressed())
             {
                 var target = ResolveKeyboardTarget();
-                var source = target?.RenderedRow.DisplayChannel.Source;
+                var source = GenesisGuiNextChannelDetailsProjection.FromRow(target?.RenderedRow).Source;
                 if (!string.IsNullOrWhiteSpace(source))
                 {
                     _ = GenesisChannelContextMenuNative.CopySourceToClipboard(
@@ -580,7 +580,7 @@ internal sealed class GenesisChannelContextMenuBridge : IAsyncDisposable
             }
             else if (command == GenesisChannelContextMenuCommand.CopySource)
             {
-                var source = row.DisplayChannel.Source;
+                var source = actions.SourceToCopy;
                 if (!string.IsNullOrWhiteSpace(source))
                 {
                     _ = GenesisChannelContextMenuNative.CopySourceToClipboard(

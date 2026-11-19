@@ -117,9 +117,19 @@ internal static class GenesisGuiNextChannelDetailsProjection
         int selectedRow)
     {
         ArgumentNullException.ThrowIfNull(rows);
-        return selectedRow < 0 || selectedRow >= rows.Count
-            ? GenesisChannelDetailsPresentation.Empty
-            : FromChannel(rows[selectedRow].DisplayChannel);
+        return FromRow(selectedRow >= 0 && selectedRow < rows.Count ? rows[selectedRow] : null);
+    }
+
+    public static GenesisChannelDetailsPresentation FromRow(GenesisGuiNextNativeTabRow? row)
+    {
+        // The saved identity still supports removal and selection. Present only
+        // the name and availability notice while the favorite is unobserved.
+        return row is { IsUnobservedFavorite: true }
+            ? FromChannel(new GenesisChannelItem(
+                row.DisplayChannel.Name,
+                string.Empty,
+                Description: GenesisGuiNextNativeTabProjection.UnobservedFavoriteDescription))
+            : FromChannel(row?.DisplayChannel);
     }
 
     public static GenesisChannelDetailsPresentation FromChannel(GenesisChannelItem? channel)

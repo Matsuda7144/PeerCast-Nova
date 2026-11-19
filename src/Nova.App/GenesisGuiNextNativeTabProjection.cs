@@ -18,7 +18,8 @@ internal sealed record GenesisGuiNextNativeTabRow(
     GenesisGuiNextRecordingHistoryRow? RecordingHistory = null,
     string? StableSelectionKey = null,
     GenesisGuiNextLogRow? Log = null,
-    NovaObsPublishingReadOnlySnapshot? Publishing = null)
+    NovaObsPublishingReadOnlySnapshot? Publishing = null,
+    bool IsUnobservedFavorite = false)
 {
     public bool IsInteractive => InteractiveChannel is not null && RecordingRule is null && Suppression is null && RecordingLibrary is null && RecordingHistory is null && Log is null && Publishing is null;
 
@@ -36,6 +37,8 @@ internal sealed record GenesisGuiNextNativeTabRow(
 /// </summary>
 internal static class GenesisGuiNextNativeTabProjection
 {
+    internal const string UnobservedFavoriteDescription = "現在の詳細は未取得";
+
     internal static string GetRecordingEmptyStateText(
         bool snapshotAvailable,
         int activeRecordingCount) =>
@@ -164,17 +167,17 @@ internal static class GenesisGuiNextNativeTabProjection
                     }
 
                     var saved = favorite.Favorite;
+                    // Retain the original source and channel ID for favorite identity and
+                    // removal, but do not present last-known metadata as current details.
                     return new GenesisGuiNextNativeTabRow(
                         new GenesisChannelItem(
                             saved.Name,
                             saved.LastKnownSource,
-                            Description: saved.Description,
-                            Type: saved.Type,
-                            ChannelId: saved.ChannelId)
-                        {
-                            YellowPage = saved.LastKnownYellowPage,
-                        },
-                        InteractiveChannel: null);
+                            Description: UnobservedFavoriteDescription,
+                            ChannelId: saved.ChannelId),
+                        InteractiveChannel: null,
+                        StableSelectionKey: saved.StableKey,
+                        IsUnobservedFavorite: true);
                 })
                 .ToArray());
 

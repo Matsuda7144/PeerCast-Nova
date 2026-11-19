@@ -443,7 +443,8 @@ internal sealed class GenesisChannelDirectContextMenuBridge : IAsyncDisposable
         private void CopySelectedSource()
         {
             if (_interaction.IsRecordingHistoryView) return;
-            var source = ResolveKeyboardTarget()?.RenderedRow.DisplayChannel.Source;
+            var row = ResolveKeyboardTarget()?.RenderedRow;
+            var source = GenesisGuiNextChannelDetailsProjection.FromRow(row).Source;
             if (!string.IsNullOrWhiteSpace(source))
             {
                 _ = GenesisChannelContextMenuNative.CopySourceToClipboard(
@@ -550,7 +551,7 @@ internal sealed class GenesisChannelDirectContextMenuBridge : IAsyncDisposable
             }
             else if (command == GenesisChannelContextMenuCommand.CopySource)
             {
-                var source = row.DisplayChannel.Source;
+                var source = actions.SourceToCopy;
                 if (!string.IsNullOrWhiteSpace(source))
                 {
                     _ = GenesisChannelContextMenuNative.CopySourceToClipboard(

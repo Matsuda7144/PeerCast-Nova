@@ -65,7 +65,7 @@ public sealed class GenesisGuiNextNativeTabProjectionTests
     }
 
     [Fact]
-    public void OfflineFavoriteShowsLastKnownMetadataWithoutBecomingInteractive()
+    public void UnobservedFavoriteHidesOldDetailsButRetainsRemovalIdentity()
     {
         var savedChannel = new GenesisChannelItem(
             "Saved offline",
@@ -89,13 +89,19 @@ public sealed class GenesisGuiNextNativeTabProjectionTests
 
         Assert.Equal(savedChannel.Name, row.DisplayChannel.Name);
         Assert.Equal(savedChannel.Source, row.DisplayChannel.Source);
-        Assert.Equal(savedChannel.Description, row.DisplayChannel.Description);
-        Assert.Equal(savedChannel.Type, row.DisplayChannel.Type);
-        Assert.Equal(savedChannel.YellowPage, row.DisplayChannel.YellowPage);
-        Assert.Equal(["Saved offline", "Last known description", "—", "—", "—", "FLV", "SP"],
+        Assert.Equal("現在の詳細は未取得", row.DisplayChannel.Description);
+        Assert.Null(row.DisplayChannel.Type);
+        Assert.Null(row.DisplayChannel.YellowPage);
+        Assert.Equal(["Saved offline", "現在の詳細は未取得", "—", "—", "—", "—", "—"],
             ModernValues(row, GenesisGuiNextTab.Favorites));
         Assert.Null(row.InteractiveChannel);
         Assert.False(row.IsInteractive);
+        Assert.True(row.IsUnobservedFavorite);
+        Assert.Equal(Assert.Single(favorites.Snapshot).StableKey, row.StableSelectionKey);
+        Assert.True(tabs.IsFavorite(row.DisplayChannel));
+        Assert.Equal(GenesisGuiNextFavoriteToggleResult.Removed,
+            GenesisGuiNextFavoriteToggle.Apply(tabs, row));
+        Assert.Empty(tabs.FavoriteChannels);
     }
 
     [Fact]
