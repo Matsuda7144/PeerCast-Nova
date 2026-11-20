@@ -516,6 +516,81 @@ public sealed class GenesisSharedPcpPlaybackRuntimeTests
     }
 
     [Fact]
+    public async Task DailyPlaybackPassesTheReadyRawFlvUrlToTheSelectedPlayer()
+    {
+        await using var listener = new TcpTransportListener(new IPEndPoint(IPAddress.Loopback, 0));
+        listener.Start();
+        using var timeout = new CancellationTokenSource(TestTimeout);
+        var accepted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseHead = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseSource = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var server = RunPlaybackBootstrapUpstreamAsync(
+            listener, accepted, releaseHead.Task, releaseSource.Task, timeout.Token);
+        var composition = new PcpRecordingRuntimeComposition(
+            Path.Combine(Path.GetTempPath(), "PeerCastNova-daily-player-tests"));
+        var launcher = new RecordingPlayerLauncher();
+        await using var controller = new NovaDailyHttpFlvPlaybackController(
+            launcher, static _ => { }, static _ => { }, composition, new GenesisSharedPcpPlaybackRuntime(composition));
+
+        try
+        {
+            var channel = new GenesisChannelItem("test FLV",
+                $"pcp://127.0.0.1:{listener.LocalEndPoint.Port}/channel/{ChannelGuid:N}");
+            var play = controller.PlayAsync(channel, timeout.Token);
+            await accepted.Task.WaitAsync(timeout.Token);
+            Assert.False(launcher.Launched.Task.IsCompleted);
+
+            releaseHead.SetResult();
+            var source = await launcher.Launched.Task.WaitAsync(timeout.Token);
+            await play.WaitAsync(timeout.Token);
+            var url = new Uri(source.StreamUrl);
+            Assert.Equal("127.0.0.1", url.Host);
+            Assert.Equal($"/stream/{ChannelGuid:N}", url.AbsolutePath, ignoreCase: true);
+            Assert.Equal(url.Port, new Uri(source.PlaylistUrl).Port);
+
+            await using var client = await new TcpTransportConnector().ConnectAsync(url.Host, url.Port, timeout.Token);
+            await client.WriteAsync(Encoding.ASCII.GetBytes(
+                $"GET {url.AbsolutePath} HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"), timeout.Token);
+            Assert.StartsWith("HTTP/1.1 200 OK\r\n", await ReadHttpResponseHeaderAsync(client, timeout.Token));
+            Assert.Equal(CreateFlvHeader(), await ReadExactlyAsync(client, 13, timeout.Token));
+
+            await controller.StopAsync().WaitAsync(timeout.Token);
+            Assert.True(launcher.Completion.IsCompletedSuccessfully);
+        }
+        finally
+        {
+            releaseHead.TrySetResult();
+            releaseSource.TrySetResult();
+            await server.WaitAsync(timeout.Token);
+        }
+    }
+
+    private sealed class RecordingPlayerLauncher : IDailyPlaybackPlayerLauncher, IDailyPlaybackPlayerLifetime
+    {
+        private readonly TaskCompletionSource _stopped = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource<DailyPlaybackPlayerSource> Launched { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task Completion => _stopped.Task;
+
+        public void ValidateConfiguration() { }
+
+        public ValueTask<IDailyPlaybackPlayerLifetime> LaunchAsync(
+            DailyPlaybackPlayerSource source, CancellationToken cancellationToken)
+        {
+            Launched.SetResult(source);
+            return ValueTask.FromResult<IDailyPlaybackPlayerLifetime>(this);
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            _stopped.TrySetResult();
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    [Fact]
     public async Task RecordingOwnerStartedFirstIsReusedByPlayback()
     {
         await using var listener = new TcpTransportListener(

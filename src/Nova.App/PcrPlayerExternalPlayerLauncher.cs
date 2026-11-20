@@ -2,12 +2,7 @@ using System.Diagnostics;
 
 namespace PeerCast.Nova.App;
 
-internal interface IDailyExternalPlayerLifetime : IAsyncDisposable
-{
-    Task Completion { get; }
-}
-
-internal sealed class PcrPlayerExternalPlayerLauncher
+internal sealed class PcrPlayerExternalPlayerLauncher : IDailyPlaybackPlayerLauncher
 {
     internal const string ExecutablePathEnvironmentVariable = "NOVA_PCRPLAYER_EXE";
     internal const string ExecutableFileName = "PCRPlayer64.exe";
@@ -94,11 +89,15 @@ internal sealed class PcrPlayerExternalPlayerLauncher
 
     public void ValidateConfiguration() => _ = ResolveCurrentExecutablePath();
 
-    public IDailyExternalPlayerLifetime Launch(string streamUrl, string? channelName = null, string? contactUrl = null)
+    public ValueTask<IDailyPlaybackPlayerLifetime> LaunchAsync(
+        DailyPlaybackPlayerSource source,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var process = new Process
         {
-            StartInfo = CreateStartInfo(ResolveCurrentExecutablePath(), streamUrl, channelName, contactUrl),
+            StartInfo = CreateStartInfo(
+                ResolveCurrentExecutablePath(), source.PlaylistUrl, source.ChannelName, source.ContactUrl),
         };
         try
         {
@@ -107,7 +106,7 @@ internal sealed class PcrPlayerExternalPlayerLauncher
                 throw new InvalidOperationException("The external player did not start.");
             }
 
-            return new SystemPcrPlayerProcessLifetime(process);
+            return ValueTask.FromResult<IDailyPlaybackPlayerLifetime>(new SystemPcrPlayerProcessLifetime(process));
         }
         catch
         {
@@ -195,7 +194,7 @@ internal sealed class PcrPlayerExternalPlayerLauncher
         return null;
     }
 
-    private sealed class SystemPcrPlayerProcessLifetime : IDailyExternalPlayerLifetime
+    private sealed class SystemPcrPlayerProcessLifetime : IDailyPlaybackPlayerLifetime
     {
         private static readonly TimeSpan GracefulCloseTimeout = TimeSpan.FromSeconds(3);
         private readonly Process _process;

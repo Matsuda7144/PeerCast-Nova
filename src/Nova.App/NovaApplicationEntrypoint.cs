@@ -1,9 +1,14 @@
 namespace PeerCast.Nova.App;
 
+internal sealed record NovaPlaybackLaunchOptions(string? PlayerExecutablePath, string? LibMpvLibraryPath);
+
 internal static class NovaApplicationEntrypoint
 {
-    private const string Usage =
+    private const string DailyUsage =
         "Usage: Nova.App [--help | --about] [--pcrplayer-executable <path>]";
+    private const string Usage =
+        "Usage: Nova.App [--help | --about] [--pcrplayer-executable <path> | --libmpv-library <path>]";
+    private const string LibMpvLibraryOption = "--libmpv-library";
     private const string PlayerExecutableHelp =
         "  --pcrplayer-executable <path>  Configure the external player with an absolute .exe path.";
 
@@ -11,7 +16,7 @@ internal static class NovaApplicationEntrypoint
         string[] args,
         TextWriter output,
         TextWriter error,
-        Func<string?, CancellationToken, ValueTask<NovaWindowsStartupResult>> runApplication,
+        Func<NovaPlaybackLaunchOptions, CancellationToken, ValueTask<NovaWindowsStartupResult>> runApplication,
         CancellationToken cancellationToken,
         Func<string, CancellationToken, ValueTask<NovaWindowsStartupResult>>? runValidationApplication = null)
     {
@@ -47,6 +52,8 @@ internal static class NovaApplicationEntrypoint
             await output.WriteLineAsync("  --about  Show legal and external-runtime information.")
                 .ConfigureAwait(false);
             await output.WriteLineAsync(PlayerExecutableHelp).ConfigureAwait(false);
+            await output.WriteLineAsync("  --libmpv-library <path>  Play FLV in a Nova window using an absolute libmpv DLL path.")
+                .ConfigureAwait(false);
             await output.WriteLineAsync("  --validation-profile <absolute-path>  Isolated network-settings validation; media/router operations blocked.")
                 .ConfigureAwait(false);
             return 0;
@@ -66,14 +73,24 @@ internal static class NovaApplicationEntrypoint
             return 0;
         }
 
-        if (!NovaDailyPlaybackCommandLine.TryParse(args, out var executablePath, out var applicationArguments) ||
+        NovaPlaybackLaunchOptions options;
+        if (args is [LibMpvLibraryOption, var libraryPath] &&
+            LibMpvPlaybackPlayerLauncher.IsLibraryPath(libraryPath))
+        {
+            options = new(null, libraryPath);
+        }
+        else if (!NovaDailyPlaybackCommandLine.TryParse(args, out var executablePath, out var applicationArguments) ||
             applicationArguments.Length != 0)
         {
             await error.WriteLineAsync(Usage).ConfigureAwait(false);
             return 2;
         }
+        else
+        {
+            options = new(executablePath, null);
+        }
 
-        var startupResult = await runApplication(executablePath, cancellationToken).ConfigureAwait(false);
+        var startupResult = await runApplication(options, cancellationToken).ConfigureAwait(false);
         return startupResult switch
         {
             NovaWindowsStartupResult.Completed => 0,
@@ -113,14 +130,14 @@ internal static class NovaApplicationEntrypoint
                 out var executablePath,
                 out var applicationArguments))
         {
-            await error.WriteLineAsync(Usage).ConfigureAwait(false);
+            await error.WriteLineAsync(DailyUsage).ConfigureAwait(false);
             return 2;
         }
 
         if (applicationArguments.Length == 1 &&
             applicationArguments[0] is "--help" or "-h")
         {
-            await output.WriteLineAsync(Usage).ConfigureAwait(false);
+            await output.WriteLineAsync(DailyUsage).ConfigureAwait(false);
             await output.WriteLineAsync("  --help   Show this help without starting the application.")
                 .ConfigureAwait(false);
             await output.WriteLineAsync("  --about  Show legal and external-runtime information.")
@@ -146,7 +163,7 @@ internal static class NovaApplicationEntrypoint
 
         if (applicationArguments.Length != 0)
         {
-            await error.WriteLineAsync(Usage).ConfigureAwait(false);
+            await error.WriteLineAsync(DailyUsage).ConfigureAwait(false);
             return 2;
         }
 

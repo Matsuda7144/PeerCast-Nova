@@ -22,8 +22,11 @@ jobs:
         include:
           - runner: ubuntu-latest
             artifact_suffix: ''
+            test_msbuild_args: ''
           - runner: windows-latest
             artifact_suffix: -windows-latest
+            # Avoid running multiple test projects at once on the hosted Windows runner.
+            test_msbuild_args: '-m:1'
     timeout-minutes: 15
 
     steps:
@@ -53,7 +56,7 @@ jobs:
           retention-days: 1
 
       - name: Test
-        run: dotnet test PeerCast-Nova.sln --configuration Release --no-build --logger "console;verbosity=normal" --logger "trx"
+        run: dotnet test PeerCast-Nova.sln --configuration Release --no-build ${{ matrix.test_msbuild_args }} --logger "console;verbosity=normal" --logger "trx"
 
       - name: Upload test results
         if: failure()

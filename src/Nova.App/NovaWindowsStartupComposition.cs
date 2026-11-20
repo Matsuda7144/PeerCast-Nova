@@ -31,6 +31,7 @@ public sealed record NovaWindowsStartupOptions
         GenesisUnavailableNetworkSettingsController.Instance;
     internal NovaValidationProfile? ValidationProfile { get; init; }
     internal string? PlayerExecutablePath { get; init; }
+    internal string? LibMpvLibraryPath { get; init; }
 }
 
 /// <summary>
@@ -91,7 +92,8 @@ public sealed class NovaWindowsStartupComposition
                 new NovaApplicationNetworkOwner(NovaSettingsStore.CreateDefault()));
         _genesisPlaybackControllerFactory = playbackControllerFactory is null
             ? (paths, settings) => _options.ValidationProfile is { } profile ? profile.CreatePlaybackController(paths) :
-                CreateDefaultGenesisPlaybackController(paths, settings, explicitPlayerPath: _options.PlayerExecutablePath)
+                CreateDefaultGenesisPlaybackController(paths, settings,
+                    explicitPlayerPath: _options.PlayerExecutablePath, libMpvLibraryPath: _options.LibMpvLibraryPath)
             : (_, _) => playbackControllerFactory();
     }
 
@@ -263,11 +265,15 @@ public sealed class NovaWindowsStartupComposition
         GenesisGuiNextPlaybackPathSource pathSource,
         GenesisRecordingOutputDirectorySettings? recordingSettings = null,
         GenesisRecordingHistoryStore? historyStore = null,
-        string? explicitPlayerPath = null)
+        string? explicitPlayerPath = null,
+        string? libMpvLibraryPath = null)
     {
         ArgumentNullException.ThrowIfNull(pathSource);
-        return GuiNextDailyPlaybackSessionController.CreateSystemWithPathProvider(
-            () => explicitPlayerPath ?? pathSource.Current, recordingSettings, historyStore);
+        IDailyPlaybackPlayerLauncher launcher = libMpvLibraryPath is not null
+            ? new LibMpvPlaybackPlayerLauncher(libMpvLibraryPath)
+            : PcrPlayerExternalPlayerLauncher.CreateWithPathProvider(() => explicitPlayerPath ?? pathSource.Current);
+        return GuiNextDailyPlaybackSessionController.CreateSystemWithPlayerLauncher(
+            launcher, recordingSettings, historyStore);
     }
 
     internal async ValueTask<NovaWindowsStartupResult> RunGenesisAsync(

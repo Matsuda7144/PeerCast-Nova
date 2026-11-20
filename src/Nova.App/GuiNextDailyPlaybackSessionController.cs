@@ -1,12 +1,13 @@
 using PeerCast.Nova.Core.Channels;
 using PeerCast.Nova.Core.Recording;
+using PeerCast.Nova.Windows;
 
 namespace PeerCast.Nova.App;
 
 /// <summary>
 /// Adapts the GUI playback contract to the existing daily PCP/HTTP-FLV
 /// controller. The daily controller remains the owner of the PCP session,
-/// loopback HTTP-FLV host, and external player process.
+/// loopback HTTP-FLV host, and selected player.
 /// </summary>
 internal sealed class GuiNextDailyPlaybackSessionController :
     IPlaybackSessionController,
@@ -145,12 +146,12 @@ internal sealed class GuiNextDailyPlaybackSessionController :
             static _ => { },
             static _ => { }, recordingSettings, historyStore));
 
-    internal static GuiNextDailyPlaybackSessionController CreateSystemWithPathProvider(
-        Func<string?> explicitPlayerPathProvider,
+    internal static GuiNextDailyPlaybackSessionController CreateSystemWithPlayerLauncher(
+        IDailyPlaybackPlayerLauncher playerLauncher,
         GenesisRecordingOutputDirectorySettings? recordingSettings = null,
         GenesisRecordingHistoryStore? historyStore = null) =>
-        new(NovaDailyHttpFlvPlaybackController.CreateWithPlayerPathProvider(
-            explicitPlayerPathProvider,
+        new(NovaDailyHttpFlvPlaybackController.CreateWithPlayerLauncher(
+            playerLauncher,
             static _ => { },
             static _ => { }, recordingSettings, historyStore));
 
@@ -282,6 +283,7 @@ internal sealed class GuiNextDailyPlaybackSessionController :
             var message = exception switch
             {
                 PcrPlayerExecutableResolutionException => PlayerUnavailableMessage,
+                LibMpvPlaybackException libMpv => libMpv.Message,
                 NovaDailyPlaybackStartupException startup => startup.Message,
                 _ => PlaybackFailedMessage,
             };

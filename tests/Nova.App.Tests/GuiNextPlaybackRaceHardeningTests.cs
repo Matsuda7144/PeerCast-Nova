@@ -122,7 +122,7 @@ public sealed class GuiNextPlaybackRaceHardeningTests
             .GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!
             .GetValue(instance);
 
-    private sealed class ControlledPlayerLifetime : IDailyExternalPlayerLifetime
+    private sealed class ControlledPlayerLifetime : IDailyPlaybackPlayerLifetime
     {
         private readonly TaskCompletionSource _completion = new(
             TaskCreationOptions.RunContinuationsAsynchronously);

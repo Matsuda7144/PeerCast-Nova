@@ -14,8 +14,12 @@ try
         args,
         Console.Out,
         Console.Error,
-        static (playerPath, cancellationToken) =>
-            new NovaWindowsStartupComposition(new() { PlayerExecutablePath = playerPath }).RunGenesisAsync(cancellationToken),
+        static (playback, cancellationToken) =>
+            new NovaWindowsStartupComposition(new()
+            {
+                PlayerExecutablePath = playback.PlayerExecutablePath,
+                LibMpvLibraryPath = playback.LibMpvLibraryPath,
+            }).RunGenesisAsync(cancellationToken),
         cancellationSource.Token,
         static async (root, token) =>
         {

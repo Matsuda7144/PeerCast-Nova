@@ -27,7 +27,7 @@ internal sealed class NovaDailyHttpFlvPlaybackController :
 
     private readonly object _stateGate = new();
     private readonly SemaphoreSlim _commands = new(1, 1);
-    private readonly PcrPlayerExternalPlayerLauncher _playerLauncher;
+    private readonly IDailyPlaybackPlayerLauncher _playerLauncher;
     private readonly GenesisSharedPcpPlaybackRuntime _sharedPlaybackRuntime;
     private readonly PcpRecordingRuntimeComposition _recordingComposition;
     private readonly GenesisManualRecordingSessionController _manualRecordingController;
@@ -56,7 +56,7 @@ internal sealed class NovaDailyHttpFlvPlaybackController :
     }
 
     private NovaDailyHttpFlvPlaybackController(
-        PcrPlayerExternalPlayerLauncher playerLauncher,
+        IDailyPlaybackPlayerLauncher playerLauncher,
         Action<string> setStatus,
         Action<string> showError,
         PcpRecordingRuntimeComposition recordingComposition)
@@ -70,7 +70,7 @@ internal sealed class NovaDailyHttpFlvPlaybackController :
     }
 
     internal NovaDailyHttpFlvPlaybackController(
-        PcrPlayerExternalPlayerLauncher playerLauncher,
+        IDailyPlaybackPlayerLauncher playerLauncher,
         Action<string> setStatus,
         Action<string> showError,
         PcpRecordingRuntimeComposition recordingComposition,
@@ -145,14 +145,14 @@ internal sealed class NovaDailyHttpFlvPlaybackController :
     Task<GenesisRecordingLibraryRefreshResult> IGenesisRecordingLibraryController.RefreshAsync(CancellationToken cancellationToken) =>
         RefreshRecordingLibraryAsync(cancellationToken);
 
-    internal static NovaDailyHttpFlvPlaybackController CreateWithPlayerPathProvider(
-        Func<string?> explicitPlayerPathProvider,
+    internal static NovaDailyHttpFlvPlaybackController CreateWithPlayerLauncher(
+        IDailyPlaybackPlayerLauncher playerLauncher,
         Action<string> setStatus,
         Action<string> showError,
         GenesisRecordingOutputDirectorySettings? recordingSettings = null,
         GenesisRecordingHistoryStore? historyStore = null) =>
         new(
-            PcrPlayerExternalPlayerLauncher.CreateWithPathProvider(explicitPlayerPathProvider),
+            playerLauncher,
             setStatus,
             showError,
             CreateProductionRecordingComposition(recordingSettings, historyStore));
@@ -284,12 +284,14 @@ internal sealed class NovaDailyHttpFlvPlaybackController :
                 throw NovaDailyPlaybackStartupException.FromResult(result, playbackAttachment.ReadFault?.Invoke());
             }
 
-            _ = await ready.Task.ConfigureAwait(false);
+            var streamUrl = await ready.Task.ConfigureAwait(false);
             startupCancellation.Token.ThrowIfCancellationRequested();
-            _setStatus($"{channel.Name}: 外部プレイヤー起動中…");
+            _setStatus($"{channel.Name}: プレイヤー起動中…");
             var info = ReadPlayerInfo(active, source.ChannelId.Value);
-            active.Player = _playerLauncher.Launch(host.PlaylistUrlFor(source.ChannelId),
-                info?.Metadata.Name ?? channel.Name, info is null ? channel.ContactUrl : info.Metadata.ContactUrl);
+            active.Player = await _playerLauncher.LaunchAsync(
+                new(streamUrl, host.PlaylistUrlFor(source.ChannelId),
+                    info?.Metadata.Name ?? channel.Name, info is null ? channel.ContactUrl : info.Metadata.ContactUrl),
+                startupCancellation.Token).ConfigureAwait(false);
             _setStatus($"{channel.Name}: 再生中");
             _ = ObservePlaybackEndAsync(active, channel.Name, channel.Source);
         }
@@ -668,6 +670,6 @@ internal sealed class NovaDailyHttpFlvPlaybackController :
 
         public Task<PcpRelayCoordinatorResult>? OwnerTask { get; set; }
 
-        public IDailyExternalPlayerLifetime? Player { get; set; }
+        public IDailyPlaybackPlayerLifetime? Player { get; set; }
     }
 }

@@ -77,6 +77,12 @@ MVP の再生要件を満たす採用済み経路は external-player handoff で
 
 CLI と環境変数でも実行ファイルの絶対パスを指定します。互換性のため、従来の `PCRPlayer64.exe` という名前だけの指定は PATH から解決します。明示した設定が無効な場合はエラーを表示します。`PCRPlayer64.exe` は従来の追加引数を使い、ほかの実行ファイルには再生URLだけを渡します。
 
+Windows で内蔵FLVプレイヤーを試す場合は、利用者が用意した互換性のある libmpv（client API 2）の DLL を `--libmpv-library` で指定します。チャンネルを選択して「再生」を押すと、Novaの再生ウィンドウに表示します。ライブラリとその依存ファイルはNovaに同梱されません。
+
+```powershell
+Nova.App.exe --libmpv-library "C:\path\libmpv-2.dll"
+```
+
 ## 公開 Relay のポート自動開放
 
 PCP downstream relay listener の IPv4 TCP ポートを、NAT-PMP 対応ルーターへ

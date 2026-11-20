@@ -147,6 +147,21 @@ public sealed class GuiNextDailyPlaybackSessionControllerTests
     }
 
     [Fact]
+    public async Task ConfiguredLibMpvModeReportsItsOwnMissingLibrary()
+    {
+        var missingLibrary = Path.Combine(
+            Path.GetTempPath(), Guid.NewGuid().ToString("N"), "libmpv-2.dll");
+        await using var controller = NovaWindowsStartupComposition.CreateDefaultGenesisPlaybackController(
+            new GenesisGuiNextPlaybackPathSource(), libMpvLibraryPath: missingLibrary);
+
+        var outcome = await controller.PlayAsync(Source);
+
+        Assert.Equal(PlaybackSessionCommandResult.Faulted, outcome.Result);
+        Assert.Equal(PlaybackSessionState.Faulted, outcome.Snapshot.State);
+        Assert.Contains("--libmpv-library", outcome.Snapshot.ErrorMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task DailyStartupExceptionIsMappedWithoutExposingRawException()
     {
         var daily = new RecordingDailyPlaybackController
