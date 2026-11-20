@@ -122,14 +122,135 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
         Assert.Contains("--libmpv-library", error.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void AudioControllerAdjustsVolumeFromMouseWheelAndClampsBounds()
+    {
+        var controller = new LibMpvPlaybackAudioController(new LibMpvPlaybackAudioState(50, Muted: false));
+        var observed = new List<LibMpvPlaybackAudioState>();
+        controller.StateChanged += observed.Add;
+
+        // Fractional wheel deltas accumulate until one 120-unit notch is reached.
+        Assert.False(controller.ApplyWheelDelta(60));
+        Assert.True(controller.ApplyWheelDelta(60));
+        Assert.Equal(55, controller.Current.Volume);
+
+        // Reversing wheel direction discards prior remainder and steps downward.
+        Assert.False(controller.ApplyWheelDelta(60));
+        Assert.True(controller.ApplyWheelDelta(-120));
+        Assert.Equal(50, controller.Current.Volume);
+
+        // Clamping at 0 and 100 never emits out-of-range values.
+        Assert.True(controller.ApplyWheelDelta(-120 * 20));
+        Assert.Equal(0, controller.Current.Volume);
+        Assert.False(controller.ApplyWheelDelta(-120));
+
+        Assert.True(controller.ApplyWheelDelta(120 * 30));
+        Assert.Equal(100, controller.Current.Volume);
+        Assert.False(controller.ApplyWheelDelta(120));
+
+        Assert.Equal(4, observed.Count);
+    }
+
+    [Fact]
+    public void AudioControllerUnmutesAutomaticallyWhenRaisingVolume()
+    {
+        var controller = new LibMpvPlaybackAudioController(new LibMpvPlaybackAudioState(40, Muted: false));
+        Assert.True(controller.ToggleMute());
+        Assert.True(controller.Current.Muted);
+        Assert.Equal("Unmute", controller.Current.FormatMuteButtonText());
+        Assert.Equal("Muted", controller.Current.FormatVolumeLabel());
+
+        // Lowering volume while muted keeps mute active.
+        Assert.True(controller.ApplyWheelDelta(-120));
+        Assert.Equal(35, controller.Current.Volume);
+        Assert.True(controller.Current.Muted);
+
+        // Raising volume via wheel unmutes automatically.
+        Assert.True(controller.ApplyWheelDelta(120));
+        Assert.Equal(40, controller.Current.Volume);
+        Assert.False(controller.Current.Muted);
+        Assert.Equal("Mute", controller.Current.FormatMuteButtonText());
+        Assert.Equal("40%", controller.Current.FormatVolumeLabel());
+    }
+
+    [Fact]
+    public async Task VolumeChangesPropagateToClientAndPersistAcrossSessions()
+    {
+        using var dll = new TestLibrary();
+        using var timeout = new CancellationTokenSource(TestTimeout);
+        var audioStore = new LibMpvPlaybackAudioSessionStore(new LibMpvPlaybackAudioState(75, Muted: false));
+
+        var firstClient = new ControlledClient();
+        var firstWindow = new ControlledWindow(static () => { }, new LibMpvPlaybackAudioState(75, Muted: false));
+        var firstInitialAudio = default(LibMpvPlaybackAudioState);
+        var firstLauncher = new LibMpvPlaybackPlayerLauncher(
+            dll.Path,
+            _ => firstClient,
+            (_, initialAudio, _) =>
+            {
+                firstInitialAudio = initialAudio;
+                return new(firstWindow);
+            },
+            audioStore);
+
+        var firstLaunching = firstLauncher.LaunchAsync(Source, timeout.Token).AsTask();
+        await firstClient.Loaded.Task.WaitAsync(timeout.Token);
+        firstClient.Signal(LibMpvPlaybackEvent.FileLoaded);
+        await using (var firstPlayer = await firstLaunching.WaitAsync(timeout.Token))
+        {
+            Assert.Equal(new LibMpvPlaybackAudioState(75, Muted: false), firstInitialAudio);
+            Assert.Equal(new LibMpvPlaybackAudioState(75, Muted: false), firstClient.InitialAudio);
+
+            firstWindow.RaiseAudioChanged(new LibMpvPlaybackAudioState(60, Muted: false));
+            firstWindow.RaiseAudioChanged(new LibMpvPlaybackAudioState(60, Muted: true));
+
+            Assert.Equal([60, 60], firstClient.Volumes);
+            Assert.Equal([false, true], firstClient.Mutes);
+            await firstPlayer.DisposeAsync().AsTask().WaitAsync(timeout.Token);
+        }
+
+        // Next playback session receives the last audio state from the shared session store.
+        var secondClient = new ControlledClient();
+        var secondInitialAudio = default(LibMpvPlaybackAudioState);
+        var secondWindow = new ControlledWindow(static () => { }, audioStore.Current);
+        var secondLauncher = new LibMpvPlaybackPlayerLauncher(
+            dll.Path,
+            _ => secondClient,
+            (_, initialAudio, _) =>
+            {
+                secondInitialAudio = initialAudio;
+                return new(secondWindow);
+            },
+            audioStore);
+
+        var secondLaunching = secondLauncher.LaunchAsync(Source, timeout.Token).AsTask();
+        await secondClient.Loaded.Task.WaitAsync(timeout.Token);
+        secondClient.Signal(LibMpvPlaybackEvent.FileLoaded);
+        await using (await secondLaunching.WaitAsync(timeout.Token))
+        {
+            Assert.Equal(new LibMpvPlaybackAudioState(60, Muted: true), secondInitialAudio);
+            Assert.Equal(new LibMpvPlaybackAudioState(60, Muted: true), secondClient.InitialAudio);
+        }
+    }
+
     private sealed class ControlledClient : ILibMpvPlaybackClient
     {
         private readonly Channel<LibMpvPlaybackEvent> _events = Channel.CreateUnbounded<LibMpvPlaybackEvent>();
         public TaskCompletionSource<(string StreamUrl, uint WindowId)> Loaded { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public LibMpvPlaybackAudioState InitialAudio { get; private set; }
+        public List<int> Volumes { get; } = [];
+        public List<bool> Mutes { get; } = [];
         public int DisposeCount { get; private set; }
 
-        public void LoadFile(string streamUrl, uint windowId) => Loaded.SetResult((streamUrl, windowId));
+        public void LoadFile(string streamUrl, uint windowId, LibMpvPlaybackAudioState initialAudio)
+        {
+            InitialAudio = initialAudio;
+            Loaded.SetResult((streamUrl, windowId));
+        }
+
+        public void SetVolume(int volume) => Volumes.Add(volume);
+        public void SetMuted(bool muted) => Mutes.Add(muted);
         public LibMpvPlaybackEvent WaitForEvent() => _events.Reader.ReadAsync().AsTask().GetAwaiter().GetResult();
         public void Wakeup() => Signal(LibMpvPlaybackEvent.Other);
         public void Dispose() => DisposeCount++;
@@ -137,12 +258,23 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
         public void Signal(LibMpvPlaybackEvent notification) => _events.Writer.TryWrite(notification);
     }
 
-    private sealed class ControlledWindow(Action verifyShutdownOrder) : ILibMpvPlaybackWindow
+    private sealed class ControlledWindow(
+        Action verifyShutdownOrder,
+        LibMpvPlaybackAudioState? initialAudio = null) : ILibMpvPlaybackWindow
     {
         private readonly TaskCompletionSource _closed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private LibMpvPlaybackAudioState _audioState = (initialAudio ?? LibMpvPlaybackAudioState.Default).Normalized();
         public uint WindowId => 0x8001_0223;
+        public LibMpvPlaybackAudioState AudioState => _audioState;
+        public event Action<LibMpvPlaybackAudioState>? AudioStateChanged;
         public Task Closed => _closed.Task;
         public int DisposeCount { get; private set; }
+
+        public void RaiseAudioChanged(LibMpvPlaybackAudioState state)
+        {
+            _audioState = state.Normalized();
+            AudioStateChanged?.Invoke(_audioState);
+        }
 
         public void Close() => _closed.TrySetResult();
 

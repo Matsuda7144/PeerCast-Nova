@@ -5,27 +5,82 @@ namespace PeerCast.Nova.App;
 internal interface ILibMpvPlaybackWindow : IAsyncDisposable
 {
     uint WindowId { get; }
+    LibMpvPlaybackAudioState AudioState { get; }
+    event Action<LibMpvPlaybackAudioState>? AudioStateChanged;
     Task Closed { get; }
+}
+
+internal sealed class LibMpvPlaybackAudioSessionStore
+{
+    private readonly object _sync = new();
+    private LibMpvPlaybackAudioState _state;
+
+    public LibMpvPlaybackAudioSessionStore(LibMpvPlaybackAudioState? initialState = null)
+    {
+        _state = (initialState ?? LibMpvPlaybackAudioState.Default).Normalized();
+    }
+
+    public LibMpvPlaybackAudioState Current
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _state;
+            }
+        }
+    }
+
+    public void Update(LibMpvPlaybackAudioState state)
+    {
+        var normalized = state.Normalized();
+        lock (_sync)
+        {
+            _state = normalized;
+        }
+    }
 }
 
 internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLauncher
 {
     private static readonly TimeSpan OpenTimeout = TimeSpan.FromSeconds(15);
     private readonly string _libraryPath;
+    private readonly LibMpvPlaybackAudioSessionStore _audioStore;
     private readonly Func<string, ILibMpvPlaybackClient> _openClient;
-    private readonly Func<CancellationToken, ValueTask<ILibMpvPlaybackWindow>> _openWindow;
+    private readonly Func<DailyPlaybackPlayerSource, LibMpvPlaybackAudioState, CancellationToken, ValueTask<ILibMpvPlaybackWindow>> _openWindow;
 
-    public LibMpvPlaybackPlayerLauncher(string libraryPath)
-        : this(libraryPath, LibMpvPlaybackClient.Open, OpenWindowAsync)
+    public LibMpvPlaybackPlayerLauncher(
+        string libraryPath,
+        LibMpvPlaybackAudioSessionStore? audioStore = null)
+        : this(
+            libraryPath,
+            LibMpvPlaybackClient.Open,
+            OpenWindowAsync,
+            audioStore)
     {
     }
 
     internal LibMpvPlaybackPlayerLauncher(
         string libraryPath,
         Func<string, ILibMpvPlaybackClient> openClient,
-        Func<CancellationToken, ValueTask<ILibMpvPlaybackWindow>> openWindow)
+        Func<CancellationToken, ValueTask<ILibMpvPlaybackWindow>> openWindow,
+        LibMpvPlaybackAudioSessionStore? audioStore = null)
+        : this(
+            libraryPath,
+            openClient,
+            (_, _, cancellationToken) => openWindow(cancellationToken),
+            audioStore)
+    {
+    }
+
+    internal LibMpvPlaybackPlayerLauncher(
+        string libraryPath,
+        Func<string, ILibMpvPlaybackClient> openClient,
+        Func<DailyPlaybackPlayerSource, LibMpvPlaybackAudioState, CancellationToken, ValueTask<ILibMpvPlaybackWindow>> openWindow,
+        LibMpvPlaybackAudioSessionStore? audioStore = null)
     {
         _libraryPath = libraryPath;
+        _audioStore = audioStore ?? new();
         _openClient = openClient;
         _openWindow = openWindow;
     }
@@ -54,8 +109,8 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
             throw new LibMpvPlaybackException("Embedded playback requires Nova's loopback HTTP-FLV stream URL.");
         }
 
-        var window = await _openWindow(cancellationToken).ConfigureAwait(false);
-        var lifetime = new Lifetime(window, () => _openClient(_libraryPath), source.StreamUrl);
+        var window = await _openWindow(source, _audioStore.Current, cancellationToken).ConfigureAwait(false);
+        var lifetime = new Lifetime(window, () => _openClient(_libraryPath), source.StreamUrl, _audioStore);
         try
         {
             await lifetime.WaitUntilReadyAsync(cancellationToken).ConfigureAwait(false);
@@ -77,24 +132,30 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
         Guid.TryParseExact(uri.AbsolutePath.AsSpan(8), "N", out var channelId) &&
         channelId != Guid.Empty;
 
-    private static async ValueTask<ILibMpvPlaybackWindow> OpenWindowAsync(CancellationToken cancellationToken)
+    private static async ValueTask<ILibMpvPlaybackWindow> OpenWindowAsync(
+        DailyPlaybackPlayerSource source,
+        LibMpvPlaybackAudioState initialAudio,
+        CancellationToken cancellationToken)
     {
-        var host = new PlaybackWindowsPhysicalRunnerHost(new()
+        var title = string.IsNullOrWhiteSpace(source.ChannelName)
+            ? "PeerCast Nova - FLV Playback"
+            : $"PeerCast Nova - {source.ChannelName.Trim()}";
+        var host = new LibMpvPlaybackWindowHost(new()
         {
-            Title = "PeerCast Nova - FLV Playback",
-            ClientWidth = 960,
-            ClientHeight = 540,
+            Title = title,
+            VideoWidth = 960,
+            VideoHeight = 540,
+            InitialAudioState = initialAudio,
         });
         try
         {
-            var started = await host.StartAsync(cancellationToken).ConfigureAwait(false);
+            var windowId = await host.StartAsync(cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
-            // Win32's wid option expects the unsigned 32-bit value of the HWND.
-            var windowId = unchecked((uint)host.Snapshot.WindowToken);
-            if (started != PlaybackWindowsPhysicalRunnerResult.Started || windowId == 0)
+            if (windowId == 0)
             {
                 throw new LibMpvPlaybackException("The embedded playback window could not be opened.");
             }
+
             return new PlaybackWindow(host, windowId);
         }
         catch
@@ -104,31 +165,46 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
         }
     }
 
-    private sealed class PlaybackWindow(PlaybackWindowsPhysicalRunnerHost host, uint windowId)
-        : ILibMpvPlaybackWindow
+    private sealed class PlaybackWindow : ILibMpvPlaybackWindow
     {
-        public uint WindowId { get; } = windowId;
-        public Task Closed { get; } = WaitForCloseAsync(host);
+        private readonly LibMpvPlaybackWindowHost _host;
 
-        public ValueTask DisposeAsync() => host.DisposeAsync();
-
-        private static async Task WaitForCloseAsync(PlaybackWindowsPhysicalRunnerHost host)
+        public PlaybackWindow(LibMpvPlaybackWindowHost host, uint windowId)
         {
-            if (await host.WaitForExitAsync().ConfigureAwait(false) != PlaybackWindowsPhysicalRunnerResult.Stopped)
-            {
-                throw new LibMpvPlaybackException("The embedded playback window ended unexpectedly.");
-            }
+            _host = host;
+            WindowId = windowId;
+            _host.AudioStateChanged += OnAudioStateChanged;
         }
+
+        public uint WindowId { get; }
+        public LibMpvPlaybackAudioState AudioState => _host.AudioState;
+        public event Action<LibMpvPlaybackAudioState>? AudioStateChanged;
+        public Task Closed => _host.Closed;
+
+        public ValueTask DisposeAsync()
+        {
+            _host.AudioStateChanged -= OnAudioStateChanged;
+            return _host.DisposeAsync();
+        }
+
+        private void OnAudioStateChanged(LibMpvPlaybackAudioState state) =>
+            AudioStateChanged?.Invoke(state);
     }
 
     private sealed class Lifetime : IDailyPlaybackPlayerLifetime
     {
         private readonly CancellationTokenSource _stop = new();
         private readonly TaskCompletionSource _fileLoaded = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly LibMpvPlaybackAudioSessionStore _audioStore;
         private int _disposed;
 
-        public Lifetime(ILibMpvPlaybackWindow window, Func<ILibMpvPlaybackClient> openClient, string streamUrl)
+        public Lifetime(
+            ILibMpvPlaybackWindow window,
+            Func<ILibMpvPlaybackClient> openClient,
+            string streamUrl,
+            LibMpvPlaybackAudioSessionStore audioStore)
         {
+            _audioStore = audioStore;
             Completion = RunAsync(window, openClient, streamUrl);
         }
 
@@ -212,21 +288,45 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
                 return;
             }
 
-            client.LoadFile(streamUrl, window.WindowId);
-            // Unregister and join any in-flight wakeup before releasing the mpv handle.
-            using var wakeup = _stop.Token.UnsafeRegister(
-                static state => ((ILibMpvPlaybackClient)state!).Wakeup(), client);
-            while (!_stop.IsCancellationRequested)
+            void OnAudioStateChanged(LibMpvPlaybackAudioState state)
             {
-                var notification = client.WaitForEvent();
-                if (notification == LibMpvPlaybackEvent.Ended)
+                var normalized = state.Normalized();
+                _audioStore.Update(normalized);
+                client.SetVolume(normalized.Volume);
+                client.SetMuted(normalized.Muted);
+            }
+
+            window.AudioStateChanged += OnAudioStateChanged;
+            try
+            {
+                var initialAudio = window.AudioState.Normalized();
+                _audioStore.Update(initialAudio);
+                client.LoadFile(streamUrl, window.WindowId, initialAudio);
+                var currentAudio = window.AudioState.Normalized();
+                if (currentAudio != initialAudio)
                 {
-                    return;
+                    OnAudioStateChanged(currentAudio);
                 }
-                if (notification == LibMpvPlaybackEvent.FileLoaded)
+
+                // Unregister and join any in-flight wakeup before releasing the mpv handle.
+                using var wakeup = _stop.Token.UnsafeRegister(
+                    static state => ((ILibMpvPlaybackClient)state!).Wakeup(), client);
+                while (!_stop.IsCancellationRequested)
                 {
-                    _fileLoaded.TrySetResult();
+                    var notification = client.WaitForEvent();
+                    if (notification == LibMpvPlaybackEvent.Ended)
+                    {
+                        return;
+                    }
+                    if (notification == LibMpvPlaybackEvent.FileLoaded)
+                    {
+                        _fileLoaded.TrySetResult();
+                    }
                 }
+            }
+            finally
+            {
+                window.AudioStateChanged -= OnAudioStateChanged;
             }
         }
     }

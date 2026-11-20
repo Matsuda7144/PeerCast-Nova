@@ -269,11 +269,12 @@ public sealed class NovaWindowsStartupComposition
         string? libMpvLibraryPath = null)
     {
         ArgumentNullException.ThrowIfNull(pathSource);
+        var audioStore = new LibMpvPlaybackAudioSessionStore();
         IDailyPlaybackPlayerLauncher CreateLauncher()
         {
             if (libMpvLibraryPath is not null)
             {
-                return new LibMpvPlaybackPlayerLauncher(libMpvLibraryPath);
+                return new LibMpvPlaybackPlayerLauncher(libMpvLibraryPath, audioStore);
             }
 
             if (explicitPlayerPath is not null)
@@ -283,7 +284,7 @@ public sealed class NovaWindowsStartupComposition
 
             var preferences = pathSource.Current;
             return preferences.PlayerMode == GenesisPlaybackPlayerMode.Internal
-                ? new LibMpvPlaybackPlayerLauncher(preferences.LibMpvLibraryPath ?? string.Empty)
+                ? new LibMpvPlaybackPlayerLauncher(preferences.LibMpvLibraryPath ?? string.Empty, audioStore)
                 : new PcrPlayerExternalPlayerLauncher(preferences.PcrPlayerExecutablePath);
         }
 

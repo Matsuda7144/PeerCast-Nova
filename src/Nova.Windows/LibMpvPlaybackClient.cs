@@ -12,7 +12,9 @@ internal enum LibMpvPlaybackEvent
 
 internal interface ILibMpvPlaybackClient : IDisposable
 {
-    void LoadFile(string streamUrl, uint windowId);
+    void LoadFile(string streamUrl, uint windowId, LibMpvPlaybackAudioState initialAudio);
+    void SetVolume(int volume);
+    void SetMuted(bool muted);
     LibMpvPlaybackEvent WaitForEvent();
     void Wakeup();
 }
@@ -24,14 +26,22 @@ internal sealed class LibMpvPlaybackClient : ILibMpvPlaybackClient
     private const uint ClientApiMajor = 2;
     private const ulong LoadFileReply = 1;
     private const int EndFileError = 4;
+    private const int FormatFlag = 3;
+    private const int FormatDouble = 5;
+    private readonly object _clientGate = new();
     private readonly nint _library;
     private readonly nint _client;
     private readonly ClientAction _destroy;
     private readonly InitializeClient _initialize;
     private readonly SetOptionString _setOption;
+    private readonly SetPropertyDoubleAsync _setPropertyDoubleAsync;
+    private readonly SetPropertyFlagAsync _setPropertyFlagAsync;
     private readonly CommandAsync _command;
     private readonly ReadEvent _waitForEvent;
     private readonly ClientAction _wakeup;
+    private bool _initialized;
+    private bool _disposed;
+    private LibMpvPlaybackAudioState _desiredAudio = LibMpvPlaybackAudioState.Default;
 
     private LibMpvPlaybackClient(nint library)
     {
@@ -45,6 +55,8 @@ internal sealed class LibMpvPlaybackClient : ILibMpvPlaybackClient
         _destroy = Bind<ClientAction>(library, "mpv_terminate_destroy");
         _initialize = Bind<InitializeClient>(library, "mpv_initialize");
         _setOption = Bind<SetOptionString>(library, "mpv_set_option_string");
+        _setPropertyDoubleAsync = Bind<SetPropertyDoubleAsync>(library, "mpv_set_property_async");
+        _setPropertyFlagAsync = Bind<SetPropertyFlagAsync>(library, "mpv_set_property_async");
         _command = Bind<CommandAsync>(library, "mpv_command_async");
         _waitForEvent = Bind<ReadEvent>(library, "mpv_wait_event");
         _wakeup = Bind<ClientAction>(library, "mpv_wakeup");
@@ -86,28 +98,72 @@ internal sealed class LibMpvPlaybackClient : ILibMpvPlaybackClient
         }
     }
 
-    public void LoadFile(string streamUrl, uint windowId)
+    public void LoadFile(string streamUrl, uint windowId, LibMpvPlaybackAudioState initialAudio)
     {
-        SetOption("config", "no");
-        SetOption("load-scripts", "no");
-        SetOption("input-default-bindings", "no");
-        SetOption("wid", windowId.ToString(CultureInfo.InvariantCulture));
-        SetOption("demuxer", "lavf");
-        SetOption("demuxer-lavf-format", "flv");
-        Check(_initialize(_client), "initialize playback");
+        var normalized = initialAudio.Normalized();
+        lock (_clientGate)
+        {
+            if (_disposed)
+            {
+                return;
+            }
 
-        // libmpv copies the null-terminated UTF-8 command vector during the call.
-        var arguments = new nint[3];
-        try
-        {
-            arguments[0] = Marshal.StringToCoTaskMemUTF8("loadfile");
-            arguments[1] = Marshal.StringToCoTaskMemUTF8(streamUrl);
-            Check(_command(_client, LoadFileReply, arguments), "request the HTTP-FLV stream");
+            _desiredAudio = normalized;
+            SetOption("config", "no");
+            SetOption("load-scripts", "no");
+            SetOption("input-default-bindings", "no");
+            SetOption("wid", windowId.ToString(CultureInfo.InvariantCulture));
+            SetOption("demuxer", "lavf");
+            SetOption("demuxer-lavf-format", "flv");
+            SetOption("volume", normalized.Volume.ToString(CultureInfo.InvariantCulture));
+            SetOption("mute", normalized.Muted ? "yes" : "no");
+            Check(_initialize(_client), "initialize playback");
+            _initialized = true;
+
+            // libmpv copies the null-terminated UTF-8 command vector during the call.
+            var arguments = new nint[3];
+            try
+            {
+                arguments[0] = Marshal.StringToCoTaskMemUTF8("loadfile");
+                arguments[1] = Marshal.StringToCoTaskMemUTF8(streamUrl);
+                Check(_command(_client, LoadFileReply, arguments), "request the HTTP-FLV stream");
+            }
+            finally
+            {
+                Marshal.FreeCoTaskMem(arguments[1]);
+                Marshal.FreeCoTaskMem(arguments[0]);
+            }
         }
-        finally
+    }
+
+    public void SetVolume(int volume)
+    {
+        var clamped = LibMpvPlaybackAudioState.ClampVolume(volume);
+        lock (_clientGate)
         {
-            Marshal.FreeCoTaskMem(arguments[1]);
-            Marshal.FreeCoTaskMem(arguments[0]);
+            _desiredAudio = _desiredAudio with { Volume = clamped };
+            if (_disposed || !_initialized)
+            {
+                return;
+            }
+
+            double value = clamped;
+            _ = _setPropertyDoubleAsync(_client, 0, "volume", FormatDouble, ref value);
+        }
+    }
+
+    public void SetMuted(bool muted)
+    {
+        lock (_clientGate)
+        {
+            _desiredAudio = _desiredAudio with { Muted = muted };
+            if (_disposed || !_initialized)
+            {
+                return;
+            }
+
+            int value = muted ? 1 : 0;
+            _ = _setPropertyFlagAsync(_client, 0, "mute", FormatFlag, ref value);
         }
     }
 
@@ -140,8 +196,17 @@ internal sealed class LibMpvPlaybackClient : ILibMpvPlaybackClient
 
     public void Dispose()
     {
-        _destroy(_client);
-        NativeLibrary.Free(_library);
+        lock (_clientGate)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            _destroy(_client);
+            NativeLibrary.Free(_library);
+        }
     }
 
     private void SetOption(string name, string value) =>
@@ -192,6 +257,14 @@ internal sealed class LibMpvPlaybackClient : ILibMpvPlaybackClient
     private delegate int SetOptionString(nint client,
         [MarshalAs(UnmanagedType.LPUTF8Str)] string name,
         [MarshalAs(UnmanagedType.LPUTF8Str)] string value);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate int SetPropertyDoubleAsync(nint client, ulong replyUserdata,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string name, int format, ref double data);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate int SetPropertyFlagAsync(nint client, ulong replyUserdata,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string name, int format, ref int data);
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate int CommandAsync(nint client, ulong replyUserdata, [In] nint[] arguments);
