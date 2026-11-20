@@ -54,9 +54,12 @@ public sealed class GenesisGuiNextSettingsLayoutTests
             int S(int value) => GenesisMainWindowLayout.Scale(value, dpi);
             Assert.True(GenesisMainWindowLayout.TryResolve(S(size.Item1), S(size.Item2), dpi, out _, out _, out var list, out var details));
             var layout = new GenesisGuiNextSettingsLayout(list.Width, details.Bottom - list.Top);
+            var playback = category == (int)GenesisIntegratedSettingsCategory.Playback;
             var boxes = new List<GenesisGuiNextAppShellPlacement.WindowRectangle> { layout.Title, GenesisGuiNextSettingsLayout.General,
                 GenesisGuiNextSettingsLayout.PlaybackTab, GenesisGuiNextSettingsLayout.RecordingTab, GenesisGuiNextSettingsLayout.NotificationsTab,
-                GenesisGuiNextSettingsLayout.ConnectionTab, GenesisGuiNextSettingsLayout.YellowPagesTab, layout.Legacy, layout.CardTitle, layout.PathNotice, layout.Back };
+                GenesisGuiNextSettingsLayout.ConnectionTab, GenesisGuiNextSettingsLayout.YellowPagesTab, layout.Legacy, layout.CardTitle, layout.PathNotice(playback), layout.Back };
+            if (playback)
+                boxes.AddRange([GenesisGuiNextSettingsLayout.InternalPlayerChoice, GenesisGuiNextSettingsLayout.ExternalPlayerChoice]);
             if (category == (int)GenesisIntegratedSettingsCategory.Notifications)
             {
                 boxes.AddRange(Enumerable.Range(0, 3).Select(layout.NotificationCheck));
@@ -65,10 +68,9 @@ public sealed class GenesisGuiNextSettingsLayoutTests
             }
             else
             {
-                boxes.AddRange([layout.PathRuntime, layout.PathSaved, layout.PathInput(true),
-                    layout.PathStatus, layout.Reset, layout.Save, layout.Cancel]);
-                boxes.Add(layout.Browse); // Both playback executable and recording directory use Browse.
-                Assert.True(layout.PathStatus.Bottom < layout.Card.Bottom);
+                boxes.AddRange([layout.PathRuntime(playback), layout.PathSaved(playback), layout.PathInput(playback),
+                    layout.PathStatus(playback), layout.Reset, layout.Save, layout.Cancel, layout.Browse(playback)]);
+                Assert.True(layout.PathStatus(playback).Bottom < layout.Card.Bottom);
             }
             foreach (var b in boxes)
             {

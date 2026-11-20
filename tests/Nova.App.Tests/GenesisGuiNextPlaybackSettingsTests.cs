@@ -20,8 +20,8 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
     public async Task PlaybackPreferenceJsonRoundTripsUnsetAndUnicodeSpacePath()
     {
         using var directory = new TemporaryDirectory();
-        var store = new JsonGenesisGuiNextPlaybackPreferencesStore(
-            Path.Combine(directory.Path, "playback-preferences.json"));
+        var storePath = Path.Combine(directory.Path, "playback-preferences.json");
+        var store = new JsonGenesisGuiNextPlaybackPreferencesStore(storePath);
         const string path = "C:\\Player Tools\\配信\\PCRPlayer64.exe";
 
         await store.SaveAsync(GenesisGuiNextPlaybackPreferences.Default);
@@ -29,11 +29,40 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
             GenesisGuiNextPlaybackPreferences.Default,
             await store.LoadAsync());
 
-        await store.SaveAsync(new(path));
-        Assert.Equal(path, (await store.LoadAsync()).PcrPlayerExecutablePath);
+        await File.WriteAllTextAsync(storePath, """{"PcrPlayerExecutablePath":"C:\\Player Tools\\配信\\PCRPlayer64.exe"}""");
+        Assert.Equal(new(path, GenesisPlaybackPlayerMode.External), await store.LoadAsync());
 
         await store.SaveAsync(new(null));
         Assert.Null((await store.LoadAsync()).PcrPlayerExecutablePath);
+    }
+
+    [Fact]
+    public async Task PlayerModeAndBothFilesSurviveApplicationStateRestart()
+    {
+        using var directory = new TemporaryDirectory();
+        var externalPath = directory.CreateExecutableFile("External");
+        var libmpvPath = directory.CreateExecutableFile("Internal", "libmpv-2.dll");
+        var storePath = Path.Combine(directory.Path, "playback-preferences.json");
+        var saved = new GenesisGuiNextPlaybackPreferences(externalPath, GenesisPlaybackPlayerMode.Internal, libmpvPath);
+        var source = new GenesisGuiNextPlaybackPreferencesSource();
+
+        await using (var state = await LoadAsync(source))
+        {
+            Assert.Equal(GenesisGuiNextPlaybackSettingsUpdateResult.Saved,
+                state.Playback.Save(state.Playback.Preferences, saved).Result);
+            Assert.Equal(saved, source.Current);
+        }
+
+        var restartedSource = new GenesisGuiNextPlaybackPreferencesSource();
+        await using var restarted = await LoadAsync(restartedSource);
+        Assert.Equal(saved, restarted.Playback.Preferences);
+        Assert.Equal(saved, restartedSource.Current);
+
+        ValueTask<GenesisGuiNextApplicationState> LoadAsync(GenesisGuiNextPlaybackPreferencesSource preferences) =>
+            GenesisGuiNextApplicationState.LoadAsync(
+                new EmptyFavoriteStore(), new EmptyNotificationStore(),
+                DefaultGenesisYellowPageConfigurationStore.Instance,
+                new JsonGenesisGuiNextPlaybackPreferencesStore(storePath), new SilentSoundPlayer(), preferences);
     }
 
     [Fact]
@@ -47,7 +76,7 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
         var storePath = Path.Combine(directory.Path, "playback-preferences.json");
         var store = new JsonGenesisGuiNextPlaybackPreferencesStore(storePath);
         await store.SaveAsync(new(initialPath));
-        var pathSource = new GenesisGuiNextPlaybackPathSource();
+        var pathSource = new GenesisGuiNextPlaybackPreferencesSource();
         await using var state = await GenesisGuiNextApplicationState.LoadAsync(
             new EmptyFavoriteStore(),
             new EmptyNotificationStore(),
@@ -57,15 +86,15 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
             pathSource);
 
         Assert.Equal(initialPath, state.Playback.PcrPlayerExecutablePath);
-        Assert.Equal(initialPath, pathSource.Current);
+        Assert.Equal(initialPath, pathSource.Current.PcrPlayerExecutablePath);
         Assert.Equal(
             GenesisGuiNextPlaybackSettingsUpdateResult.Saved,
             state.Playback.SetPcrPlayerExecutablePath($" \"{updatedPath}\" "));
         Assert.Equal(updatedPath, state.Playback.PcrPlayerExecutablePath);
-        Assert.Equal(updatedPath, pathSource.Current);
+        Assert.Equal(updatedPath, pathSource.Current.PcrPlayerExecutablePath);
         Assert.Equal(updatedPath, (await store.LoadAsync()).PcrPlayerExecutablePath);
 
-        var restartedPathSource = new GenesisGuiNextPlaybackPathSource();
+        var restartedPathSource = new GenesisGuiNextPlaybackPreferencesSource();
         await using var restartedState = await GenesisGuiNextApplicationState.LoadAsync(
             new EmptyFavoriteStore(),
             new EmptyNotificationStore(),
@@ -74,27 +103,27 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
             new SilentSoundPlayer(),
             restartedPathSource);
         Assert.Equal(updatedPath, restartedState.Playback.PcrPlayerExecutablePath);
-        Assert.Equal(updatedPath, restartedPathSource.Current);
+        Assert.Equal(updatedPath, restartedPathSource.Current.PcrPlayerExecutablePath);
         Assert.Equal(
             updatedPath,
-            PcrPlayerExternalPlayerLauncher.ResolveExecutablePath(restartedPathSource.Current, environmentPath, null));
+            PcrPlayerExternalPlayerLauncher.ResolveExecutablePath(restartedPathSource.Current.PcrPlayerExecutablePath, environmentPath, null));
 
         Assert.Equal(
             GenesisGuiNextPlaybackSettingsUpdateResult.Saved,
             restartedState.Playback.SetPcrPlayerExecutablePath(" "));
         Assert.Null(restartedState.Playback.PcrPlayerExecutablePath);
-        Assert.Null(restartedPathSource.Current);
+        Assert.Null(restartedPathSource.Current.PcrPlayerExecutablePath);
         Assert.Null((await store.LoadAsync()).PcrPlayerExecutablePath);
         Assert.Equal(
             environmentPath,
             PcrPlayerExternalPlayerLauncher.ResolveExecutablePath(
-                restartedPathSource.Current,
+                restartedPathSource.Current.PcrPlayerExecutablePath,
                 environmentPath,
                 System.IO.Path.GetDirectoryName(pathPlayer)));
         Assert.Equal(
             pathPlayer,
             PcrPlayerExternalPlayerLauncher.ResolveExecutablePath(
-                restartedPathSource.Current,
+                restartedPathSource.Current.PcrPlayerExecutablePath,
                 null,
                 System.IO.Path.GetDirectoryName(pathPlayer)));
     }
@@ -103,7 +132,7 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
     public void FailedPersistenceDoesNotChangeConfiguredPath()
     {
         const string currentPath = "C:\\Player\\PCRPlayer64.exe";
-        var source = new GenesisGuiNextPlaybackPathSource();
+        var source = new GenesisGuiNextPlaybackPreferencesSource();
         var settings = new GenesisGuiNextPlaybackSettings(new(currentPath), source, static _ => null);
         settings.BindPersistence(static _ => false);
 
@@ -111,7 +140,7 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
             GenesisGuiNextPlaybackSettingsUpdateResult.PersistenceFailed,
             settings.SetPcrPlayerExecutablePath("D:\\Missing Save\\PCRPlayer64.exe"));
         Assert.Equal(currentPath, settings.PcrPlayerExecutablePath);
-        Assert.Equal(currentPath, source.Current);
+        Assert.Equal(currentPath, source.Current.PcrPlayerExecutablePath);
     }
 
     [Fact]
@@ -144,11 +173,13 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
                 Marshal.OffsetOf<GenesisGuiNextPlaybackSettingsWindow.OpenFileName>(field));
     }
 
-    [Fact]
-    public void BrowseMarshalsRealStructureAndReadsUnicodeSelectionWithoutOpeningDialog()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void BrowseMarshalsRealStructureAndReadsUnicodeSelectionWithoutOpeningDialog(bool library)
     {
-        const string initial = @"C:\Player Tools\配信\PCRPlayer64.exe";
-        const string selected = @"D:\新しい Player\PCRBrowser.exe";
+        var initial = library ? @"C:\Player Tools\配信\libmpv-2.dll" : @"C:\Player Tools\配信\PCRPlayer64.exe";
+        var selected = library ? @"D:\新しい Player\libmpv-2.dll" : @"D:\新しい Player\PCRBrowser.exe";
         var harness = new BrowseHarness();
         harness.ShowDialog = (ref GenesisGuiNextPlaybackSettingsWindow.OpenFileName dialog) =>
         {
@@ -156,7 +187,7 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
             Assert.Equal((uint)Marshal.SizeOf<GenesisGuiNextPlaybackSettingsWindow.OpenFileName>(), dialog.StructSize);
             Assert.Equal((uint)GenesisGuiNextPlaybackSettingsWindow.BrowseFileCapacity, dialog.MaximumFile);
             Assert.Equal(0x1808u, dialog.Flags);
-            Assert.Equal("exe", dialog.DefaultExtension);
+            Assert.Equal(library ? "dll" : "exe", dialog.DefaultExtension);
             Assert.Equal(0, dialog.InitialDirectory);
             Assert.Equal(initial, Marshal.PtrToStringUni(dialog.File));
             Assert.Equal(0, Marshal.ReadInt16(dialog.File, initial.Length * sizeof(char)));
@@ -179,7 +210,8 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
                     var offset = Marshal.OffsetOf<GenesisGuiNextPlaybackSettingsWindow.OpenFileName>(
                         nameof(GenesisGuiNextPlaybackSettingsWindow.OpenFileName.Filter));
                     Marshal.Copy(Marshal.ReadIntPtr(native, (int)offset), filter, 0, filter.Length);
-                    Assert.Equal("Executable files (*.exe)\0*.exe\0All files (*.*)\0*.*\0\0", new string(filter));
+                    Assert.Equal(library ? "libmpv DLL (*.dll)\0*.dll\0\0" :
+                        "Executable files (*.exe)\0*.exe\0All files (*.*)\0*.*\0\0", new string(filter));
                 }
                 finally
                 {
@@ -198,7 +230,7 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
         };
         harness.GetExtendedError = () => throw new InvalidOperationException("Not called on success.");
 
-        var result = harness.Browse($"  \"{initial}\"  ");
+        var result = harness.Browse($"  \"{initial}\"  ", library);
 
         Assert.Equal(selected, result.SelectedPath);
         Assert.False(result.Failed);
@@ -392,14 +424,14 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
         public List<string> Diagnostics { get; } = [];
         public int FreeCount { get; private set; }
 
-        public GenesisGuiNextPlaybackSettingsWindow.BrowseResult Browse(string? currentPath) =>
-            GenesisGuiNextPlaybackSettingsWindow.BrowseForExecutable(123, currentPath,
+        public GenesisGuiNextPlaybackSettingsWindow.BrowseResult Browse(string? currentPath, bool library = false) =>
+            GenesisGuiNextPlaybackSettingsWindow.BrowseForPlayerFile(123, currentPath,
                 ShowDialog, GetExtendedError, buffer =>
                 {
                     Assert.NotEqual(0, buffer);
                     FreeCount++;
                     Marshal.FreeHGlobal(buffer);
-                }, ReportFailure ?? Diagnostics.Add);
+                }, ReportFailure ?? Diagnostics.Add, library);
     }
 
     [Theory]
@@ -429,7 +461,7 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
         var path = directory.CreateExecutableFile("Player", fileName);
 
         Assert.Equal(
-            GenesisGuiNextPlaybackSettingsUpdateResult.UnsupportedExecutableExtension,
+            GenesisGuiNextPlaybackSettingsUpdateResult.UnsupportedFileExtension,
             GenesisGuiNextPlaybackSettings.ValidateExecutablePath(path));
     }
 
@@ -440,7 +472,7 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
         var missingPath = Path.Combine(directory.Path, "Missing", "OtherPlayer.exe");
         var directoryPath = directory.CreateExecutableDirectory("Directory.exe");
         Assert.Equal(
-            GenesisGuiNextPlaybackSettingsUpdateResult.ExecutableNotFound,
+            GenesisGuiNextPlaybackSettingsUpdateResult.FileNotFound,
             GenesisGuiNextPlaybackSettings.ValidateExecutablePath(missingPath));
         Assert.Equal(
             GenesisGuiNextPlaybackSettingsUpdateResult.DirectorySelected,
@@ -461,17 +493,17 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
             path.Length >= 3 && char.IsAsciiLetter(path[0]) && path[1] == ':' && path[2] is '\\' or '/';
         static string GetWindowsFileName(string path) => path[(path.LastIndexOfAny(['\\', '/']) + 1)..];
 
-        Assert.Null(GenesisGuiNextPlaybackSettings.ValidateExecutablePath(
-            windowsPath, IsWindowsAbsolute, GetWindowsFileName, static _ => FileAttributes.Normal, static _ => { }));
+        Assert.Null(GenesisGuiNextPlaybackSettings.ValidatePlayerPath(
+            windowsPath, ".exe", IsWindowsAbsolute, GetWindowsFileName, static _ => FileAttributes.Normal, static _ => { }));
         Assert.Equal(
             GenesisGuiNextPlaybackSettingsUpdateResult.AccessDenied,
-            GenesisGuiNextPlaybackSettings.ValidateExecutablePath(
-                windowsPath, IsWindowsAbsolute, GetWindowsFileName,
+            GenesisGuiNextPlaybackSettings.ValidatePlayerPath(
+                windowsPath, ".exe", IsWindowsAbsolute, GetWindowsFileName,
                 static _ => FileAttributes.Normal, static _ => throw new UnauthorizedAccessException()));
         Assert.Equal(
             GenesisGuiNextPlaybackSettingsUpdateResult.PathCheckFailed,
-            GenesisGuiNextPlaybackSettings.ValidateExecutablePath(
-                windowsPath, IsWindowsAbsolute, GetWindowsFileName,
+            GenesisGuiNextPlaybackSettings.ValidatePlayerPath(
+                windowsPath, ".exe", IsWindowsAbsolute, GetWindowsFileName,
                 static _ => FileAttributes.Normal, static _ => throw new IOException()));
     }
 
@@ -481,14 +513,14 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
         using var directory = new TemporaryDirectory();
         var oldPath = directory.CreateExecutableFile("Old");
         var newPath = Path.Combine(directory.Path, "New", "OtherPlayer.exe");
-        var source = new GenesisGuiNextPlaybackPathSource();
+        var source = new GenesisGuiNextPlaybackPreferencesSource();
         var store = new RecordingPlaybackPreferencesStore(new(oldPath));
         var settings = new GenesisGuiNextPlaybackSettings(new(oldPath), source);
-        settings.BindPersistence(path =>
+        settings.BindPersistence(preferences =>
         {
             try
             {
-                store.SaveAsync(new(path)).AsTask().GetAwaiter().GetResult();
+                store.SaveAsync(preferences).AsTask().GetAwaiter().GetResult();
                 return true;
             }
             catch
@@ -498,10 +530,10 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
         });
 
         Assert.Equal(
-            GenesisGuiNextPlaybackSettingsUpdateResult.ExecutableNotFound,
+            GenesisGuiNextPlaybackSettingsUpdateResult.FileNotFound,
             settings.SetPcrPlayerExecutablePath(newPath));
         Assert.Equal(oldPath, settings.PcrPlayerExecutablePath);
-        Assert.Equal(oldPath, source.Current);
+        Assert.Equal(oldPath, source.Current.PcrPlayerExecutablePath);
         Assert.Equal(oldPath, (await store.LoadAsync()).PcrPlayerExecutablePath);
         Assert.Null(store.Saved);
 
@@ -510,7 +542,7 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
             GenesisGuiNextPlaybackSettingsUpdateResult.Saved,
             settings.SetPcrPlayerExecutablePath(newPath));
         Assert.Equal(newPath, settings.PcrPlayerExecutablePath);
-        Assert.Equal(newPath, source.Current);
+        Assert.Equal(newPath, source.Current.PcrPlayerExecutablePath);
         Assert.Equal(newPath, store.Saved?.PcrPlayerExecutablePath);
 
         var failedSavePath = directory.CreateExecutableFile("FailedSave");
@@ -519,7 +551,7 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
             GenesisGuiNextPlaybackSettingsUpdateResult.PersistenceFailed,
             settings.SetPcrPlayerExecutablePath(failedSavePath));
         Assert.Equal(newPath, settings.PcrPlayerExecutablePath);
-        Assert.Equal(newPath, source.Current);
+        Assert.Equal(newPath, source.Current.PcrPlayerExecutablePath);
         Assert.Equal(newPath, (await store.LoadAsync()).PcrPlayerExecutablePath);
     }
 
@@ -528,7 +560,7 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
     {
         const string currentPath = "C:\\Player\\PCRPlayer64.exe";
         const string newPath = "D:\\Player\\PCRPlayer64.exe";
-        var source = new GenesisGuiNextPlaybackPathSource();
+        var source = new GenesisGuiNextPlaybackPreferencesSource();
         var settings = new GenesisGuiNextPlaybackSettings(
             new(currentPath),
             source,
@@ -539,7 +571,7 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
             GenesisGuiNextPlaybackSettingsUpdateResult.PersistenceFailed,
             settings.SetPcrPlayerExecutablePath(newPath));
         Assert.Equal(currentPath, settings.PcrPlayerExecutablePath);
-        Assert.Equal(currentPath, source.Current);
+        Assert.Equal(currentPath, source.Current.PcrPlayerExecutablePath);
     }
 
     [Fact]
@@ -547,12 +579,12 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
     {
         Assert.Equal(
             "指定した実行ファイルが見つかりません。",
-            GenesisGuiNextPlaybackSettingsWindow.GetPcrPlayerSaveFeedback(
-                GenesisGuiNextPlaybackSettingsUpdateResult.ExecutableNotFound,
+            GenesisGuiNextPlaybackSettingsWindow.GetPlayerPathSaveFeedback(
+                GenesisGuiNextPlaybackSettingsUpdateResult.FileNotFound,
                 "C:\\Missing\\PCRPlayer64.exe"));
         Assert.Equal(
             "外部プレイヤーの設定を保存しました。次の再生から使用します。",
-            GenesisGuiNextPlaybackSettingsWindow.GetPcrPlayerSaveFeedback(
+            GenesisGuiNextPlaybackSettingsWindow.GetPlayerPathSaveFeedback(
                 GenesisGuiNextPlaybackSettingsUpdateResult.Saved,
                 "C:\\Player\\PCRPlayer64.exe"));
     }
@@ -569,12 +601,12 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
         var currentPath = directory.CreateExecutableFile("Old Player");
         var invalidPath = Path.Combine(directory.Path, "Missing Player", "OtherPlayer.exe");
         var path = directory.CreateExecutableFile("Player Tools", "OtherPlayer.exe");
-        var pathSource = new GenesisGuiNextPlaybackPathSource();
+        var pathSource = new GenesisGuiNextPlaybackPreferencesSource();
         var settings = new GenesisGuiNextPlaybackSettings(new(currentPath), pathSource);
         string? persistedPath = currentPath;
         settings.BindPersistence(value =>
         {
-            persistedPath = value;
+            persistedPath = value.PcrPlayerExecutablePath;
             return true;
         });
 
@@ -602,7 +634,7 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
             Assert.Equal(invalidPath, ReadWindowText(controls.Path));
             Assert.Equal(currentPath, settings.PcrPlayerExecutablePath);
             Assert.Equal(currentPath, persistedPath);
-            Assert.Equal(currentPath, pathSource.Current);
+            Assert.Equal(currentPath, pathSource.Current.PcrPlayerExecutablePath);
 
             Assert.True(SetWindowTextW(controls.Path, path));
             _ = SendMessageW(controls.Save, ButtonMessageClick, 0, 0);
@@ -610,7 +642,7 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
             Assert.Equal("外部プレイヤーの設定を保存しました。次の再生から使用します。", ReadWindowText(controls.Status));
             Assert.Equal(path, persistedPath);
             Assert.Equal(path, settings.PcrPlayerExecutablePath);
-            Assert.Equal(path, pathSource.Current);
+            Assert.Equal(path, pathSource.Current.PcrPlayerExecutablePath);
 
             await window.DisposeAsync();
             await using var reopened = GenesisGuiNextPlaybackSettingsWindow.TryCreate(owner, settings);

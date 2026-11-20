@@ -144,8 +144,8 @@ internal sealed class PcrPlayerExternalPlayerLauncher : IDailyPlaybackPlayerLaun
         {
             var reason = failure switch
             {
-                GenesisGuiNextPlaybackSettingsUpdateResult.UnsupportedExecutableExtension => "must specify an .exe file",
-                GenesisGuiNextPlaybackSettingsUpdateResult.ExecutableNotFound => "does not exist",
+                GenesisGuiNextPlaybackSettingsUpdateResult.UnsupportedFileExtension => "must specify an .exe file",
+                GenesisGuiNextPlaybackSettingsUpdateResult.FileNotFound => "does not exist",
                 GenesisGuiNextPlaybackSettingsUpdateResult.DirectorySelected => "points to a directory",
                 GenesisGuiNextPlaybackSettingsUpdateResult.AccessDenied => "is not accessible",
                 GenesisGuiNextPlaybackSettingsUpdateResult.InvalidPath => "must be a valid absolute path",

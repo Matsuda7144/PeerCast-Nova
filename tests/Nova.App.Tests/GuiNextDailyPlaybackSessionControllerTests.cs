@@ -152,7 +152,7 @@ public sealed class GuiNextDailyPlaybackSessionControllerTests
         var missingLibrary = Path.Combine(
             Path.GetTempPath(), Guid.NewGuid().ToString("N"), "libmpv-2.dll");
         await using var controller = NovaWindowsStartupComposition.CreateDefaultGenesisPlaybackController(
-            new GenesisGuiNextPlaybackPathSource(), libMpvLibraryPath: missingLibrary);
+            new GenesisGuiNextPlaybackPreferencesSource(), libMpvLibraryPath: missingLibrary);
 
         var outcome = await controller.PlayAsync(Source);
 

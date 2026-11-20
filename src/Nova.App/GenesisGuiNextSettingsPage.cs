@@ -198,7 +198,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             PaintNetworkSettingsFrames(dc);
             if (PathCategory)
             {
-                var input = new GenesisGuiNextSettingsLayout(LogicalWidth(client.Right), LogicalWidth(client.Bottom)).PathInput(true);
+                var input = new GenesisGuiNextSettingsLayout(LogicalWidth(client.Right), LogicalWidth(client.Bottom)).PathInput(PlaybackCategory);
                 using var focus = new VisualPen(dc, Scale(1), GetFocus() == _settingsPath ? GenesisGuiNextDesign.Accent : GenesisGuiNextDesign.Border);
                 _ = GdiRectangle(dc, Scale(input.Left) - 1, Scale(input.Top) - 1, Scale(input.Right) + 1, Scale(input.Bottom) + 1);
             }
@@ -235,7 +235,9 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 draw.ControlId == ConnectionCategoryId && _settingsCategory == GenesisIntegratedSettingsCategory.Connection ||
                 draw.ControlId == YellowPagesCategoryId && _settingsCategory == GenesisIntegratedSettingsCategory.YellowPages ||
                 draw.ControlId == NotificationsCategoryId && _settingsCategory == GenesisIntegratedSettingsCategory.Notifications || draw.ControlId == ClassicChoiceId && _generalSettings?.Draft == NovaGuiMode.Classic ||
-                draw.ControlId == ModernChoiceId && _generalSettings?.Draft == NovaGuiMode.Modern;
+                draw.ControlId == ModernChoiceId && _generalSettings?.Draft == NovaGuiMode.Modern ||
+                draw.ControlId == InternalPlayerChoiceId && PlaybackCategory && _pathSettings?.PlayerMode == GenesisPlaybackPlayerMode.Internal ||
+                draw.ControlId == ExternalPlayerChoiceId && PlaybackCategory && _pathSettings?.PlayerMode == GenesisPlaybackPlayerMode.External;
             var disabled = (draw.ItemState & DrawItemDisabled) != 0;
             var hot = _hoverControl == draw.ControlWindow;
             var pressed = (draw.ItemState & 1) != 0;

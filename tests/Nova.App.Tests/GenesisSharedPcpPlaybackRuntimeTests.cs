@@ -529,8 +529,10 @@ public sealed class GenesisSharedPcpPlaybackRuntimeTests
         var composition = new PcpRecordingRuntimeComposition(
             Path.Combine(Path.GetTempPath(), "PeerCastNova-daily-player-tests"));
         var launcher = new RecordingPlayerLauncher();
+        var changedLauncher = new RecordingPlayerLauncher();
+        var selectedLauncher = launcher;
         await using var controller = new NovaDailyHttpFlvPlaybackController(
-            launcher, static _ => { }, static _ => { }, composition, new GenesisSharedPcpPlaybackRuntime(composition));
+            () => selectedLauncher, static _ => { }, static _ => { }, composition, new GenesisSharedPcpPlaybackRuntime(composition));
 
         try
         {
@@ -540,9 +542,11 @@ public sealed class GenesisSharedPcpPlaybackRuntimeTests
             await accepted.Task.WaitAsync(timeout.Token);
             Assert.False(launcher.Launched.Task.IsCompleted);
 
+            selectedLauncher = changedLauncher;
             releaseHead.SetResult();
             var source = await launcher.Launched.Task.WaitAsync(timeout.Token);
             await play.WaitAsync(timeout.Token);
+            Assert.False(changedLauncher.Launched.Task.IsCompleted);
             var url = new Uri(source.StreamUrl);
             Assert.Equal("127.0.0.1", url.Host);
             Assert.Equal($"/stream/{ChannelGuid:N}", url.AbsolutePath, ignoreCase: true);

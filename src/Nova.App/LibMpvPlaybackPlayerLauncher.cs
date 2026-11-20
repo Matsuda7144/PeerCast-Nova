@@ -38,7 +38,8 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
     {
         if (!IsLibraryPath(_libraryPath) || !File.Exists(_libraryPath))
         {
-            throw new LibMpvPlaybackException("Specify an existing absolute libmpv DLL path with --libmpv-library.");
+            throw new LibMpvPlaybackException(
+                "Specify an existing absolute libmpv DLL path in Playback Settings or with --libmpv-library.");
         }
     }
 

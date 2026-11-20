@@ -1,18 +1,23 @@
 namespace PeerCast.Nova.App;
 
-internal sealed record GenesisGuiNextPlaybackPreferences(string? PcrPlayerExecutablePath)
+internal enum GenesisPlaybackPlayerMode { External = 0, Internal = 1 }
+
+internal sealed record GenesisGuiNextPlaybackPreferences(
+    string? PcrPlayerExecutablePath,
+    GenesisPlaybackPlayerMode PlayerMode = GenesisPlaybackPlayerMode.External,
+    string? LibMpvLibraryPath = null)
 {
     public static GenesisGuiNextPlaybackPreferences Default { get; } =
         new(PcrPlayerExecutablePath: null);
 }
 
-internal sealed class GenesisGuiNextPlaybackPathSource
+internal sealed class GenesisGuiNextPlaybackPreferencesSource
 {
-    private string? _current;
+    private GenesisGuiNextPlaybackPreferences _current = GenesisGuiNextPlaybackPreferences.Default;
 
-    public string? Current => Volatile.Read(ref _current);
+    public GenesisGuiNextPlaybackPreferences Current => Volatile.Read(ref _current);
 
-    internal void Set(string? path) => Interlocked.Exchange(ref _current, path);
+    internal void Set(GenesisGuiNextPlaybackPreferences preferences) => Volatile.Write(ref _current, preferences);
 }
 
 internal enum GenesisGuiNextPlaybackSettingsUpdateResult
@@ -20,46 +25,56 @@ internal enum GenesisGuiNextPlaybackSettingsUpdateResult
     Saved,
     Unchanged,
     InvalidPath,
-    UnsupportedExecutableExtension,
-    ExecutableNotFound,
+    UnsupportedFileExtension,
+    FileNotFound,
     DirectorySelected,
     AccessDenied,
     PathCheckFailed,
+    LibraryRequired,
+    Conflict,
     PersistenceFailed,
 }
 
 internal sealed class GenesisGuiNextPlaybackSettings
 {
     private readonly object _gate = new();
-    private readonly GenesisGuiNextPlaybackPathSource? _pathSource;
+    private readonly GenesisGuiNextPlaybackPreferencesSource? _preferencesSource;
     private readonly Func<string, GenesisGuiNextPlaybackSettingsUpdateResult?> _validateExecutablePath;
-    private string? _pcrPlayerExecutablePath;
-    private Func<string?, bool>? _persist;
+    private GenesisGuiNextPlaybackPreferences _preferences;
+    private Func<GenesisGuiNextPlaybackPreferences, bool>? _persist;
 
     public GenesisGuiNextPlaybackSettings(
         GenesisGuiNextPlaybackPreferences preferences,
-        GenesisGuiNextPlaybackPathSource? pathSource = null,
+        GenesisGuiNextPlaybackPreferencesSource? preferencesSource = null,
         Func<string, GenesisGuiNextPlaybackSettingsUpdateResult?>? validateExecutablePath = null)
     {
         ArgumentNullException.ThrowIfNull(preferences);
-        _pcrPlayerExecutablePath = NormalizePath(preferences.PcrPlayerExecutablePath);
-        _pathSource = pathSource;
+        _preferences = preferences with
+        {
+            PcrPlayerExecutablePath = NormalizePath(preferences.PcrPlayerExecutablePath),
+            LibMpvLibraryPath = NormalizePath(preferences.LibMpvLibraryPath),
+            PlayerMode = preferences.PlayerMode == GenesisPlaybackPlayerMode.Internal
+                ? GenesisPlaybackPlayerMode.Internal : GenesisPlaybackPlayerMode.External,
+        };
+        _preferencesSource = preferencesSource;
         _validateExecutablePath = validateExecutablePath ?? ValidateExecutablePath;
-        _pathSource?.Set(_pcrPlayerExecutablePath);
+        _preferencesSource?.Set(_preferences);
     }
 
-    public string? PcrPlayerExecutablePath
+    public string? PcrPlayerExecutablePath => Preferences.PcrPlayerExecutablePath;
+
+    internal GenesisGuiNextPlaybackPreferences Preferences
     {
         get
         {
             lock (_gate)
             {
-                return _pcrPlayerExecutablePath;
+                return _preferences;
             }
         }
     }
 
-    internal void BindPersistence(Func<string?, bool> persist)
+    internal void BindPersistence(Func<GenesisGuiNextPlaybackPreferences, bool> persist)
     {
         ArgumentNullException.ThrowIfNull(persist);
         lock (_gate)
@@ -69,7 +84,8 @@ internal sealed class GenesisGuiNextPlaybackSettings
     }
 
     public GenesisGuiNextPlaybackSettingsUpdateResult SetPcrPlayerExecutablePath(
-        string? path)
+        string? path,
+        GenesisGuiNextPlaybackPreferences? expected = null)
     {
         var normalized = NormalizePath(path);
         if (normalized is not null && _validateExecutablePath(normalized) is { } validationFailure)
@@ -79,28 +95,71 @@ internal sealed class GenesisGuiNextPlaybackSettings
 
         lock (_gate)
         {
-            if (string.Equals(
-                    _pcrPlayerExecutablePath,
-                    normalized,
-                    StringComparison.Ordinal))
-            {
-                return GenesisGuiNextPlaybackSettingsUpdateResult.Unchanged;
-            }
-
-            if (_persist is not null && !_persist(normalized))
-            {
-                return GenesisGuiNextPlaybackSettingsUpdateResult.PersistenceFailed;
-            }
-
-            _pcrPlayerExecutablePath = normalized;
-            _pathSource?.Set(normalized);
-            return GenesisGuiNextPlaybackSettingsUpdateResult.Saved;
+            return expected is not null && expected != _preferences
+                ? GenesisGuiNextPlaybackSettingsUpdateResult.Conflict
+                : Persist(_preferences with { PcrPlayerExecutablePath = normalized });
         }
     }
 
+    internal (GenesisGuiNextPlaybackSettingsUpdateResult Result, GenesisPlaybackPlayerMode? InvalidPathMode) Save(
+        GenesisGuiNextPlaybackPreferences expected,
+        GenesisGuiNextPlaybackPreferences draft)
+    {
+        var requested = draft with
+        {
+            PcrPlayerExecutablePath = NormalizePath(draft.PcrPlayerExecutablePath),
+            LibMpvLibraryPath = NormalizePath(draft.LibMpvLibraryPath),
+        };
+        var internalSelected = requested.PlayerMode == GenesisPlaybackPlayerMode.Internal;
+        if (internalSelected && requested.LibMpvLibraryPath is null)
+        {
+            return (GenesisGuiNextPlaybackSettingsUpdateResult.LibraryRequired, GenesisPlaybackPlayerMode.Internal);
+        }
+
+        if (requested.LibMpvLibraryPath is { } libraryPath &&
+            (internalSelected || libraryPath != expected.LibMpvLibraryPath) &&
+            ValidatePlayerPath(libraryPath, ".dll") is { } libraryFailure)
+        {
+            return (libraryFailure, GenesisPlaybackPlayerMode.Internal);
+        }
+
+        if (requested.PcrPlayerExecutablePath is { } executablePath &&
+            (!internalSelected || executablePath != expected.PcrPlayerExecutablePath) &&
+            _validateExecutablePath(executablePath) is { } executableFailure)
+        {
+            return (executableFailure, GenesisPlaybackPlayerMode.External);
+        }
+
+        lock (_gate)
+        {
+            return (expected == _preferences ? Persist(requested) : GenesisGuiNextPlaybackSettingsUpdateResult.Conflict, null);
+        }
+    }
+
+    private GenesisGuiNextPlaybackSettingsUpdateResult Persist(GenesisGuiNextPlaybackPreferences preferences)
+    {
+        if (preferences == _preferences)
+        {
+            return GenesisGuiNextPlaybackSettingsUpdateResult.Unchanged;
+        }
+
+        if (_persist is not null && !_persist(preferences))
+        {
+            return GenesisGuiNextPlaybackSettingsUpdateResult.PersistenceFailed;
+        }
+
+        _preferences = preferences;
+        _preferencesSource?.Set(preferences);
+        return GenesisGuiNextPlaybackSettingsUpdateResult.Saved;
+    }
+
     internal static GenesisGuiNextPlaybackSettingsUpdateResult? ValidateExecutablePath(string path) =>
-        ValidateExecutablePath(
+        ValidatePlayerPath(path, ".exe");
+
+    private static GenesisGuiNextPlaybackSettingsUpdateResult? ValidatePlayerPath(string path, string extension) =>
+        ValidatePlayerPath(
             path,
+            extension,
             Path.IsPathFullyQualified,
             Path.GetFileName,
             File.GetAttributes,
@@ -109,8 +168,9 @@ internal sealed class GenesisGuiNextPlaybackSettings
                 using var file = File.Open(candidatePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
             });
 
-    internal static GenesisGuiNextPlaybackSettingsUpdateResult? ValidateExecutablePath(
+    internal static GenesisGuiNextPlaybackSettingsUpdateResult? ValidatePlayerPath(
         string path,
+        string extension,
         Func<string, bool> isPathFullyQualified,
         Func<string, string> getFileName,
         Func<string, FileAttributes> getAttributes,
@@ -140,9 +200,9 @@ internal sealed class GenesisGuiNextPlaybackSettings
                 return GenesisGuiNextPlaybackSettingsUpdateResult.DirectorySelected;
             }
 
-            if (!string.Equals(Path.GetExtension(fileName), ".exe", StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(Path.GetExtension(fileName), extension, StringComparison.OrdinalIgnoreCase))
             {
-                return GenesisGuiNextPlaybackSettingsUpdateResult.UnsupportedExecutableExtension;
+                return GenesisGuiNextPlaybackSettingsUpdateResult.UnsupportedFileExtension;
             }
 
             checkReadable(path);
@@ -150,11 +210,11 @@ internal sealed class GenesisGuiNextPlaybackSettings
         }
         catch (FileNotFoundException)
         {
-            return GenesisGuiNextPlaybackSettingsUpdateResult.ExecutableNotFound;
+            return GenesisGuiNextPlaybackSettingsUpdateResult.FileNotFound;
         }
         catch (DirectoryNotFoundException)
         {
-            return GenesisGuiNextPlaybackSettingsUpdateResult.ExecutableNotFound;
+            return GenesisGuiNextPlaybackSettingsUpdateResult.FileNotFound;
         }
         catch (UnauthorizedAccessException)
         {

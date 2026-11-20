@@ -68,7 +68,9 @@ Nova 内の managed decoder、scheduler、Windows output を使う playback の�
 
 [Headless publish channel foundation](docs/headless-obs-publish-channel.md) は同じchannel generationを既存relayとHTTP-FLVへ接続します。managed localhost roundtripまでが検証範囲で、実OBS相互運用は未検証です。
 
-MVP の再生要件を満たす採用済み経路は external-player handoff です。PCRPlayer と DSPlayer を含む対応 player に PCP 入力を loopback 限定の HTTP-FLV で渡します。Modern の「設定 → 再生」では、実在する読み取り可能な `.exe` の絶対パスを保存できます。実行ファイルは次の順で解決します。
+Modern の「設定 → 再生」で内蔵プレイヤーと外部プレイヤーを選択できます。「保存」を押すと次の再生から適用されます。初期設定は外部プレイヤーです。どちらも PCP 入力を loopback 限定の HTTP-FLV 経由で再生します。
+
+外部プレイヤーには PCRPlayer や DSPlayer を指定できます。実在する読み取り可能な `.exe` の絶対パスを指定するか、空欄にして環境変数または PATH を使用します。実行ファイルは次の順で解決します。
 
 1. `--pcrplayer-executable <path>`
 2. GUI に保存したパス
@@ -77,7 +79,9 @@ MVP の再生要件を満たす採用済み経路は external-player handoff で
 
 CLI と環境変数でも実行ファイルの絶対パスを指定します。互換性のため、従来の `PCRPlayer64.exe` という名前だけの指定は PATH から解決します。明示した設定が無効な場合はエラーを表示します。`PCRPlayer64.exe` は従来の追加引数を使い、ほかの実行ファイルには再生URLだけを渡します。
 
-Windows で内蔵FLVプレイヤーを試す場合は、利用者が用意した互換性のある libmpv（client API 2）の DLL を `--libmpv-library` で指定します。チャンネルを選択して「再生」を押すと、Novaの再生ウィンドウに表示します。ライブラリとその依存ファイルはNovaに同梱されません。
+内蔵プレイヤーには、利用者が用意した互換性のある libmpv（client API 2）の DLL の絶対パスを指定します。チャンネルを選んで「再生」を押すと、Nova の再生ウィンドウに表示します。ライブラリとその依存ファイルは別途用意してください。外部プレイヤーと内蔵プレイヤーのパスはそれぞれ保存されます。
+
+`--libmpv-library` または `--pcrplayer-executable` を起動時に指定すると、その起動中は保存済みのプレイヤー選択より優先されます。
 
 ```powershell
 Nova.App.exe --libmpv-library "C:\path\libmpv-2.dll"

@@ -49,7 +49,7 @@ public sealed class NovaWindowsStartupComposition
     private readonly INovaObsPublishingRuntimeFactory _publishingRuntimeFactory;
     private readonly IPublishingPreferencesStore? _publishingPreferencesStore;
     private readonly Func<
-        GenesisGuiNextPlaybackPathSource,
+        GenesisGuiNextPlaybackPreferencesSource,
         GenesisRecordingOutputDirectorySettings,
         IPlaybackSessionController> _genesisPlaybackControllerFactory;
 
@@ -143,7 +143,7 @@ public sealed class NovaWindowsStartupComposition
     // The production root and managed composition tests use the same lifetime.
     // Surfaces receive a borrower; only this root initializes/disposes the owner.
     internal ValueTask<NovaWindowsStartupResult> RunOwnedGenesisAsync(
-        Func<GenesisGuiNextPlaybackPathSource, GenesisRecordingOutputDirectorySettings,
+        Func<GenesisGuiNextPlaybackPreferencesSource, GenesisRecordingOutputDirectorySettings,
             IGenesisMainWindowSurfaceTarget> createSurface,
         GenesisRecordingOutputDirectorySettings? recordingSettings = null,
         CancellationToken cancellationToken = default)
@@ -154,7 +154,7 @@ public sealed class NovaWindowsStartupComposition
     }
 
     private async ValueTask<NovaWindowsStartupResult> RunOwnedGenesisCoreAsync(
-        Func<GenesisGuiNextPlaybackPathSource, GenesisRecordingOutputDirectorySettings,
+        Func<GenesisGuiNextPlaybackPreferencesSource, GenesisRecordingOutputDirectorySettings,
             INovaObsPublishingReadOnlyStatus, INovaGuiNextPublishingCommands, GenesisGuiNextApplicationState?, IGenesisMainWindowSurfaceTarget> createSurface,
         GenesisRecordingOutputDirectorySettings? recordingSettings = null,
         bool loadApplicationState = false, CancellationToken cancellationToken = default)
@@ -171,7 +171,7 @@ public sealed class NovaWindowsStartupComposition
             _options.ValidationProfile?.CheckReady();
             networkOwner = _networkOwnerFactory() ??
                 throw new InvalidOperationException("Application network owner is unavailable.");
-            var paths = new GenesisGuiNextPlaybackPathSource();
+            var paths = new GenesisGuiNextPlaybackPreferencesSource();
             recordingSettings ??= _options.ValidationProfile is { } profile ? profile.RecordingSettings :
                 GenesisRecordingOutputDirectorySettings.CreateSystem();
             if (_options.ValidationProfile is not null &&
@@ -262,18 +262,33 @@ public sealed class NovaWindowsStartupComposition
         GuiNextDailyPlaybackSessionController.CreateSystem(recordingSettings: recordingSettings, historyStore: historyStore);
 
     internal static GuiNextDailyPlaybackSessionController CreateDefaultGenesisPlaybackController(
-        GenesisGuiNextPlaybackPathSource pathSource,
+        GenesisGuiNextPlaybackPreferencesSource pathSource,
         GenesisRecordingOutputDirectorySettings? recordingSettings = null,
         GenesisRecordingHistoryStore? historyStore = null,
         string? explicitPlayerPath = null,
         string? libMpvLibraryPath = null)
     {
         ArgumentNullException.ThrowIfNull(pathSource);
-        IDailyPlaybackPlayerLauncher launcher = libMpvLibraryPath is not null
-            ? new LibMpvPlaybackPlayerLauncher(libMpvLibraryPath)
-            : PcrPlayerExternalPlayerLauncher.CreateWithPathProvider(() => explicitPlayerPath ?? pathSource.Current);
-        return GuiNextDailyPlaybackSessionController.CreateSystemWithPlayerLauncher(
-            launcher, recordingSettings, historyStore);
+        IDailyPlaybackPlayerLauncher CreateLauncher()
+        {
+            if (libMpvLibraryPath is not null)
+            {
+                return new LibMpvPlaybackPlayerLauncher(libMpvLibraryPath);
+            }
+
+            if (explicitPlayerPath is not null)
+            {
+                return new PcrPlayerExternalPlayerLauncher(explicitPlayerPath);
+            }
+
+            var preferences = pathSource.Current;
+            return preferences.PlayerMode == GenesisPlaybackPlayerMode.Internal
+                ? new LibMpvPlaybackPlayerLauncher(preferences.LibMpvLibraryPath ?? string.Empty)
+                : new PcrPlayerExternalPlayerLauncher(preferences.PcrPlayerExecutablePath);
+        }
+
+        return GuiNextDailyPlaybackSessionController.CreateSystemWithPlayerLauncherFactory(
+            CreateLauncher, recordingSettings, historyStore);
     }
 
     internal async ValueTask<NovaWindowsStartupResult> RunGenesisAsync(
@@ -492,7 +507,7 @@ public sealed class NovaWindowsStartupComposition
 
     private static GenesisGuiNextApplicationState LoadSystemGuiNextState(
         CancellationToken cancellationToken,
-        GenesisGuiNextPlaybackPathSource? pathSource = null) =>
+        GenesisGuiNextPlaybackPreferencesSource? pathSource = null) =>
         SystemGenesisGuiNextApplicationState.LoadAsync(pathSource, cancellationToken)
             .AsTask()
             .GetAwaiter()

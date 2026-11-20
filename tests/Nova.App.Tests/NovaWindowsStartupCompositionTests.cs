@@ -121,33 +121,62 @@ public sealed class NovaWindowsStartupCompositionTests
     }
 
     [Fact]
-    public async Task PlaybackSettingsPathReachesProductionControllerForNextPlay()
+    public async Task SavedPlayerModeIsReadForEachNewPlay()
     {
         using var fixture = new RecordingMetadataFixture();
-        var pathSource = new GenesisGuiNextPlaybackPathSource();
+        var pathSource = new GenesisGuiNextPlaybackPreferencesSource();
         await using var controller = NovaWindowsStartupComposition
             .CreateDefaultGenesisPlaybackController(pathSource,
                 fixture.Settings, fixture.Store);
 
         Assert.Equal(PlaybackSessionState.Stopped, controller.Snapshot.State);
 
-        var configuredPath = Path.Combine(
-            Path.GetTempPath(),
-            $"NovaMissing-{Guid.NewGuid():N}",
-            "PCRPlayer64.exe");
-        pathSource.Set(configuredPath);
-        var outcome = await controller.PlayAsync(new PlaybackSessionRequest(
+        var missingDirectory = Path.Combine(Path.GetTempPath(), $"NovaMissing-{Guid.NewGuid():N}");
+        var preferences = new GenesisGuiNextPlaybackPreferences(
+            Path.Combine(missingDirectory, "PCRPlayer64.exe"),
+            GenesisPlaybackPlayerMode.Internal,
+            Path.Combine(missingDirectory, "libmpv-2.dll"));
+        var request = new PlaybackSessionRequest(
             "pcp://127.0.0.1:7144/channel/0123456789ABCDEF0123456789ABCDEF",
             "Settings path composition",
+            "0123456789ABCDEF0123456789ABCDEF");
+
+        pathSource.Set(preferences);
+        var internalResult = await controller.PlayAsync(request);
+        Assert.Equal(PlaybackSessionCommandResult.Faulted, internalResult.Result);
+        Assert.Contains("libmpv DLL", internalResult.Snapshot.ErrorMessage, StringComparison.Ordinal);
+
+        pathSource.Set(preferences with { PlayerMode = GenesisPlaybackPlayerMode.External });
+        var externalResult = await controller.PlayAsync(request);
+        Assert.Equal(PlaybackSessionCommandResult.Faulted, externalResult.Result);
+        Assert.Contains("--pcrplayer-executable", externalResult.Snapshot.ErrorMessage, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ExplicitStartupPlayerOverridesTheSavedChoice(bool useInternal)
+    {
+        using var fixture = new RecordingMetadataFixture();
+        var pathSource = new GenesisGuiNextPlaybackPreferencesSource();
+        var missingDirectory = Path.Combine(Path.GetTempPath(), $"NovaMissing-{Guid.NewGuid():N}");
+        var executablePath = Path.Combine(missingDirectory, "PCRPlayer64.exe");
+        var libraryPath = Path.Combine(missingDirectory, "libmpv-2.dll");
+        pathSource.Set(new(executablePath,
+            useInternal ? GenesisPlaybackPlayerMode.External : GenesisPlaybackPlayerMode.Internal, libraryPath));
+        await using var controller = NovaWindowsStartupComposition.CreateDefaultGenesisPlaybackController(
+            pathSource, fixture.Settings, fixture.Store,
+            explicitPlayerPath: useInternal ? null : executablePath,
+            libMpvLibraryPath: useInternal ? libraryPath : null);
+
+        var result = await controller.PlayAsync(new PlaybackSessionRequest(
+            "pcp://127.0.0.1:7144/channel/0123456789ABCDEF0123456789ABCDEF",
+            "Explicit startup player",
             "0123456789ABCDEF0123456789ABCDEF"));
 
-        Assert.Equal(PlaybackSessionCommandResult.Faulted, outcome.Result);
-        Assert.Equal(PlaybackSessionState.Faulted, outcome.Snapshot.State);
-        Assert.Contains(
-            "Playback Settings",
-            outcome.Snapshot.ErrorMessage ?? string.Empty,
-            StringComparison.Ordinal);
-        Assert.Equal(configuredPath, pathSource.Current);
+        Assert.Equal(PlaybackSessionCommandResult.Faulted, result.Result);
+        Assert.Contains(useInternal ? "libmpv DLL" : "--pcrplayer-executable",
+            result.Snapshot.ErrorMessage, StringComparison.Ordinal);
     }
 
     [Fact]

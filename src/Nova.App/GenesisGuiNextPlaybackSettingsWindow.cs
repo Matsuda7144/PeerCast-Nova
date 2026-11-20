@@ -195,16 +195,17 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
 
     internal readonly record struct BrowseResult(string? SelectedPath, bool Failed);
 
-    internal static BrowseResult BrowseForExecutable(nint owner, string? currentPath) =>
-        BrowseForExecutable(owner, currentPath, GetOpenFileNameW, CommDlgExtendedError, Marshal.FreeHGlobal, Console.Error.WriteLine);
+    internal static BrowseResult BrowseForPlayerFile(nint owner, string? currentPath, bool library = false) =>
+        BrowseForPlayerFile(owner, currentPath, GetOpenFileNameW, CommDlgExtendedError, Marshal.FreeHGlobal, Console.Error.WriteLine, library);
 
-    internal static BrowseResult BrowseForExecutable(
+    internal static BrowseResult BrowseForPlayerFile(
         nint owner,
         string? currentPath,
         ShowOpenFileDialog showDialog,
         Func<uint> getExtendedError,
         Action<nint> releaseBuffer,
-        Action<string> reportFailure)
+        Action<string> reportFailure,
+        bool library = false)
     {
         nint fileBuffer = 0;
         try
@@ -223,19 +224,20 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
             {
                 StructSize = (uint)Marshal.SizeOf<OpenFileName>(),
                 Owner = owner,
-                Filter = "Executable files (*.exe)\0*.exe\0All files (*.*)\0*.*\0\0",
+                Filter = library ? "libmpv DLL (*.dll)\0*.dll\0\0" :
+                    "Executable files (*.exe)\0*.exe\0All files (*.*)\0*.*\0\0",
                 File = fileBuffer,
                 MaximumFile = BrowseFileCapacity,
-                Title = "外部プレイヤーの実行ファイルを選択",
+                Title = library ? "内蔵プレイヤーの libmpv DLL を選択" : "外部プレイヤーの実行ファイルを選択",
                 Flags = FileMustExist | PathMustExist | NoChangeDirectory,
-                DefaultExtension = "exe",
+                DefaultExtension = library ? "dll" : "exe",
             };
             if (!showDialog(ref dialog))
             {
                 // Read the common-dialog error before cleanup or another native call.
                 var error = getExtendedError();
                 if (error == 0) return default;
-                ReportBrowseFailure($"CommonDialogError=0x{error:X8}", reportFailure);
+                ReportBrowseFailure($"CommonDialogError=0x{error:X8}", reportFailure, library);
                 return new(null, true);
             }
 
@@ -245,7 +247,7 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
             if (terminator <= 0 ||
                 !TryResolveBrowsePath(new string(characters, 0, terminator), out var selectedPath))
             {
-                ReportBrowseFailure("InvalidSelectionBuffer", reportFailure);
+                ReportBrowseFailure("InvalidSelectionBuffer", reportFailure, library);
                 return new(null, true);
             }
             return new(selectedPath, false);
@@ -254,7 +256,7 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
             MarshalDirectiveException or TypeLoadException or NotSupportedException or
             System.ComponentModel.Win32Exception or COMException)
         {
-            ReportBrowseFailure(exception.GetType().Name, reportFailure);
+            ReportBrowseFailure(exception.GetType().Name, reportFailure, library);
             return new(null, true);
         }
         finally
@@ -263,11 +265,12 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
         }
     }
 
-    private static void ReportBrowseFailure(string diagnostic, Action<string> reportFailure)
+    private static void ReportBrowseFailure(string diagnostic, Action<string> reportFailure, bool library)
     {
         try
         {
-            reportFailure($"External player browse failed: {diagnostic}.");
+            var file = library ? "libmpv DLL" : "External player";
+            reportFailure($"{file} browse failed: {diagnostic}.");
         }
         catch (Exception exception) when (exception is IOException or ObjectDisposedException)
         {
@@ -275,25 +278,30 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
         }
     }
 
-    internal static string GetPcrPlayerSaveFeedback(
+    internal static string GetPlayerPathSaveFeedback(
         GenesisGuiNextPlaybackSettingsUpdateResult result,
-        string? requestedPath) =>
-        result switch
+        string? requestedPath,
+        bool library = false)
+    {
+        var fileLabel = library ? "libmpv DLL" : "実行ファイル";
+        return result switch
         {
             GenesisGuiNextPlaybackSettingsUpdateResult.PersistenceFailed =>
                 "設定を保存できませんでした。保存場所を確認してください。",
             GenesisGuiNextPlaybackSettingsUpdateResult.InvalidPath =>
                 "有効な絶対パスを入力してください。",
-            GenesisGuiNextPlaybackSettingsUpdateResult.UnsupportedExecutableExtension =>
-                ".exeファイルを指定してください。",
-            GenesisGuiNextPlaybackSettingsUpdateResult.ExecutableNotFound =>
-                "指定した実行ファイルが見つかりません。",
+            GenesisGuiNextPlaybackSettingsUpdateResult.LibraryRequired =>
+                "内蔵プレイヤーで使用する libmpv DLL（.dll）を指定してください。",
+            GenesisGuiNextPlaybackSettingsUpdateResult.UnsupportedFileExtension =>
+                library ? "libmpv DLL（.dll）を指定してください。" : ".exeファイルを指定してください。",
+            GenesisGuiNextPlaybackSettingsUpdateResult.FileNotFound =>
+                $"指定した{fileLabel}が見つかりません。",
             GenesisGuiNextPlaybackSettingsUpdateResult.DirectorySelected =>
-                "フォルダーではなく実行ファイルを指定してください。",
+                library ? "libmpv DLL のファイルを指定してください。" : "フォルダーではなく実行ファイルを指定してください。",
             GenesisGuiNextPlaybackSettingsUpdateResult.AccessDenied =>
-                "実行ファイルを確認できません。アクセス権を確認してください。",
+                $"{fileLabel}を確認できません。アクセス権を確認してください。",
             GenesisGuiNextPlaybackSettingsUpdateResult.PathCheckFailed =>
-                "実行ファイルを確認できません。パスを確認してください。",
+                $"{fileLabel}を確認できません。パスを確認してください。",
             GenesisGuiNextPlaybackSettingsUpdateResult.Unchanged when
                 GenesisGuiNextPlaybackSettings.NormalizePath(requestedPath) is null =>
                 "外部プレイヤーは未設定です。次の再生では環境変数またはPATHを使います。",
@@ -303,6 +311,7 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
                 "未設定に戻しました。次の再生では環境変数またはPATHを使います。",
             _ => "外部プレイヤーの設定を保存しました。次の再生から使用します。",
         };
+    }
 
     private static Controls? CreateAppearanceControls(nint window, nint instance)
     {
@@ -474,7 +483,7 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
 
         private void Browse()
         {
-            var result = BrowseForExecutable(window, GetText(controls.Path));
+            var result = BrowseForPlayerFile(window, GetText(controls.Path));
             if (result.SelectedPath is { } selectedPath)
             {
                 SetText(controls.Path, selectedPath);
@@ -506,7 +515,7 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
                 return;
             }
             var result = settings!.SetPcrPlayerExecutablePath(path);
-            SetText(controls.Status, GetPcrPlayerSaveFeedback(result, path));
+            SetText(controls.Status, GetPlayerPathSaveFeedback(result, path));
             if (result is GenesisGuiNextPlaybackSettingsUpdateResult.Saved or
                 GenesisGuiNextPlaybackSettingsUpdateResult.Unchanged)
             {

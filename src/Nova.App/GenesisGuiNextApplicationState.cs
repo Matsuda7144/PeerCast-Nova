@@ -321,7 +321,7 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
         IGenesisYellowPageConfigurationStore yellowPageStore,
         IGenesisGuiNextPlaybackPreferencesStore playbackPreferencesStore,
         IGenesisSystemNotificationSoundPlayer soundPlayer,
-        GenesisGuiNextPlaybackPathSource? pathSource = null,
+        GenesisGuiNextPlaybackPreferencesSource? pathSource = null,
         CancellationToken cancellationToken = default) =>
         LoadAsync(favoriteStore, notificationStore, yellowPageStore, playbackPreferencesStore,
             DefaultGenesisGuiNextConnectionPreferencesStore.Instance, soundPlayer, pathSource, cancellationToken);
@@ -333,7 +333,7 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
         IGenesisGuiNextPlaybackPreferencesStore playbackPreferencesStore,
         IGenesisGuiNextConnectionPreferencesStore connectionPreferencesStore,
         IGenesisSystemNotificationSoundPlayer soundPlayer,
-        GenesisGuiNextPlaybackPathSource? pathSource = null,
+        GenesisGuiNextPlaybackPreferencesSource? pathSource = null,
         CancellationToken cancellationToken = default) =>
         LoadCoreAsync(
             favoriteStore,
@@ -365,7 +365,7 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
         IGenesisYellowPageConfigurationStore yellowPageStore,
         IGenesisGuiNextPlaybackPreferencesStore playbackPreferencesStore,
         IGenesisSystemNotificationSoundPlayer soundPlayer,
-        GenesisGuiNextPlaybackPathSource? pathSource,
+        GenesisGuiNextPlaybackPreferencesSource? pathSource,
         Func<GenesisRecordingRuleRepository> recordingRuleRepositoryFactory,
         CancellationToken cancellationToken = default) =>
         LoadWithRecordingRuleRepositoryFactoryAsync(favoriteStore, notificationStore, yellowPageStore,
@@ -378,7 +378,7 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
         IGenesisYellowPageConfigurationStore yellowPageStore,
         IGenesisGuiNextPlaybackPreferencesStore playbackPreferencesStore,
         IGenesisSystemNotificationSoundPlayer soundPlayer,
-        GenesisGuiNextPlaybackPathSource? pathSource,
+        GenesisGuiNextPlaybackPreferencesSource? pathSource,
         Func<GenesisRecordingRuleRepository> recordingRuleRepositoryFactory,
         IGenesisGuiNextConnectionPreferencesStore connectionPreferencesStore,
         CancellationToken cancellationToken = default) =>
@@ -399,7 +399,7 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
         IGenesisYellowPageConfigurationStore yellowPageStore,
         IGenesisGuiNextPlaybackPreferencesStore playbackPreferencesStore,
         IGenesisSystemNotificationSoundPlayer soundPlayer,
-        GenesisGuiNextPlaybackPathSource? pathSource,
+        GenesisGuiNextPlaybackPreferencesSource? pathSource,
         Func<GenesisRecordingRuleRepository>? recordingRuleRepositoryFactory,
         IGenesisGuiNextConnectionPreferencesStore connectionPreferencesStore,
         CancellationToken cancellationToken,
@@ -597,7 +597,7 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
             try
             {
                 await _playbackPreferencesStore.SaveAsync(
-                        new(Playback.PcrPlayerExecutablePath),
+                        Playback.Preferences,
                         CancellationToken.None)
                     .ConfigureAwait(false);
             }
@@ -674,12 +674,12 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
         }
     }
 
-    private bool TryPersistPlaybackPreferences(string? executablePath)
+    private bool TryPersistPlaybackPreferences(GenesisGuiNextPlaybackPreferences preferences)
     {
         try
         {
             _playbackPreferencesStore.SaveAsync(
-                    new(executablePath),
+                    preferences,
                     CancellationToken.None)
                 .AsTask()
                 .GetAwaiter()
@@ -708,7 +708,7 @@ internal static class SystemGenesisGuiNextApplicationState
         LoadAsync(pathSource: null, cancellationToken: cancellationToken);
 
     internal static async ValueTask<GenesisGuiNextApplicationState> LoadAsync(
-        GenesisGuiNextPlaybackPathSource? pathSource,
+        GenesisGuiNextPlaybackPreferencesSource? pathSource,
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();

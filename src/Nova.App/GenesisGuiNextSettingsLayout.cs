@@ -22,12 +22,18 @@ internal readonly record struct GenesisGuiNextSettingsLayout(int Width, int Heig
     internal static GenesisGuiNextAppShellPlacement.WindowRectangle PlaybackTab => Box(132, 54, 108, 30);
     internal static GenesisGuiNextAppShellPlacement.WindowRectangle RecordingTab => Box(248, 54, 144, 30);
     internal static GenesisGuiNextAppShellPlacement.WindowRectangle NotificationsTab => Box(400, 54, 108, 30);
-    internal GenesisGuiNextAppShellPlacement.WindowRectangle PathNotice => Box(32, 150, Width - 64, 40);
-    internal GenesisGuiNextAppShellPlacement.WindowRectangle PathRuntime => Box(32, 192, Width - 64, 20);
-    internal GenesisGuiNextAppShellPlacement.WindowRectangle PathSaved => Box(32, 216, Width - 64, 20);
-    internal GenesisGuiNextAppShellPlacement.WindowRectangle PathInput(bool browse) => Box(32, 244, Width - (browse ? 172 : 64), 30);
-    internal GenesisGuiNextAppShellPlacement.WindowRectangle Browse => Box(Width - 128, 244, 96, 30);
-    internal GenesisGuiNextAppShellPlacement.WindowRectangle PathStatus => Box(32, 282, Width - 64, 28);
+    internal static GenesisGuiNextAppShellPlacement.WindowRectangle InternalPlayerChoice => Box(32, 150, 192, 30);
+    internal static GenesisGuiNextAppShellPlacement.WindowRectangle ExternalPlayerChoice => Box(232, 150, 192, 30);
+    internal GenesisGuiNextAppShellPlacement.WindowRectangle PathNotice(bool playback) => Box(32, playback ? 184 : 150, Width - 64, playback ? 38 : 40);
+    internal GenesisGuiNextAppShellPlacement.WindowRectangle PathRuntime(bool playback) => Box(32, playback ? 224 : 192, Width - 64, 20);
+    internal GenesisGuiNextAppShellPlacement.WindowRectangle PathSaved(bool playback) => Box(32, playback ? 246 : 216, Width - 64, playback ? 18 : 20);
+    internal GenesisGuiNextAppShellPlacement.WindowRectangle PathInput(bool playback) => Box(32, playback ? 265 : 244, Width - 172, playback ? 28 : 30);
+    internal GenesisGuiNextAppShellPlacement.WindowRectangle Browse(bool playback)
+    {
+        var input = PathInput(playback);
+        return Box(Width - 128, input.Top, 96, input.Height);
+    }
+    internal GenesisGuiNextAppShellPlacement.WindowRectangle PathStatus(bool playback) => Box(32, playback ? 296 : 282, Width - 64, playback ? 22 : 28);
     internal GenesisGuiNextAppShellPlacement.WindowRectangle Reset => Box(Width - 440, Height - 44, 188, 30);
     internal GenesisGuiNextAppShellPlacement.WindowRectangle SoundTest => Box(Width - 176, Height - 44, 160, 30);
     internal GenesisGuiNextAppShellPlacement.WindowRectangle NotificationCheck(int index) => Box(32, 196 + index * 32, Width - 64, 26);

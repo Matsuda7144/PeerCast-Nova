@@ -389,7 +389,7 @@ public sealed class GuiNextNetworkCompositionTests
                 {
                     CreatedPlayback = UseProductionPlayback
                         ? NovaWindowsStartupComposition.CreateDefaultGenesisPlaybackController(
-                            new GenesisGuiNextPlaybackPathSource(), Settings, new GenesisRecordingHistoryStore(Path.Combine(Root, "history.json")))
+                            new GenesisGuiNextPlaybackPreferencesSource(), Settings, new GenesisRecordingHistoryStore(Path.Combine(Root, "history.json")))
                         : Playback;
                     return CreatedPlayback;
                 },

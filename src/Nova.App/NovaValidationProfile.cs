@@ -140,7 +140,7 @@ internal sealed class NovaValidationProfile : IAsyncDisposable
             createPublicRelayDriver: static _ => new NovaValidationPublicRelayDriver());
     }
 
-    internal IPlaybackSessionController CreatePlaybackController(GenesisGuiNextPlaybackPathSource paths)
+    internal IPlaybackSessionController CreatePlaybackController(GenesisGuiNextPlaybackPreferencesSource paths)
     {
         CheckReady();
         var directory = Paths.Resolve("diagnostics", "run-" + Guid.NewGuid().ToString("N"));
@@ -152,7 +152,7 @@ internal sealed class NovaValidationProfile : IAsyncDisposable
             libraryFileSystem: new NovaValidationLibraryFileSystem(Paths), diagnostics: diagnostic);
         owners.Add(recording);
         var daily = new NovaDailyHttpFlvPlaybackController(
-            PcrPlayerExternalPlayerLauncher.CreateWithPathProvider(() => paths.Current),
+            PcrPlayerExternalPlayerLauncher.CreateWithPathProvider(() => paths.Current.PcrPlayerExecutablePath),
             static _ => { }, static _ => { }, recording, new GenesisSharedPcpPlaybackRuntime(recording),
             new NovaValidationRuleProvider(Paths));
         var controller = new NovaValidationPlaybackController(new GuiNextDailyPlaybackSessionController(daily));

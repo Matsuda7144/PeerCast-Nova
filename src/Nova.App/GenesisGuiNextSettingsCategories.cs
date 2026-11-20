@@ -7,6 +7,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
     private const int PlaybackCategoryId = 1190, RecordingCategoryId = 1191, NotificationsCategoryId = 1192,
         NotifyNewId = 1193, NotifyFavoriteId = 1194, NotifySoundId = 1195, TestSoundId = 1196,
         SettingsPathId = 1197, SettingsBrowseId = 1198, SettingsResetId = 1199;
+    private const int InternalPlayerChoiceId = 1235, ExternalPlayerChoiceId = 1236;
 
     private sealed partial class AppShellState
     {
@@ -14,12 +15,15 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private long _settingsCategoryRevision;
         private GenesisPathSettingsPage? _pathSettings;
         private nint _playbackCategory, _recordingCategory, _notificationsCategory, _settingsPath, _settingsBrowse, _settingsReset;
+        private nint _internalPlayerChoice, _externalPlayerChoice;
         private nint _notifyNew, _notifyFavorite, _notifySound, _testSound;
         private bool _updatingSettingsPath, _notificationError;
         private string _notificationMessage = string.Empty;
-        private nint[] AdditionalSettingsButtons => [_playbackCategory, _recordingCategory, _notificationsCategory, _settingsBrowse, _settingsReset, _testSound, .. NetworkSettingsButtons];
+        private nint[] AdditionalSettingsButtons => [_playbackCategory, _recordingCategory, _notificationsCategory,
+            _internalPlayerChoice, _externalPlayerChoice, _settingsBrowse, _settingsReset, _testSound, .. NetworkSettingsButtons];
         private nint[] SettingsChecks => [_notifyNew, _notifyFavorite, _notifySound, _connectionIpv6, _connectionWan, _connectionAutoMapping, _ypEnabled];
-        private bool PathCategory => _settingsCategory is GenesisIntegratedSettingsCategory.Playback or GenesisIntegratedSettingsCategory.Recording;
+        private bool PlaybackCategory => _settingsCategory == GenesisIntegratedSettingsCategory.Playback;
+        private bool PathCategory => PlaybackCategory || _settingsCategory == GenesisIntegratedSettingsCategory.Recording;
         private bool SettingsError => _settingsCategory == GenesisIntegratedSettingsCategory.General ? _generalSettings?.IsError == true :
             PathCategory ? _pathSettings?.IsError == true : NetworkCategory ? NetworkSettingsError : _notificationError;
 
@@ -36,12 +40,14 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             _playbackCategory = Button("再生", PlaybackCategoryId);
             _recordingCategory = Button("録画・保存先", RecordingCategoryId);
             _notificationsCategory = Button("通知", NotificationsCategoryId);
-            _settingsBrowse = Button("参照…", SettingsBrowseId);
-            _settingsReset = Button("未設定に戻す", SettingsResetId);
-            _testSound = Button("通知音テスト", TestSoundId);
+            _internalPlayerChoice = Button(GenesisPathSettingsPage.PlayerLabel(GenesisPlaybackPlayerMode.Internal), InternalPlayerChoiceId);
+            _externalPlayerChoice = Button(GenesisPathSettingsPage.PlayerLabel(GenesisPlaybackPlayerMode.External), ExternalPlayerChoiceId);
             _settingsPath = CreateWindowExW(0, "EDIT", string.Empty, WindowStyleChild | WindowStyleVisible | WindowStyleTabStop | 0x0080,
                 0, 0, 1, 1, _settingsPane, (nint)SettingsPathId, instance, 0);
             _ = SendMessageW(_settingsPath, 0x00C5, GenesisGuiNextPlaybackSettingsWindow.BrowseFileCapacity - 1, 0); // EM_SETLIMITTEXT
+            _settingsBrowse = Button("参照…", SettingsBrowseId);
+            _settingsReset = Button("未設定に戻す", SettingsResetId);
+            _testSound = Button("通知音テスト", TestSoundId);
             _notifyNew = Check("新着チャンネル通知", NotifyNewId);
             _notifyFavorite = Check("お気に入りチャンネル通知", NotifyFavoriteId);
             _notifySound = Check("通知音を有効にする", NotifySoundId);
@@ -67,7 +73,15 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             else { _notificationError = false; _notificationMessage = "変更は即時に保存・反映されます。保存・キャンセル操作はありません。"; }
             ShowSettingsCategory();
             RefreshIntegratedSettings();
-            _ = SetFocus(NetworkCategory ? NetworkInitialFocus : PathCategory ? _settingsPath : category == GenesisIntegratedSettingsCategory.Notifications ? _notifyNew : _modernChoice);
+            _ = SetFocus(category switch
+            {
+                GenesisIntegratedSettingsCategory.Playback =>
+                    _pathSettings.PlayerMode == GenesisPlaybackPlayerMode.Internal ? _internalPlayerChoice : _externalPlayerChoice,
+                GenesisIntegratedSettingsCategory.Recording => _settingsPath,
+                GenesisIntegratedSettingsCategory.Notifications => _notifyNew,
+                GenesisIntegratedSettingsCategory.Connection or GenesisIntegratedSettingsCategory.YellowPages => NetworkInitialFocus,
+                _ => _modernChoice,
+            });
         }
 
         private void ShowSettingsCategory()
@@ -80,8 +94,9 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             Show(_generalStatus, true);
             Show(_generalRuntime, !notification); Show(_generalConfigured, !notification);
             Show(_generalSave, !notification); Show(_generalCancel, !notification);
+            Show(_internalPlayerChoice, PlaybackCategory); Show(_externalPlayerChoice, PlaybackCategory);
             Show(_settingsPath, PathCategory); Show(_settingsBrowse, PathCategory);
-            Show(_settingsReset, PathCategory); Show(_testSound, notification);
+            Show(_settingsReset, PathCategory && _pathSettings!.CanReset); Show(_testSound, notification);
             foreach (var control in new[] { _notifyNew, _notifyFavorite, _notifySound }) Show(control, notification);
             ShowNetworkSettingsCategory();
             _ = EnableWindow(_playbackCategory, _pathSettings?.Available(GenesisIntegratedSettingsCategory.Playback) == true);
@@ -120,14 +135,22 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             if (id == PlaybackCategoryId && control == _playbackCategory) SelectSettingsCategory(GenesisIntegratedSettingsCategory.Playback);
             else if (id == RecordingCategoryId && control == _recordingCategory) SelectSettingsCategory(GenesisIntegratedSettingsCategory.Recording);
             else if (id == NotificationsCategoryId && control == _notificationsCategory) SelectSettingsCategory(GenesisIntegratedSettingsCategory.Notifications);
+            else if (PlaybackCategory &&
+                (id == InternalPlayerChoiceId && control == _internalPlayerChoice || id == ExternalPlayerChoiceId && control == _externalPlayerChoice))
+            {
+                _settingsCategoryRevision++;
+                _pathSettings!.SelectPlayer(id == InternalPlayerChoiceId ? GenesisPlaybackPlayerMode.Internal : GenesisPlaybackPlayerMode.External);
+                RefreshIntegratedSettings();
+            }
             else if (id == SettingsBrowseId && control == _settingsBrowse && PathCategory)
             {
                 if (!ReadSettingsPath(out var text)) { RefreshIntegratedSettings(); return true; }
                 var category = _settingsCategory;
                 var revision = _settingsCategoryRevision;
                 // Browsing only modifies the current draft; persistence remains behind the Save button.
-                var selectedPath = category == GenesisIntegratedSettingsCategory.Playback
-                    ? GenesisGuiNextPlaybackSettingsWindow.BrowseForExecutable(_owner, text)
+                var selectedPath = PlaybackCategory
+                    ? GenesisGuiNextPlaybackSettingsWindow.BrowseForPlayerFile(
+                        _owner, text, library: _pathSettings!.PlayerMode == GenesisPlaybackPlayerMode.Internal)
                     : default;
                 var folder = category == GenesisIntegratedSettingsCategory.Recording
                     ? GenesisRecordingDirectoryPicker.Browse(_owner)
@@ -174,12 +197,28 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             {
                 var page = _pathSettings!;
                 page.Refresh();
-                var recording = _settingsCategory == GenesisIntegratedSettingsCategory.Recording;
-                _ = SetWindowTextW(_generalTitle, recording ? "録画・保存先設定" : "再生設定");
-                _ = SetWindowTextW(_generalNotice, recording ? GenesisRecordingOutputDirectorySettings.NextStartNotice + " 既存writerの保存先は変わりません。\r\n「既定値に戻す」は即時保存します。フォルダーや録画ファイルは作成・移動しません。" :
-                    "外部プレイヤーの実行ファイル（.exe）を指定します。保存した設定は次の再生から使用します。\r\n空欄・「未設定に戻す」では環境変数またはPATHを使用します。戻す操作は即時保存です。");
-                _ = SetWindowTextW(_generalRuntime, recording ? "現在起動中: " + page.RuntimeDirectory : "保存値: " + (page.Saved.Length == 0 ? "未設定" : page.Saved));
-                _ = SetWindowTextW(_generalConfigured, recording ? "次回起動用: " + page.EffectiveDirectory + (page.Saved.Length == 0 ? "（既定）" : string.Empty) : "外部プレイヤーの実行ファイルパス（未保存の入力はカテゴリ移動で破棄）");
+                if (PlaybackCategory)
+                {
+                    var internalSelected = page.PlayerMode == GenesisPlaybackPlayerMode.Internal;
+                    _ = SetWindowTextW(_generalTitle, "再生設定");
+                    _ = SetWindowTextW(_generalNotice, internalSelected
+                        ? "内蔵プレイヤーは、別途用意した libmpv DLL を使用します。\r\n保存したプレイヤーとファイルは次の再生から使用します。"
+                        : "保存したプレイヤーとファイルは次の再生から使用します。\r\n空欄では環境変数または PATH を使用します。「未設定に戻す」は即時保存します。");
+                    var savedMode = page.SavedPlayerMode;
+                    var savedPath = savedMode == page.PlayerMode ? " / " + (page.Saved.Length == 0 ? "パス未設定" : page.Saved) : string.Empty;
+                    _ = SetWindowTextW(_generalRuntime, "保存済み: " + GenesisPathSettingsPage.PlayerLabel(savedMode) + savedPath);
+                    _ = SetWindowTextW(_generalConfigured, internalSelected ? "libmpv DLL（.dll）" : "外部プレイヤーの実行ファイル（.exe）");
+                    SetPlayerChoiceText(_internalPlayerChoice, GenesisPlaybackPlayerMode.Internal, page.PlayerMode);
+                    SetPlayerChoiceText(_externalPlayerChoice, GenesisPlaybackPlayerMode.External, page.PlayerMode);
+                }
+                else
+                {
+                    _ = SetWindowTextW(_generalTitle, "録画・保存先設定");
+                    _ = SetWindowTextW(_generalNotice, GenesisRecordingOutputDirectorySettings.NextStartNotice +
+                        " 既存writerの保存先は変わりません。\r\n「既定値に戻す」は即時保存します。フォルダーや録画ファイルは作成・移動しません。");
+                    _ = SetWindowTextW(_generalRuntime, "現在起動中: " + page.RuntimeDirectory);
+                    _ = SetWindowTextW(_generalConfigured, "次回起動用: " + page.EffectiveDirectory + (page.Saved.Length == 0 ? "（既定）" : string.Empty));
+                }
                 _updatingSettingsPath = true;
                 try
                 {
@@ -187,10 +226,11 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                         _ = SetWindowTextW(_settingsPath, page.Draft);
                 }
                 finally { _updatingSettingsPath = false; }
-                _ = SetWindowTextW(_settingsReset, recording ? "既定値に戻す" : "未設定に戻す");
+                _ = SetWindowTextW(_settingsReset, PlaybackCategory ? "未設定に戻す" : "既定値に戻す");
                 _ = SetWindowTextW(_generalStatus, page.Message);
                 _ = EnableWindow(_generalSave, page.IsDirty && !page.Conflict);
                 _ = EnableWindow(_generalCancel, page.IsDirty || page.Conflict || page.IsError);
+                _ = ShowWindow(_settingsReset, page.CanReset ? ShowWindowShowNoActivate : ShowWindowHide);
                 _ = EnableWindow(_settingsReset, !page.Conflict);
             }
             else if (_viewModel.NotificationSettings is { } notifications)
@@ -205,21 +245,30 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             }
         }
 
+        private static void SetPlayerChoiceText(nint control, GenesisPlaybackPlayerMode mode, GenesisPlaybackPlayerMode selected) =>
+            _ = SetWindowTextW(control, GenesisPathSettingsPage.PlayerLabel(mode) + (mode == selected ? "（選択中）" : string.Empty));
+
         private void PlaceSettingsCategory(GenesisGuiNextSettingsLayout layout)
         {
             void Place(nint control, GenesisGuiNextAppShellPlacement.WindowRectangle b) => _ = MoveWindow(control, Scale(b.Left), Scale(b.Top), Scale(b.Width), Scale(b.Height), true);
             PlaceNetworkSettingsCategory(layout);
             Place(_playbackCategory, GenesisGuiNextSettingsLayout.PlaybackTab); Place(_recordingCategory, GenesisGuiNextSettingsLayout.RecordingTab);
             Place(_notificationsCategory, GenesisGuiNextSettingsLayout.NotificationsTab);
-            Place(_settingsBrowse, layout.Browse); Place(_settingsReset, layout.Reset); Place(_testSound, layout.SoundTest);
+            Place(_internalPlayerChoice, GenesisGuiNextSettingsLayout.InternalPlayerChoice);
+            Place(_externalPlayerChoice, GenesisGuiNextSettingsLayout.ExternalPlayerChoice);
+            Place(_settingsReset, layout.Reset); Place(_testSound, layout.SoundTest);
             if (PathCategory)
             {
-                Place(_generalNotice, layout.PathNotice); Place(_generalRuntime, layout.PathRuntime); Place(_generalConfigured, layout.PathSaved);
-                Place(_settingsPath, layout.PathInput(true)); Place(_generalStatus, layout.PathStatus);
+                Place(_generalNotice, layout.PathNotice(PlaybackCategory));
+                Place(_generalRuntime, layout.PathRuntime(PlaybackCategory));
+                Place(_generalConfigured, layout.PathSaved(PlaybackCategory));
+                Place(_settingsPath, layout.PathInput(PlaybackCategory));
+                Place(_settingsBrowse, layout.Browse(PlaybackCategory));
+                Place(_generalStatus, layout.PathStatus(PlaybackCategory));
             }
             else if (_settingsCategory == GenesisIntegratedSettingsCategory.Notifications)
             {
-                Place(_generalNotice, layout.PathNotice); Place(_generalStatus, layout.NotificationStatus);
+                Place(_generalNotice, layout.PathNotice(playback: false)); Place(_generalStatus, layout.NotificationStatus);
             }
             for (var i = 0; i < 3; i++) Place(SettingsChecks[i], layout.NotificationCheck(i));
         }

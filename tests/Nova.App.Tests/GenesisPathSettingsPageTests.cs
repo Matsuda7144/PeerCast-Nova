@@ -16,10 +16,10 @@ public sealed class GenesisPathSettingsPageTests : IDisposable
     public void PlaybackCancelAndSaveReuseValidationPersistenceAndNextPlaySource()
     {
         var first = Executable("first"); var next = Executable("next", "OtherPlayer.exe");
-        var source = new GenesisGuiNextPlaybackPathSource();
+        var source = new GenesisGuiNextPlaybackPreferencesSource();
         var settings = new GenesisGuiNextPlaybackSettings(new(first), source);
         string? saved = null;
-        settings.BindPersistence(value => { saved = value; return true; });
+        settings.BindPersistence(value => { saved = value.PcrPlayerExecutablePath; return true; });
         var page = new GenesisPathSettingsPage(settings, null);
         Assert.True(page.Open(GenesisIntegratedSettingsCategory.Playback));
         page.Edit(next); page.Cancel();
@@ -28,13 +28,73 @@ public sealed class GenesisPathSettingsPageTests : IDisposable
         page.Edit(" \"" + next + "\" ");
         Assert.True(page.Save());
         Assert.Equal(next, settings.PcrPlayerExecutablePath);
-        Assert.Equal(next, source.Current);
+        Assert.Equal(next, source.Current.PcrPlayerExecutablePath);
         Assert.Equal(next, saved);
         Assert.Equal(next, page.Draft);
         Assert.False(page.IsDirty);
         Assert.True(page.Save(reset: true));
         Assert.Null(settings.PcrPlayerExecutablePath);
-        Assert.Null(source.Current);
+        Assert.Null(source.Current.PcrPlayerExecutablePath);
+    }
+
+    [Fact]
+    public void PlayerChoiceKeepsEachFilesDraftAndTakesEffectOnlyOnSave()
+    {
+        var originalExe = Executable("original");
+        var chosenExe = Executable("chosen", "OtherPlayer.exe");
+        var library = Executable("libmpv", "libmpv-2.dll");
+        var source = new GenesisGuiNextPlaybackPreferencesSource();
+        var original = new GenesisGuiNextPlaybackPreferences(originalExe);
+        var settings = new GenesisGuiNextPlaybackSettings(original, source);
+        var page = new GenesisPathSettingsPage(settings, null);
+        Assert.True(page.Open(GenesisIntegratedSettingsCategory.Playback));
+
+        page.Edit(chosenExe);
+        page.SelectPlayer(GenesisPlaybackPlayerMode.Internal);
+        Assert.False(page.CanReset);
+        Assert.Empty(page.Draft);
+        page.Edit(library);
+        page.SelectPlayer(GenesisPlaybackPlayerMode.External);
+        Assert.Equal(chosenExe, page.Draft);
+        page.SelectPlayer(GenesisPlaybackPlayerMode.Internal);
+        Assert.True(page.IsDirty);
+        Assert.Equal(library, page.Draft);
+        Assert.Equal(original, source.Current);
+
+        Assert.True(page.Save());
+        Assert.Equal(new(chosenExe, GenesisPlaybackPlayerMode.Internal, library), source.Current);
+        Assert.False(page.IsDirty);
+
+        page.SelectPlayer(GenesisPlaybackPlayerMode.External);
+        Assert.Equal(chosenExe, page.Draft);
+        page.Cancel();
+        Assert.Equal(GenesisPlaybackPlayerMode.Internal, page.PlayerMode);
+        Assert.Equal(library, page.Draft);
+        page.SelectPlayer(GenesisPlaybackPlayerMode.External);
+        Assert.True(page.Save());
+        Assert.Equal(new(chosenExe, GenesisPlaybackPlayerMode.External, library), source.Current);
+    }
+
+    [Fact]
+    public void InternalPlayerRequiresAnExistingDll()
+    {
+        var executable = Executable("external");
+        var settings = new GenesisGuiNextPlaybackSettings(new(executable));
+        var page = new GenesisPathSettingsPage(settings, null);
+        Assert.True(page.Open(GenesisIntegratedSettingsCategory.Playback));
+        page.SelectPlayer(GenesisPlaybackPlayerMode.Internal);
+
+        Assert.False(page.Save());
+        Assert.Contains("libmpv DLL", page.Message, StringComparison.Ordinal);
+        page.Edit(executable);
+        Assert.False(page.Save());
+        Assert.Contains(".dll", page.Message, StringComparison.Ordinal);
+        page.Edit(Path.Combine(_root, "missing.dll"));
+        Assert.False(page.Save());
+        Assert.Contains("見つかりません", page.Message, StringComparison.Ordinal);
+        Assert.Equal(GenesisPlaybackPlayerMode.External, settings.Preferences.PlayerMode);
+        Assert.Equal(executable, settings.PcrPlayerExecutablePath);
+        Assert.Null(settings.Preferences.LibMpvLibraryPath);
     }
 
     [Theory]
@@ -62,7 +122,7 @@ public sealed class GenesisPathSettingsPageTests : IDisposable
         var settings = new GenesisGuiNextPlaybackSettings(new("initial"), validateExecutablePath: _ => null);
         var allowSave = false;
         string? persisted = null;
-        settings.BindPersistence(value => { if (!allowSave) return false; persisted = value; return true; });
+        settings.BindPersistence(value => { if (!allowSave) return false; persisted = value.PcrPlayerExecutablePath; return true; });
         var page = new GenesisPathSettingsPage(settings, null);
         page.Open(GenesisIntegratedSettingsCategory.Playback);
         var longPath = "C:\\" + new string('長', 10000) + "\\PCRPlayer64.exe";
