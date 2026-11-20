@@ -14,8 +14,16 @@ concurrency:
 
 jobs:
   build-and-test:
-    name: Build and test (ubuntu-latest)
-    runs-on: ubuntu-latest
+    name: Build and test (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            artifact_suffix: ''
+          - runner: windows-latest
+            artifact_suffix: -windows-latest
     timeout-minutes: 15
 
     steps:
@@ -40,7 +48,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: build-log
+          name: build-log${{ matrix.artifact_suffix }}
           path: build.log
           retention-days: 1
 
@@ -51,7 +59,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results
+          name: test-results${{ matrix.artifact_suffix }}
           path: '**/TestResults/*.trx'
           if-no-files-found: warn
           retention-days: 1

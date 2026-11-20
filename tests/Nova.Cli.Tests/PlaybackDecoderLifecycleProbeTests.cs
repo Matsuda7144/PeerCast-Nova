@@ -324,7 +324,8 @@ public sealed class PlaybackDecoderLifecycleProbeTests
         {
             ChannelId = Guid.ParseExact(ChannelId, "N"),
             UpstreamPort = unusedPort,
-            Duration = TimeSpan.FromSeconds(2),
+            // Allow the transport failure and teardown to finish before the probe deadline.
+            Duration = TimeSpan.FromSeconds(10),
             IdleTimeout = TimeSpan.FromSeconds(1),
             MaxProbeBytes = 16,
         };

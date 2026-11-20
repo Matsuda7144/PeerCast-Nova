@@ -438,21 +438,34 @@ public sealed class RecordingActiveSessionSnapshotTests
             CreateCandidate(FirstChannelId),
             CancellationToken.None);
 
-        var snapshotTask = Task.Run(async () =>
-            await manager.GetActiveRecordingSessionsAsync(
-                CancellationToken.None));
-        await sink.StatusReadEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-
-        var disposeStarted = new TaskCompletionSource(
-            TaskCreationOptions.RunContinuationsAsynchronously);
-        var disposeTask = Task.Run(() =>
+        // This fixture deliberately blocks the status call until the test releases it.
+        var snapshotTask = Task.Factory.StartNew(
+            () => manager.GetActiveRecordingSessionsAsync(CancellationToken.None).AsTask(),
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default).Unwrap();
+        Task disposeTask;
+        try
         {
-            disposeStarted.TrySetResult();
-            manager.Dispose();
-        });
-        await disposeStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await sink.StatusReadEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
-        sink.ReleaseStatusRead.TrySetResult();
+            var disposeStarted = new TaskCompletionSource(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            disposeTask = Task.Factory.StartNew(
+                () =>
+                {
+                    disposeStarted.TrySetResult();
+                    manager.Dispose();
+                },
+                CancellationToken.None,
+                TaskCreationOptions.LongRunning,
+                TaskScheduler.Default);
+            await disposeStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            sink.ReleaseStatusRead.TrySetResult();
+        }
         var sessions = await snapshotTask.WaitAsync(TimeSpan.FromSeconds(5));
         await disposeTask.WaitAsync(TimeSpan.FromSeconds(5));
 
@@ -667,10 +680,7 @@ public sealed class RecordingActiveSessionSnapshotTests
             if (BlockStatusRead)
             {
                 StatusReadEntered.TrySetResult();
-                if (!ReleaseStatusRead.Task.Wait(TimeSpan.FromSeconds(5)))
-                {
-                    throw new TimeoutException("The test did not release the status read.");
-                }
+                ReleaseStatusRead.Task.GetAwaiter().GetResult();
             }
 
             if (ThrowOnStatusRead)
