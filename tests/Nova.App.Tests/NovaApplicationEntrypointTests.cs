@@ -27,6 +27,7 @@ public sealed class NovaApplicationEntrypointTests
         Assert.StartsWith("Usage: Nova.App [--help | --about]", output.ToString());
         Assert.Contains("--pcrplayer-executable <path>", output.ToString(), StringComparison.Ordinal);
         Assert.Contains("--libmpv-library <path>", output.ToString(), StringComparison.Ordinal);
+        Assert.Contains("--play-fmp4 <loopback-url>", output.ToString(), StringComparison.Ordinal);
         Assert.Empty(error.ToString());
     }
 
@@ -131,6 +132,43 @@ public sealed class NovaApplicationEntrypointTests
 
         Assert.Equal(0, exitCode);
         Assert.Equal(new NovaPlaybackLaunchOptions(null, libraryPath), options);
+    }
+
+    [Theory]
+    [InlineData("http://127.0.0.1:45913/stream/531dc8dfc7fb42928ac2c0a626517a87")]
+    [InlineData("https://127.0.0.1:45913/fmp4/531dc8dfc7fb42928ac2c0a626517a87")]
+    [InlineData("http://example.test:45913/fmp4/531dc8dfc7fb42928ac2c0a626517a87")]
+    [InlineData("http://127.0.0.1:0/fmp4/531dc8dfc7fb42928ac2c0a626517a87")]
+    public async Task Fmp4OptionRejectsAnInvalidEndpointBeforeStartup(string url)
+    {
+        var libraryPath = Path.Combine(Path.GetTempPath(), "libmpv-2.dll");
+        var error = new StringWriter();
+        var exitCode = await NovaApplicationEntrypoint.RunAsync(
+            ["--play-fmp4", url, "--libmpv-library", libraryPath],
+            TextWriter.Null,
+            error,
+            (_, _) => throw new InvalidOperationException("Neither playback nor the regular app may start."),
+            CancellationToken.None);
+
+        Assert.Equal(2, exitCode);
+        Assert.Contains("--play-fmp4 <loopback-url>", error.ToString(), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("--play-fmp4")]
+    [InlineData("--play-fmp4", "http://127.0.0.1:45913/fmp4/531dc8dfc7fb42928ac2c0a626517a87")]
+    [InlineData("--play-fmp4", "http://127.0.0.1:45913/fmp4/531dc8dfc7fb42928ac2c0a626517a87", "--libmpv-library", "libmpv-2.dll")]
+    [InlineData("--play-fmp4", "http://127.0.0.1:45913/fmp4/531dc8dfc7fb42928ac2c0a626517a87", "--pcrplayer-executable", "player.exe")]
+    public async Task Fmp4OptionRequiresAnExplicitLibMpvLibrary(params string[] args)
+    {
+        var exitCode = await NovaApplicationEntrypoint.RunAsync(
+            args,
+            TextWriter.Null,
+            TextWriter.Null,
+            (_, _) => throw new InvalidOperationException("Neither playback nor the regular app may start."),
+            CancellationToken.None);
+
+        Assert.Equal(2, exitCode);
     }
 
     [Theory]

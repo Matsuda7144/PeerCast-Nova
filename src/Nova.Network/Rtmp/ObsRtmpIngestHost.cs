@@ -19,7 +19,8 @@ public sealed class ObsRtmpIngestHost : IAsyncDisposable
     private readonly ObsRtmpIngestOptions _options;
     private readonly ChannelId _channelId;
     private readonly ChannelSessionId _sessionId;
-    private readonly IPcpChannelPacketConsumer _consumer;
+    private readonly IPcpChannelPacketConsumer? _consumer;
+    private readonly IObsRtmpEncodedMediaConsumer? _encodedConsumer;
     private readonly CancellationTokenSource _stop = new();
     private readonly ObsRtmpIngressAdmission _admission = new();
     private readonly ObsRtmpIngressObservation? _observation;
@@ -39,21 +40,44 @@ public sealed class ObsRtmpIngestHost : IAsyncDisposable
     {
     }
 
+    /// <summary>Publishes admitted access units through the encoded media path.</summary>
+    public static ObsRtmpIngestHost CreateForEncodedMedia(
+        ChannelId channelId,
+        ChannelSessionId sessionId,
+        IObsRtmpEncodedMediaConsumer consumer,
+        ObsRtmpIngestOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(consumer);
+        return new(channelId, sessionId, null, options, null, consumer);
+    }
+
     internal ObsRtmpIngestHost(
         ChannelId channelId,
         ChannelSessionId sessionId,
         IPcpChannelPacketConsumer consumer,
         ObsRtmpIngestOptions? options,
         ObsRtmpIngressObservation? observation)
+        : this(channelId, sessionId, consumer ?? throw new ArgumentNullException(nameof(consumer)),
+            options, observation, null)
+    {
+    }
+
+    private ObsRtmpIngestHost(
+        ChannelId channelId,
+        ChannelSessionId sessionId,
+        IPcpChannelPacketConsumer? consumer,
+        ObsRtmpIngestOptions? options,
+        ObsRtmpIngressObservation? observation,
+        IObsRtmpEncodedMediaConsumer? encodedConsumer)
     {
         ArgumentNullException.ThrowIfNull(channelId);
         ArgumentNullException.ThrowIfNull(sessionId);
-        ArgumentNullException.ThrowIfNull(consumer);
         _options = options is null ? new() : options with { };
         _options.Validate();
         _channelId = channelId;
         _sessionId = sessionId;
         _consumer = consumer;
+        _encodedConsumer = encodedConsumer;
         _observation = observation;
     }
 
@@ -182,7 +206,7 @@ public sealed class ObsRtmpIngestHost : IAsyncDisposable
     {
         using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _stop.Token);
         using var reads = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token, _admission.ReadStop);
-        var publishing = new ObsFlvPublishingSession(_channelId, _sessionId, _consumer, _options);
+        var publishing = new ObsFlvPublishingSession(_channelId, _sessionId, _consumer, _options, _encodedConsumer);
         Task? reject = null;
         ObsRtmpIngestEndReason reason;
         ObsRtmpRejectionDiagnostic? rejection = null;

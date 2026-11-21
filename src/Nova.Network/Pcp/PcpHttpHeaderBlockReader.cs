@@ -1,14 +1,15 @@
 using System.Buffers;
 using System.IO.Pipelines;
 using System.Text;
+using PeerCast.Nova.Network.Transport;
 
 namespace PeerCast.Nova.Network.Pcp;
 
-internal static class PcpHttpHeaderBlockReader
+public static class PcpHttpHeaderBlockReader
 {
     private static ReadOnlySpan<byte> Terminator => "\r\n\r\n"u8;
 
-    public static async ValueTask<PcpHttpResponseHeader> ReadResponseAsync(
+    internal static async ValueTask<PcpHttpResponseHeader> ReadResponseAsync(
         PipeReader reader,
         int maxHeaderBytes,
         CancellationToken cancellationToken)
@@ -47,6 +48,26 @@ internal static class PcpHttpHeaderBlockReader
     }
 
     public static async ValueTask<PcpHttpRequestHeader> ReadRequestAsync(
+        TcpTransportConnection connection,
+        int maxHeaderBytes,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        var reader = PipeReader.Create(
+            connection.TransportStream,
+            new StreamPipeReaderOptions(leaveOpen: true));
+        try
+        {
+            return await ReadRequestAsync(reader, maxHeaderBytes, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            await reader.CompleteAsync().ConfigureAwait(false);
+        }
+    }
+
+    internal static async ValueTask<PcpHttpRequestHeader> ReadRequestAsync(
         PipeReader reader,
         int maxHeaderBytes,
         CancellationToken cancellationToken)

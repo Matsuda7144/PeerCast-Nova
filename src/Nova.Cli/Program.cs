@@ -13,6 +13,18 @@ using PeerCast.Nova.Network.Pcp;
 using PeerCast.Nova.Network.Transport;
 using PeerCast.Nova.Protocol.Pcp;
 
+if (args.Length > 0 && args[0] == PlaybackFmp4HttpFixtureCommand.Argument)
+{
+    Environment.ExitCode = await PlaybackFmp4HttpFixtureCommand.RunAsync(args);
+    return;
+}
+
+if (args.Length > 0 && args[0] == PlaybackObsFmp4Command.Argument)
+{
+    Environment.ExitCode = await PlaybackObsFmp4Command.RunAsync(args);
+    return;
+}
+
 Console.WriteLine("Hello, Nova.");
 Console.WriteLine("PeerCast Nova 0.0.7b Timed Scheduler Dispatch Boundary");
 

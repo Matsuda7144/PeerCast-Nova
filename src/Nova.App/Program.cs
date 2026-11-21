@@ -14,12 +14,7 @@ try
         args,
         Console.Out,
         Console.Error,
-        static (playback, cancellationToken) =>
-            new NovaWindowsStartupComposition(new()
-            {
-                PlayerExecutablePath = playback.PlayerExecutablePath,
-                LibMpvLibraryPath = playback.LibMpvLibraryPath,
-            }).RunGenesisAsync(cancellationToken),
+        RunApplicationAsync,
         cancellationSource.Token,
         static async (root, token) =>
         {
@@ -40,4 +35,30 @@ try
 finally
 {
     Console.CancelKeyPress -= cancelHandler;
+}
+
+static async ValueTask<NovaWindowsStartupResult> RunApplicationAsync(
+    NovaPlaybackLaunchOptions playback,
+    CancellationToken cancellationToken)
+{
+    if (playback is { Fmp4StreamUrl: { } streamUrl, LibMpvLibraryPath: { } libraryPath })
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            await Console.Error.WriteLineAsync("Embedded libmpv playback requires Windows.").ConfigureAwait(false);
+            return NovaWindowsStartupResult.PlatformUnsupported;
+        }
+
+        return await NovaApplicationEntrypoint.PlayFmp4Async(
+            streamUrl,
+            new LibMpvPlaybackPlayerLauncher(libraryPath),
+            Console.Error,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    return await new NovaWindowsStartupComposition(new()
+    {
+        PlayerExecutablePath = playback.PlayerExecutablePath,
+        LibMpvLibraryPath = playback.LibMpvLibraryPath,
+    }).RunGenesisAsync(cancellationToken).ConfigureAwait(false);
 }

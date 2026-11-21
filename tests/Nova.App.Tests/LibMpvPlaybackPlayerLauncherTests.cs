@@ -1,4 +1,6 @@
 using System.Threading.Channels;
+using PeerCast.Nova.Core.Channels;
+using PeerCast.Nova.Playback;
 using PeerCast.Nova.Windows;
 
 namespace PeerCast.Nova.App.Tests;
@@ -44,7 +46,7 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
         Assert.False(loadedBeforeWindow);
         Assert.False(completedBeforeFileLoaded);
         Assert.Equal(dll.Path, await selectedDll.Task.WaitAsync(timeout.Token));
-        Assert.Equal((Source.StreamUrl, window.WindowId), load);
+        Assert.Equal((Source.StreamUrl, PlaybackMediaContainer.FlashVideo, window.WindowId), load);
 
         if (closeByUser)
         {
@@ -99,9 +101,16 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
     }
 
     [Theory]
-    [InlineData("http://example.test:45913/stream/531dc8dfc7fb42928ac2c0a626517a87")]
-    [InlineData("http://127.0.0.1:45913/pls/531dc8dfc7fb42928ac2c0a626517a87.pls")]
-    public async Task OnlyLoopbackStreamUrlsReachTheEmbeddedClient(string url)
+    [InlineData("http://example.test:45913/stream/531dc8dfc7fb42928ac2c0a626517a87", PlaybackMediaContainer.FlashVideo)]
+    [InlineData("http://127.0.0.1:45913/pls/531dc8dfc7fb42928ac2c0a626517a87.pls", PlaybackMediaContainer.FlashVideo)]
+    [InlineData("http://127.0.0.1:45913/fmp4/531dc8dfc7fb42928ac2c0a626517a87", PlaybackMediaContainer.FlashVideo)]
+    [InlineData("http://127.0.0.1:45913/stream/531dc8dfc7fb42928ac2c0a626517a87", PlaybackMediaContainer.FragmentedMp4)]
+    [InlineData("http://127.0.0.1:45913/fmp4/00000000000000000000000000000000", PlaybackMediaContainer.FragmentedMp4)]
+    [InlineData("http://127.0.0.1:45913/fmp4/531dc8dfc7fb42928ac2c0a626517a87?start=0", PlaybackMediaContainer.FragmentedMp4)]
+    [InlineData("http://127.1:45913/fmp4/531dc8dfc7fb42928ac2c0a626517a87", PlaybackMediaContainer.FragmentedMp4)]
+    [InlineData("http://127.0.0.1:45913/stream/../fmp4/531dc8dfc7fb42928ac2c0a626517a87", PlaybackMediaContainer.FragmentedMp4)]
+    [InlineData("http://127.0.0.1:45913/fmp4/531dc8dfc7fb42928ac2c0a626517a87", PlaybackMediaContainer.Unknown)]
+    public async Task OnlyMatchingLoopbackStreamUrlsReachTheEmbeddedClient(string url, PlaybackMediaContainer container)
     {
         using var dll = new TestLibrary();
         var launcher = new LibMpvPlaybackPlayerLauncher(dll.Path,
@@ -109,8 +118,69 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
             _ => throw new InvalidOperationException("The window must remain unopened."));
 
         var error = await Assert.ThrowsAsync<LibMpvPlaybackException>(() =>
-            launcher.LaunchAsync(Source with { StreamUrl = url }, CancellationToken.None).AsTask());
-        Assert.Contains("loopback HTTP-FLV stream URL", error.Message, StringComparison.Ordinal);
+            launcher.LaunchAsync(Source with { StreamUrl = url, Container = container }, CancellationToken.None).AsTask());
+        Assert.Contains("loopback HTTP stream URL", error.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(PlaybackMediaContainer.FlashVideo, "flv")]
+    [InlineData(PlaybackMediaContainer.FragmentedMp4, "mov")]
+    public void NativeDemuxerFollowsTheDeclaredContainer(PlaybackMediaContainer container, string demuxer)
+    {
+        Assert.Equal(demuxer, LibMpvPlaybackClient.DemuxerFormatFor(container));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Fmp4OptionPassesTheHostUrlAndCleansUpOnEndOrCancellation(bool cancel)
+    {
+        using var dll = new TestLibrary();
+        using var cancellation = new CancellationTokenSource();
+        using var timeout = new CancellationTokenSource(TestTimeout);
+        using var error = new StringWriter();
+        await using var host = new PlaybackFmp4HttpStreamHost(
+            new ChannelId(Guid.NewGuid()), new ChannelSessionId(Guid.NewGuid()));
+        var client = new ControlledClient();
+        var window = new ControlledWindow(() => Assert.Equal(1, client.DisposeCount));
+        var launcher = new LibMpvPlaybackPlayerLauncher(dll.Path, _ => client, _ => new(window));
+        var url = host.StreamUri.AbsoluteUri;
+
+        var app = NovaApplicationEntrypoint.RunAsync(
+            ["--play-fmp4", url, "--libmpv-library", dll.Path],
+            TextWriter.Null,
+            error,
+            (options, token) =>
+            {
+                Assert.Equal(new NovaPlaybackLaunchOptions(null, dll.Path, url), options);
+                return NovaApplicationEntrypoint.PlayFmp4Async(url, launcher, error, token);
+            },
+            cancellation.Token).AsTask();
+
+        try
+        {
+            var load = await client.Loaded.Task.WaitAsync(timeout.Token);
+            Assert.Equal((url, PlaybackMediaContainer.FragmentedMp4, window.WindowId), load);
+            Assert.False(app.IsCompleted);
+            client.Signal(LibMpvPlaybackEvent.FileLoaded);
+            if (cancel)
+            {
+                cancellation.Cancel();
+            }
+            else
+            {
+                client.Signal(LibMpvPlaybackEvent.Ended);
+            }
+
+            Assert.Equal(0, await app.WaitAsync(timeout.Token));
+            Assert.Empty(error.ToString());
+            Assert.Equal(1, client.DisposeCount);
+            Assert.Equal(1, window.DisposeCount);
+        }
+        finally
+        {
+            cancellation.Cancel();
+        }
     }
 
     [Fact]
@@ -236,17 +306,17 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
     private sealed class ControlledClient : ILibMpvPlaybackClient
     {
         private readonly Channel<LibMpvPlaybackEvent> _events = Channel.CreateUnbounded<LibMpvPlaybackEvent>();
-        public TaskCompletionSource<(string StreamUrl, uint WindowId)> Loaded { get; } =
+        public TaskCompletionSource<(string StreamUrl, PlaybackMediaContainer Container, uint WindowId)> Loaded { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
         public LibMpvPlaybackAudioState InitialAudio { get; private set; }
         public List<int> Volumes { get; } = [];
         public List<bool> Mutes { get; } = [];
         public int DisposeCount { get; private set; }
 
-        public void LoadFile(string streamUrl, uint windowId, LibMpvPlaybackAudioState initialAudio)
+        public void LoadFile(string streamUrl, PlaybackMediaContainer container, uint windowId, LibMpvPlaybackAudioState initialAudio)
         {
             InitialAudio = initialAudio;
-            Loaded.SetResult((streamUrl, windowId));
+            Loaded.SetResult((streamUrl, container, windowId));
         }
 
         public void SetVolume(int volume) => Volumes.Add(volume);

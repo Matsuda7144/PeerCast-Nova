@@ -1,10 +1,13 @@
+using PeerCast.Nova.Playback;
+
 namespace PeerCast.Nova.App;
 
 internal sealed record DailyPlaybackPlayerSource(
     string StreamUrl,
     string PlaylistUrl,
     string? ChannelName,
-    string? ContactUrl);
+    string? ContactUrl,
+    PlaybackMediaContainer Container = PlaybackMediaContainer.FlashVideo);
 
 internal interface IDailyPlaybackPlayerLauncher
 {

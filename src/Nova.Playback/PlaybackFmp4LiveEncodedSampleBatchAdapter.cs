@@ -160,21 +160,16 @@ public sealed class PlaybackFmp4LiveEncodedSampleBatchAdapter
         }
     }
 
-    private PlaybackEncodedSampleBatchCreationResult CreateBatchLocked(
-        ReadOnlyMemory<byte> mediaSegment,
-        out PlaybackEncodedSampleBatch? batch)
+    internal static PlaybackEncodedSampleBatchCreationResult ProjectMediaSegment(
+        ReadOnlySpan<byte> segmentBytes,
+        int maximumSegmentBytes,
+        PlaybackFmp4LiveInitializationFragmentDefaultsProjection initializationDefaults,
+        out PlaybackFmp4LiveMediaSegmentPayloadProjection? payloadProjection)
     {
-        batch = null;
-        if (mediaSegment.IsEmpty ||
-            mediaSegment.Length > _options.MaximumSegmentBytes)
-        {
-            return PlaybackEncodedSampleBatchCreationResult.InvalidMediaSegment;
-        }
-
-        var segmentBytes = mediaSegment.Span;
+        payloadProjection = null;
         if (PlaybackFmp4LiveSegmentEnvelopeValidator.Validate(
                 segmentBytes,
-                _options.MaximumSegmentBytes,
+                maximumSegmentBytes,
                 out var envelope) !=
                 PlaybackFmp4LiveSegmentEnvelopeValidationResult.Accepted ||
             envelope is null ||
@@ -197,7 +192,7 @@ public sealed class PlaybackFmp4LiveEncodedSampleBatchAdapter
                     .Projected ||
             decodeTimeline is null ||
             PlaybackFmp4LiveMediaFragmentProfileBinder.Bind(
-                _initializationDefaults.Source,
+                initializationDefaults.Source,
                 fragmentIdentity,
                 decodeTimeline,
                 out var fragmentBinding) !=
@@ -209,15 +204,33 @@ public sealed class PlaybackFmp4LiveEncodedSampleBatchAdapter
 
         if (PlaybackFmp4LiveMediaSegmentPayloadProjector.Project(
                 segmentBytes,
-                _options.MaximumSegmentBytes,
-                _initializationDefaults,
+                maximumSegmentBytes,
+                initializationDefaults,
                 fragmentBinding,
-                out var payloadProjection) !=
+                out payloadProjection) !=
                 PlaybackFmp4LiveMediaSegmentPayloadProjectionResult.Projected ||
             payloadProjection is null)
         {
             return PlaybackEncodedSampleBatchCreationResult
                 .InvalidPayloadProjection;
+        }
+
+        return PlaybackEncodedSampleBatchCreationResult.Created;
+    }
+
+    private PlaybackEncodedSampleBatchCreationResult CreateBatchLocked(
+        ReadOnlyMemory<byte> mediaSegment,
+        out PlaybackEncodedSampleBatch? batch)
+    {
+        batch = null;
+        var projectionResult = ProjectMediaSegment(
+            mediaSegment.Span,
+            _options.MaximumSegmentBytes,
+            _initializationDefaults,
+            out var payloadProjection);
+        if (payloadProjection is null)
+        {
+            return projectionResult;
         }
 
         if (PlaybackFmp4LiveMultiTrackEpochInputBinder.Bind(

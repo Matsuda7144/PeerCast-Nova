@@ -1176,6 +1176,7 @@ public sealed class PlaybackBoundedFlvParser : IDisposable
 
             var spsResult = TryParseSps(
                 parameterSet,
+                _options,
                 out var currentWidth,
                 out var currentHeight,
                 out var currentProfile,
@@ -1257,8 +1258,9 @@ public sealed class PlaybackBoundedFlvParser : IDisposable
         return (parameterSet[0] & 0x1F) == expectedNalType;
     }
 
-    private PlaybackBoundedFlvParserResult TryParseSps(
+    internal static PlaybackBoundedFlvParserResult TryParseSps(
         ReadOnlySpan<byte> parameterSet,
+        PlaybackBoundedFlvParserOptions options,
         out int width,
         out int height,
         out int profileIdc,
@@ -1276,7 +1278,7 @@ public sealed class PlaybackBoundedFlvParser : IDisposable
         byte[]? rbsp = null;
         try
         {
-            rbsp = RemoveEmulationPreventionBytes(parameterSet.Slice(1));
+            rbsp = RemoveEmulationPreventionBytes(parameterSet[1..], options.MaximumSpsRbspBytes);
             if (rbsp is null)
             {
                 return PlaybackBoundedFlvParserResult.InvalidStreamDescription;
@@ -1362,7 +1364,7 @@ public sealed class PlaybackBoundedFlvParser : IDisposable
                     !reader.TryReadSignedExpGolomb(out _) ||
                     !reader.TryReadSignedExpGolomb(out _) ||
                     !reader.TryReadUnsignedExpGolomb(out var cycleCount) ||
-                    cycleCount > _options.MaximumSpsCycleOffsets)
+                    cycleCount > options.MaximumSpsCycleOffsets)
                 {
                     return PlaybackBoundedFlvParserResult.UnsupportedCodec;
                 }
@@ -1447,9 +1449,9 @@ public sealed class PlaybackBoundedFlvParser : IDisposable
         }
     }
 
-    private byte[]? RemoveEmulationPreventionBytes(ReadOnlySpan<byte> source)
+    private static byte[]? RemoveEmulationPreventionBytes(ReadOnlySpan<byte> source, int maximumBytes)
     {
-        if (source.IsEmpty || source.Length > _options.MaximumSpsRbspBytes)
+        if (source.IsEmpty || source.Length > maximumBytes)
         {
             return null;
         }

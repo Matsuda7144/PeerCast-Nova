@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Runtime.InteropServices;
+using PeerCast.Nova.Playback;
 
 namespace PeerCast.Nova.Windows;
 
@@ -12,7 +13,7 @@ internal enum LibMpvPlaybackEvent
 
 internal interface ILibMpvPlaybackClient : IDisposable
 {
-    void LoadFile(string streamUrl, uint windowId, LibMpvPlaybackAudioState initialAudio);
+    void LoadFile(string streamUrl, PlaybackMediaContainer container, uint windowId, LibMpvPlaybackAudioState initialAudio);
     void SetVolume(int volume);
     void SetMuted(bool muted);
     LibMpvPlaybackEvent WaitForEvent();
@@ -98,7 +99,7 @@ internal sealed class LibMpvPlaybackClient : ILibMpvPlaybackClient
         }
     }
 
-    public void LoadFile(string streamUrl, uint windowId, LibMpvPlaybackAudioState initialAudio)
+    public void LoadFile(string streamUrl, PlaybackMediaContainer container, uint windowId, LibMpvPlaybackAudioState initialAudio)
     {
         var normalized = initialAudio.Normalized();
         lock (_clientGate)
@@ -114,7 +115,7 @@ internal sealed class LibMpvPlaybackClient : ILibMpvPlaybackClient
             SetOption("input-default-bindings", "no");
             SetOption("wid", windowId.ToString(CultureInfo.InvariantCulture));
             SetOption("demuxer", "lavf");
-            SetOption("demuxer-lavf-format", "flv");
+            SetOption("demuxer-lavf-format", DemuxerFormatFor(container));
             SetOption("volume", normalized.Volume.ToString(CultureInfo.InvariantCulture));
             SetOption("mute", normalized.Muted ? "yes" : "no");
             Check(_initialize(_client), "initialize playback");
@@ -126,7 +127,7 @@ internal sealed class LibMpvPlaybackClient : ILibMpvPlaybackClient
             {
                 arguments[0] = Marshal.StringToCoTaskMemUTF8("loadfile");
                 arguments[1] = Marshal.StringToCoTaskMemUTF8(streamUrl);
-                Check(_command(_client, LoadFileReply, arguments), "request the HTTP-FLV stream");
+                Check(_command(_client, LoadFileReply, arguments), "request the loopback HTTP stream");
             }
             finally
             {
@@ -135,6 +136,13 @@ internal sealed class LibMpvPlaybackClient : ILibMpvPlaybackClient
             }
         }
     }
+
+    internal static string DemuxerFormatFor(PlaybackMediaContainer container) => container switch
+    {
+        PlaybackMediaContainer.FlashVideo => "flv",
+        PlaybackMediaContainer.FragmentedMp4 => "mov",
+        _ => throw new ArgumentOutOfRangeException(nameof(container)),
+    };
 
     public void SetVolume(int volume)
     {
@@ -175,13 +183,13 @@ internal sealed class LibMpvPlaybackClient : ILibMpvPlaybackClient
             case EventId.FileLoaded:
                 return LibMpvPlaybackEvent.FileLoaded;
             case EventId.CommandReply when notification.ReplyUserdata == LoadFileReply:
-                Check(notification.Error, "open the HTTP-FLV stream");
+                Check(notification.Error, "open the loopback HTTP stream");
                 break;
             case EventId.EndFile:
                 if (notification.Data != 0 && Marshal.ReadInt32(notification.Data) == EndFileError)
                 {
                     throw new LibMpvPlaybackException(
-                        $"libmpv ended HTTP-FLV playback with error {Marshal.ReadInt32(notification.Data, sizeof(int))}.");
+                        $"libmpv ended loopback playback with error {Marshal.ReadInt32(notification.Data, sizeof(int))}.");
                 }
                 return LibMpvPlaybackEvent.Ended;
             case EventId.Shutdown:

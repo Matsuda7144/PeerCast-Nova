@@ -6,20 +6,21 @@ using PeerCast.Nova.Network.Pcp;
 namespace PeerCast.Nova.Network.Rtmp;
 
 /// <summary>
-/// Converts classic RTMP media bodies to FLV without touching encoded samples,
-/// DTS or signed composition time. One awaited consumer owns each borrowed packet.
+/// Admits classic AVC/AAC RTMP messages and publishes them as FLV or as
+/// borrowed access units for an explicitly selected encoded media consumer.
 /// </summary>
 internal sealed class ObsFlvPublishingSession(
     ChannelId channelId,
     ChannelSessionId sessionId,
-    IPcpChannelPacketConsumer consumer,
-    ObsRtmpIngestOptions options)
+    IPcpChannelPacketConsumer? consumer,
+    ObsRtmpIngestOptions options,
+    IObsRtmpEncodedMediaConsumer? encodedConsumer = null)
 {
     private byte[]? _audio;
     private byte[]? _video;
     private byte[]? _metadata;
     private int _nalLengthBytes;
-    private bool _headPublished;
+    private bool _bootstrapPublished;
     private bool _mediaStarted;
     private bool _videoEnded;
 
@@ -39,7 +40,7 @@ internal sealed class ObsFlvPublishingSession(
             var state = (_metadata is not null ? ObsFlvBootstrapState.Metadata : 0) |
                 (_audio is not null ? ObsFlvBootstrapState.AudioConfiguration : 0) |
                 (_video is not null ? ObsFlvBootstrapState.VideoConfiguration : 0) |
-                (_headPublished ? ObsFlvBootstrapState.HeadPublished : 0) |
+                (_bootstrapPublished && encodedConsumer is null ? ObsFlvBootstrapState.HeadPublished : 0) |
                 (_mediaStarted ? ObsFlvBootstrapState.MediaStarted : 0) |
                 (_videoEnded ? ObsFlvBootstrapState.VideoEnded : 0);
             ObsRtmpRejection.Enrich(exception, ObsRtmpRejection.ForMessage(message) with
@@ -77,10 +78,15 @@ internal sealed class ObsFlvPublishingSession(
                 return;
             }
 
+            if (encodedConsumer is not null)
+            {
+                return;
+            }
+
             // Strip only the RTMP wrapper string. Preserve the original metadata encoding.
             var payload = message.Payload.AsSpan(framed ? 16 : 0);
             tag = CreateTag(18, message.Timestamp, payload);
-            if (!_headPublished)
+            if (!_bootstrapPublished)
             {
                 Retain(ref _metadata, tag);
                 tag = null;
@@ -111,7 +117,7 @@ internal sealed class ObsFlvPublishingSession(
 
                 if (_mediaStarted)
                 {
-                    tag = CreateTag(8, message.Timestamp, bytes);
+                    tag = PublishMedia(message);
                 }
             }
         }
@@ -156,7 +162,7 @@ internal sealed class ObsFlvPublishingSession(
 
                     _videoEnded = true;
 
-                    if (_mediaStarted)
+                    if (_mediaStarted && encodedConsumer is null)
                     {
                         tag = CreateTag(9, message.Timestamp, bytes);
                     }
@@ -164,41 +170,87 @@ internal sealed class ObsFlvPublishingSession(
                 else
                 {
                     var idr = ValidateNalus(bytes.AsSpan(5));
-                    if (_headPublished && (_mediaStarted || (bytes[0] >> 4 == 1 && idr)))
+                    if (_bootstrapPublished && (_mediaStarted || (bytes[0] >> 4 == 1 && idr)))
                     {
                         _mediaStarted = true;
-                        tag = CreateTag(9, message.Timestamp, bytes);
+                        tag = PublishMedia(message, idr);
                     }
                 }
             }
         }
 
-        if (!_headPublished && _audio is not null && _video is not null)
+        if (!_bootstrapPublished && _audio is not null && _video is not null)
         {
-            var head = new byte[13 + (_metadata?.Length ?? 0) + _audio.Length + _video.Length];
-            byte[] header = [0x46, 0x4C, 0x56, 1, 5, 0, 0, 0, 9, 0, 0, 0, 0];
-            header.CopyTo(head, 0);
-            var offset = 13;
-            // The existing managed FLV parser creates its session at the AAC
-            // sequence header, after observing AVC. Canonicalize this order
-            // regardless of the order OBS sent the configurations.
-            foreach (var bootstrap in new[] { _metadata, _video, _audio })
+            if (encodedConsumer is not null)
             {
-                if (bootstrap is not null)
+                try
                 {
-                    bootstrap.CopyTo(head, offset);
-                    offset += bootstrap.Length;
+                    encodedConsumer.Configure(CodecConfiguration(_video, 5), CodecConfiguration(_audio, 2));
+                }
+                catch (Exception exception)
+                {
+                    throw new ObsRtmpConsumerException(exception);
                 }
             }
+            else
+            {
+                var head = new byte[13 + (_metadata?.Length ?? 0) + _audio.Length + _video.Length];
+                byte[] header = [0x46, 0x4C, 0x56, 1, 5, 0, 0, 0, 9, 0, 0, 0, 0];
+                header.CopyTo(head, 0);
+                var offset = 13;
+                // The existing managed FLV parser creates its session at the AAC
+                // sequence header, after observing AVC. Canonicalize this order
+                // regardless of the order OBS sent the configurations.
+                foreach (var bootstrap in new[] { _metadata, _video, _audio })
+                {
+                    if (bootstrap is not null)
+                    {
+                        bootstrap.CopyTo(head, offset);
+                        offset += bootstrap.Length;
+                    }
+                }
 
-            await PublishAsync(head, 0x64616568, cancellationToken).ConfigureAwait(false);
-            _headPublished = true;
+                await PublishAsync(head, 0x64616568, cancellationToken).ConfigureAwait(false);
+            }
+
+            _bootstrapPublished = true;
         }
 
         if (tag is not null)
         {
             await PublishAsync(tag, 0x61746164, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    private static ReadOnlySpan<byte> CodecConfiguration(byte[] tag, int codecHeaderBytes) =>
+        tag.AsSpan(11 + codecHeaderBytes, tag.Length - 15 - codecHeaderBytes);
+
+    private byte[]? PublishMedia(RtmpMessage message, bool isIdr = false)
+    {
+        if (encodedConsumer is null)
+        {
+            return CreateTag(message.Type, message.Timestamp, message.Payload);
+        }
+
+        var bytes = message.Payload.AsSpan();
+        try
+        {
+            if (message.Type == 8)
+            {
+                encodedConsumer.AcceptAudio(message.Timestamp, bytes[2..]);
+            }
+            else
+            {
+                var compositionTime = (unchecked((sbyte)bytes[2]) << 16) | (bytes[3] << 8) | bytes[4];
+                encodedConsumer.AcceptVideo(message.Timestamp, compositionTime, isIdr, bytes[5..]);
+            }
+        }
+        catch (Exception exception)
+        {
+            throw new ObsRtmpConsumerException(exception);
+        }
+
+        return null;
     }
 
     private void RetainConfiguration(ref byte[]? retained, byte[] tag)
@@ -247,7 +299,7 @@ internal sealed class ObsFlvPublishingSession(
                 bytes.AsMemory(offset, count), discontinuity: null);
             try
             {
-                await consumer.ConsumeAsync(packet, cancellationToken).ConfigureAwait(false);
+                await consumer!.ConsumeAsync(packet, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -404,4 +456,4 @@ internal sealed class ObsFlvPublishingSession(
 }
 
 internal sealed class ObsRtmpConsumerException(Exception innerException)
-    : Exception("The PCP packet consumer rejected publication.", innerException);
+    : Exception("The RTMP media consumer rejected publication.", innerException);

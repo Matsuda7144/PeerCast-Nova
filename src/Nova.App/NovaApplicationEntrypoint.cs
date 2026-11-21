@@ -1,6 +1,12 @@
+using PeerCast.Nova.Playback;
+using PeerCast.Nova.Windows;
+
 namespace PeerCast.Nova.App;
 
-internal sealed record NovaPlaybackLaunchOptions(string? PlayerExecutablePath, string? LibMpvLibraryPath);
+internal sealed record NovaPlaybackLaunchOptions(
+    string? PlayerExecutablePath,
+    string? LibMpvLibraryPath,
+    string? Fmp4StreamUrl = null);
 
 internal static class NovaApplicationEntrypoint
 {
@@ -9,6 +15,8 @@ internal static class NovaApplicationEntrypoint
     private const string Usage =
         "Usage: Nova.App [--help | --about] [--pcrplayer-executable <path> | --libmpv-library <path>]";
     private const string LibMpvLibraryOption = "--libmpv-library";
+    private const string Fmp4PlaybackOption = "--play-fmp4";
+    private const string Fmp4Usage = "Usage: Nova.App --play-fmp4 <loopback-url> --libmpv-library <path>";
     private const string PlayerExecutableHelp =
         "  --pcrplayer-executable <path>  Configure the external player with an absolute .exe path.";
 
@@ -47,12 +55,15 @@ internal static class NovaApplicationEntrypoint
         if (args.Length == 1 && args[0] is "--help" or "-h")
         {
             await output.WriteLineAsync(Usage).ConfigureAwait(false);
+            await output.WriteLineAsync(Fmp4Usage).ConfigureAwait(false);
             await output.WriteLineAsync("  --help   Show this help without starting the application.")
                 .ConfigureAwait(false);
             await output.WriteLineAsync("  --about  Show legal and external-runtime information.")
                 .ConfigureAwait(false);
             await output.WriteLineAsync(PlayerExecutableHelp).ConfigureAwait(false);
             await output.WriteLineAsync("  --libmpv-library <path>  Play FLV in a Nova window using an absolute libmpv DLL path.")
+                .ConfigureAwait(false);
+            await output.WriteLineAsync("  --play-fmp4 <loopback-url>  Open Nova's local fMP4 stream in an embedded playback window.")
                 .ConfigureAwait(false);
             await output.WriteLineAsync("  --validation-profile <absolute-path>  Isolated network-settings validation; media/router operations blocked.")
                 .ConfigureAwait(false);
@@ -79,6 +90,17 @@ internal static class NovaApplicationEntrypoint
         {
             options = new(null, libraryPath);
         }
+        else if (args is [Fmp4PlaybackOption, var streamUrl, LibMpvLibraryOption, var fmp4LibraryPath] &&
+            LibMpvPlaybackPlayerLauncher.IsLibraryPath(fmp4LibraryPath) &&
+            LibMpvPlaybackPlayerLauncher.IsLoopbackStream(streamUrl, PlaybackMediaContainer.FragmentedMp4))
+        {
+            options = new(null, fmp4LibraryPath, streamUrl);
+        }
+        else if (args.Length != 0 && args[0] == Fmp4PlaybackOption)
+        {
+            await error.WriteLineAsync(Fmp4Usage).ConfigureAwait(false);
+            return 2;
+        }
         else if (!NovaDailyPlaybackCommandLine.TryParse(args, out var executablePath, out var applicationArguments) ||
             applicationArguments.Length != 0)
         {
@@ -98,6 +120,31 @@ internal static class NovaApplicationEntrypoint
             NovaWindowsStartupResult.PlatformUnsupported => 2,
             _ => 1,
         };
+    }
+
+    internal static async ValueTask<NovaWindowsStartupResult> PlayFmp4Async(
+        string streamUrl,
+        IDailyPlaybackPlayerLauncher launcher,
+        TextWriter error,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var source = new DailyPlaybackPlayerSource(
+                streamUrl, string.Empty, null, null, PlaybackMediaContainer.FragmentedMp4);
+            await using var playback = await launcher.LaunchAsync(source, cancellationToken).ConfigureAwait(false);
+            await playback.Completion.WaitAsync(cancellationToken).ConfigureAwait(false);
+            return NovaWindowsStartupResult.Completed;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return NovaWindowsStartupResult.Cancelled;
+        }
+        catch (LibMpvPlaybackException exception)
+        {
+            await error.WriteLineAsync(exception.Message).ConfigureAwait(false);
+            return NovaWindowsStartupResult.Faulted;
+        }
     }
 
     internal static async ValueTask<int> RunDailyAsync(

@@ -1,3 +1,5 @@
+using System.Globalization;
+using PeerCast.Nova.Playback;
 using PeerCast.Nova.Windows;
 
 namespace PeerCast.Nova.App;
@@ -104,13 +106,13 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
     {
         cancellationToken.ThrowIfCancellationRequested();
         ValidateConfiguration();
-        if (!IsLoopbackFlvStream(source.StreamUrl))
+        if (!IsLoopbackStream(source.StreamUrl, source.Container))
         {
-            throw new LibMpvPlaybackException("Embedded playback requires Nova's loopback HTTP-FLV stream URL.");
+            throw new LibMpvPlaybackException("Embedded playback requires Nova's loopback HTTP stream URL for the selected format.");
         }
 
         var window = await _openWindow(source, _audioStore.Current, cancellationToken).ConfigureAwait(false);
-        var lifetime = new Lifetime(window, () => _openClient(_libraryPath), source.StreamUrl, _audioStore);
+        var lifetime = new Lifetime(window, () => _openClient(_libraryPath), source, _audioStore);
         try
         {
             await lifetime.WaitUntilReadyAsync(cancellationToken).ConfigureAwait(false);
@@ -123,22 +125,41 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
         }
     }
 
-    private static bool IsLoopbackFlvStream(string url) =>
-        Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
-        uri.Scheme == Uri.UriSchemeHttp &&
-        uri.Host == "127.0.0.1" &&
-        uri.UserInfo.Length == 0 && uri.Query.Length == 0 && uri.Fragment.Length == 0 &&
-        uri.AbsolutePath.StartsWith("/stream/", StringComparison.Ordinal) &&
-        Guid.TryParseExact(uri.AbsolutePath.AsSpan(8), "N", out var channelId) &&
-        channelId != Guid.Empty;
+    internal static bool IsLoopbackStream(string url, PlaybackMediaContainer container)
+    {
+        var pathPrefix = container switch
+        {
+            PlaybackMediaContainer.FlashVideo => "/stream/",
+            PlaybackMediaContainer.FragmentedMp4 => "/fmp4/",
+            _ => null,
+        };
+
+        if (pathPrefix is null ||
+            !Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+            uri.Scheme != Uri.UriSchemeHttp ||
+            uri.Host != "127.0.0.1" ||
+            uri.UserInfo.Length != 0 || uri.Query.Length != 0 || uri.Fragment.Length != 0 ||
+            !uri.AbsolutePath.StartsWith(pathPrefix, StringComparison.Ordinal) ||
+            !Guid.TryParseExact(uri.AbsolutePath.AsSpan(pathPrefix.Length), "N", out var channelId) ||
+            channelId == Guid.Empty)
+        {
+            return false;
+        }
+
+        // The preview accepts the exact authority and path emitted by Nova.
+        // Do not pass URI aliases or a rewritten path to libmpv.
+        return container != PlaybackMediaContainer.FragmentedMp4 ||
+            (uri.Port > 0 && url == string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{uri.Port}{uri.AbsolutePath}"));
+    }
 
     private static async ValueTask<ILibMpvPlaybackWindow> OpenWindowAsync(
         DailyPlaybackPlayerSource source,
         LibMpvPlaybackAudioState initialAudio,
         CancellationToken cancellationToken)
     {
+        var format = source.Container == PlaybackMediaContainer.FragmentedMp4 ? "fMP4" : "FLV";
         var title = string.IsNullOrWhiteSpace(source.ChannelName)
-            ? "PeerCast Nova - FLV Playback"
+            ? $"PeerCast Nova - {format} Playback"
             : $"PeerCast Nova - {source.ChannelName.Trim()}";
         var host = new LibMpvPlaybackWindowHost(new()
         {
@@ -201,11 +222,11 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
         public Lifetime(
             ILibMpvPlaybackWindow window,
             Func<ILibMpvPlaybackClient> openClient,
-            string streamUrl,
+            DailyPlaybackPlayerSource source,
             LibMpvPlaybackAudioSessionStore audioStore)
         {
             _audioStore = audioStore;
-            Completion = RunAsync(window, openClient, streamUrl);
+            Completion = RunAsync(window, openClient, source);
         }
 
         public Task Completion { get; }
@@ -219,13 +240,16 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
             }
             catch (TimeoutException)
             {
-                throw new LibMpvPlaybackException("libmpv timed out opening the HTTP-FLV stream.");
+                throw new LibMpvPlaybackException("libmpv timed out opening the loopback HTTP stream.");
             }
 
             if (Completion.IsCompleted)
             {
                 await Completion.ConfigureAwait(false);
-                throw new LibMpvPlaybackException("Embedded playback ended before the HTTP-FLV stream opened.");
+                if (!_fileLoaded.Task.IsCompletedSuccessfully)
+                {
+                    throw new LibMpvPlaybackException("Embedded playback ended before the loopback HTTP stream opened.");
+                }
             }
         }
 
@@ -254,11 +278,11 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
         }
 
         private async Task RunAsync(
-            ILibMpvPlaybackWindow window, Func<ILibMpvPlaybackClient> openClient, string streamUrl)
+            ILibMpvPlaybackWindow window, Func<ILibMpvPlaybackClient> openClient, DailyPlaybackPlayerSource source)
         {
             try
             {
-                var player = Task.Factory.StartNew(() => RunPlayer(window, openClient, streamUrl),
+                var player = Task.Factory.StartNew(() => RunPlayer(window, openClient, source),
                     CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
                 if (await Task.WhenAny(player, window.Closed).ConfigureAwait(false) == window.Closed)
                 {
@@ -275,7 +299,7 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
         }
 
         private void RunPlayer(
-            ILibMpvPlaybackWindow window, Func<ILibMpvPlaybackClient> openClient, string streamUrl)
+            ILibMpvPlaybackWindow window, Func<ILibMpvPlaybackClient> openClient, DailyPlaybackPlayerSource source)
         {
             if (_stop.IsCancellationRequested)
             {
@@ -301,7 +325,7 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
             {
                 var initialAudio = window.AudioState.Normalized();
                 _audioStore.Update(initialAudio);
-                client.LoadFile(streamUrl, window.WindowId, initialAudio);
+                client.LoadFile(source.StreamUrl, source.Container, window.WindowId, initialAudio);
                 var currentAudio = window.AudioState.Normalized();
                 if (currentAudio != initialAudio)
                 {
