@@ -36,14 +36,17 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
         Assert.Null((await store.LoadAsync()).PcrPlayerExecutablePath);
     }
 
-    [Fact]
-    public async Task PlayerModeAndBothFilesSurviveApplicationStateRestart()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PlaybackPreferencesSurviveApplicationStateRestart(bool lowLatency)
     {
         using var directory = new TemporaryDirectory();
         var externalPath = directory.CreateExecutableFile("External");
         var libmpvPath = directory.CreateExecutableFile("Internal", "libmpv-2.dll");
         var storePath = Path.Combine(directory.Path, "playback-preferences.json");
-        var saved = new GenesisGuiNextPlaybackPreferences(externalPath, GenesisPlaybackPlayerMode.Internal, libmpvPath);
+        var saved = new GenesisGuiNextPlaybackPreferences(
+            externalPath, GenesisPlaybackPlayerMode.Internal, libmpvPath, LowLatencyInternalPlayback: lowLatency);
         var source = new GenesisGuiNextPlaybackPreferencesSource();
 
         await using (var state = await LoadAsync(source))

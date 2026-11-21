@@ -59,7 +59,8 @@ public sealed class GenesisGuiNextSettingsLayoutTests
                 GenesisGuiNextSettingsLayout.PlaybackTab, GenesisGuiNextSettingsLayout.RecordingTab, GenesisGuiNextSettingsLayout.NotificationsTab,
                 GenesisGuiNextSettingsLayout.ConnectionTab, GenesisGuiNextSettingsLayout.YellowPagesTab, layout.Legacy, layout.CardTitle, layout.PathNotice(playback), layout.Back };
             if (playback)
-                boxes.AddRange([GenesisGuiNextSettingsLayout.InternalPlayerChoice, GenesisGuiNextSettingsLayout.ExternalPlayerChoice]);
+                boxes.AddRange([GenesisGuiNextSettingsLayout.InternalPlayerChoice,
+                    GenesisGuiNextSettingsLayout.ExternalPlayerChoice, layout.LowLatencyPlayback]);
             if (category == (int)GenesisIntegratedSettingsCategory.Notifications)
             {
                 boxes.AddRange(Enumerable.Range(0, 3).Select(layout.NotificationCheck));

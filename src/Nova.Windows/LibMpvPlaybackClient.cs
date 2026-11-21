@@ -13,14 +13,15 @@ internal enum LibMpvPlaybackEvent
 
 internal interface ILibMpvPlaybackClient : IDisposable
 {
-    void LoadFile(string streamUrl, PlaybackMediaContainer container, uint windowId, LibMpvPlaybackAudioState initialAudio);
+    void LoadFile(string streamUrl, PlaybackMediaContainer container, uint windowId, LibMpvPlaybackAudioState initialAudio, bool lowLatency);
     void SetVolume(int volume);
     void SetMuted(bool muted);
     LibMpvPlaybackEvent WaitForEvent();
     void Wakeup();
 }
 
-internal sealed class LibMpvPlaybackException(string message) : InvalidOperationException(message);
+internal sealed class LibMpvPlaybackException(string message, Exception? innerException = null)
+    : InvalidOperationException(message, innerException);
 
 internal sealed class LibMpvPlaybackClient : ILibMpvPlaybackClient
 {
@@ -99,7 +100,8 @@ internal sealed class LibMpvPlaybackClient : ILibMpvPlaybackClient
         }
     }
 
-    public void LoadFile(string streamUrl, PlaybackMediaContainer container, uint windowId, LibMpvPlaybackAudioState initialAudio)
+    public void LoadFile(
+        string streamUrl, PlaybackMediaContainer container, uint windowId, LibMpvPlaybackAudioState initialAudio, bool lowLatency)
     {
         var normalized = initialAudio.Normalized();
         lock (_clientGate)
@@ -110,14 +112,7 @@ internal sealed class LibMpvPlaybackClient : ILibMpvPlaybackClient
             }
 
             _desiredAudio = normalized;
-            SetOption("config", "no");
-            SetOption("load-scripts", "no");
-            SetOption("input-default-bindings", "no");
-            SetOption("wid", windowId.ToString(CultureInfo.InvariantCulture));
-            SetOption("demuxer", "lavf");
-            SetOption("demuxer-lavf-format", DemuxerFormatFor(container));
-            SetOption("volume", normalized.Volume.ToString(CultureInfo.InvariantCulture));
-            SetOption("mute", normalized.Muted ? "yes" : "no");
+            SetStartupOptions(SetOption, container, windowId, normalized, lowLatency);
             Check(_initialize(_client), "initialize playback");
             _initialized = true;
 
@@ -134,6 +129,44 @@ internal sealed class LibMpvPlaybackClient : ILibMpvPlaybackClient
                 Marshal.FreeCoTaskMem(arguments[1]);
                 Marshal.FreeCoTaskMem(arguments[0]);
             }
+        }
+    }
+
+    internal static void SetStartupOptions(
+        Action<string, string> setOption, PlaybackMediaContainer container, uint windowId, LibMpvPlaybackAudioState audio, bool lowLatency)
+    {
+        setOption("config", "no");
+        setOption("load-scripts", "no");
+        setOption("input-default-bindings", "no");
+        setOption("wid", windowId.ToString(CultureInfo.InvariantCulture));
+        setOption("demuxer", "lavf");
+        setOption("demuxer-lavf-format", DemuxerFormatFor(container));
+        setOption("volume", audio.Volume.ToString(CultureInfo.InvariantCulture));
+        setOption("mute", audio.Muted ? "yes" : "no");
+        if (!lowLatency)
+        {
+            return;
+        }
+
+        try
+        {
+            // Network caching can use the larger of the two readahead durations.
+            setOption("demuxer-readahead-secs", "0.3");
+            setOption("cache-secs", "0.3");
+            setOption("cache-pause-wait", "0.15");
+            setOption("cache-pause-initial", "no");
+            // Keep lavf, stream, audio, and decoder buffering small so readahead caps lower display latency.
+            setOption("demuxer-lavf-o", "fflags=+nobuffer");
+            setOption("demuxer-lavf-analyzeduration", "0.25");
+            setOption("stream-buffer-size", "4k");
+            setOption("audio-buffer", "0.05");
+            setOption("video-latency-hacks", "yes");
+            setOption("vd-lavc-threads", "1");
+        }
+        catch (LibMpvPlaybackException exception)
+        {
+            throw new LibMpvPlaybackException(
+                "このlibmpvでは低遅延設定を適用できません。標準に切り替えて再生してください。", exception);
         }
     }
 

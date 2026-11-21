@@ -48,17 +48,20 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
     private static readonly TimeSpan OpenTimeout = TimeSpan.FromSeconds(15);
     private readonly string _libraryPath;
     private readonly LibMpvPlaybackAudioSessionStore _audioStore;
+    private readonly bool _lowLatency;
     private readonly Func<string, ILibMpvPlaybackClient> _openClient;
     private readonly Func<DailyPlaybackPlayerSource, LibMpvPlaybackAudioState, CancellationToken, ValueTask<ILibMpvPlaybackWindow>> _openWindow;
 
     public LibMpvPlaybackPlayerLauncher(
         string libraryPath,
-        LibMpvPlaybackAudioSessionStore? audioStore = null)
+        LibMpvPlaybackAudioSessionStore? audioStore = null,
+        bool lowLatency = false)
         : this(
             libraryPath,
             LibMpvPlaybackClient.Open,
             OpenWindowAsync,
-            audioStore)
+            audioStore,
+            lowLatency)
     {
     }
 
@@ -66,12 +69,14 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
         string libraryPath,
         Func<string, ILibMpvPlaybackClient> openClient,
         Func<CancellationToken, ValueTask<ILibMpvPlaybackWindow>> openWindow,
-        LibMpvPlaybackAudioSessionStore? audioStore = null)
+        LibMpvPlaybackAudioSessionStore? audioStore = null,
+        bool lowLatency = false)
         : this(
             libraryPath,
             openClient,
             (_, _, cancellationToken) => openWindow(cancellationToken),
-            audioStore)
+            audioStore,
+            lowLatency)
     {
     }
 
@@ -79,10 +84,12 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
         string libraryPath,
         Func<string, ILibMpvPlaybackClient> openClient,
         Func<DailyPlaybackPlayerSource, LibMpvPlaybackAudioState, CancellationToken, ValueTask<ILibMpvPlaybackWindow>> openWindow,
-        LibMpvPlaybackAudioSessionStore? audioStore = null)
+        LibMpvPlaybackAudioSessionStore? audioStore = null,
+        bool lowLatency = false)
     {
         _libraryPath = libraryPath;
         _audioStore = audioStore ?? new();
+        _lowLatency = lowLatency;
         _openClient = openClient;
         _openWindow = openWindow;
     }
@@ -112,7 +119,7 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
         }
 
         var window = await _openWindow(source, _audioStore.Current, cancellationToken).ConfigureAwait(false);
-        var lifetime = new Lifetime(window, () => _openClient(_libraryPath), source, _audioStore);
+        var lifetime = new Lifetime(window, () => _openClient(_libraryPath), source, _audioStore, _lowLatency);
         try
         {
             await lifetime.WaitUntilReadyAsync(cancellationToken).ConfigureAwait(false);
@@ -217,15 +224,18 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
         private readonly CancellationTokenSource _stop = new();
         private readonly TaskCompletionSource _fileLoaded = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly LibMpvPlaybackAudioSessionStore _audioStore;
+        private readonly bool _lowLatency;
         private int _disposed;
 
         public Lifetime(
             ILibMpvPlaybackWindow window,
             Func<ILibMpvPlaybackClient> openClient,
             DailyPlaybackPlayerSource source,
-            LibMpvPlaybackAudioSessionStore audioStore)
+            LibMpvPlaybackAudioSessionStore audioStore,
+            bool lowLatency)
         {
             _audioStore = audioStore;
+            _lowLatency = lowLatency;
             Completion = RunAsync(window, openClient, source);
         }
 
@@ -325,7 +335,7 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
             {
                 var initialAudio = window.AudioState.Normalized();
                 _audioStore.Update(initialAudio);
-                client.LoadFile(source.StreamUrl, source.Container, window.WindowId, initialAudio);
+                client.LoadFile(source.StreamUrl, source.Container, window.WindowId, initialAudio, _lowLatency);
                 var currentAudio = window.AudioState.Normalized();
                 if (currentAudio != initialAudio)
                 {

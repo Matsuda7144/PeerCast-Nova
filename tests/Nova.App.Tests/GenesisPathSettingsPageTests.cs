@@ -76,6 +76,43 @@ public sealed class GenesisPathSettingsPageTests : IDisposable
     }
 
     [Fact]
+    public void LowLatencyIsAnInternalPlayerDraftAndSurvivesPlayerSwitches()
+    {
+        var library = Executable("libmpv", "libmpv-2.dll");
+        var source = new GenesisGuiNextPlaybackPreferencesSource();
+        var settings = new GenesisGuiNextPlaybackSettings(new(null, GenesisPlaybackPlayerMode.Internal, library), source);
+        var page = new GenesisPathSettingsPage(settings, null);
+        Assert.True(page.Open(GenesisIntegratedSettingsCategory.Playback));
+        Assert.True(page.CanEditLowLatency);
+        Assert.False(page.LowLatencyInternalPlayback);
+
+        page.SetLowLatencyInternalPlayback(true);
+        Assert.True(page.IsDirty);
+        Assert.False(source.Current.LowLatencyInternalPlayback);
+        page.Cancel();
+        Assert.False(page.LowLatencyInternalPlayback);
+        Assert.False(page.IsDirty);
+
+        page.SetLowLatencyInternalPlayback(true);
+        Assert.True(page.Save());
+        Assert.True(source.Current.LowLatencyInternalPlayback);
+
+        page.SelectPlayer(GenesisPlaybackPlayerMode.External);
+        Assert.False(page.CanEditLowLatency);
+        page.SetLowLatencyInternalPlayback(false);
+        Assert.True(page.Save());
+        Assert.Equal(GenesisPlaybackPlayerMode.External, source.Current.PlayerMode);
+        Assert.True(source.Current.LowLatencyInternalPlayback);
+
+        page.SelectPlayer(GenesisPlaybackPlayerMode.Internal);
+        Assert.True(page.CanEditLowLatency);
+        Assert.True(page.LowLatencyInternalPlayback);
+        page.SetLowLatencyInternalPlayback(false);
+        Assert.True(page.Save());
+        Assert.False(source.Current.LowLatencyInternalPlayback);
+    }
+
+    [Fact]
     public void InternalPlayerRequiresAnExistingDll()
     {
         var executable = Executable("external");

@@ -51,7 +51,7 @@ static async ValueTask<NovaWindowsStartupResult> RunApplicationAsync(
 
         return await NovaApplicationEntrypoint.PlayFmp4Async(
             streamUrl,
-            new LibMpvPlaybackPlayerLauncher(libraryPath),
+            new LibMpvPlaybackPlayerLauncher(libraryPath, lowLatency: playback.LowLatency),
             Console.Error,
             cancellationToken).ConfigureAwait(false);
     }

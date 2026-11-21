@@ -17,6 +17,8 @@ internal sealed class GenesisPathSettingsPage(GenesisGuiNextPlaybackSettings? pl
     internal bool Conflict { get; private set; }
     internal bool IsDirty => IsPlayback ? _playbackDraft != _playbackBaseline : _recordingDraft != _recordingBaseline;
     internal GenesisPlaybackPlayerMode PlayerMode => _playbackDraft.PlayerMode;
+    internal bool LowLatencyInternalPlayback => _playbackDraft.LowLatencyInternalPlayback;
+    internal bool CanEditLowLatency => IsPlayback && PlayerMode == GenesisPlaybackPlayerMode.Internal;
     internal GenesisPlaybackPlayerMode SavedPlayerMode => playback?.Preferences.PlayerMode ?? GenesisPlaybackPlayerMode.External;
     internal string Draft => IsPlayback ? PathForMode(_playbackDraft) : _recordingDraft;
     internal string Saved => IsPlayback ? PathForMode(playback!.Preferences) : recording?.Presentation.ConfiguredDirectory ?? string.Empty;
@@ -76,6 +78,15 @@ internal sealed class GenesisPathSettingsPage(GenesisGuiNextPlaybackSettings? pl
         Refresh();
         if (PlayerMode == mode) return;
         _playbackDraft = _playbackDraft with { PlayerMode = mode };
+        UpdateEditMessage();
+    }
+
+    internal void SetLowLatencyInternalPlayback(bool enabled)
+    {
+        if (_released || !CanEditLowLatency) return;
+        Refresh();
+        if (!CanEditLowLatency || LowLatencyInternalPlayback == enabled) return;
+        _playbackDraft = _playbackDraft with { LowLatencyInternalPlayback = enabled };
         UpdateEditMessage();
     }
 

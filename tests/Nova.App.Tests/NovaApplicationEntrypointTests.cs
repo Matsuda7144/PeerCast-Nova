@@ -135,16 +135,23 @@ public sealed class NovaApplicationEntrypointTests
     }
 
     [Theory]
-    [InlineData("http://127.0.0.1:45913/stream/531dc8dfc7fb42928ac2c0a626517a87")]
-    [InlineData("https://127.0.0.1:45913/fmp4/531dc8dfc7fb42928ac2c0a626517a87")]
-    [InlineData("http://example.test:45913/fmp4/531dc8dfc7fb42928ac2c0a626517a87")]
-    [InlineData("http://127.0.0.1:0/fmp4/531dc8dfc7fb42928ac2c0a626517a87")]
-    public async Task Fmp4OptionRejectsAnInvalidEndpointBeforeStartup(string url)
+    [InlineData("http://127.0.0.1:45913/stream/531dc8dfc7fb42928ac2c0a626517a87", false)]
+    [InlineData("https://127.0.0.1:45913/fmp4/531dc8dfc7fb42928ac2c0a626517a87", false)]
+    [InlineData("http://example.test:45913/fmp4/531dc8dfc7fb42928ac2c0a626517a87", false)]
+    [InlineData("http://example.test:45913/fmp4/531dc8dfc7fb42928ac2c0a626517a87", true)]
+    [InlineData("http://127.0.0.1:0/fmp4/531dc8dfc7fb42928ac2c0a626517a87", false)]
+    public async Task Fmp4OptionRejectsAnInvalidEndpointBeforeStartup(string url, bool lowLatency)
     {
         var libraryPath = Path.Combine(Path.GetTempPath(), "libmpv-2.dll");
         var error = new StringWriter();
+        string[] args = ["--play-fmp4", url, "--libmpv-library", libraryPath];
+        if (lowLatency)
+        {
+            args = [.. args, "--low-latency"];
+        }
+
         var exitCode = await NovaApplicationEntrypoint.RunAsync(
-            ["--play-fmp4", url, "--libmpv-library", libraryPath],
+            args,
             TextWriter.Null,
             error,
             (_, _) => throw new InvalidOperationException("Neither playback nor the regular app may start."),
@@ -158,6 +165,7 @@ public sealed class NovaApplicationEntrypointTests
     [InlineData("--play-fmp4")]
     [InlineData("--play-fmp4", "http://127.0.0.1:45913/fmp4/531dc8dfc7fb42928ac2c0a626517a87")]
     [InlineData("--play-fmp4", "http://127.0.0.1:45913/fmp4/531dc8dfc7fb42928ac2c0a626517a87", "--libmpv-library", "libmpv-2.dll")]
+    [InlineData("--play-fmp4", "http://127.0.0.1:45913/fmp4/531dc8dfc7fb42928ac2c0a626517a87", "--libmpv-library", "libmpv-2.dll", "--low-latency")]
     [InlineData("--play-fmp4", "http://127.0.0.1:45913/fmp4/531dc8dfc7fb42928ac2c0a626517a87", "--pcrplayer-executable", "player.exe")]
     public async Task Fmp4OptionRequiresAnExplicitLibMpvLibrary(params string[] args)
     {
@@ -166,6 +174,19 @@ public sealed class NovaApplicationEntrypointTests
             TextWriter.Null,
             TextWriter.Null,
             (_, _) => throw new InvalidOperationException("Neither playback nor the regular app may start."),
+            CancellationToken.None);
+
+        Assert.Equal(2, exitCode);
+    }
+
+    [Fact]
+    public async Task LowLatencyFlagRequiresTheFmp4Command()
+    {
+        var exitCode = await NovaApplicationEntrypoint.RunAsync(
+            ["--low-latency"],
+            TextWriter.Null,
+            TextWriter.Null,
+            (_, _) => throw new InvalidOperationException("The regular app may not start with --low-latency."),
             CancellationToken.None);
 
         Assert.Equal(2, exitCode);

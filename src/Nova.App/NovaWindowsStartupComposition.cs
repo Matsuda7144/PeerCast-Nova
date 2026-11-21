@@ -272,9 +272,11 @@ public sealed class NovaWindowsStartupComposition
         var audioStore = new LibMpvPlaybackAudioSessionStore();
         IDailyPlaybackPlayerLauncher CreateLauncher()
         {
+            var preferences = pathSource.Current;
             if (libMpvLibraryPath is not null)
             {
-                return new LibMpvPlaybackPlayerLauncher(libMpvLibraryPath, audioStore);
+                return new LibMpvPlaybackPlayerLauncher(
+                    libMpvLibraryPath, audioStore, lowLatency: preferences.LowLatencyInternalPlayback);
             }
 
             if (explicitPlayerPath is not null)
@@ -282,9 +284,9 @@ public sealed class NovaWindowsStartupComposition
                 return new PcrPlayerExternalPlayerLauncher(explicitPlayerPath);
             }
 
-            var preferences = pathSource.Current;
             return preferences.PlayerMode == GenesisPlaybackPlayerMode.Internal
-                ? new LibMpvPlaybackPlayerLauncher(preferences.LibMpvLibraryPath ?? string.Empty, audioStore)
+                ? new LibMpvPlaybackPlayerLauncher(
+                    preferences.LibMpvLibraryPath ?? string.Empty, audioStore, lowLatency: preferences.LowLatencyInternalPlayback)
                 : new PcrPlayerExternalPlayerLauncher(preferences.PcrPlayerExecutablePath);
         }
 

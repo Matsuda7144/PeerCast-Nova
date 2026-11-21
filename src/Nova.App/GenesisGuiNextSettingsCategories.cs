@@ -7,7 +7,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
     private const int PlaybackCategoryId = 1190, RecordingCategoryId = 1191, NotificationsCategoryId = 1192,
         NotifyNewId = 1193, NotifyFavoriteId = 1194, NotifySoundId = 1195, TestSoundId = 1196,
         SettingsPathId = 1197, SettingsBrowseId = 1198, SettingsResetId = 1199;
-    private const int InternalPlayerChoiceId = 1235, ExternalPlayerChoiceId = 1236;
+    private const int InternalPlayerChoiceId = 1235, ExternalPlayerChoiceId = 1236, LowLatencyPlaybackId = 1237;
 
     private sealed partial class AppShellState
     {
@@ -15,13 +15,13 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private long _settingsCategoryRevision;
         private GenesisPathSettingsPage? _pathSettings;
         private nint _playbackCategory, _recordingCategory, _notificationsCategory, _settingsPath, _settingsBrowse, _settingsReset;
-        private nint _internalPlayerChoice, _externalPlayerChoice;
+        private nint _internalPlayerChoice, _externalPlayerChoice, _lowLatencyPlayback;
         private nint _notifyNew, _notifyFavorite, _notifySound, _testSound;
         private bool _updatingSettingsPath, _notificationError;
         private string _notificationMessage = string.Empty;
         private nint[] AdditionalSettingsButtons => [_playbackCategory, _recordingCategory, _notificationsCategory,
             _internalPlayerChoice, _externalPlayerChoice, _settingsBrowse, _settingsReset, _testSound, .. NetworkSettingsButtons];
-        private nint[] SettingsChecks => [_notifyNew, _notifyFavorite, _notifySound, _connectionIpv6, _connectionWan, _connectionAutoMapping, _ypEnabled];
+        private nint[] SettingsChecks => [_notifyNew, _notifyFavorite, _notifySound, _connectionIpv6, _connectionWan, _connectionAutoMapping, _ypEnabled, _lowLatencyPlayback];
         private bool PlaybackCategory => _settingsCategory == GenesisIntegratedSettingsCategory.Playback;
         private bool PathCategory => PlaybackCategory || _settingsCategory == GenesisIntegratedSettingsCategory.Recording;
         private bool SettingsError => _settingsCategory == GenesisIntegratedSettingsCategory.General ? _generalSettings?.IsError == true :
@@ -46,6 +46,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 0, 0, 1, 1, _settingsPane, (nint)SettingsPathId, instance, 0);
             _ = SendMessageW(_settingsPath, 0x00C5, GenesisGuiNextPlaybackSettingsWindow.BrowseFileCapacity - 1, 0); // EM_SETLIMITTEXT
             _settingsBrowse = Button("参照…", SettingsBrowseId);
+            _lowLatencyPlayback = Check("低遅延再生", LowLatencyPlaybackId);
             _settingsReset = Button("未設定に戻す", SettingsResetId);
             _testSound = Button("通知音テスト", TestSoundId);
             _notifyNew = Check("新着チャンネル通知", NotifyNewId);
@@ -95,6 +96,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             Show(_generalRuntime, !notification); Show(_generalConfigured, !notification);
             Show(_generalSave, !notification); Show(_generalCancel, !notification);
             Show(_internalPlayerChoice, PlaybackCategory); Show(_externalPlayerChoice, PlaybackCategory);
+            Show(_lowLatencyPlayback, PlaybackCategory);
             Show(_settingsPath, PathCategory); Show(_settingsBrowse, PathCategory);
             Show(_settingsReset, PathCategory && _pathSettings!.CanReset); Show(_testSound, notification);
             foreach (var control in new[] { _notifyNew, _notifyFavorite, _notifySound }) Show(control, notification);
@@ -140,6 +142,11 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             {
                 _settingsCategoryRevision++;
                 _pathSettings!.SelectPlayer(id == InternalPlayerChoiceId ? GenesisPlaybackPlayerMode.Internal : GenesisPlaybackPlayerMode.External);
+                RefreshIntegratedSettings();
+            }
+            else if (id == LowLatencyPlaybackId && control == _lowLatencyPlayback && PlaybackCategory)
+            {
+                _pathSettings!.SetLowLatencyInternalPlayback(SendMessageW(control, 0x00F0, 0, 0) == 1);
                 RefreshIntegratedSettings();
             }
             else if (id == SettingsBrowseId && control == _settingsBrowse && PathCategory)
@@ -202,7 +209,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                     var internalSelected = page.PlayerMode == GenesisPlaybackPlayerMode.Internal;
                     _ = SetWindowTextW(_generalTitle, "再生設定");
                     _ = SetWindowTextW(_generalNotice, internalSelected
-                        ? "内蔵プレイヤーは、別途用意した libmpv DLL を使用します。\r\n保存したプレイヤーとファイルは次の再生から使用します。"
+                        ? "内蔵プレイヤーは libmpv DLL を使用し、保存した設定は次の再生から使用します。\r\n低遅延再生では通信状況により途切れやすくなります。"
                         : "保存したプレイヤーとファイルは次の再生から使用します。\r\n空欄では環境変数または PATH を使用します。「未設定に戻す」は即時保存します。");
                     var savedMode = page.SavedPlayerMode;
                     var savedPath = savedMode == page.PlayerMode ? " / " + (page.Saved.Length == 0 ? "パス未設定" : page.Saved) : string.Empty;
@@ -210,6 +217,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                     _ = SetWindowTextW(_generalConfigured, internalSelected ? "libmpv DLL（.dll）" : "外部プレイヤーの実行ファイル（.exe）");
                     SetPlayerChoiceText(_internalPlayerChoice, GenesisPlaybackPlayerMode.Internal, page.PlayerMode);
                     SetPlayerChoiceText(_externalPlayerChoice, GenesisPlaybackPlayerMode.External, page.PlayerMode);
+                    _ = SendMessageW(_lowLatencyPlayback, 0x00F1, page.LowLatencyInternalPlayback ? 1u : 0u, 0);
+                    _ = EnableWindow(_lowLatencyPlayback, page.CanEditLowLatency);
                 }
                 else
                 {
@@ -256,6 +265,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             Place(_notificationsCategory, GenesisGuiNextSettingsLayout.NotificationsTab);
             Place(_internalPlayerChoice, GenesisGuiNextSettingsLayout.InternalPlayerChoice);
             Place(_externalPlayerChoice, GenesisGuiNextSettingsLayout.ExternalPlayerChoice);
+            Place(_lowLatencyPlayback, layout.LowLatencyPlayback);
             Place(_settingsReset, layout.Reset); Place(_testSound, layout.SoundTest);
             if (PathCategory)
             {

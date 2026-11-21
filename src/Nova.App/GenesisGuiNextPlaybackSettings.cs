@@ -5,7 +5,8 @@ internal enum GenesisPlaybackPlayerMode { External = 0, Internal = 1 }
 internal sealed record GenesisGuiNextPlaybackPreferences(
     string? PcrPlayerExecutablePath,
     GenesisPlaybackPlayerMode PlayerMode = GenesisPlaybackPlayerMode.External,
-    string? LibMpvLibraryPath = null)
+    string? LibMpvLibraryPath = null,
+    bool LowLatencyInternalPlayback = false)
 {
     public static GenesisGuiNextPlaybackPreferences Default { get; } =
         new(PcrPlayerExecutablePath: null);

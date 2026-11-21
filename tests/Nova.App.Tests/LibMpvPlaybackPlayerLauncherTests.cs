@@ -15,9 +15,10 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
         null);
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task WaitsForWindowAndFileLoadedThenCleansUpOnStopOrWindowClose(bool closeByUser)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task WaitsForWindowAndFileLoadedThenCleansUpOnStopOrWindowClose(bool closeByUser, bool lowLatency)
     {
         using var dll = new TestLibrary();
         using var timeout = new CancellationTokenSource(TestTimeout);
@@ -33,7 +34,8 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
                 selectedDll.SetResult(path);
                 return client;
             },
-            token => new(windowReady.Task.WaitAsync(token)));
+            token => new(windowReady.Task.WaitAsync(token)),
+            lowLatency: lowLatency);
 
         var launching = launcher.LaunchAsync(Source, timeout.Token).AsTask();
         var loadedBeforeWindow = selectedDll.Task.IsCompleted;
@@ -46,7 +48,7 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
         Assert.False(loadedBeforeWindow);
         Assert.False(completedBeforeFileLoaded);
         Assert.Equal(dll.Path, await selectedDll.Task.WaitAsync(timeout.Token));
-        Assert.Equal((Source.StreamUrl, PlaybackMediaContainer.FlashVideo, window.WindowId), load);
+        Assert.Equal((Source.StreamUrl, PlaybackMediaContainer.FlashVideo, window.WindowId, lowLatency), load);
 
         if (closeByUser)
         {
@@ -123,17 +125,79 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
     }
 
     [Theory]
-    [InlineData(PlaybackMediaContainer.FlashVideo, "flv")]
-    [InlineData(PlaybackMediaContainer.FragmentedMp4, "mov")]
-    public void NativeDemuxerFollowsTheDeclaredContainer(PlaybackMediaContainer container, string demuxer)
+    [InlineData(PlaybackMediaContainer.FlashVideo, "flv", false)]
+    [InlineData(PlaybackMediaContainer.FlashVideo, "flv", true)]
+    [InlineData(PlaybackMediaContainer.FragmentedMp4, "mov", false)]
+    [InlineData(PlaybackMediaContainer.FragmentedMp4, "mov", true)]
+    public void StartupOptionsApplyBufferSettingsOnlyInLowLatencyMode(
+        PlaybackMediaContainer container, string demuxer, bool lowLatency)
     {
-        Assert.Equal(demuxer, LibMpvPlaybackClient.DemuxerFormatFor(container));
+        var applied = new List<(string Name, string Value)>();
+        LibMpvPlaybackClient.SetStartupOptions(
+            (name, value) => applied.Add((name, value)), container, 42, new(75, Muted: true), lowLatency);
+
+        var expected = new List<(string Name, string Value)>
+        {
+            ("config", "no"),
+            ("load-scripts", "no"),
+            ("input-default-bindings", "no"),
+            ("wid", "42"),
+            ("demuxer", "lavf"),
+            ("demuxer-lavf-format", demuxer),
+            ("volume", "75"),
+            ("mute", "yes"),
+        };
+        if (lowLatency)
+        {
+            expected.AddRange(
+            [
+                ("demuxer-readahead-secs", "0.3"),
+                ("cache-secs", "0.3"),
+                ("cache-pause-wait", "0.15"),
+                ("cache-pause-initial", "no"),
+                ("demuxer-lavf-o", "fflags=+nobuffer"),
+                ("demuxer-lavf-analyzeduration", "0.25"),
+                ("stream-buffer-size", "4k"),
+                ("audio-buffer", "0.05"),
+                ("video-latency-hacks", "yes"),
+                ("vd-lavc-threads", "1"),
+            ]);
+        }
+        Assert.Equal(expected, applied);
+    }
+
+    [Fact]
+    public async Task RejectedLowLatencyOptionExplainsTheFallbackAndReleasesTheClientAndWindow()
+    {
+        using var dll = new TestLibrary();
+        var nativeFailure = new LibMpvPlaybackException("libmpv rejected cache-secs.");
+        var client = new ControlledClient((container, windowId, audio, lowLatency) =>
+            LibMpvPlaybackClient.SetStartupOptions((name, _) =>
+            {
+                if (name == "cache-secs")
+                {
+                    throw nativeFailure;
+                }
+            }, container, windowId, audio, lowLatency));
+        var window = new ControlledWindow(() => Assert.Equal(1, client.DisposeCount));
+        var launcher = new LibMpvPlaybackPlayerLauncher(dll.Path, _ => client, _ => new(window), lowLatency: true);
+
+        var error = await Assert.ThrowsAsync<LibMpvPlaybackException>(() =>
+            launcher.LaunchAsync(Source, CancellationToken.None).AsTask().WaitAsync(TestTimeout));
+
+        Assert.Contains("標準に切り替えて", error.Message, StringComparison.Ordinal);
+        Assert.Same(nativeFailure, error.InnerException);
+        Assert.False(client.Loaded.Task.IsCompleted);
+        Assert.Equal(1, client.DisposeCount);
+        Assert.Equal(1, window.DisposeCount);
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Fmp4OptionPassesTheHostUrlAndCleansUpOnEndOrCancellation(bool cancel)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task Fmp4OptionPassesTheHostUrlAndCleansUpOnEndOrCancellation(bool cancel, bool lowLatency)
     {
         using var dll = new TestLibrary();
         using var cancellation = new CancellationTokenSource();
@@ -143,24 +207,30 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
             new ChannelId(Guid.NewGuid()), new ChannelSessionId(Guid.NewGuid()));
         var client = new ControlledClient();
         var window = new ControlledWindow(() => Assert.Equal(1, client.DisposeCount));
-        var launcher = new LibMpvPlaybackPlayerLauncher(dll.Path, _ => client, _ => new(window));
         var url = host.StreamUri.AbsoluteUri;
+        string[] args = ["--play-fmp4", url, "--libmpv-library", dll.Path];
+        if (lowLatency)
+        {
+            args = [.. args, "--low-latency"];
+        }
 
         var app = NovaApplicationEntrypoint.RunAsync(
-            ["--play-fmp4", url, "--libmpv-library", dll.Path],
+            args,
             TextWriter.Null,
             error,
             (options, token) =>
             {
-                Assert.Equal(new NovaPlaybackLaunchOptions(null, dll.Path, url), options);
-                return NovaApplicationEntrypoint.PlayFmp4Async(url, launcher, error, token);
+                Assert.Equal(new NovaPlaybackLaunchOptions(null, dll.Path, url, lowLatency), options);
+                var launcher = new LibMpvPlaybackPlayerLauncher(
+                    options.LibMpvLibraryPath!, _ => client, _ => new(window), lowLatency: options.LowLatency);
+                return NovaApplicationEntrypoint.PlayFmp4Async(options.Fmp4StreamUrl!, launcher, error, token);
             },
             cancellation.Token).AsTask();
 
         try
         {
             var load = await client.Loaded.Task.WaitAsync(timeout.Token);
-            Assert.Equal((url, PlaybackMediaContainer.FragmentedMp4, window.WindowId), load);
+            Assert.Equal((url, PlaybackMediaContainer.FragmentedMp4, window.WindowId, lowLatency), load);
             Assert.False(app.IsCompleted);
             client.Signal(LibMpvPlaybackEvent.FileLoaded);
             if (cancel)
@@ -303,20 +373,23 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
         }
     }
 
-    private sealed class ControlledClient : ILibMpvPlaybackClient
+    private sealed class ControlledClient(
+        Action<PlaybackMediaContainer, uint, LibMpvPlaybackAudioState, bool>? setStartupOptions = null) : ILibMpvPlaybackClient
     {
         private readonly Channel<LibMpvPlaybackEvent> _events = Channel.CreateUnbounded<LibMpvPlaybackEvent>();
-        public TaskCompletionSource<(string StreamUrl, PlaybackMediaContainer Container, uint WindowId)> Loaded { get; } =
+        public TaskCompletionSource<(string StreamUrl, PlaybackMediaContainer Container, uint WindowId, bool LowLatency)> Loaded { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
         public LibMpvPlaybackAudioState InitialAudio { get; private set; }
         public List<int> Volumes { get; } = [];
         public List<bool> Mutes { get; } = [];
         public int DisposeCount { get; private set; }
 
-        public void LoadFile(string streamUrl, PlaybackMediaContainer container, uint windowId, LibMpvPlaybackAudioState initialAudio)
+        public void LoadFile(
+            string streamUrl, PlaybackMediaContainer container, uint windowId, LibMpvPlaybackAudioState initialAudio, bool lowLatency)
         {
+            setStartupOptions?.Invoke(container, windowId, initialAudio, lowLatency);
             InitialAudio = initialAudio;
-            Loaded.SetResult((streamUrl, container, windowId));
+            Loaded.SetResult((streamUrl, container, windowId, lowLatency));
         }
 
         public void SetVolume(int volume) => Volumes.Add(volume);

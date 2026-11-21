@@ -6,7 +6,8 @@ namespace PeerCast.Nova.App;
 internal sealed record NovaPlaybackLaunchOptions(
     string? PlayerExecutablePath,
     string? LibMpvLibraryPath,
-    string? Fmp4StreamUrl = null);
+    string? Fmp4StreamUrl = null,
+    bool LowLatency = false);
 
 internal static class NovaApplicationEntrypoint
 {
@@ -16,7 +17,8 @@ internal static class NovaApplicationEntrypoint
         "Usage: Nova.App [--help | --about] [--pcrplayer-executable <path> | --libmpv-library <path>]";
     private const string LibMpvLibraryOption = "--libmpv-library";
     private const string Fmp4PlaybackOption = "--play-fmp4";
-    private const string Fmp4Usage = "Usage: Nova.App --play-fmp4 <loopback-url> --libmpv-library <path>";
+    private const string LowLatencyOption = "--low-latency";
+    private const string Fmp4Usage = "Usage: Nova.App --play-fmp4 <loopback-url> --libmpv-library <path> [--low-latency]";
     private const string PlayerExecutableHelp =
         "  --pcrplayer-executable <path>  Configure the external player with an absolute .exe path.";
 
@@ -65,6 +67,8 @@ internal static class NovaApplicationEntrypoint
                 .ConfigureAwait(false);
             await output.WriteLineAsync("  --play-fmp4 <loopback-url>  Open Nova's local fMP4 stream in an embedded playback window.")
                 .ConfigureAwait(false);
+            await output.WriteLineAsync("  --low-latency  Reduce readahead and rebuffering thresholds for --play-fmp4.")
+                .ConfigureAwait(false);
             await output.WriteLineAsync("  --validation-profile <absolute-path>  Isolated network-settings validation; media/router operations blocked.")
                 .ConfigureAwait(false);
             return 0;
@@ -90,11 +94,12 @@ internal static class NovaApplicationEntrypoint
         {
             options = new(null, libraryPath);
         }
-        else if (args is [Fmp4PlaybackOption, var streamUrl, LibMpvLibraryOption, var fmp4LibraryPath] &&
+        else if (args is [Fmp4PlaybackOption, var streamUrl, LibMpvLibraryOption, var fmp4LibraryPath, .. var fmp4Options] &&
+            fmp4Options is [] or [LowLatencyOption] &&
             LibMpvPlaybackPlayerLauncher.IsLibraryPath(fmp4LibraryPath) &&
             LibMpvPlaybackPlayerLauncher.IsLoopbackStream(streamUrl, PlaybackMediaContainer.FragmentedMp4))
         {
-            options = new(null, fmp4LibraryPath, streamUrl);
+            options = new(null, fmp4LibraryPath, streamUrl, LowLatency: fmp4Options.Length != 0);
         }
         else if (args.Length != 0 && args[0] == Fmp4PlaybackOption)
         {
