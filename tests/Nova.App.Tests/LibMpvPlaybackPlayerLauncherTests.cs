@@ -451,6 +451,17 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
         Assert.EndsWith("Nova_20261122_223005_123.png", file, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void CaptionOverlayHitTestsMinimizeMaximizeCloseRegions()
+    {
+        Assert.Equal(LibMpvCaptionOverlayButton.Minimize, LibMpvPlaybackCaptionOverlay.HitTestButton(5, 10));
+        Assert.Equal(LibMpvCaptionOverlayButton.Maximize, LibMpvPlaybackCaptionOverlay.HitTestButton(35, 10));
+        Assert.Equal(LibMpvCaptionOverlayButton.Close, LibMpvPlaybackCaptionOverlay.HitTestButton(75, 10));
+        Assert.Equal(LibMpvCaptionOverlayButton.None, LibMpvPlaybackCaptionOverlay.HitTestButton(-1, 10));
+        Assert.Equal(LibMpvCaptionOverlayButton.None, LibMpvPlaybackCaptionOverlay.HitTestButton(95, 10));
+        Assert.Equal(LibMpvCaptionOverlayButton.None, LibMpvPlaybackCaptionOverlay.HitTestButton(10, 30));
+    }
+
     private sealed class ControlledClient(
         Action<PlaybackMediaContainer, uint, LibMpvPlaybackAudioState, bool>? setStartupOptions = null) : ILibMpvPlaybackClient
     {

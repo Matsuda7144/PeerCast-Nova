@@ -54,6 +54,7 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
     private const uint ChildBbsInputEdit = 0x50811044; // WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_BORDER | ES_MULTILINE | ES_AUTOVSCROLL | ES_WANTRETURN
     private const int ShowWindowHide = 0;
     private const int ShowWindowNormal = 1;
+    private const int ShowWindowMinimize = 6;
     private const int CursorArrow = 32512;
     private const int StockBlackBrush = 4;
     private const int StockDefaultGuiFont = 17;
@@ -123,6 +124,7 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
 
     private const nuint BbsHoverTimerId = 1;
     private const nuint ClockTimerId = 2;
+    private const nuint CaptionOverlayTimerId = 3;
     private const uint MenuFlagString = 0x0000;
     private const uint MenuFlagPopup = 0x0010;
     private const uint MenuFlagSeparator = 0x0800;
@@ -178,6 +180,7 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
     private nint _bbsInputEdit;
     private nint _bbsSendButton;
     private LibMpvPlaybackBbsPopup? _bbsPopup;
+    private LibMpvPlaybackCaptionOverlay? _captionOverlay;
     private nint _panelBrush;
     private nint _inputBrush;
     private nint _borderBrush;
@@ -193,7 +196,10 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
     private string? _bbsPostError;
     private bool _alwaysOnTop;
     private bool _borderless;
+    private bool _borderlessMaximized;
     private bool _fullscreen;
+    private bool _captionOverlayTimerActive;
+    private WindowRectangle _preMaximizeRect;
     private WindowRectangle _preFullscreenRect;
     private LibMpvPlaybackWindowState _windowState;
     private LibMpvVideoAdjustment _videoAdjustment = LibMpvVideoAdjustment.Default;
@@ -432,6 +438,9 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
                 ApplyAlwaysOnTop(window, alwaysOnTop: true);
             }
 
+            _captionOverlay = new LibMpvPlaybackCaptionOverlay(instance, window);
+            _captionOverlay.ButtonClicked += button => HandleCaptionOverlayButton(window, button);
+
             _videoWindow = CreateWindowExW(
                 0,
                 videoClassName,
@@ -575,9 +584,17 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
                     return;
                 }
 
-                if (message.Message == WindowMessageMouseMove && HasBbs && message.Window == _bbsThreadBar)
+                if (message.Message == WindowMessageMouseMove)
                 {
-                    ShowBbsPopup();
+                    if (_borderless && !_fullscreen)
+                    {
+                        ShowCaptionOverlay(window);
+                    }
+
+                    if (HasBbs && message.Window == _bbsThreadBar)
+                    {
+                        ShowBbsPopup();
+                    }
                 }
 
                 if (message.Message == WindowMessageMouseWheel)
@@ -640,11 +657,19 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
                 _bbsHoverTimerActive = false;
             }
 
+            if (_captionOverlayTimerActive && window != 0 && IsWindow(window))
+            {
+                _ = KillTimer(window, CaptionOverlayTimerId);
+                _captionOverlayTimerActive = false;
+            }
+
             if (window != 0 && IsWindow(window))
             {
                 _ = KillTimer(window, ClockTimerId);
             }
 
+            _captionOverlay?.Dispose();
+            _captionOverlay = null;
             _bbsPopup?.Dispose();
             _bbsPopup = null;
 
@@ -848,6 +873,7 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
 
             case WindowMessageMove:
                 HideBbsPopup();
+                SyncCaptionOverlayPosition(window);
                 return 0;
 
             case WindowMessageSize:
@@ -855,9 +881,11 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
                 var width = unchecked((int)(lParam.ToInt64() & 0xFFFF));
                 var height = unchecked((int)((lParam.ToInt64() >> 16) & 0xFFFF));
                 LayoutControls(width, height);
+                SyncCaptionOverlayPosition(window);
                 return 0;
 
             case WindowMessageExitSizeMove:
+                _borderlessMaximized = false;
                 CaptureNormalWindowBounds(window);
                 return 0;
 
@@ -942,6 +970,12 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
                 if (wParam == BbsHoverTimerId)
                 {
                     CheckBbsPopupHover();
+                    return 0;
+                }
+
+                if (wParam == CaptionOverlayTimerId)
+                {
+                    CheckCaptionOverlayHover(window);
                     return 0;
                 }
 
@@ -1579,12 +1613,14 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
         }
 
         HideBbsPopup();
+        HideCaptionOverlay();
         if (!GetClientRect(window, out var client) || !GetWindowRect(window, out var outer))
         {
             return;
         }
 
         _borderless = !_borderless;
+        _borderlessMaximized = false;
         var style = _borderless ? WindowStyleBorderlessClipChildren : WindowStyleOverlappedClipChildren;
         SetVisibleWindowStyle(window, style);
         var adjusted = new WindowRectangle
@@ -1625,6 +1661,7 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
         }
 
         HideBbsPopup();
+        HideCaptionOverlay();
         if (!_fullscreen)
         {
             if (GetWindowRect(window, out var currentRect))
@@ -1682,6 +1719,158 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
         }
     }
 
+    private void ShowCaptionOverlay(nint window)
+    {
+        if (!_borderless || _fullscreen || _captionOverlay is null || window == 0 || IsIconic(window))
+        {
+            return;
+        }
+
+        if (!GetWindowRect(window, out var outer))
+        {
+            return;
+        }
+
+        _captionOverlay.ShowAtTopRight(outer.Right, outer.Top, _borderlessMaximized);
+        if (!_captionOverlayTimerActive)
+        {
+            _ = SetTimer(window, CaptionOverlayTimerId, 120, 0);
+            _captionOverlayTimerActive = true;
+        }
+    }
+
+    private void SyncCaptionOverlayPosition(nint window)
+    {
+        if (_captionOverlay is not { IsVisible: true } || window == 0)
+        {
+            return;
+        }
+
+        if (!_borderless || _fullscreen || IsIconic(window) || !GetWindowRect(window, out var outer))
+        {
+            HideCaptionOverlay();
+            return;
+        }
+
+        _captionOverlay.ShowAtTopRight(outer.Right, outer.Top, _borderlessMaximized);
+    }
+
+    private void HideCaptionOverlay()
+    {
+        if (_captionOverlayTimerActive && _window != 0 && IsWindow(_window))
+        {
+            _ = KillTimer(_window, CaptionOverlayTimerId);
+            _captionOverlayTimerActive = false;
+        }
+
+        _captionOverlay?.Hide();
+    }
+
+    private void CheckCaptionOverlayHover(nint window)
+    {
+        if (!_borderless || _fullscreen || window == 0 || IsIconic(window) || !GetCursorPos(out var point))
+        {
+            HideCaptionOverlay();
+            return;
+        }
+
+        var overOwner = IsScreenPointInWindow(window, point.X, point.Y);
+        var overOverlay = _captionOverlay is not null && _captionOverlay.ContainsScreenPoint(point.X, point.Y);
+        if (!overOwner && !overOverlay)
+        {
+            HideCaptionOverlay();
+        }
+    }
+
+    private void HandleCaptionOverlayButton(nint window, LibMpvCaptionOverlayButton button)
+    {
+        if (window == 0 || !IsWindow(window))
+        {
+            return;
+        }
+
+        switch (button)
+        {
+            case LibMpvCaptionOverlayButton.Minimize:
+                HideCaptionOverlay();
+                HideBbsPopup();
+                _ = ShowWindow(window, ShowWindowMinimize);
+                break;
+
+            case LibMpvCaptionOverlayButton.Maximize:
+                ToggleBorderlessMaximize(window);
+                break;
+
+            case LibMpvCaptionOverlayButton.Close:
+                HideCaptionOverlay();
+                _ = PostMessageW(window, WindowMessageClose, 0, 0);
+                break;
+        }
+    }
+
+    private void ToggleBorderlessMaximize(nint window)
+    {
+        if (!_borderless || _fullscreen || window == 0)
+        {
+            return;
+        }
+
+        HideBbsPopup();
+        if (!_borderlessMaximized)
+        {
+            if (GetWindowRect(window, out var current))
+            {
+                _preMaximizeRect = current;
+            }
+
+            var monitor = MonitorFromWindow(window, MonitorDefaultToNearest);
+            var info = new MonitorInfo { Size = (uint)Marshal.SizeOf<MonitorInfo>() };
+            if (monitor == 0 || !GetMonitorInfoW(monitor, ref info))
+            {
+                return;
+            }
+
+            _borderlessMaximized = true;
+            var work = info.Work;
+            _ = SetWindowPos(
+                window,
+                _alwaysOnTop ? HwndTopMost : HwndNoTopMost,
+                work.Left,
+                work.Top,
+                work.Right - work.Left,
+                work.Bottom - work.Top,
+                SwpFrameChanged | SwpShowWindow);
+            if (GetClientRect(window, out var client))
+            {
+                LayoutControls(client.Right - client.Left, client.Bottom - client.Top);
+            }
+
+            _ = UpdateWindow(window);
+            ShowCaptionOverlay(window);
+        }
+        else
+        {
+            _borderlessMaximized = false;
+            var width = Math.Max(LibMpvPlaybackWindowState.MinVideoWidth, _preMaximizeRect.Right - _preMaximizeRect.Left);
+            var height = Math.Max(LibMpvPlaybackWindowState.MinVideoHeight + BottomBarsHeight, _preMaximizeRect.Bottom - _preMaximizeRect.Top);
+            _ = SetWindowPos(
+                window,
+                _alwaysOnTop ? HwndTopMost : HwndNoTopMost,
+                _preMaximizeRect.Left,
+                _preMaximizeRect.Top,
+                width,
+                height,
+                SwpFrameChanged | SwpShowWindow);
+            if (GetClientRect(window, out var client))
+            {
+                LayoutControls(client.Right - client.Left, client.Bottom - client.Top);
+            }
+
+            _ = UpdateWindow(window);
+            ShowCaptionOverlay(window);
+        }
+    }
+
     private static void SetVisibleWindowStyle(nint window, uint style) =>
         _ = SetWindowLongPtrW(window, GwlStyle, unchecked((nint)(nuint)(style | WindowStyleVisible)));
 
@@ -1721,6 +1910,7 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
             ToggleFullscreen(window);
         }
 
+        _borderlessMaximized = false;
         var style = _borderless ? WindowStyleBorderlessClipChildren : WindowStyleOverlappedClipChildren;
         var rect = new WindowRectangle
         {
@@ -2264,6 +2454,10 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool IsWindow(nint window);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsIconic(nint window);
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern nint LoadCursorW(nint instance, nint cursorName);
