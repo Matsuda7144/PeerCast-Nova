@@ -1,5 +1,6 @@
 using System.Globalization;
 using PeerCast.Nova.Playback;
+using PeerCast.Nova.Playback.Bbs;
 using PeerCast.Nova.Windows;
 
 namespace PeerCast.Nova.App;
@@ -8,7 +9,11 @@ internal interface ILibMpvPlaybackWindow : IAsyncDisposable
 {
     uint WindowId { get; }
     LibMpvPlaybackAudioState AudioState { get; }
+    PlaybackBbsSession? BbsSession => null;
     event Action<LibMpvPlaybackAudioState>? AudioStateChanged;
+    event Action? ScreenshotRequested { add { } remove { } }
+    event Action<LibMpvVideoAdjustment, string>? VideoAdjustmentChanged { add { } remove { } }
+    void UpdateStatusStats(string? statsText) { }
     Task Closed { get; }
 }
 
@@ -55,11 +60,12 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
     public LibMpvPlaybackPlayerLauncher(
         string libraryPath,
         LibMpvPlaybackAudioSessionStore? audioStore = null,
-        bool lowLatency = false)
+        bool lowLatency = false,
+        LibMpvPlaybackWindowStateStore? windowStateStore = null)
         : this(
             libraryPath,
             LibMpvPlaybackClient.Open,
-            OpenWindowAsync,
+            (source, initialAudio, token) => OpenWindowAsync(source, initialAudio, windowStateStore, token),
             audioStore,
             lowLatency)
     {
@@ -162,19 +168,36 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
     private static async ValueTask<ILibMpvPlaybackWindow> OpenWindowAsync(
         DailyPlaybackPlayerSource source,
         LibMpvPlaybackAudioState initialAudio,
+        LibMpvPlaybackWindowStateStore? windowStateStore,
         CancellationToken cancellationToken)
     {
         var format = source.Container == PlaybackMediaContainer.FragmentedMp4 ? "fMP4" : "FLV";
         var title = string.IsNullOrWhiteSpace(source.ChannelName)
             ? $"PeerCast Nova - {format} Playback"
             : $"PeerCast Nova - {source.ChannelName.Trim()}";
+        var statusLabel = string.IsNullOrWhiteSpace(source.ChannelName)
+            ? format
+            : $"{source.ChannelName.Trim()} ({format})";
+        PlaybackBbsSession? bbsSession = BbsUrlParser.TryParse(source.ContactUrl, out var bbsTarget)
+            ? new PlaybackBbsSession(bbsTarget!)
+            : null;
+        var initialWindowState = windowStateStore?.Current;
         var host = new LibMpvPlaybackWindowHost(new()
         {
             Title = title,
-            VideoWidth = 960,
-            VideoHeight = 540,
-            InitialAudioState = initialAudio,
+            StatusLabel = statusLabel,
+            ContactUrl = source.ContactUrl,
+            VideoWidth = initialWindowState?.VideoWidth ?? 960,
+            VideoHeight = initialWindowState?.VideoHeight ?? 540,
+            InitialAudioState = initialWindowState?.AudioState ?? initialAudio,
+            InitialWindowState = initialWindowState,
+            BbsSession = bbsSession,
         });
+        if (windowStateStore is not null)
+        {
+            host.WindowStateChanged += windowStateStore.Update;
+        }
+
         try
         {
             var windowId = await host.StartAsync(cancellationToken).ConfigureAwait(false);
@@ -184,11 +207,22 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
                 throw new LibMpvPlaybackException("The embedded playback window could not be opened.");
             }
 
-            return new PlaybackWindow(host, windowId);
+            bbsSession?.Start();
+            return new PlaybackWindow(host, windowId, bbsSession, windowStateStore);
         }
         catch
         {
+            if (windowStateStore is not null)
+            {
+                host.WindowStateChanged -= windowStateStore.Update;
+            }
+
             await host.DisposeAsync().ConfigureAwait(false);
+            if (bbsSession is not null)
+            {
+                await bbsSession.DisposeAsync().ConfigureAwait(false);
+            }
+
             throw;
         }
     }
@@ -196,27 +230,60 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
     private sealed class PlaybackWindow : ILibMpvPlaybackWindow
     {
         private readonly LibMpvPlaybackWindowHost _host;
+        private readonly PlaybackBbsSession? _bbsSession;
+        private readonly LibMpvPlaybackWindowStateStore? _windowStateStore;
 
-        public PlaybackWindow(LibMpvPlaybackWindowHost host, uint windowId)
+        public PlaybackWindow(
+            LibMpvPlaybackWindowHost host,
+            uint windowId,
+            PlaybackBbsSession? bbsSession,
+            LibMpvPlaybackWindowStateStore? windowStateStore)
         {
             _host = host;
+            _bbsSession = bbsSession;
+            _windowStateStore = windowStateStore;
             WindowId = windowId;
             _host.AudioStateChanged += OnAudioStateChanged;
+            _host.ScreenshotRequested += OnScreenshotRequested;
+            _host.VideoAdjustmentChanged += OnVideoAdjustmentChanged;
         }
 
         public uint WindowId { get; }
         public LibMpvPlaybackAudioState AudioState => _host.AudioState;
+        public PlaybackBbsSession? BbsSession => _bbsSession;
         public event Action<LibMpvPlaybackAudioState>? AudioStateChanged;
+        public event Action? ScreenshotRequested;
+        public event Action<LibMpvVideoAdjustment, string>? VideoAdjustmentChanged;
         public Task Closed => _host.Closed;
 
-        public ValueTask DisposeAsync()
+        public void UpdateStatusStats(string? statsText) => _host.UpdateStatusStats(statsText);
+
+        public async ValueTask DisposeAsync()
         {
             _host.AudioStateChanged -= OnAudioStateChanged;
-            return _host.DisposeAsync();
+            _host.ScreenshotRequested -= OnScreenshotRequested;
+            _host.VideoAdjustmentChanged -= OnVideoAdjustmentChanged;
+            if (_windowStateStore is not null)
+            {
+                _host.WindowStateChanged -= _windowStateStore.Update;
+                _windowStateStore.Update(_host.WindowState);
+            }
+
+            await _host.DisposeAsync().ConfigureAwait(false);
+            if (_bbsSession is not null)
+            {
+                await _bbsSession.DisposeAsync().ConfigureAwait(false);
+            }
         }
 
         private void OnAudioStateChanged(LibMpvPlaybackAudioState state) =>
             AudioStateChanged?.Invoke(state);
+
+        private void OnScreenshotRequested() =>
+            ScreenshotRequested?.Invoke();
+
+        private void OnVideoAdjustmentChanged(LibMpvVideoAdjustment adjustment, string summary) =>
+            VideoAdjustmentChanged?.Invoke(adjustment, summary);
     }
 
     private sealed class Lifetime : IDailyPlaybackPlayerLifetime
@@ -330,7 +397,47 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
                 client.SetMuted(normalized.Muted);
             }
 
+            void OnBbsNewPostsReceived(IReadOnlyList<BbsPost> posts)
+            {
+                if (posts.Count > 0)
+                {
+                    client.ShowOsdText(LibMpvPlaybackClient.FormatLatestPostOsdAss(posts[^1]), 6000);
+                }
+            }
+
+            void OnScreenshotRequested()
+            {
+                try
+                {
+                    var directory = LibMpvScreenshotPaths.ResolveDefaultDirectory();
+                    Directory.CreateDirectory(directory);
+                    var filePath = LibMpvScreenshotPaths.CreateFilePath(directory, DateTimeOffset.Now);
+                    if (client.SaveScreenshot(filePath))
+                    {
+                        client.ShowOsdText($"スナップショット保存: {Path.GetFileName(filePath)}", 2500);
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            void OnVideoAdjustmentChanged(LibMpvVideoAdjustment adjustment, string summary)
+            {
+                client.SetVideoAdjustment(adjustment);
+                client.ShowOsdText(summary, 2500);
+            }
+
             window.AudioStateChanged += OnAudioStateChanged;
+            window.ScreenshotRequested += OnScreenshotRequested;
+            window.VideoAdjustmentChanged += OnVideoAdjustmentChanged;
+            if (window.BbsSession is { } bbsSession)
+            {
+                bbsSession.NewPostsReceived += OnBbsNewPostsReceived;
+            }
+
+            using var statsStop = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token);
+            var statsTask = PollStatsAsync(client, window, statsStop.Token);
             try
             {
                 var initialAudio = window.AudioState.Normalized();
@@ -360,7 +467,43 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
             }
             finally
             {
+                statsStop.Cancel();
+                try
+                {
+                    statsTask.GetAwaiter().GetResult();
+                }
+                catch (OperationCanceledException)
+                {
+                }
+
+                if (window.BbsSession is { } session)
+                {
+                    session.NewPostsReceived -= OnBbsNewPostsReceived;
+                }
+
+                window.VideoAdjustmentChanged -= OnVideoAdjustmentChanged;
+                window.ScreenshotRequested -= OnScreenshotRequested;
                 window.AudioStateChanged -= OnAudioStateChanged;
+            }
+        }
+
+        private static async Task PollStatsAsync(
+            ILibMpvPlaybackClient client,
+            ILibMpvPlaybackWindow window,
+            CancellationToken cancellationToken)
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+            while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
+            {
+                var stats = client.TryReadStats();
+                if (stats is not null)
+                {
+                    var formatted = stats.FormatCompact();
+                    if (!string.IsNullOrEmpty(formatted))
+                    {
+                        window.UpdateStatusStats(formatted);
+                    }
+                }
             }
         }
     }

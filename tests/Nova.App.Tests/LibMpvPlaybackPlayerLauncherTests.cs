@@ -1,6 +1,7 @@
 using System.Threading.Channels;
 using PeerCast.Nova.Core.Channels;
 using PeerCast.Nova.Playback;
+using PeerCast.Nova.Playback.Bbs;
 using PeerCast.Nova.Windows;
 
 namespace PeerCast.Nova.App.Tests;
@@ -373,6 +374,83 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
         }
     }
 
+    [Fact]
+    public void FormatLatestPostOsdAssEscapesAssBracesAndFormatsBottomLeftOverlay()
+    {
+        var post = new BbsPost(901, "名無し", "sage", "2026/11/22 20:35:06", "ID1", "初心者大歓迎 {テスト}\n2行目");
+        var osd = LibMpvPlaybackClient.FormatLatestPostOsdAss(post);
+
+        Assert.StartsWith("${osd-ass-cc/0}{\\an1", osd, StringComparison.Ordinal);
+        Assert.Contains(">>901 初心者大歓迎 \\{テスト\\} 2行目", osd, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WindowSnapClampsNearWorkAreaEdgesAndLeavesCenterUnchanged()
+    {
+        // Snaps top-left within 12px.
+        Assert.Equal((0, 0), LibMpvPlaybackWindowState.SnapToWorkArea(9, 10, 640, 360, 0, 0, 1920, 1040));
+
+        // Snaps bottom-right within 12px.
+        Assert.Equal((1280, 680), LibMpvPlaybackWindowState.SnapToWorkArea(1271, 688, 640, 360, 0, 0, 1920, 1040));
+
+        // Leaves middle positions untouched.
+        Assert.Equal((300, 200), LibMpvPlaybackWindowState.SnapToWorkArea(300, 200, 640, 360, 0, 0, 1920, 1040));
+    }
+
+    [Fact]
+    public void WindowStateStorePersistsAndReloadsNormalizedState()
+    {
+        var tempDir = Directory.CreateTempSubdirectory("nova-winstate-");
+        try
+        {
+            var path = Path.Combine(tempDir.FullName, "embedded-player-window.json");
+            var store = new LibMpvPlaybackWindowStateStore(path);
+            store.Update(new LibMpvPlaybackWindowState(
+                Left: 120,
+                Top: 80,
+                VideoWidth: 1280,
+                VideoHeight: 720,
+                Volume: 45,
+                Muted: true,
+                AlwaysOnTop: true,
+                Borderless: true,
+                BbsUseSage: false));
+
+            var reloaded = new LibMpvPlaybackWindowStateStore(path);
+            Assert.Equal(120, reloaded.Current.Left);
+            Assert.Equal(80, reloaded.Current.Top);
+            Assert.Equal(1280, reloaded.Current.VideoWidth);
+            Assert.Equal(720, reloaded.Current.VideoHeight);
+            Assert.Equal(45, reloaded.Current.Volume);
+            Assert.True(reloaded.Current.Muted);
+            Assert.True(reloaded.Current.AlwaysOnTop);
+            Assert.True(reloaded.Current.Borderless);
+            Assert.False(reloaded.Current.BbsUseSage);
+        }
+        finally
+        {
+            tempDir.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void PlaybackStatsAndVideoAdjustmentFormatAndClampCleanly()
+    {
+        var stats = new LibMpvPlaybackStats(1280, 720, 59.94, 2_381_000, 0.25);
+        Assert.Equal("1280x720 2381 kbps (60)", stats.FormatCompact());
+
+        var partial = new LibMpvPlaybackStats(0, 0, null, null, null);
+        Assert.Equal(string.Empty, partial.FormatCompact());
+
+        var clamped = new LibMpvVideoAdjustment(Brightness: 150, Contrast: -140, Saturation: 20, Gamma: 0).Clamped();
+        Assert.Equal(new LibMpvVideoAdjustment(100, -100, 20, 0), clamped);
+        Assert.False(clamped.IsDefault);
+        Assert.True(LibMpvVideoAdjustment.Default.IsDefault);
+
+        var file = LibMpvScreenshotPaths.CreateFilePath(@"C:\Shots", new DateTimeOffset(2026, 11, 22, 22, 30, 5, 123, TimeSpan.Zero));
+        Assert.EndsWith("Nova_20261122_223005_123.png", file, StringComparison.Ordinal);
+    }
+
     private sealed class ControlledClient(
         Action<PlaybackMediaContainer, uint, LibMpvPlaybackAudioState, bool>? setStartupOptions = null) : ILibMpvPlaybackClient
     {
@@ -382,6 +460,7 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
         public LibMpvPlaybackAudioState InitialAudio { get; private set; }
         public List<int> Volumes { get; } = [];
         public List<bool> Mutes { get; } = [];
+        public List<(string Text, int DurationMs)> OsdMessages { get; } = [];
         public int DisposeCount { get; private set; }
 
         public void LoadFile(
@@ -394,6 +473,10 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
 
         public void SetVolume(int volume) => Volumes.Add(volume);
         public void SetMuted(bool muted) => Mutes.Add(muted);
+        public void ShowOsdText(string text, int durationMs) => OsdMessages.Add((text, durationMs));
+        public bool SaveScreenshot(string filePath) => true;
+        public void SetVideoAdjustment(LibMpvVideoAdjustment adjustment) { }
+        public LibMpvPlaybackStats? TryReadStats() => null;
         public LibMpvPlaybackEvent WaitForEvent() => _events.Reader.ReadAsync().AsTask().GetAwaiter().GetResult();
         public void Wakeup() => Signal(LibMpvPlaybackEvent.Other);
         public void Dispose() => DisposeCount++;

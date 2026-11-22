@@ -1,14 +1,20 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
+using PeerCast.Nova.Playback.Bbs;
 
 namespace PeerCast.Nova.Windows;
 
 internal sealed record LibMpvPlaybackWindowOptions
 {
     public string Title { get; init; } = "PeerCast Nova - FLV Playback";
+    public string? StatusLabel { get; init; }
+    public string? ContactUrl { get; init; }
     public int VideoWidth { get; init; } = 960;
     public int VideoHeight { get; init; } = 540;
     public LibMpvPlaybackAudioState InitialAudioState { get; init; } = LibMpvPlaybackAudioState.Default;
+    public LibMpvPlaybackWindowState? InitialWindowState { get; init; }
     public string? ApplicationIconPath { get; init; } = Environment.ProcessPath;
+    public PlaybackBbsSession? BbsSession { get; init; }
 }
 
 internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
@@ -31,20 +37,22 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
     private const uint SpiGetHighContrast = 0x0042;
     private const uint HcfHighContrastOn = 0x0001;
 
-    private const int ControlBarHeight = 36;
-    private const int BarMargin = 8;
-    private const int ControlGap = 8;
-    private const int MuteButtonWidth = 68;
-    private const int VolumeLabelWidth = 54;
-    private const int MaxSliderWidth = 220;
-    private const int ControlHeight = 24;
+    private const int StatusBarHeight = 20;
+    private const int ThreadBarHeight = 20;
+    private const int BbsInputBarHeight = 22;
+    private const int BbsSendButtonWidth = 26;
+    private const int VolumeButtonWidth = 58;
+    private const int ClockWidth = 44;
 
-    private const uint ClassStyleOwnDeviceContext = 0x0020;
+    private const uint ClassStyleOwnDeviceContextDoubleClicks = 0x0028; // CS_OWNDC | CS_DBLCLKS
+    private const uint WindowStyleVisible = 0x10000000; // WS_VISIBLE
     private const uint WindowStyleOverlappedClipChildren = 0x02CF0000;
+    private const uint WindowStyleBorderlessClipChildren = 0x82000000; // WS_POPUP | WS_CLIPCHILDREN
     private const uint ChildVideoDisabled = 0x58000000;
+    private const uint ChildOwnerDrawButton = 0x5000000B; // WS_CHILD | WS_VISIBLE | BS_OWNERDRAW
     private const uint ChildOwnerDrawButtonTabStop = 0x5001000B; // WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW
-    private const uint ChildTrackbar = 0x50010018;
-    private const uint ChildStaticRightCenter = 0x50000202;
+    private const uint ChildBbsInputEdit = 0x50811044; // WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_BORDER | ES_MULTILINE | ES_AUTOVSCROLL | ES_WANTRETURN
+    private const int ShowWindowHide = 0;
     private const int ShowWindowNormal = 1;
     private const int CursorArrow = 32512;
     private const int StockBlackBrush = 4;
@@ -52,46 +60,109 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
     private const uint CommonControlsBarClasses = 0x00000004;
 
     private const uint WindowMessageDestroy = 0x0002;
+    private const uint WindowMessageMove = 0x0003;
     private const uint WindowMessageSize = 0x0005;
+    private const uint WindowMessageActivate = 0x0006;
     private const uint WindowMessagePaint = 0x000F;
     private const uint WindowMessageClose = 0x0010;
     private const uint WindowMessageDrawItem = 0x002B;
     private const uint WindowMessageSetFont = 0x0030;
-    private const uint WindowMessageNotify = 0x004E;
+    private const uint WindowMessageNcHitTest = 0x0084;
+    private const uint WindowMessageNcLeftButtonDown = 0x00A1;
     private const uint WindowMessageKeyDown = 0x0100;
+    private const uint WindowMessageSysKeyDown = 0x0104;
     private const uint WindowMessageCommand = 0x0111;
-    private const uint WindowMessageHScroll = 0x0114;
-    private const uint WindowMessageCtlColorStatic = 0x0138;
+    private const uint WindowMessageTimer = 0x0113;
+    private const uint WindowMessageCtlColorEdit = 0x0133;
+    private const uint WindowMessageMouseMove = 0x0200;
+    private const uint WindowMessageLeftButtonDown = 0x0201;
+    private const uint WindowMessageLeftButtonDblClk = 0x0203;
+    private const uint WindowMessageRightButtonUp = 0x0205;
     private const uint WindowMessageMouseWheel = 0x020A;
+    private const uint WindowMessageMoving = 0x0216;
+    private const uint WindowMessageExitSizeMove = 0x0232;
+    private const uint WindowMessageBbsStateChanged = 0x8001;
+    private const uint WindowMessageBbsPostCompleted = 0x8002;
 
-    private const uint TrackbarGetPos = 0x0400;
-    private const uint TrackbarSetPos = 0x0405;
-    private const uint TrackbarSetRangeMin = 0x0407;
-    private const uint TrackbarSetRangeMax = 0x0408;
-    private const uint TrackbarSetPageSize = 0x0415;
+    private const int GwlStyle = -16;
+    private const nint HwndTopMost = -1;
+    private const nint HwndNoTopMost = -2;
+    private const uint SwpNoSize = 0x0001;
+    private const uint SwpNoMove = 0x0002;
+    private const uint SwpNoZOrder = 0x0004;
+    private const uint SwpNoActivate = 0x0010;
+    private const uint SwpFrameChanged = 0x0020;
+    private const uint SwpShowWindow = 0x0040;
+    private const uint MonitorDefaultToNearest = 2;
+    private const uint MonitorDefaultToNull = 0;
 
-    private const int NmCustomDraw = -12;
-    private const uint CddsPrePaint = 0x00000001;
-    private const uint CddsItemPrePaint = 0x00010001;
-    private const int CdrfDoDefault = 0x00000000;
-    private const int CdrfSkipDefault = 0x00000004;
-    private const int CdrfNotifyItemDraw = 0x00000020;
-    private const nuint TbcdThumb = 2;
-    private const nuint TbcdChannel = 3;
+    private const int HitCaption = 2;
+    private const int HitLeft = 10;
+    private const int HitRight = 11;
+    private const int HitTop = 12;
+    private const int HitTopLeft = 13;
+    private const int HitTopRight = 14;
+    private const int HitBottom = 15;
+    private const int HitBottomLeft = 16;
+    private const int HitBottomRight = 17;
+    private const int BorderlessResizeEdge = 6;
 
     private const uint OdsSelected = 0x0001;
     private const uint OdsFocus = 0x0010;
     private const int BkModeTransparent = 1;
     private const uint DrawTextSingleLineCenter = 0x00000025; // DT_CENTER | DT_VCENTER | DT_SINGLELINE
+    private const uint DrawTextSingleLineCenterEllipsis = 0x00008825; // DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS
+    private const uint DrawTextSingleLineLeftEllipsis = 0x00008824; // DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS
+    private const uint DrawTextSingleLineRight = 0x00000826; // DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX
 
     private const int ButtonClicked = 0;
-    private const int MuteButtonId = 1001;
-    private const int VolumeSliderId = 1002;
-    private const int VolumeLabelId = 1003;
+    private const int VolumeButtonId = 1001;
+    private const int BbsThreadBarId = 1004;
+    private const int BbsInputEditId = 1005;
+    private const int BbsSendButtonId = 1006;
 
+    private const nuint BbsHoverTimerId = 1;
+    private const nuint ClockTimerId = 2;
+    private const uint MenuFlagString = 0x0000;
+    private const uint MenuFlagPopup = 0x0010;
+    private const uint MenuFlagSeparator = 0x0800;
+    private const uint MenuFlagChecked = 0x0008;
+    private const uint TrackPopupReturnCmd = 0x0100;
+    private const uint TrackPopupBottomAlign = 0x0020;
+    private const uint MenuCmdRefresh = 2001;
+    private const uint MenuCmdToggleSage = 2002;
+    private const uint MenuCmdOpenBrowser = 2003;
+    private const uint MenuCmdToggleAlwaysOnTop = 2101;
+    private const uint MenuCmdToggleBorderless = 2102;
+    private const uint MenuCmdToggleFullscreen = 2103;
+    private const uint MenuCmdToggleMute = 2104;
+    private const uint MenuCmdScreenshot = 2105;
+    private const uint MenuCmdOpenScreenshotFolder = 2106;
+    private const uint MenuCmdResizeSmall = 2110;
+    private const uint MenuCmdResizeMedium = 2111;
+    private const uint MenuCmdResizeHd = 2112;
+    private const uint MenuCmdResizeLarge = 2113;
+    private const uint MenuCmdBrightUp = 2120;
+    private const uint MenuCmdBrightDown = 2121;
+    private const uint MenuCmdContrastUp = 2122;
+    private const uint MenuCmdContrastDown = 2123;
+    private const uint MenuCmdSatUp = 2124;
+    private const uint MenuCmdSatDown = 2125;
+    private const uint MenuCmdGammaUp = 2126;
+    private const uint MenuCmdGammaDown = 2127;
+    private const uint MenuCmdVideoAdjustReset = 2128;
+    private const uint MenuCmdThreadBase = 3000;
+
+    private const nuint VirtualKeyReturn = 0x0D;
+    private const int VirtualKeyShift = 0x10;
+    private const nuint VirtualKeyEscape = 0x1B;
     private const nuint VirtualKeyUp = 0x26;
     private const nuint VirtualKeyDown = 0x28;
+    private const nuint VirtualKeyB = 0x42;
+    private const nuint VirtualKeyF = 0x46;
     private const nuint VirtualKeyM = 0x4D;
+    private const nuint VirtualKeyS = 0x53;
+    private const nuint VirtualKeyT = 0x54;
 
     private readonly object _sync = new();
     private readonly LibMpvPlaybackWindowOptions _options;
@@ -102,9 +173,11 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
     private Thread? _thread;
     private nint _window;
     private nint _videoWindow;
-    private nint _muteButton;
-    private nint _volumeSlider;
-    private nint _volumeLabel;
+    private nint _volumeButton;
+    private nint _bbsThreadBar;
+    private nint _bbsInputEdit;
+    private nint _bbsSendButton;
+    private LibMpvPlaybackBbsPopup? _bbsPopup;
     private nint _panelBrush;
     private nint _inputBrush;
     private nint _borderBrush;
@@ -112,24 +185,68 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
     private nint _selectedBrush;
     private nint _hoverBrush;
     private nint _accentBrush;
-    private nint _textBrush;
-    private nint _secondaryTextBrush;
-    private nint _disabledTextBrush;
     private bool _stopRequested;
     private bool _disposed;
-    private bool _syncingControls;
+    private bool _bbsUseSage = true;
+    private bool _bbsPosting;
+    private bool _bbsHoverTimerActive;
+    private string? _bbsPostError;
+    private bool _alwaysOnTop;
+    private bool _borderless;
+    private bool _fullscreen;
+    private WindowRectangle _preFullscreenRect;
+    private LibMpvPlaybackWindowState _windowState;
+    private LibMpvVideoAdjustment _videoAdjustment = LibMpvVideoAdjustment.Default;
+    private string? _statusStatsText;
 
     public LibMpvPlaybackWindowHost(LibMpvPlaybackWindowOptions? options = null)
     {
         _options = options is null ? new() : options with { };
-        _audio = new(_options.InitialAudioState);
-        _audio.StateChanged += state => AudioStateChanged?.Invoke(state);
+        var initialState = (_options.InitialWindowState ?? LibMpvPlaybackWindowState.Default with
+        {
+            VideoWidth = _options.VideoWidth,
+            VideoHeight = _options.VideoHeight,
+            Volume = _options.InitialAudioState.Volume,
+            Muted = _options.InitialAudioState.Muted,
+        }).Normalized();
+        _windowState = initialState;
+        _alwaysOnTop = initialState.AlwaysOnTop;
+        _borderless = initialState.Borderless;
+        _bbsUseSage = initialState.BbsUseSage;
+        _audio = new(initialState.AudioState);
+        _audio.StateChanged += state =>
+        {
+            AudioStateChanged?.Invoke(state);
+            UpdateSavedWindowState(s => s with { Volume = state.Volume, Muted = state.Muted });
+        };
         _windowProcedure = ProcessWindowMessage;
     }
 
     public event Action<LibMpvPlaybackAudioState>? AudioStateChanged;
 
+    public event Action<LibMpvPlaybackWindowState>? WindowStateChanged;
+
+    public event Action? ScreenshotRequested;
+
+    public event Action<LibMpvVideoAdjustment, string>? VideoAdjustmentChanged;
+
+    public void UpdateStatusStats(string? statsText)
+    {
+        Volatile.Write(ref _statusStatsText, statsText);
+    }
+
     public LibMpvPlaybackAudioState AudioState => _audio.Current;
+
+    public LibMpvPlaybackWindowState WindowState
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _windowState;
+            }
+        }
+    }
 
     public Task Closed => _closed.Task;
 
@@ -225,7 +342,7 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
         var mainClass = new WindowClassEx
         {
             Size = (uint)Marshal.SizeOf<WindowClassEx>(),
-            Style = ClassStyleOwnDeviceContext,
+            Style = ClassStyleOwnDeviceContextDoubleClicks,
             WindowProcedure = Marshal.GetFunctionPointerForDelegate(_windowProcedure),
             Instance = instance,
             Cursor = LoadCursorW(0, (nint)CursorArrow),
@@ -235,7 +352,7 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
         var videoClass = new WindowClassEx
         {
             Size = (uint)Marshal.SizeOf<WindowClassEx>(),
-            Style = ClassStyleOwnDeviceContext,
+            Style = ClassStyleOwnDeviceContextDoubleClicks,
             WindowProcedure = Marshal.GetFunctionPointerForDelegate(DefaultVideoWindowProcedure),
             Instance = instance,
             Cursor = LoadCursorW(0, (nint)CursorArrow),
@@ -261,8 +378,10 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
                 return;
             }
 
-            var clientWidth = Math.Max(320, _options.VideoWidth);
-            var clientHeight = Math.Max(180, _options.VideoHeight) + ControlBarHeight;
+            var initial = WindowState;
+            var clientWidth = Math.Max(LibMpvPlaybackWindowState.MinVideoWidth, initial.VideoWidth);
+            var clientHeight = Math.Max(LibMpvPlaybackWindowState.MinVideoHeight, initial.VideoHeight) + BottomBarsHeight;
+            var windowStyle = _borderless ? WindowStyleBorderlessClipChildren : WindowStyleOverlappedClipChildren;
             var rectangle = new WindowRectangle
             {
                 Left = 0,
@@ -270,19 +389,31 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
                 Right = clientWidth,
                 Bottom = clientHeight,
             };
-            if (!AdjustWindowRectEx(ref rectangle, WindowStyleOverlappedClipChildren, false, 0))
+            if (!AdjustWindowRectEx(ref rectangle, windowStyle, false, 0))
             {
                 FailStart("The embedded playback window bounds could not be calculated.");
                 return;
+            }
+
+            var initialX = int.MinValue;
+            var initialY = int.MinValue;
+            if (initial.Left is { } savedLeft && initial.Top is { } savedTop)
+            {
+                var probePoint = new WindowPoint { X = savedLeft + 40, Y = savedTop + 40 };
+                if (MonitorFromPoint(probePoint, MonitorDefaultToNull) != 0)
+                {
+                    initialX = savedLeft;
+                    initialY = savedTop;
+                }
             }
 
             window = CreateWindowExW(
                 0,
                 mainClassName,
                 _options.Title,
-                WindowStyleOverlappedClipChildren,
-                int.MinValue,
-                int.MinValue,
+                windowStyle,
+                initialX,
+                initialY,
                 rectangle.Right - rectangle.Left,
                 rectangle.Bottom - rectangle.Top,
                 0,
@@ -296,6 +427,10 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
             }
 
             ApplyDarkTitleBar(window);
+            if (_alwaysOnTop)
+            {
+                ApplyAlwaysOnTop(window, alwaysOnTop: true);
+            }
 
             _videoWindow = CreateWindowExW(
                 0,
@@ -305,52 +440,71 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
                 0,
                 0,
                 clientWidth,
-                clientHeight - ControlBarHeight,
+                clientHeight - BottomBarsHeight,
                 window,
                 0,
                 instance,
                 0);
-            _muteButton = CreateWindowExW(
+            if (HasBbs)
+            {
+                _bbsThreadBar = CreateWindowExW(
+                    0,
+                    "BUTTON",
+                    _options.BbsSession!.Snapshot.FormatThreadBarText(),
+                    ChildOwnerDrawButton,
+                    0,
+                    0,
+                    clientWidth,
+                    ThreadBarHeight,
+                    window,
+                    (nint)BbsThreadBarId,
+                    instance,
+                    0);
+                _bbsInputEdit = CreateWindowExW(
+                    0,
+                    "EDIT",
+                    string.Empty,
+                    ChildBbsInputEdit,
+                    0,
+                    0,
+                    Math.Max(120, clientWidth - BbsSendButtonWidth - 2),
+                    BbsInputBarHeight - 2,
+                    window,
+                    (nint)BbsInputEditId,
+                    instance,
+                    0);
+                _bbsSendButton = CreateWindowExW(
+                    0,
+                    "BUTTON",
+                    "▶",
+                    ChildOwnerDrawButton,
+                    0,
+                    0,
+                    BbsSendButtonWidth,
+                    BbsInputBarHeight - 2,
+                    window,
+                    (nint)BbsSendButtonId,
+                    instance,
+                    0);
+                _bbsPopup = new LibMpvPlaybackBbsPopup(instance, window);
+                _bbsPopup.UpdatePosts(_options.BbsSession.Snapshot.Posts, _options.BbsSession.Snapshot.StatusMessage);
+            }
+            _volumeButton = CreateWindowExW(
                 0,
                 "BUTTON",
-                _audio.Current.FormatMuteButtonText(),
-                ChildOwnerDrawButtonTabStop,
-                0,
-                0,
-                MuteButtonWidth,
-                ControlHeight,
-                window,
-                (nint)MuteButtonId,
-                instance,
-                0);
-            _volumeSlider = CreateWindowExW(
-                0,
-                "msctls_trackbar32",
-                string.Empty,
-                ChildTrackbar,
-                0,
-                0,
-                MaxSliderWidth,
-                ControlHeight,
-                window,
-                (nint)VolumeSliderId,
-                instance,
-                0);
-            _volumeLabel = CreateWindowExW(
-                0,
-                "STATIC",
                 _audio.Current.FormatVolumeLabel(),
-                ChildStaticRightCenter,
+                ChildOwnerDrawButton,
                 0,
                 0,
-                VolumeLabelWidth,
-                ControlHeight,
+                VolumeButtonWidth,
+                StatusBarHeight,
                 window,
-                (nint)VolumeLabelId,
+                (nint)VolumeButtonId,
                 instance,
                 0);
 
-            if (_videoWindow == 0 || _muteButton == 0 || _volumeSlider == 0 || _volumeLabel == 0)
+            if (_videoWindow == 0 || _volumeButton == 0 ||
+                (HasBbs && (_bbsThreadBar == 0 || _bbsInputEdit == 0 || _bbsSendButton == 0)))
             {
                 FailStart("The embedded playback window controls could not be created.");
                 return;
@@ -359,15 +513,18 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
             var font = GetStockObject(StockDefaultGuiFont);
             if (font != 0)
             {
-                _ = SendMessageW(_muteButton, WindowMessageSetFont, (nuint)font, 1);
-                _ = SendMessageW(_volumeLabel, WindowMessageSetFont, (nuint)font, 1);
+                _ = SendMessageW(_volumeButton, WindowMessageSetFont, (nuint)font, 1);
+                if (HasBbs)
+                {
+                    _ = SendMessageW(_bbsThreadBar, WindowMessageSetFont, (nuint)font, 1);
+                    _ = SendMessageW(_bbsInputEdit, WindowMessageSetFont, (nuint)font, 1);
+                    _ = SendMessageW(_bbsSendButton, WindowMessageSetFont, (nuint)font, 1);
+                }
             }
 
-            _ = SendMessageW(_volumeSlider, TrackbarSetRangeMin, 0, LibMpvPlaybackAudioState.MinVolume);
-            _ = SendMessageW(_volumeSlider, TrackbarSetRangeMax, 0, LibMpvPlaybackAudioState.MaxVolume);
-            _ = SendMessageW(_volumeSlider, TrackbarSetPageSize, 0, LibMpvPlaybackAudioState.VolumeStep * 2);
             SyncControls();
             LayoutControls(clientWidth, clientHeight);
+            _ = SetTimer(window, ClockTimerId, 1000, 0);
 
             bool requestStop;
             lock (_sync)
@@ -389,6 +546,11 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
             {
                 FailStart("The embedded playback video surface handle was invalid.");
                 return;
+            }
+
+            if (_options.BbsSession is { } bbsSession)
+            {
+                bbsSession.StateChanged += OnBbsStateChanged;
             }
 
             _started.TrySetResult(videoWindowId);
@@ -413,20 +575,52 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
                     return;
                 }
 
+                if (message.Message == WindowMessageMouseMove && HasBbs && message.Window == _bbsThreadBar)
+                {
+                    ShowBbsPopup();
+                }
+
                 if (message.Message == WindowMessageMouseWheel)
                 {
                     var wheelDelta = unchecked((short)((message.WParam >> 16) & 0xFFFF));
-                    if (_audio.ApplyWheelDelta(wheelDelta))
+                    if (TryHandleBbsMouseWheel(wheelDelta, out var passToControl))
                     {
-                        SyncControls();
+                        if (!passToControl)
+                        {
+                            continue;
+                        }
                     }
+                    else
+                    {
+                        if (_audio.ApplyWheelDelta(wheelDelta))
+                        {
+                            SyncControls();
+                        }
 
+                        continue;
+                    }
+                }
+
+                if (message.Message == WindowMessageSysKeyDown && message.WParam == VirtualKeyReturn)
+                {
+                    ToggleFullscreen(window);
                     continue;
                 }
 
-                if (message.Message == WindowMessageKeyDown && TryHandleKeyDown(message.WParam))
+                if (message.Message == WindowMessageKeyDown)
                 {
-                    continue;
+                    if (HasBbs && message.Window == _bbsInputEdit)
+                    {
+                        if (message.WParam == VirtualKeyReturn && (GetKeyState(VirtualKeyShift) & 0x8000) != 0)
+                        {
+                            SubmitBbsPost();
+                            continue;
+                        }
+                    }
+                    else if (TryHandleKeyDown(window, message.WParam))
+                    {
+                        continue;
+                    }
                 }
 
                 _ = TranslateMessage(ref message);
@@ -435,6 +629,25 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
         }
         finally
         {
+            if (_options.BbsSession is { } bbsSession)
+            {
+                bbsSession.StateChanged -= OnBbsStateChanged;
+            }
+
+            if (_bbsHoverTimerActive && window != 0 && IsWindow(window))
+            {
+                _ = KillTimer(window, BbsHoverTimerId);
+                _bbsHoverTimerActive = false;
+            }
+
+            if (window != 0 && IsWindow(window))
+            {
+                _ = KillTimer(window, ClockTimerId);
+            }
+
+            _bbsPopup?.Dispose();
+            _bbsPopup = null;
+
             lock (_sync)
             {
                 _window = 0;
@@ -479,9 +692,6 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
         _selectedBrush = CreateSolidBrush(ColorSelected);
         _hoverBrush = CreateSolidBrush(ColorHover);
         _accentBrush = CreateSolidBrush(ColorAccent);
-        _textBrush = CreateSolidBrush(ColorText);
-        _secondaryTextBrush = CreateSolidBrush(ColorSecondaryText);
-        _disabledTextBrush = CreateSolidBrush(ColorDisabledText);
     }
 
     private void DestroyThemeBrushes()
@@ -493,9 +703,6 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
         DeleteBrush(ref _selectedBrush);
         DeleteBrush(ref _hoverBrush);
         DeleteBrush(ref _accentBrush);
-        DeleteBrush(ref _textBrush);
-        DeleteBrush(ref _secondaryTextBrush);
-        DeleteBrush(ref _disabledTextBrush);
     }
 
     private static void DeleteBrush(ref nint brush)
@@ -539,8 +746,38 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
             : null;
     }
 
-    private bool TryHandleKeyDown(nuint virtualKey)
+    private bool TryHandleKeyDown(nint window, nuint virtualKey)
     {
+        if (virtualKey == VirtualKeyEscape && _fullscreen)
+        {
+            ToggleFullscreen(window);
+            return true;
+        }
+
+        if (virtualKey == VirtualKeyF)
+        {
+            ToggleFullscreen(window);
+            return true;
+        }
+
+        if (virtualKey == VirtualKeyB)
+        {
+            ToggleBorderless(window);
+            return true;
+        }
+
+        if (virtualKey == VirtualKeyT)
+        {
+            ToggleAlwaysOnTop(window);
+            return true;
+        }
+
+        if (virtualKey == VirtualKeyS)
+        {
+            ScreenshotRequested?.Invoke();
+            return true;
+        }
+
         var changed = virtualKey switch
         {
             VirtualKeyUp => _audio.AdjustVolume(LibMpvPlaybackAudioState.VolumeStep),
@@ -561,46 +798,115 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
     {
         switch (message)
         {
+            case WindowMessageNcHitTest:
+                if (_borderless && !_fullscreen)
+                {
+                    var hit = HitTestBorderlessEdge(window, lParam);
+                    if (hit != 0)
+                    {
+                        return hit;
+                    }
+                }
+
+                return DefWindowProcW(window, message, wParam, lParam);
+
+            case WindowMessageMoving:
+                if (!_fullscreen && lParam != 0)
+                {
+                    SnapMovingRect(window, lParam);
+                }
+
+                return 1;
+
+            case WindowMessageLeftButtonDown:
+                if (!_fullscreen && IsClientPointInVideoArea(window, lParam))
+                {
+                    _ = ReleaseCapture();
+                    _ = SendMessageW(window, WindowMessageNcLeftButtonDown, HitCaption, 0);
+                    return 0;
+                }
+
+                return DefWindowProcW(window, message, wParam, lParam);
+
+            case WindowMessageLeftButtonDblClk:
+                if (IsClientPointInVideoArea(window, lParam))
+                {
+                    ToggleFullscreen(window);
+                    return 0;
+                }
+
+                return DefWindowProcW(window, message, wParam, lParam);
+
+            case WindowMessageRightButtonUp:
+                if (IsClientPointInVideoArea(window, lParam))
+                {
+                    ShowVideoContextMenu(window);
+                    return 0;
+                }
+
+                return DefWindowProcW(window, message, wParam, lParam);
+
+            case WindowMessageMove:
+                HideBbsPopup();
+                return 0;
+
             case WindowMessageSize:
+                HideBbsPopup();
                 var width = unchecked((int)(lParam.ToInt64() & 0xFFFF));
                 var height = unchecked((int)((lParam.ToInt64() >> 16) & 0xFFFF));
                 LayoutControls(width, height);
                 return 0;
 
+            case WindowMessageExitSizeMove:
+                CaptureNormalWindowBounds(window);
+                return 0;
+
+            case WindowMessageActivate:
+                if ((wParam & 0xFFFF) == 0)
+                {
+                    HideBbsPopup();
+                }
+
+                return DefWindowProcW(window, message, wParam, lParam);
+
             case WindowMessagePaint:
                 PaintControlBar(window);
                 return 0;
 
-            case WindowMessageCtlColorStatic:
-                if (wParam != 0)
+            case WindowMessageCtlColorEdit:
+                if (wParam != 0 && lParam == _bbsInputEdit && _bbsInputEdit != 0)
                 {
                     var hdc = (nint)wParam;
-                    _ = SetBkColor(hdc, ColorPanel);
-                    _ = SetTextColor(hdc, _audio.Current.Muted ? ColorSecondaryText : ColorText);
-                    if (_panelBrush != 0)
+                    _ = SetBkColor(hdc, ColorInput);
+                    _ = SetTextColor(hdc, ColorText);
+                    if (_inputBrush != 0)
                     {
-                        return _panelBrush;
+                        return _inputBrush;
                     }
                 }
 
                 return DefWindowProcW(window, message, wParam, lParam);
 
             case WindowMessageDrawItem:
-                if (lParam != 0 && unchecked((int)wParam) == MuteButtonId)
-                {
-                    DrawMuteButton(lParam);
-                    return 1;
-                }
-
-                return DefWindowProcW(window, message, wParam, lParam);
-
-            case WindowMessageNotify:
                 if (lParam != 0)
                 {
-                    var header = Marshal.PtrToStructure<NmHdr>(lParam);
-                    if (header.HwndFrom == _volumeSlider && header.Code == NmCustomDraw)
+                    var controlId = unchecked((int)wParam);
+                    if (controlId == VolumeButtonId)
                     {
-                        return HandleSliderCustomDraw(lParam);
+                        DrawVolumeButton(lParam);
+                        return 1;
+                    }
+
+                    if (controlId == BbsThreadBarId)
+                    {
+                        DrawBbsThreadBar(lParam);
+                        return 1;
+                    }
+
+                    if (controlId == BbsSendButtonId)
+                    {
+                        DrawBbsSendButton(lParam);
+                        return 1;
                     }
                 }
 
@@ -608,7 +914,7 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
 
             case WindowMessageCommand:
                 var notification = (int)((wParam >> 16) & 0xFFFF);
-                if (notification == ButtonClicked && lParam == _muteButton && _muteButton != 0)
+                if (notification == ButtonClicked && lParam == _volumeButton && _volumeButton != 0)
                 {
                     if (_audio.ToggleMute())
                     {
@@ -618,23 +924,45 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
                     return 0;
                 }
 
-                return DefWindowProcW(window, message, wParam, lParam);
-
-            case WindowMessageHScroll:
-                if (lParam == _volumeSlider && _volumeSlider != 0 && !_syncingControls)
+                if (notification == ButtonClicked && lParam == _bbsThreadBar && _bbsThreadBar != 0)
                 {
-                    var position = unchecked((int)SendMessageW(_volumeSlider, TrackbarGetPos, 0, 0).ToInt64());
-                    if (_audio.SetVolume(position))
-                    {
-                        SyncControls(updateSlider: false);
-                    }
+                    ShowBbsThreadMenu(window);
+                    return 0;
+                }
 
+                if (notification == ButtonClicked && lParam == _bbsSendButton && _bbsSendButton != 0)
+                {
+                    HandleBbsActionButtonClick();
                     return 0;
                 }
 
                 return DefWindowProcW(window, message, wParam, lParam);
 
+            case WindowMessageTimer:
+                if (wParam == BbsHoverTimerId)
+                {
+                    CheckBbsPopupHover();
+                    return 0;
+                }
+
+                if (wParam == ClockTimerId)
+                {
+                    _ = InvalidateRect(window, 0, false);
+                    return 0;
+                }
+
+                return DefWindowProcW(window, message, wParam, lParam);
+
+            case WindowMessageBbsStateChanged:
+                SyncBbsControls();
+                return 0;
+
+            case WindowMessageBbsPostCompleted:
+                CompleteBbsPostOnUiThread(wParam != 0);
+                return 0;
+
             case WindowMessageClose:
+                CaptureNormalWindowBounds(window);
                 _ = DestroyWindow(window);
                 return 0;
 
@@ -647,6 +975,14 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
         }
     }
 
+    private bool HasBbs => _options.BbsSession is not null;
+
+    private int BottomBarsHeight => _fullscreen
+        ? 0
+        : HasBbs
+            ? ThreadBarHeight + BbsInputBarHeight + StatusBarHeight
+            : StatusBarHeight;
+
     private void PaintControlBar(nint window)
     {
         var hdc = BeginPaint(window, out var paint);
@@ -654,7 +990,7 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
         {
             if (hdc != 0 && GetClientRect(window, out var client))
             {
-                var barTop = Math.Max(0, client.Bottom - ControlBarHeight);
+                var barTop = Math.Max(0, client.Bottom - BottomBarsHeight);
                 var barRect = new WindowRectangle
                 {
                     Left = 0,
@@ -667,16 +1003,62 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
                     _ = FillRect(hdc, ref barRect, _panelBrush);
                 }
 
-                if (_separatorBrush != 0 && barTop < client.Bottom)
+                var statusTop = Math.Max(0, client.Bottom - StatusBarHeight);
+                if (_separatorBrush != 0 && statusTop < client.Bottom)
                 {
                     var separatorRect = new WindowRectangle
                     {
                         Left = 0,
-                        Top = barTop,
+                        Top = statusTop,
                         Right = client.Right,
-                        Bottom = barTop + 1,
+                        Bottom = statusTop + 1,
                     };
                     _ = FillRect(hdc, ref separatorRect, _separatorBrush);
+                }
+
+                var font = GetStockObject(StockDefaultGuiFont);
+                var previousFont = font != 0 ? SelectObject(hdc, font) : 0;
+                try
+                {
+                    _ = SetBkMode(hdc, BkModeTransparent);
+                    var rightAreaWidth = VolumeButtonWidth + ClockWidth + 8;
+                    var baseStatus = string.IsNullOrWhiteSpace(_options.StatusLabel)
+                        ? _options.Title
+                        : _options.StatusLabel;
+                    var stats = Volatile.Read(ref _statusStatsText);
+                    var statusText = string.IsNullOrWhiteSpace(stats)
+                        ? baseStatus
+                        : $"{baseStatus}  {stats}";
+                    if (client.Right - rightAreaWidth > 16)
+                    {
+                        var labelRect = new WindowRectangle
+                        {
+                            Left = 6,
+                            Top = statusTop + 1,
+                            Right = client.Right - rightAreaWidth,
+                            Bottom = client.Bottom,
+                        };
+                        _ = SetTextColor(hdc, ColorSecondaryText);
+                        _ = DrawTextW(hdc, statusText, statusText.Length, ref labelRect, DrawTextSingleLineLeftEllipsis);
+                    }
+
+                    var clockText = DateTime.Now.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+                    var clockRect = new WindowRectangle
+                    {
+                        Left = Math.Max(0, client.Right - VolumeButtonWidth - ClockWidth - 4),
+                        Top = statusTop + 1,
+                        Right = Math.Max(0, client.Right - VolumeButtonWidth - 4),
+                        Bottom = client.Bottom,
+                    };
+                    _ = SetTextColor(hdc, ColorSecondaryText);
+                    _ = DrawTextW(hdc, clockText, clockText.Length, ref clockRect, DrawTextSingleLineRight);
+                }
+                finally
+                {
+                    if (previousFont != 0)
+                    {
+                        _ = SelectObject(hdc, previousFont);
+                    }
                 }
             }
         }
@@ -686,20 +1068,180 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
         }
     }
 
-    private void DrawMuteButton(nint drawItemPointer)
+    private void DrawVolumeButton(nint drawItemPointer)
     {
         var item = Marshal.PtrToStructure<DrawItemStruct>(drawItemPointer);
         var state = _audio.Current;
         var pressed = (item.ItemState & OdsSelected) != 0;
+        var fillBrush = pressed ? _hoverBrush : _panelBrush;
+        var rect = item.ItemRect;
+        if (fillBrush != 0)
+        {
+            _ = FillRect(item.DeviceContext, ref rect, fillBrush);
+        }
+
+        var font = GetStockObject(StockDefaultGuiFont);
+        var previousFont = font != 0 ? SelectObject(item.DeviceContext, font) : 0;
+        try
+        {
+            _ = SetBkMode(item.DeviceContext, BkModeTransparent);
+            _ = SetTextColor(item.DeviceContext, state.Muted ? ColorDisabledText : ColorText);
+            var text = state.Muted ? "MUTE" : $"{state.Volume}%";
+            var textRect = new WindowRectangle
+            {
+                Left = rect.Left,
+                Top = rect.Top,
+                Right = rect.Right - 6,
+                Bottom = rect.Bottom,
+            };
+            _ = DrawTextW(item.DeviceContext, text, text.Length, ref textRect, DrawTextSingleLineRight);
+        }
+        finally
+        {
+            if (previousFont != 0)
+            {
+                _ = SelectObject(item.DeviceContext, previousFont);
+            }
+        }
+    }
+
+    private void LayoutControls(int clientWidth, int clientHeight)
+    {
+        if (_videoWindow == 0)
+        {
+            return;
+        }
+
+        var safeWidth = Math.Max(0, clientWidth);
+        var safeHeight = Math.Max(0, clientHeight);
+        var videoHeight = Math.Max(0, safeHeight - BottomBarsHeight);
+        _ = MoveWindow(_videoWindow, 0, 0, safeWidth, videoHeight, true);
+
+        var nextY = videoHeight;
+        if (HasBbs)
+        {
+            if (_bbsThreadBar != 0)
+            {
+                _ = MoveWindow(_bbsThreadBar, 0, nextY, safeWidth, ThreadBarHeight, true);
+            }
+
+            nextY += ThreadBarHeight;
+            var editTop = nextY + 1;
+            var editHeight = BbsInputBarHeight - 2;
+            var sendWidth = BbsSendButtonWidth;
+            var editWidth = Math.Max(60, safeWidth - sendWidth - 2);
+            if (_bbsInputEdit != 0)
+            {
+                _ = MoveWindow(_bbsInputEdit, 1, editTop, editWidth, editHeight, true);
+            }
+
+            if (_bbsSendButton != 0)
+            {
+                _ = MoveWindow(_bbsSendButton, editWidth + 1, editTop, sendWidth, editHeight, true);
+            }
+
+            nextY += BbsInputBarHeight;
+        }
+
+        if (_volumeButton != 0)
+        {
+            var volumeX = Math.Max(0, safeWidth - VolumeButtonWidth);
+            _ = MoveWindow(_volumeButton, volumeX, nextY + 1, VolumeButtonWidth, StatusBarHeight - 1, true);
+        }
+
+        if (_window != 0)
+        {
+            _ = InvalidateRect(_window, 0, true);
+        }
+    }
+
+    private void OnBbsStateChanged(BbsSessionSnapshot snapshot)
+    {
+        nint window;
+        lock (_sync)
+        {
+            window = _window;
+        }
+
+        if (window != 0 && IsWindow(window))
+        {
+            _ = PostMessageW(window, WindowMessageBbsStateChanged, 0, 0);
+        }
+    }
+
+    private void SyncBbsControls()
+    {
+        if (!HasBbs)
+        {
+            return;
+        }
+
+        var snapshot = _options.BbsSession!.Snapshot;
+        _bbsPopup?.UpdatePosts(snapshot.Posts, snapshot.StatusMessage);
+        if (_bbsThreadBar != 0)
+        {
+            _ = SetWindowTextW(_bbsThreadBar, FormatThreadBarDisplayText(snapshot));
+            _ = InvalidateRect(_bbsThreadBar, 0, true);
+        }
+    }
+
+    private string FormatThreadBarDisplayText(BbsSessionSnapshot snapshot) =>
+        !string.IsNullOrWhiteSpace(_bbsPostError)
+            ? $"[ {_bbsPostError} ]  {snapshot.FormatThreadBarText()}"
+            : snapshot.FormatThreadBarText();
+
+    private void DrawBbsThreadBar(nint drawItemPointer)
+    {
+        var item = Marshal.PtrToStructure<DrawItemStruct>(drawItemPointer);
+        var pressed = (item.ItemState & OdsSelected) != 0;
+        var hovered = _bbsPopup is { IsVisible: true };
+        var fillBrush = pressed || hovered ? _hoverBrush : _panelBrush;
+        var rect = item.ItemRect;
+        if (fillBrush != 0)
+        {
+            _ = FillRect(item.DeviceContext, ref rect, fillBrush);
+        }
+
+        if (_separatorBrush != 0 && rect.Bottom > rect.Top)
+        {
+            var topLine = new WindowRectangle { Left = rect.Left, Top = rect.Top, Right = rect.Right, Bottom = rect.Top + 1 };
+            var bottomLine = new WindowRectangle { Left = rect.Left, Top = rect.Bottom - 1, Right = rect.Right, Bottom = rect.Bottom };
+            _ = FillRect(item.DeviceContext, ref topLine, _separatorBrush);
+            _ = FillRect(item.DeviceContext, ref bottomLine, _separatorBrush);
+        }
+
+        var font = GetStockObject(StockDefaultGuiFont);
+        var previousFont = font != 0 ? SelectObject(item.DeviceContext, font) : 0;
+        try
+        {
+            _ = SetBkMode(item.DeviceContext, BkModeTransparent);
+            _ = SetTextColor(item.DeviceContext, hovered ? ColorAccent : ColorText);
+            var text = HasBbs ? FormatThreadBarDisplayText(_options.BbsSession!.Snapshot) : string.Empty;
+            var textRect = new WindowRectangle
+            {
+                Left = rect.Left + 8,
+                Top = rect.Top,
+                Right = rect.Right - 8,
+                Bottom = rect.Bottom,
+            };
+            _ = DrawTextW(item.DeviceContext, text, text.Length, ref textRect, DrawTextSingleLineCenterEllipsis);
+        }
+        finally
+        {
+            if (previousFont != 0)
+            {
+                _ = SelectObject(item.DeviceContext, previousFont);
+            }
+        }
+    }
+
+    private void DrawBbsSendButton(nint drawItemPointer)
+    {
+        var item = Marshal.PtrToStructure<DrawItemStruct>(drawItemPointer);
+        var pressed = (item.ItemState & OdsSelected) != 0;
         var focused = (item.ItemState & OdsFocus) != 0;
-        var fillBrush = pressed
-            ? _hoverBrush
-            : state.Muted
-                ? _selectedBrush
-                : _inputBrush;
-        var borderBrush = pressed || focused || state.Muted
-            ? _accentBrush
-            : _borderBrush;
+        var fillBrush = pressed ? _hoverBrush : _bbsPosting ? _selectedBrush : _inputBrush;
+        var borderBrush = pressed || focused || _bbsPosting ? _accentBrush : _borderBrush;
 
         var rect = item.ItemRect;
         if (fillBrush != 0)
@@ -717,8 +1259,8 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
         try
         {
             _ = SetBkMode(item.DeviceContext, BkModeTransparent);
-            _ = SetTextColor(item.DeviceContext, ColorText);
-            var text = state.FormatMuteButtonText();
+            _ = SetTextColor(item.DeviceContext, _bbsPosting ? ColorSecondaryText : ColorText);
+            var text = _bbsPosting ? "…" : "▶";
             _ = DrawTextW(item.DeviceContext, text, text.Length, ref rect, DrawTextSingleLineCenter);
         }
         finally
@@ -730,150 +1272,752 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
         }
     }
 
-    private nint HandleSliderCustomDraw(nint customDrawPointer)
+    private void ShowBbsPopup()
     {
-        var draw = Marshal.PtrToStructure<NmCustomDrawStruct>(customDrawPointer);
-        if (draw.DrawStage == CddsPrePaint)
-        {
-            return CdrfNotifyItemDraw;
-        }
-
-        if (draw.DrawStage != CddsItemPrePaint)
-        {
-            return CdrfDoDefault;
-        }
-
-        if (draw.ItemSpec == TbcdChannel)
-        {
-            var channel = draw.Rect;
-            if (_inputBrush != 0)
-            {
-                _ = FillRect(draw.DeviceContext, ref channel, _inputBrush);
-            }
-
-            var state = _audio.Current;
-            var width = Math.Max(0, channel.Right - channel.Left);
-            var filledWidth = (int)Math.Round(
-                width * (state.Volume / (double)LibMpvPlaybackAudioState.MaxVolume));
-            if (filledWidth > 0)
-            {
-                var filled = new WindowRectangle
-                {
-                    Left = channel.Left,
-                    Top = channel.Top,
-                    Right = channel.Left + filledWidth,
-                    Bottom = channel.Bottom,
-                };
-                var fillBrush = state.Muted ? _disabledTextBrush : _accentBrush;
-                if (fillBrush != 0)
-                {
-                    _ = FillRect(draw.DeviceContext, ref filled, fillBrush);
-                }
-            }
-
-            if (_borderBrush != 0)
-            {
-                _ = FrameRect(draw.DeviceContext, ref channel, _borderBrush);
-            }
-
-            return CdrfSkipDefault;
-        }
-
-        if (draw.ItemSpec == TbcdThumb)
-        {
-            var thumb = draw.Rect;
-            var state = _audio.Current;
-            var thumbFill = state.Muted ? _secondaryTextBrush : _textBrush;
-            var thumbBorder = state.Muted ? _borderBrush : _accentBrush;
-            if (thumbFill != 0)
-            {
-                _ = FillRect(draw.DeviceContext, ref thumb, thumbFill);
-            }
-
-            if (thumbBorder != 0)
-            {
-                _ = FrameRect(draw.DeviceContext, ref thumb, thumbBorder);
-            }
-
-            return CdrfSkipDefault;
-        }
-
-        return CdrfDoDefault;
-    }
-
-    private void LayoutControls(int clientWidth, int clientHeight)
-    {
-        if (_videoWindow == 0)
+        if (!HasBbs || _bbsPopup is null || _bbsThreadBar == 0 || _videoWindow == 0)
         {
             return;
         }
 
-        var safeWidth = Math.Max(0, clientWidth);
-        var safeHeight = Math.Max(0, clientHeight);
-        var videoHeight = Math.Max(0, safeHeight - ControlBarHeight);
-        _ = MoveWindow(_videoWindow, 0, 0, safeWidth, videoHeight, true);
-
-        var controlTop = videoHeight + ((ControlBarHeight - ControlHeight) / 2);
-        var muteX = BarMargin;
-        var sliderX = muteX + MuteButtonWidth + ControlGap;
-        var availableSliderWidth = Math.Max(
-            60,
-            safeWidth - sliderX - ControlGap - VolumeLabelWidth - BarMargin);
-        var sliderWidth = Math.Min(MaxSliderWidth, availableSliderWidth);
-        var labelX = sliderX + sliderWidth + ControlGap;
-
-        if (_muteButton != 0)
+        if (!GetWindowRect(_bbsThreadBar, out var barRect) || !GetWindowRect(_videoWindow, out var videoRect))
         {
-            _ = MoveWindow(_muteButton, muteX, controlTop, MuteButtonWidth, ControlHeight, true);
+            return;
         }
 
-        if (_volumeSlider != 0)
+        var videoHeight = Math.Max(180, videoRect.Bottom - videoRect.Top);
+        _bbsPopup.ShowAbove(barRect.Left, barRect.Top, Math.Max(320, barRect.Right - barRect.Left), videoHeight);
+        if (!_bbsHoverTimerActive && _window != 0)
         {
-            _ = MoveWindow(_volumeSlider, sliderX, controlTop, sliderWidth, ControlHeight, true);
+            _ = SetTimer(_window, BbsHoverTimerId, 120, 0);
+            _bbsHoverTimerActive = true;
         }
 
-        if (_volumeLabel != 0)
+        _ = InvalidateRect(_bbsThreadBar, 0, true);
+    }
+
+    private void HideBbsPopup()
+    {
+        if (_bbsHoverTimerActive && _window != 0 && IsWindow(_window))
         {
-            _ = MoveWindow(_volumeLabel, labelX, controlTop, VolumeLabelWidth, ControlHeight, true);
+            _ = KillTimer(_window, BbsHoverTimerId);
+            _bbsHoverTimerActive = false;
         }
 
-        if (_window != 0)
+        if (_bbsPopup is { IsVisible: true })
         {
-            _ = InvalidateRect(_window, 0, true);
+            _bbsPopup.Hide();
+            if (_bbsThreadBar != 0 && IsWindow(_bbsThreadBar))
+            {
+                _ = InvalidateRect(_bbsThreadBar, 0, true);
+            }
         }
     }
 
-    private void SyncControls(bool updateSlider = true)
+    private void CheckBbsPopupHover()
     {
-        var state = _audio.Current;
-        _syncingControls = true;
+        if (!GetCursorPos(out var point))
+        {
+            HideBbsPopup();
+            return;
+        }
+
+        var overThreadBar = _bbsThreadBar != 0 && IsScreenPointInWindow(_bbsThreadBar, point.X, point.Y);
+        var overPopup = _bbsPopup is not null && _bbsPopup.ContainsScreenPoint(point.X, point.Y);
+        if (!overThreadBar && !overPopup)
+        {
+            HideBbsPopup();
+        }
+    }
+
+    private bool TryHandleBbsMouseWheel(short wheelDelta, out bool passToControl)
+    {
+        passToControl = false;
+        if (!HasBbs || !GetCursorPos(out var point))
+        {
+            return false;
+        }
+
+        if (_bbsPopup is { IsVisible: true } && _bbsPopup.ContainsScreenPoint(point.X, point.Y))
+        {
+            _bbsPopup.ScrollByNotches(wheelDelta / 120);
+            return true;
+        }
+
+        if (_bbsInputEdit != 0 && IsScreenPointInWindow(_bbsInputEdit, point.X, point.Y))
+        {
+            passToControl = true;
+            return true;
+        }
+
+        return false;
+    }
+
+    private void HandleBbsActionButtonClick()
+    {
+        var text = ReadBbsInputText();
+        if (!string.IsNullOrWhiteSpace(text))
+        {
+            SubmitBbsPost();
+            return;
+        }
+
+        if (_options.BbsSession is { } bbs)
+        {
+            _ = Task.Run(() => bbs.RefreshAsync());
+        }
+    }
+
+    private void SubmitBbsPost()
+    {
+        if (!HasBbs || _bbsPosting)
+        {
+            return;
+        }
+
+        var text = ReadBbsInputText();
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return;
+        }
+
+        _bbsPosting = true;
+        _bbsPostError = null;
+        if (_bbsSendButton != 0)
+        {
+            _ = EnableWindow(_bbsSendButton, false);
+            _ = InvalidateRect(_bbsSendButton, 0, true);
+        }
+
+        if (_bbsThreadBar != 0)
+        {
+            _ = InvalidateRect(_bbsThreadBar, 0, true);
+        }
+
+        var bbs = _options.BbsSession!;
+        var mail = _bbsUseSage ? "sage" : string.Empty;
+        _ = Task.Run(async () =>
+        {
+            var result = await bbs.PostAsync(string.Empty, mail, text).ConfigureAwait(false);
+            if (!result.Succeeded)
+            {
+                _bbsPostError = result.ErrorMessage ?? "書き込みに失敗しました";
+            }
+
+            nint window;
+            lock (_sync)
+            {
+                window = _window;
+            }
+
+            if (window != 0 && IsWindow(window))
+            {
+                _ = PostMessageW(window, WindowMessageBbsPostCompleted, result.Succeeded ? (nuint)1 : 0, 0);
+            }
+        });
+    }
+
+    private void CompleteBbsPostOnUiThread(bool succeeded)
+    {
+        _bbsPosting = false;
+        if (succeeded)
+        {
+            _bbsPostError = null;
+            if (_bbsInputEdit != 0)
+            {
+                _ = SetWindowTextW(_bbsInputEdit, string.Empty);
+            }
+        }
+
+        if (_bbsSendButton != 0)
+        {
+            _ = EnableWindow(_bbsSendButton, true);
+            _ = InvalidateRect(_bbsSendButton, 0, true);
+        }
+
+        if (_bbsThreadBar != 0)
+        {
+            _ = InvalidateRect(_bbsThreadBar, 0, true);
+        }
+    }
+
+    private void ShowBbsThreadMenu(nint window)
+    {
+        if (!HasBbs || _bbsThreadBar == 0)
+        {
+            return;
+        }
+
+        HideBbsPopup();
+        var bbs = _options.BbsSession!;
+        var snapshot = bbs.Snapshot;
+        var menu = CreatePopupMenu();
+        if (menu == 0)
+        {
+            return;
+        }
+
         try
         {
-            if (updateSlider && _volumeSlider != 0)
+            var threads = snapshot.Threads.Take(20).ToArray();
+            for (var i = 0; i < threads.Length; i++)
             {
-                _ = SendMessageW(_volumeSlider, TrackbarSetPos, 1, state.Volume);
+                var thread = threads[i];
+                var flags = MenuFlagString;
+                if (string.Equals(thread.Key, snapshot.ThreadKey, StringComparison.Ordinal))
+                {
+                    flags |= MenuFlagChecked;
+                }
+
+                var label = $"{thread.Title} ({thread.PostCount})".Replace("&", "&&", StringComparison.Ordinal);
+                _ = AppendMenuW(menu, flags, MenuCmdThreadBase + (uint)i, label);
             }
 
-            if (_volumeSlider != 0)
+            if (threads.Length > 0)
             {
-                _ = InvalidateRect(_volumeSlider, 0, true);
+                _ = AppendMenuW(menu, MenuFlagSeparator, 0, string.Empty);
             }
 
-            if (_muteButton != 0)
-            {
-                _ = SetWindowTextW(_muteButton, state.FormatMuteButtonText());
-                _ = InvalidateRect(_muteButton, 0, true);
-            }
+            _ = AppendMenuW(menu, MenuFlagString, MenuCmdRefresh, "掲示板を更新");
+            _ = AppendMenuW(menu, MenuFlagString | (_bbsUseSage ? MenuFlagChecked : 0), MenuCmdToggleSage, "sage で書き込む");
+            _ = AppendMenuW(menu, MenuFlagString, MenuCmdOpenBrowser, "ブラウザで開く");
 
-            if (_volumeLabel != 0)
+            var anchor = GetWindowRect(_bbsThreadBar, out var barRect)
+                ? new WindowPoint { X = barRect.Left + 8, Y = barRect.Top }
+                : new WindowPoint { X = 0, Y = 0 };
+            var selected = TrackPopupMenuEx(menu, TrackPopupReturnCmd | TrackPopupBottomAlign, anchor.X, anchor.Y, window, 0);
+            if (selected == MenuCmdRefresh)
             {
-                _ = SetWindowTextW(_volumeLabel, state.FormatVolumeLabel());
-                _ = InvalidateRect(_volumeLabel, 0, true);
+                _ = Task.Run(() => bbs.RefreshAsync());
+            }
+            else if (selected == MenuCmdToggleSage)
+            {
+                _bbsUseSage = !_bbsUseSage;
+                UpdateSavedWindowState(s => s with { BbsUseSage = _bbsUseSage });
+            }
+            else if (selected == MenuCmdOpenBrowser)
+            {
+                var url = snapshot.Target.ThreadUrl ?? snapshot.Target.BoardUrl;
+                try
+                {
+                    _ = Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+                }
+                catch
+                {
+                }
+            }
+            else if (selected >= MenuCmdThreadBase)
+            {
+                var threadIndex = (int)(selected - MenuCmdThreadBase);
+                if (threadIndex >= 0 && threadIndex < threads.Length)
+                {
+                    var key = threads[threadIndex].Key;
+                    _ = Task.Run(() => bbs.SelectThreadAsync(key));
+                }
             }
         }
         finally
         {
-            _syncingControls = false;
+            _ = DestroyMenu(menu);
+        }
+    }
+
+    private string ReadBbsInputText()
+    {
+        if (_bbsInputEdit == 0)
+        {
+            return string.Empty;
+        }
+
+        var length = GetWindowTextLengthW(_bbsInputEdit);
+        if (length <= 0)
+        {
+            return string.Empty;
+        }
+
+        var buffer = new char[length + 1];
+        var copied = GetWindowTextW(_bbsInputEdit, buffer, buffer.Length);
+        return copied > 0 ? new string(buffer, 0, copied) : string.Empty;
+    }
+
+    private static bool IsScreenPointInWindow(nint hwnd, int screenX, int screenY) =>
+        GetWindowRect(hwnd, out var rect) &&
+        screenX >= rect.Left && screenX <= rect.Right &&
+        screenY >= rect.Top && screenY <= rect.Bottom;
+
+    private void ToggleAlwaysOnTop(nint window)
+    {
+        if (window == 0)
+        {
+            return;
+        }
+
+        _alwaysOnTop = !_alwaysOnTop;
+        ApplyAlwaysOnTop(window, _alwaysOnTop);
+        UpdateSavedWindowState(s => s with { AlwaysOnTop = _alwaysOnTop });
+    }
+
+    private static void ApplyAlwaysOnTop(nint window, bool alwaysOnTop) =>
+        _ = SetWindowPos(
+            window,
+            alwaysOnTop ? HwndTopMost : HwndNoTopMost,
+            0,
+            0,
+            0,
+            0,
+            SwpNoMove | SwpNoSize | SwpNoActivate);
+
+    private void ToggleBorderless(nint window)
+    {
+        if (window == 0)
+        {
+            return;
+        }
+
+        if (_fullscreen)
+        {
+            ToggleFullscreen(window);
+        }
+
+        HideBbsPopup();
+        if (!GetClientRect(window, out var client) || !GetWindowRect(window, out var outer))
+        {
+            return;
+        }
+
+        _borderless = !_borderless;
+        var style = _borderless ? WindowStyleBorderlessClipChildren : WindowStyleOverlappedClipChildren;
+        SetVisibleWindowStyle(window, style);
+        var adjusted = new WindowRectangle
+        {
+            Left = 0,
+            Top = 0,
+            Right = Math.Max(LibMpvPlaybackWindowState.MinVideoWidth, client.Right - client.Left),
+            Bottom = Math.Max(LibMpvPlaybackWindowState.MinVideoHeight + BottomBarsHeight, client.Bottom - client.Top),
+        };
+        _ = AdjustWindowRectEx(ref adjusted, style, false, 0);
+        _ = SetWindowPos(
+            window,
+            _alwaysOnTop ? HwndTopMost : HwndNoTopMost,
+            outer.Left,
+            outer.Top,
+            adjusted.Right - adjusted.Left,
+            adjusted.Bottom - adjusted.Top,
+            SwpFrameChanged | SwpShowWindow);
+        if (!_borderless)
+        {
+            ApplyDarkTitleBar(window);
+        }
+
+        if (GetClientRect(window, out var newClient))
+        {
+            LayoutControls(newClient.Right - newClient.Left, newClient.Bottom - newClient.Top);
+        }
+
+        _ = UpdateWindow(window);
+        UpdateSavedWindowState(s => s with { Borderless = _borderless });
+    }
+
+    private void ToggleFullscreen(nint window)
+    {
+        if (window == 0)
+        {
+            return;
+        }
+
+        HideBbsPopup();
+        if (!_fullscreen)
+        {
+            if (GetWindowRect(window, out var currentRect))
+            {
+                _preFullscreenRect = currentRect;
+            }
+
+            var monitor = MonitorFromWindow(window, MonitorDefaultToNearest);
+            var monitorInfo = new MonitorInfo { Size = (uint)Marshal.SizeOf<MonitorInfo>() };
+            if (monitor == 0 || !GetMonitorInfoW(monitor, ref monitorInfo))
+            {
+                return;
+            }
+
+            _fullscreen = true;
+            SetBottomControlsVisible(visible: false);
+            SetVisibleWindowStyle(window, WindowStyleBorderlessClipChildren);
+            var bounds = monitorInfo.Monitor;
+            _ = SetWindowPos(
+                window,
+                HwndTopMost,
+                bounds.Left,
+                bounds.Top,
+                bounds.Right - bounds.Left,
+                bounds.Bottom - bounds.Top,
+                SwpFrameChanged | SwpShowWindow);
+            LayoutControls(bounds.Right - bounds.Left, bounds.Bottom - bounds.Top);
+            _ = UpdateWindow(window);
+        }
+        else
+        {
+            _fullscreen = false;
+            var style = _borderless ? WindowStyleBorderlessClipChildren : WindowStyleOverlappedClipChildren;
+            SetVisibleWindowStyle(window, style);
+            SetBottomControlsVisible(visible: true);
+            _ = SetWindowPos(
+                window,
+                _alwaysOnTop ? HwndTopMost : HwndNoTopMost,
+                _preFullscreenRect.Left,
+                _preFullscreenRect.Top,
+                Math.Max(LibMpvPlaybackWindowState.MinVideoWidth, _preFullscreenRect.Right - _preFullscreenRect.Left),
+                Math.Max(LibMpvPlaybackWindowState.MinVideoHeight + BottomBarsHeight, _preFullscreenRect.Bottom - _preFullscreenRect.Top),
+                SwpFrameChanged | SwpShowWindow);
+            if (!_borderless)
+            {
+                ApplyDarkTitleBar(window);
+            }
+
+            if (GetClientRect(window, out var client))
+            {
+                LayoutControls(client.Right - client.Left, client.Bottom - client.Top);
+            }
+
+            _ = UpdateWindow(window);
+        }
+    }
+
+    private static void SetVisibleWindowStyle(nint window, uint style) =>
+        _ = SetWindowLongPtrW(window, GwlStyle, unchecked((nint)(nuint)(style | WindowStyleVisible)));
+
+    private void SetBottomControlsVisible(bool visible)
+    {
+        var cmd = visible ? ShowWindowNormal : ShowWindowHide;
+        if (_volumeButton != 0)
+        {
+            _ = ShowWindow(_volumeButton, cmd);
+        }
+
+        if (_bbsThreadBar != 0)
+        {
+            _ = ShowWindow(_bbsThreadBar, cmd);
+        }
+
+        if (_bbsInputEdit != 0)
+        {
+            _ = ShowWindow(_bbsInputEdit, cmd);
+        }
+
+        if (_bbsSendButton != 0)
+        {
+            _ = ShowWindow(_bbsSendButton, cmd);
+        }
+    }
+
+    private void ResizeVideoArea(nint window, int videoWidth, int videoHeight)
+    {
+        if (window == 0)
+        {
+            return;
+        }
+
+        if (_fullscreen)
+        {
+            ToggleFullscreen(window);
+        }
+
+        var style = _borderless ? WindowStyleBorderlessClipChildren : WindowStyleOverlappedClipChildren;
+        var rect = new WindowRectangle
+        {
+            Left = 0,
+            Top = 0,
+            Right = videoWidth,
+            Bottom = videoHeight + BottomBarsHeight,
+        };
+        _ = AdjustWindowRectEx(ref rect, style, false, 0);
+        _ = SetWindowPos(
+            window,
+            0,
+            0,
+            0,
+            rect.Right - rect.Left,
+            rect.Bottom - rect.Top,
+            SwpNoMove | SwpNoZOrder | SwpNoActivate);
+        CaptureNormalWindowBounds(window);
+    }
+
+    private void ShowVideoContextMenu(nint window)
+    {
+        HideBbsPopup();
+        var menu = CreatePopupMenu();
+        if (menu == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            _ = AppendMenuW(menu, MenuFlagString | (_alwaysOnTop ? MenuFlagChecked : 0), MenuCmdToggleAlwaysOnTop, "最前面に固定 (T)");
+            _ = AppendMenuW(menu, MenuFlagString | (_borderless ? MenuFlagChecked : 0), MenuCmdToggleBorderless, "枠なし表示 (B)");
+            _ = AppendMenuW(menu, MenuFlagString | (_fullscreen ? MenuFlagChecked : 0), MenuCmdToggleFullscreen, "フルスクリーン (F)");
+            _ = AppendMenuW(menu, MenuFlagSeparator, 0, string.Empty);
+            _ = AppendMenuW(menu, MenuFlagString, MenuCmdScreenshot, "スナップショットを保存 (S)");
+            _ = AppendMenuW(menu, MenuFlagString, MenuCmdOpenScreenshotFolder, "スナップショットフォルダを開く");
+            _ = AppendMenuW(menu, MenuFlagSeparator, 0, string.Empty);
+
+            var adjustMenu = CreatePopupMenu();
+            if (adjustMenu != 0)
+            {
+                _ = AppendMenuW(adjustMenu, MenuFlagString, MenuCmdBrightUp, $"明るさ +10 (現在 {_videoAdjustment.Brightness:+0;-0;0})");
+                _ = AppendMenuW(adjustMenu, MenuFlagString, MenuCmdBrightDown, "明るさ -10");
+                _ = AppendMenuW(adjustMenu, MenuFlagSeparator, 0, string.Empty);
+                _ = AppendMenuW(adjustMenu, MenuFlagString, MenuCmdContrastUp, $"コントラスト +10 (現在 {_videoAdjustment.Contrast:+0;-0;0})");
+                _ = AppendMenuW(adjustMenu, MenuFlagString, MenuCmdContrastDown, "コントラスト -10");
+                _ = AppendMenuW(adjustMenu, MenuFlagSeparator, 0, string.Empty);
+                _ = AppendMenuW(adjustMenu, MenuFlagString, MenuCmdSatUp, $"彩度 +10 (現在 {_videoAdjustment.Saturation:+0;-0;0})");
+                _ = AppendMenuW(adjustMenu, MenuFlagString, MenuCmdSatDown, "彩度 -10");
+                _ = AppendMenuW(adjustMenu, MenuFlagSeparator, 0, string.Empty);
+                _ = AppendMenuW(adjustMenu, MenuFlagString, MenuCmdGammaUp, $"ガンマ +10 (現在 {_videoAdjustment.Gamma:+0;-0;0})");
+                _ = AppendMenuW(adjustMenu, MenuFlagString, MenuCmdGammaDown, "ガンマ -10");
+                _ = AppendMenuW(adjustMenu, MenuFlagSeparator, 0, string.Empty);
+                _ = AppendMenuW(adjustMenu, MenuFlagString, MenuCmdVideoAdjustReset, "映像調整をリセット");
+                _ = AppendMenuW(menu, MenuFlagPopup, (nuint)adjustMenu, "映像調整");
+            }
+
+            _ = AppendMenuW(menu, MenuFlagSeparator, 0, string.Empty);
+            _ = AppendMenuW(menu, MenuFlagString, MenuCmdResizeSmall, "サイズ: 640 × 360");
+            _ = AppendMenuW(menu, MenuFlagString, MenuCmdResizeMedium, "サイズ: 960 × 540");
+            _ = AppendMenuW(menu, MenuFlagString, MenuCmdResizeHd, "サイズ: 1280 × 720");
+            _ = AppendMenuW(menu, MenuFlagString, MenuCmdResizeLarge, "サイズ: 1600 × 900");
+            _ = AppendMenuW(menu, MenuFlagSeparator, 0, string.Empty);
+            _ = AppendMenuW(menu, MenuFlagString | (_audio.Current.Muted ? MenuFlagChecked : 0), MenuCmdToggleMute, "ミュート (M)");
+
+            var contactUrl = _options.BbsSession?.Snapshot.Target.ThreadUrl
+                ?? _options.BbsSession?.Snapshot.Target.BoardUrl
+                ?? _options.ContactUrl;
+            if (!string.IsNullOrWhiteSpace(contactUrl))
+            {
+                _ = AppendMenuW(menu, MenuFlagSeparator, 0, string.Empty);
+                _ = AppendMenuW(menu, MenuFlagString, MenuCmdOpenBrowser, "コンタクトURLをブラウザで開く");
+            }
+
+            if (!GetCursorPos(out var cursor))
+            {
+                return;
+            }
+
+            var selected = TrackPopupMenuEx(menu, TrackPopupReturnCmd, cursor.X, cursor.Y, window, 0);
+            switch (selected)
+            {
+                case MenuCmdToggleAlwaysOnTop:
+                    ToggleAlwaysOnTop(window);
+                    break;
+                case MenuCmdToggleBorderless:
+                    ToggleBorderless(window);
+                    break;
+                case MenuCmdToggleFullscreen:
+                    ToggleFullscreen(window);
+                    break;
+                case MenuCmdScreenshot:
+                    ScreenshotRequested?.Invoke();
+                    break;
+                case MenuCmdOpenScreenshotFolder:
+                    OpenScreenshotFolder();
+                    break;
+                case MenuCmdBrightUp:
+                    ApplyVideoAdjustment(_videoAdjustment with { Brightness = _videoAdjustment.Brightness + LibMpvVideoAdjustment.Step }, "明るさ");
+                    break;
+                case MenuCmdBrightDown:
+                    ApplyVideoAdjustment(_videoAdjustment with { Brightness = _videoAdjustment.Brightness - LibMpvVideoAdjustment.Step }, "明るさ");
+                    break;
+                case MenuCmdContrastUp:
+                    ApplyVideoAdjustment(_videoAdjustment with { Contrast = _videoAdjustment.Contrast + LibMpvVideoAdjustment.Step }, "コントラスト");
+                    break;
+                case MenuCmdContrastDown:
+                    ApplyVideoAdjustment(_videoAdjustment with { Contrast = _videoAdjustment.Contrast - LibMpvVideoAdjustment.Step }, "コントラスト");
+                    break;
+                case MenuCmdSatUp:
+                    ApplyVideoAdjustment(_videoAdjustment with { Saturation = _videoAdjustment.Saturation + LibMpvVideoAdjustment.Step }, "彩度");
+                    break;
+                case MenuCmdSatDown:
+                    ApplyVideoAdjustment(_videoAdjustment with { Saturation = _videoAdjustment.Saturation - LibMpvVideoAdjustment.Step }, "彩度");
+                    break;
+                case MenuCmdGammaUp:
+                    ApplyVideoAdjustment(_videoAdjustment with { Gamma = _videoAdjustment.Gamma + LibMpvVideoAdjustment.Step }, "ガンマ");
+                    break;
+                case MenuCmdGammaDown:
+                    ApplyVideoAdjustment(_videoAdjustment with { Gamma = _videoAdjustment.Gamma - LibMpvVideoAdjustment.Step }, "ガンマ");
+                    break;
+                case MenuCmdVideoAdjustReset:
+                    ApplyVideoAdjustment(LibMpvVideoAdjustment.Default, "映像調整をリセット");
+                    break;
+                case MenuCmdResizeSmall:
+                    ResizeVideoArea(window, 640, 360);
+                    break;
+                case MenuCmdResizeMedium:
+                    ResizeVideoArea(window, 960, 540);
+                    break;
+                case MenuCmdResizeHd:
+                    ResizeVideoArea(window, 1280, 720);
+                    break;
+                case MenuCmdResizeLarge:
+                    ResizeVideoArea(window, 1600, 900);
+                    break;
+                case MenuCmdToggleMute:
+                    if (_audio.ToggleMute())
+                    {
+                        SyncControls();
+                    }
+
+                    break;
+                case MenuCmdOpenBrowser when !string.IsNullOrWhiteSpace(contactUrl):
+                    try
+                    {
+                        _ = Process.Start(new ProcessStartInfo(contactUrl) { UseShellExecute = true });
+                    }
+                    catch
+                    {
+                    }
+
+                    break;
+            }
+        }
+        finally
+        {
+            _ = DestroyMenu(menu);
+        }
+    }
+
+    private void ApplyVideoAdjustment(LibMpvVideoAdjustment next, string label)
+    {
+        _videoAdjustment = next.Clamped();
+        var summary = _videoAdjustment.IsDefault
+            ? "映像調整をリセット"
+            : $"{label}: 明るさ{_videoAdjustment.Brightness:+0;-0;0} / コントラスト{_videoAdjustment.Contrast:+0;-0;0} / 彩度{_videoAdjustment.Saturation:+0;-0;0} / ガンマ{_videoAdjustment.Gamma:+0;-0;0}";
+        VideoAdjustmentChanged?.Invoke(_videoAdjustment, summary);
+    }
+
+    private static void OpenScreenshotFolder()
+    {
+        try
+        {
+            var directory = LibMpvScreenshotPaths.ResolveDefaultDirectory();
+            Directory.CreateDirectory(directory);
+            _ = Process.Start(new ProcessStartInfo(directory) { UseShellExecute = true });
+        }
+        catch
+        {
+        }
+    }
+
+    private static nint HitTestBorderlessEdge(nint window, nint lParam)
+    {
+        if (!GetWindowRect(window, out var rect))
+        {
+            return 0;
+        }
+
+        var screenX = unchecked((short)(lParam.ToInt64() & 0xFFFF));
+        var screenY = unchecked((short)((lParam.ToInt64() >> 16) & 0xFFFF));
+        var onLeft = screenX >= rect.Left && screenX < rect.Left + BorderlessResizeEdge;
+        var onRight = screenX <= rect.Right && screenX > rect.Right - BorderlessResizeEdge;
+        var onTop = screenY >= rect.Top && screenY < rect.Top + BorderlessResizeEdge;
+        var onBottom = screenY <= rect.Bottom && screenY > rect.Bottom - BorderlessResizeEdge;
+
+        if (onTop && onLeft) return HitTopLeft;
+        if (onTop && onRight) return HitTopRight;
+        if (onBottom && onLeft) return HitBottomLeft;
+        if (onBottom && onRight) return HitBottomRight;
+        if (onLeft) return HitLeft;
+        if (onRight) return HitRight;
+        if (onTop) return HitTop;
+        if (onBottom) return HitBottom;
+        return 0;
+    }
+
+    private static void SnapMovingRect(nint window, nint rectPtr)
+    {
+        var rect = Marshal.PtrToStructure<WindowRectangle>(rectPtr);
+        var monitor = MonitorFromWindow(window, MonitorDefaultToNearest);
+        var info = new MonitorInfo { Size = (uint)Marshal.SizeOf<MonitorInfo>() };
+        if (monitor == 0 || !GetMonitorInfoW(monitor, ref info))
+        {
+            return;
+        }
+
+        var width = rect.Right - rect.Left;
+        var height = rect.Bottom - rect.Top;
+        var (snappedLeft, snappedTop) = LibMpvPlaybackWindowState.SnapToWorkArea(
+            rect.Left,
+            rect.Top,
+            width,
+            height,
+            info.Work.Left,
+            info.Work.Top,
+            info.Work.Right,
+            info.Work.Bottom);
+        rect.Left = snappedLeft;
+        rect.Top = snappedTop;
+        rect.Right = snappedLeft + width;
+        rect.Bottom = snappedTop + height;
+        Marshal.StructureToPtr(rect, rectPtr, false);
+    }
+
+    private bool IsClientPointInVideoArea(nint window, nint lParam)
+    {
+        if (!GetClientRect(window, out var client))
+        {
+            return false;
+        }
+
+        var y = unchecked((short)((lParam.ToInt64() >> 16) & 0xFFFF));
+        var videoBottom = Math.Max(0, (client.Bottom - client.Top) - BottomBarsHeight);
+        return y >= 0 && y < videoBottom;
+    }
+
+    private void CaptureNormalWindowBounds(nint window)
+    {
+        if (_fullscreen || window == 0 || !GetWindowRect(window, out var outer) || !GetClientRect(window, out var client))
+        {
+            return;
+        }
+
+        var videoWidth = client.Right - client.Left;
+        var videoHeight = (client.Bottom - client.Top) - BottomBarsHeight;
+        if (videoWidth < LibMpvPlaybackWindowState.MinVideoWidth || videoHeight < LibMpvPlaybackWindowState.MinVideoHeight)
+        {
+            return;
+        }
+
+        UpdateSavedWindowState(s => s with
+        {
+            Left = outer.Left,
+            Top = outer.Top,
+            VideoWidth = videoWidth,
+            VideoHeight = videoHeight,
+        });
+    }
+
+    private void UpdateSavedWindowState(Func<LibMpvPlaybackWindowState, LibMpvPlaybackWindowState> updater)
+    {
+        LibMpvPlaybackWindowState updated;
+        lock (_sync)
+        {
+            var next = updater(_windowState).Normalized();
+            if (next == _windowState)
+            {
+                return;
+            }
+
+            _windowState = next;
+            updated = next;
+        }
+
+        WindowStateChanged?.Invoke(updated);
+    }
+
+    private void SyncControls()
+    {
+        var state = _audio.Current;
+        if (_volumeButton != 0)
+        {
+            _ = SetWindowTextW(_volumeButton, state.FormatVolumeLabel());
+            _ = InvalidateRect(_volumeButton, 0, true);
         }
     }
 
@@ -959,26 +2103,6 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct NmHdr
-    {
-        public nint HwndFrom;
-        public nuint IdFrom;
-        public int Code;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct NmCustomDrawStruct
-    {
-        public NmHdr Header;
-        public uint DrawStage;
-        public nint DeviceContext;
-        public WindowRectangle Rect;
-        public nuint ItemSpec;
-        public uint ItemState;
-        public nint ItemLParam;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
     private struct WindowMessage
     {
         public nint Window;
@@ -995,6 +2119,15 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
     {
         public int X;
         public int Y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MonitorInfo
+    {
+        public uint Size;
+        public WindowRectangle Monitor;
+        public WindowRectangle Work;
+        public uint Flags;
     }
 
     [UnmanagedFunctionPointer(CallingConvention.Winapi)]
@@ -1164,4 +2297,69 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool DestroyIcon(nint icon);
+
+    [DllImport("user32.dll")]
+    private static extern short GetKeyState(int virtualKey);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetCursorPos(out WindowPoint point);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetWindowRect(nint window, out WindowRectangle rect);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetWindowTextLengthW(nint window);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetWindowTextW(nint window, [Out] char[] buffer, int maxCount);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EnableWindow(nint window, [MarshalAs(UnmanagedType.Bool)] bool enable);
+
+    [DllImport("user32.dll")]
+    private static extern nuint SetTimer(nint window, nuint eventId, uint elapseMs, nint timerFunc);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool KillTimer(nint window, nuint eventId);
+
+    [DllImport("user32.dll")]
+    private static extern nint CreatePopupMenu();
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool AppendMenuW(nint menu, uint flags, nuint itemId, string newItem);
+
+    [DllImport("user32.dll")]
+    private static extern uint TrackPopupMenuEx(
+        nint menu, uint flags, int x, int y, nint window, nint paramsPtr);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool DestroyMenu(nint menu);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ReleaseCapture();
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
+    private static extern nint SetWindowLongPtrW(nint window, int index, nint newLong);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowPos(
+        nint window, nint insertAfter, int x, int y, int width, int height, uint flags);
+
+    [DllImport("user32.dll")]
+    private static extern nint MonitorFromWindow(nint window, uint flags);
+
+    [DllImport("user32.dll")]
+    private static extern nint MonitorFromPoint(WindowPoint point, uint flags);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetMonitorInfoW(nint monitor, ref MonitorInfo info);
 }

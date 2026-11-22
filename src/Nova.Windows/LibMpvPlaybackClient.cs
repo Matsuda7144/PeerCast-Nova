@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Runtime.InteropServices;
 using PeerCast.Nova.Playback;
+using PeerCast.Nova.Playback.Bbs;
 
 namespace PeerCast.Nova.Windows;
 
@@ -16,6 +17,10 @@ internal interface ILibMpvPlaybackClient : IDisposable
     void LoadFile(string streamUrl, PlaybackMediaContainer container, uint windowId, LibMpvPlaybackAudioState initialAudio, bool lowLatency);
     void SetVolume(int volume);
     void SetMuted(bool muted);
+    void ShowOsdText(string text, int durationMs);
+    bool SaveScreenshot(string filePath);
+    void SetVideoAdjustment(LibMpvVideoAdjustment adjustment);
+    LibMpvPlaybackStats? TryReadStats();
     LibMpvPlaybackEvent WaitForEvent();
     void Wakeup();
 }
@@ -29,6 +34,7 @@ internal sealed class LibMpvPlaybackClient : ILibMpvPlaybackClient
     private const ulong LoadFileReply = 1;
     private const int EndFileError = 4;
     private const int FormatFlag = 3;
+    private const int FormatInt64 = 4;
     private const int FormatDouble = 5;
     private readonly object _clientGate = new();
     private readonly nint _library;
@@ -38,6 +44,8 @@ internal sealed class LibMpvPlaybackClient : ILibMpvPlaybackClient
     private readonly SetOptionString _setOption;
     private readonly SetPropertyDoubleAsync _setPropertyDoubleAsync;
     private readonly SetPropertyFlagAsync _setPropertyFlagAsync;
+    private readonly GetPropertyDouble _getPropertyDouble;
+    private readonly GetPropertyInt64 _getPropertyInt64;
     private readonly CommandAsync _command;
     private readonly ReadEvent _waitForEvent;
     private readonly ClientAction _wakeup;
@@ -59,6 +67,8 @@ internal sealed class LibMpvPlaybackClient : ILibMpvPlaybackClient
         _setOption = Bind<SetOptionString>(library, "mpv_set_option_string");
         _setPropertyDoubleAsync = Bind<SetPropertyDoubleAsync>(library, "mpv_set_property_async");
         _setPropertyFlagAsync = Bind<SetPropertyFlagAsync>(library, "mpv_set_property_async");
+        _getPropertyDouble = Bind<GetPropertyDouble>(library, "mpv_get_property");
+        _getPropertyInt64 = Bind<GetPropertyInt64>(library, "mpv_get_property");
         _command = Bind<CommandAsync>(library, "mpv_command_async");
         _waitForEvent = Bind<ReadEvent>(library, "mpv_wait_event");
         _wakeup = Bind<ClientAction>(library, "mpv_wakeup");
@@ -208,6 +218,127 @@ internal sealed class LibMpvPlaybackClient : ILibMpvPlaybackClient
         }
     }
 
+    public void ShowOsdText(string text, int durationMs)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return;
+        }
+
+        var clampedDuration = Math.Clamp(durationMs, 500, 30_000);
+        lock (_clientGate)
+        {
+            if (_disposed || !_initialized)
+            {
+                return;
+            }
+
+            var arguments = new nint[4];
+            try
+            {
+                arguments[0] = Marshal.StringToCoTaskMemUTF8("show-text");
+                arguments[1] = Marshal.StringToCoTaskMemUTF8(text);
+                arguments[2] = Marshal.StringToCoTaskMemUTF8(clampedDuration.ToString(CultureInfo.InvariantCulture));
+                _ = _command(_client, 0, arguments);
+            }
+            finally
+            {
+                Marshal.FreeCoTaskMem(arguments[2]);
+                Marshal.FreeCoTaskMem(arguments[1]);
+                Marshal.FreeCoTaskMem(arguments[0]);
+            }
+        }
+    }
+
+    public bool SaveScreenshot(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            return false;
+        }
+
+        lock (_clientGate)
+        {
+            if (_disposed || !_initialized)
+            {
+                return false;
+            }
+
+            var arguments = new nint[4];
+            try
+            {
+                arguments[0] = Marshal.StringToCoTaskMemUTF8("screenshot-to-file");
+                arguments[1] = Marshal.StringToCoTaskMemUTF8(filePath);
+                arguments[2] = Marshal.StringToCoTaskMemUTF8("video");
+                return _command(_client, 0, arguments) >= 0;
+            }
+            finally
+            {
+                Marshal.FreeCoTaskMem(arguments[2]);
+                Marshal.FreeCoTaskMem(arguments[1]);
+                Marshal.FreeCoTaskMem(arguments[0]);
+            }
+        }
+    }
+
+    public void SetVideoAdjustment(LibMpvVideoAdjustment adjustment)
+    {
+        var clamped = adjustment.Clamped();
+        lock (_clientGate)
+        {
+            if (_disposed || !_initialized)
+            {
+                return;
+            }
+
+            double brightness = clamped.Brightness;
+            double contrast = clamped.Contrast;
+            double saturation = clamped.Saturation;
+            double gamma = clamped.Gamma;
+            _ = _setPropertyDoubleAsync(_client, 0, "brightness", FormatDouble, ref brightness);
+            _ = _setPropertyDoubleAsync(_client, 0, "contrast", FormatDouble, ref contrast);
+            _ = _setPropertyDoubleAsync(_client, 0, "saturation", FormatDouble, ref saturation);
+            _ = _setPropertyDoubleAsync(_client, 0, "gamma", FormatDouble, ref gamma);
+        }
+    }
+
+    public LibMpvPlaybackStats? TryReadStats()
+    {
+        lock (_clientGate)
+        {
+            if (_disposed || !_initialized)
+            {
+                return null;
+            }
+
+            var width = _getPropertyInt64(_client, "video-params/w", FormatInt64, out var w) == 0 ? (int)w : 0;
+            var height = _getPropertyInt64(_client, "video-params/h", FormatInt64, out var h) == 0 ? (int)h : 0;
+            double? fps = _getPropertyDouble(_client, "estimated-vf-fps", FormatDouble, out var estFps) == 0 && estFps > 0.5
+                ? estFps
+                : _getPropertyDouble(_client, "container-fps", FormatDouble, out var containerFps) == 0 && containerFps > 0.5
+                    ? containerFps
+                    : null;
+            var videoBitrate = _getPropertyDouble(_client, "video-bitrate", FormatDouble, out var vb) == 0 && vb > 0 ? vb : 0;
+            var audioBitrate = _getPropertyDouble(_client, "audio-bitrate", FormatDouble, out var ab) == 0 && ab > 0 ? ab : 0;
+            double? totalBitrate = videoBitrate + audioBitrate > 0 ? videoBitrate + audioBitrate : null;
+            double? cacheSecs = _getPropertyDouble(_client, "demuxer-cache-duration", FormatDouble, out var cache) == 0 && cache >= 0
+                ? cache
+                : null;
+
+            return new LibMpvPlaybackStats(width, height, fps, totalBitrate, cacheSecs);
+        }
+    }
+
+    internal static string FormatLatestPostOsdAss(BbsPost post)
+    {
+        var compact = post.FormatCompactSingleLine(maxBodyLength: 90);
+        var escaped = compact
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("{", "\\{", StringComparison.Ordinal)
+            .Replace("}", "\\}", StringComparison.Ordinal);
+        return $"${{osd-ass-cc/0}}{{\\an1\\fs22\\b1\\bord2\\shad1\\c&HFFFFFF&\\3c&H000000&}}{escaped}";
+    }
+
     public LibMpvPlaybackEvent WaitForEvent()
     {
         var notification = Marshal.PtrToStructure<NativeEvent>(_waitForEvent(_client, -1));
@@ -306,6 +437,14 @@ internal sealed class LibMpvPlaybackClient : ILibMpvPlaybackClient
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate int SetPropertyFlagAsync(nint client, ulong replyUserdata,
         [MarshalAs(UnmanagedType.LPUTF8Str)] string name, int format, ref int data);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate int GetPropertyDouble(nint client,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string name, int format, out double data);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate int GetPropertyInt64(nint client,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string name, int format, out long data);
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate int CommandAsync(nint client, ulong replyUserdata, [In] nint[] arguments);
