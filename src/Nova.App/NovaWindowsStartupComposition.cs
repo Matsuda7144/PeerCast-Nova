@@ -287,7 +287,10 @@ public sealed class NovaWindowsStartupComposition
 
             return preferences.PlayerMode == GenesisPlaybackPlayerMode.Internal
                 ? new LibMpvPlaybackPlayerLauncher(
-                    preferences.LibMpvLibraryPath ?? string.Empty, audioStore, lowLatency: preferences.LowLatencyInternalPlayback, windowStateStore)
+                    preferences.LibMpvLibraryPath ?? LibMpvRuntimeProvisioner.TryFindAvailableLibraryPath() ?? string.Empty,
+                    audioStore,
+                    lowLatency: preferences.LowLatencyInternalPlayback,
+                    windowStateStore)
                 : new PcrPlayerExternalPlayerLauncher(preferences.PcrPlayerExecutablePath);
         }
 

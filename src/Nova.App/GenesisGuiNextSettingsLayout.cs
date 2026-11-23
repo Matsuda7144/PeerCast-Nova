@@ -36,6 +36,7 @@ internal readonly record struct GenesisGuiNextSettingsLayout(int Width, int Heig
     }
     internal GenesisGuiNextAppShellPlacement.WindowRectangle PathStatus(bool playback) => Box(32, playback ? 296 : 282, Width - 64, playback ? 22 : 28);
     internal GenesisGuiNextAppShellPlacement.WindowRectangle Reset => Box(Width - 440, Height - 44, 188, 30);
+    internal GenesisGuiNextAppShellPlacement.WindowRectangle SetupLibMpv => Box(Width - 452, Height - 44, 200, 30);
     internal GenesisGuiNextAppShellPlacement.WindowRectangle SoundTest => Box(Width - 176, Height - 44, 160, 30);
     internal GenesisGuiNextAppShellPlacement.WindowRectangle NotificationCheck(int index) => Box(32, 196 + index * 32, Width - 64, 26);
     internal GenesisGuiNextAppShellPlacement.WindowRectangle NotificationStatus => Box(32, 292, Width - 64, 20);

@@ -19,6 +19,7 @@ internal sealed class GenesisPathSettingsPage(GenesisGuiNextPlaybackSettings? pl
     internal GenesisPlaybackPlayerMode PlayerMode => _playbackDraft.PlayerMode;
     internal bool LowLatencyInternalPlayback => _playbackDraft.LowLatencyInternalPlayback;
     internal bool CanEditLowLatency => IsPlayback && PlayerMode == GenesisPlaybackPlayerMode.Internal;
+    internal bool CanSetupLibMpv => IsPlayback && PlayerMode == GenesisPlaybackPlayerMode.Internal;
     internal GenesisPlaybackPlayerMode SavedPlayerMode => playback?.Preferences.PlayerMode ?? GenesisPlaybackPlayerMode.External;
     internal string Draft => IsPlayback ? PathForMode(_playbackDraft) : _recordingDraft;
     internal string Saved => IsPlayback ? PathForMode(playback!.Preferences) : recording?.Presentation.ConfiguredDirectory ?? string.Empty;
@@ -167,6 +168,7 @@ internal sealed class GenesisPathSettingsPage(GenesisGuiNextPlaybackSettings? pl
     }
 
     internal void ReportInputError(string message) { if (!_released && Category is not null) { Message = message; IsError = true; } }
+    internal void ReportStatus(string message, bool isError) { if (!_released && Category is not null) { Message = message; IsError = isError; } }
     internal void Cancel() { if (!_released && Category is not null) { Reload(); Message = "未保存の入力を破棄しました。"; } }
     internal void Close()
     {

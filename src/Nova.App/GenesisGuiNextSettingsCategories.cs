@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using PeerCast.Nova.Windows;
 
 namespace PeerCast.Nova.App;
 
@@ -7,7 +8,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
     private const int PlaybackCategoryId = 1190, RecordingCategoryId = 1191, NotificationsCategoryId = 1192,
         NotifyNewId = 1193, NotifyFavoriteId = 1194, NotifySoundId = 1195, TestSoundId = 1196,
         SettingsPathId = 1197, SettingsBrowseId = 1198, SettingsResetId = 1199;
-    private const int InternalPlayerChoiceId = 1235, ExternalPlayerChoiceId = 1236, LowLatencyPlaybackId = 1237;
+    private const int InternalPlayerChoiceId = 1235, ExternalPlayerChoiceId = 1236, LowLatencyPlaybackId = 1237, SetupLibMpvId = 1238;
 
     private sealed partial class AppShellState
     {
@@ -15,12 +16,12 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private long _settingsCategoryRevision;
         private GenesisPathSettingsPage? _pathSettings;
         private nint _playbackCategory, _recordingCategory, _notificationsCategory, _settingsPath, _settingsBrowse, _settingsReset;
-        private nint _internalPlayerChoice, _externalPlayerChoice, _lowLatencyPlayback;
+        private nint _internalPlayerChoice, _externalPlayerChoice, _lowLatencyPlayback, _setupLibMpv;
         private nint _notifyNew, _notifyFavorite, _notifySound, _testSound;
-        private bool _updatingSettingsPath, _notificationError;
+        private bool _updatingSettingsPath, _notificationError, _settingUpLibMpv;
         private string _notificationMessage = string.Empty;
         private nint[] AdditionalSettingsButtons => [_playbackCategory, _recordingCategory, _notificationsCategory,
-            _internalPlayerChoice, _externalPlayerChoice, _settingsBrowse, _settingsReset, _testSound, .. NetworkSettingsButtons];
+            _internalPlayerChoice, _externalPlayerChoice, _settingsBrowse, _settingsReset, _setupLibMpv, _testSound, .. NetworkSettingsButtons];
         private nint[] SettingsChecks => [_notifyNew, _notifyFavorite, _notifySound, _connectionIpv6, _connectionWan, _connectionAutoMapping, _ypEnabled, _lowLatencyPlayback];
         private bool PlaybackCategory => _settingsCategory == GenesisIntegratedSettingsCategory.Playback;
         private bool PathCategory => PlaybackCategory || _settingsCategory == GenesisIntegratedSettingsCategory.Recording;
@@ -48,6 +49,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             _settingsBrowse = Button("参照…", SettingsBrowseId);
             _lowLatencyPlayback = Check("低遅延再生", LowLatencyPlaybackId);
             _settingsReset = Button("未設定に戻す", SettingsResetId);
+            _setupLibMpv = Button("公式 libmpv を自動導入", SetupLibMpvId);
             _testSound = Button("通知音テスト", TestSoundId);
             _notifyNew = Check("新着チャンネル通知", NotifyNewId);
             _notifyFavorite = Check("お気に入りチャンネル通知", NotifyFavoriteId);
@@ -98,7 +100,9 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             Show(_internalPlayerChoice, PlaybackCategory); Show(_externalPlayerChoice, PlaybackCategory);
             Show(_lowLatencyPlayback, PlaybackCategory);
             Show(_settingsPath, PathCategory); Show(_settingsBrowse, PathCategory);
-            Show(_settingsReset, PathCategory && _pathSettings!.CanReset); Show(_testSound, notification);
+            Show(_settingsReset, PathCategory && _pathSettings!.CanReset);
+            Show(_setupLibMpv, PlaybackCategory && _pathSettings!.CanSetupLibMpv);
+            Show(_testSound, notification);
             foreach (var control in new[] { _notifyNew, _notifyFavorite, _notifySound }) Show(control, notification);
             ShowNetworkSettingsCategory();
             _ = EnableWindow(_playbackCategory, _pathSettings?.Available(GenesisIntegratedSettingsCategory.Playback) == true);
@@ -172,6 +176,10 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 }
             }
             else if (id == SettingsResetId && control == _settingsReset && PathCategory) { _ = _pathSettings!.Save(reset: true); RefreshIntegratedSettings(); }
+            else if (id == SetupLibMpvId && control == _setupLibMpv && PlaybackCategory)
+            {
+                StartLibMpvAutoSetup();
+            }
             else if (_settingsCategory == GenesisIntegratedSettingsCategory.Notifications && _viewModel.NotificationSettings is { } notifications)
             {
                 if (id == TestSoundId && control == _testSound)
@@ -207,14 +215,20 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 if (PlaybackCategory)
                 {
                     var internalSelected = page.PlayerMode == GenesisPlaybackPlayerMode.Internal;
+                    var libMpvStatus = internalSelected
+                        ? LibMpvRuntimeProvisioner.DescribeAvailability(page.Draft, page.Saved)
+                        : null;
                     _ = SetWindowTextW(_generalTitle, "再生設定");
                     _ = SetWindowTextW(_generalNotice, internalSelected
                         ? "内蔵プレイヤーは libmpv DLL を使用し、保存した設定は次の再生から使用します。\r\n低遅延再生では通信状況により途切れやすくなります。"
                         : "保存したプレイヤーとファイルは次の再生から使用します。\r\n空欄では環境変数または PATH を使用します。「未設定に戻す」は即時保存します。");
                     var savedMode = page.SavedPlayerMode;
                     var savedPath = savedMode == page.PlayerMode ? " / " + (page.Saved.Length == 0 ? "パス未設定" : page.Saved) : string.Empty;
-                    _ = SetWindowTextW(_generalRuntime, "保存済み: " + GenesisPathSettingsPage.PlayerLabel(savedMode) + savedPath);
-                    _ = SetWindowTextW(_generalConfigured, internalSelected ? "libmpv DLL（.dll）" : "外部プレイヤーの実行ファイル（.exe）");
+                    var savedBadge = internalSelected && savedMode == GenesisPlaybackPlayerMode.Internal && libMpvStatus is not null
+                        ? $"（{libMpvStatus.SavedStateBadge}）"
+                        : string.Empty;
+                    _ = SetWindowTextW(_generalRuntime, "保存済み: " + GenesisPathSettingsPage.PlayerLabel(savedMode) + savedBadge + savedPath);
+                    _ = SetWindowTextW(_generalConfigured, internalSelected ? libMpvStatus!.FieldLabel : "外部プレイヤーの実行ファイル（.exe）");
                     SetPlayerChoiceText(_internalPlayerChoice, GenesisPlaybackPlayerMode.Internal, page.PlayerMode);
                     SetPlayerChoiceText(_externalPlayerChoice, GenesisPlaybackPlayerMode.External, page.PlayerMode);
                     _ = SendMessageW(_lowLatencyPlayback, 0x00F1, page.LowLatencyInternalPlayback ? 1u : 0u, 0);
@@ -241,6 +255,14 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 _ = EnableWindow(_generalCancel, page.IsDirty || page.Conflict || page.IsError);
                 _ = ShowWindow(_settingsReset, page.CanReset ? ShowWindowShowNoActivate : ShowWindowHide);
                 _ = EnableWindow(_settingsReset, !page.Conflict);
+                var setupButtonText = _settingUpLibMpv
+                    ? "導入中..."
+                    : PlaybackCategory && page.CanSetupLibMpv
+                        ? LibMpvRuntimeProvisioner.DescribeAvailability(page.Draft, page.Saved).ButtonText
+                        : "公式 libmpv を自動導入";
+                _ = ShowWindow(_setupLibMpv, PlaybackCategory && page.CanSetupLibMpv ? ShowWindowShowNoActivate : ShowWindowHide);
+                _ = SetWindowTextW(_setupLibMpv, setupButtonText);
+                _ = EnableWindow(_setupLibMpv, !_settingUpLibMpv && !page.Conflict);
             }
             else if (_viewModel.NotificationSettings is { } notifications)
             {
@@ -266,7 +288,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             Place(_internalPlayerChoice, GenesisGuiNextSettingsLayout.InternalPlayerChoice);
             Place(_externalPlayerChoice, GenesisGuiNextSettingsLayout.ExternalPlayerChoice);
             Place(_lowLatencyPlayback, layout.LowLatencyPlayback);
-            Place(_settingsReset, layout.Reset); Place(_testSound, layout.SoundTest);
+            Place(_settingsReset, layout.Reset); Place(_setupLibMpv, layout.SetupLibMpv); Place(_testSound, layout.SoundTest);
             if (PathCategory)
             {
                 Place(_generalNotice, layout.PathNotice(PlaybackCategory));
@@ -287,6 +309,65 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         internal void RefreshSettingsPathFocus(nint window)
         {
             if ((window == _settingsPath || NetworkSettingsInputs.Contains(window)) && SettingsPageOpen) _ = RedrawWindow(_settingsPane, 0, 0, 0x0001 | 0x0004);
+        }
+
+        private void StartLibMpvAutoSetup()
+        {
+            if (_settingUpLibMpv || _pathSettings is null || !_pathSettings.CanSetupLibMpv)
+            {
+                return;
+            }
+
+            _settingUpLibMpv = true;
+            _pathSettings.ReportStatus($"公式 libmpv (LGPL {LibMpvRuntimeProvisioner.Version}) の導入を開始しています…", isError: false);
+            RefreshIntegratedSettings();
+
+            var provisioner = new LibMpvRuntimeProvisioner();
+            var targetDir = LibMpvRuntimeProvisioner.ResolveDefaultRuntimeDirectory();
+            var progress = new Progress<LibMpvSetupProgress>(report => PostPublishingUi(() =>
+            {
+                if (_settingUpLibMpv && _pathSettings is not null && PlaybackCategory)
+                {
+                    _pathSettings.ReportStatus(report.FormatStatus(), isError: false);
+                    _ = SetWindowTextW(_generalStatus, _pathSettings.Message);
+                }
+            }));
+
+            _ = Task.Run(async () =>
+            {
+                var result = await provisioner.ProvisionAsync(targetDir, progress).ConfigureAwait(false);
+                PostPublishingUi(() =>
+                {
+                    _settingUpLibMpv = false;
+                    if (_pathSettings is null)
+                    {
+                        return;
+                    }
+
+                    if (result.Succeeded && !string.IsNullOrWhiteSpace(result.LibraryPath))
+                    {
+                        if (PlaybackCategory)
+                        {
+                            _pathSettings.SelectPlayer(GenesisPlaybackPlayerMode.Internal);
+                            _pathSettings.Edit(result.LibraryPath);
+                            if (_pathSettings.Save())
+                            {
+                                _pathSettings.ReportStatus(
+                                    result.AlreadyPresent
+                                        ? $"導入済みの公式 libmpv ({LibMpvRuntimeProvisioner.Version} LGPL) を設定・保存しました。"
+                                        : $"公式 libmpv ({LibMpvRuntimeProvisioner.Version} LGPL) を導入して保存しました。次の再生から使用します。",
+                                    isError: false);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        _pathSettings.ReportStatus(result.ErrorMessage ?? "libmpv の自動導入に失敗しました。", isError: true);
+                    }
+
+                    RefreshIntegratedSettings();
+                });
+            });
         }
     }
 
