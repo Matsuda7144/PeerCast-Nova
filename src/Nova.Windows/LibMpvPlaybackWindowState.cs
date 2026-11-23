@@ -9,13 +9,16 @@ internal sealed record LibMpvPlaybackWindowState(
     bool Muted = false,
     bool AlwaysOnTop = false,
     bool Borderless = false,
-    bool BbsUseSage = true)
+    bool BbsUseSage = true,
+    bool AutoResizeTo100PercentOnStart = false)
 {
-    public const int MinVideoWidth = 320;
-    public const int MinVideoHeight = 180;
+    public const int MinVideoWidth = 160;
+    public const int MinVideoHeight = 90;
     public const int MaxVideoWidth = 7680;
     public const int MaxVideoHeight = 4320;
     public const int DefaultSnapDistance = 12;
+
+    public static int[] ScalePresets { get; } = [25, 50, 75, 100, 125, 150, 200];
 
     public static LibMpvPlaybackWindowState Default { get; } = new();
 
@@ -27,6 +30,16 @@ internal sealed record LibMpvPlaybackWindowState(
         VideoHeight = Math.Clamp(VideoHeight, MinVideoHeight, MaxVideoHeight),
         Volume = LibMpvPlaybackAudioState.ClampVolume(Volume),
     };
+
+    public static (int Width, int Height) ScaleVideoSize(int nativeWidth, int nativeHeight, int scalePercent)
+    {
+        var baseWidth = nativeWidth > 0 ? nativeWidth : 960;
+        var baseHeight = nativeHeight > 0 ? nativeHeight : 540;
+        var clampedScale = Math.Clamp(scalePercent, 25, 400);
+        var width = Math.Clamp((int)Math.Round(baseWidth * clampedScale / 100.0), MinVideoWidth, MaxVideoWidth);
+        var height = Math.Clamp((int)Math.Round(baseHeight * clampedScale / 100.0), MinVideoHeight, MaxVideoHeight);
+        return (width, height);
+    }
 
     public static (int Left, int Top) SnapToWorkArea(
         int left,

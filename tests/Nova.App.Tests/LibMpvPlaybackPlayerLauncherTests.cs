@@ -462,6 +462,35 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
         Assert.Equal(LibMpvCaptionOverlayButton.None, LibMpvPlaybackCaptionOverlay.HitTestButton(10, 30));
     }
 
+    [Fact]
+    public void ScaleVideoSizeComputesPresetsAndAutoResizePersists()
+    {
+        Assert.Equal((320, 180), LibMpvPlaybackWindowState.ScaleVideoSize(1280, 720, 25));
+        Assert.Equal((640, 360), LibMpvPlaybackWindowState.ScaleVideoSize(1280, 720, 50));
+        Assert.Equal((960, 540), LibMpvPlaybackWindowState.ScaleVideoSize(1280, 720, 75));
+        Assert.Equal((1280, 720), LibMpvPlaybackWindowState.ScaleVideoSize(1280, 720, 100));
+        Assert.Equal((1600, 900), LibMpvPlaybackWindowState.ScaleVideoSize(1280, 720, 125));
+        Assert.Equal((1920, 1080), LibMpvPlaybackWindowState.ScaleVideoSize(1280, 720, 150));
+        Assert.Equal((2560, 1440), LibMpvPlaybackWindowState.ScaleVideoSize(1280, 720, 200));
+        Assert.Equal((160, 90), LibMpvPlaybackWindowState.ScaleVideoSize(320, 180, 25));
+
+        var tempDir = Directory.CreateTempSubdirectory("nova-scale-");
+        try
+        {
+            var path = Path.Combine(tempDir.FullName, "embedded-player-window.json");
+            var store = new LibMpvPlaybackWindowStateStore(path);
+            Assert.False(store.Current.AutoResizeTo100PercentOnStart);
+
+            store.Update(store.Current with { AutoResizeTo100PercentOnStart = true });
+            var reloaded = new LibMpvPlaybackWindowStateStore(path);
+            Assert.True(reloaded.Current.AutoResizeTo100PercentOnStart);
+        }
+        finally
+        {
+            tempDir.Delete(recursive: true);
+        }
+    }
+
     private sealed class ControlledClient(
         Action<PlaybackMediaContainer, uint, LibMpvPlaybackAudioState, bool>? setStartupOptions = null) : ILibMpvPlaybackClient
     {

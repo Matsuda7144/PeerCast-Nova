@@ -84,6 +84,7 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
     private const uint WindowMessageExitSizeMove = 0x0232;
     private const uint WindowMessageBbsStateChanged = 0x8001;
     private const uint WindowMessageBbsPostCompleted = 0x8002;
+    private const uint WindowMessageApplyAutoScale = 0x8003;
 
     private const int GwlStyle = -16;
     private const nint HwndTopMost = -1;
@@ -153,6 +154,8 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
     private const uint MenuCmdGammaUp = 2126;
     private const uint MenuCmdGammaDown = 2127;
     private const uint MenuCmdVideoAdjustReset = 2128;
+    private const uint MenuCmdScaleBase = 2140;
+    private const uint MenuCmdToggleAutoResize100 = 2150;
     private const uint MenuCmdThreadBase = 3000;
 
     private const nuint VirtualKeyReturn = 0x0D;
@@ -204,6 +207,11 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
     private LibMpvPlaybackWindowState _windowState;
     private LibMpvVideoAdjustment _videoAdjustment = LibMpvVideoAdjustment.Default;
     private string? _statusStatsText;
+    private int _nativeVideoWidth;
+    private int _nativeVideoHeight;
+    private bool _autoResizeTo100PercentOnStart;
+    private bool _appliedInitialAutoResize;
+    private bool _userResized;
 
     public LibMpvPlaybackWindowHost(LibMpvPlaybackWindowOptions? options = null)
     {
@@ -219,6 +227,7 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
         _alwaysOnTop = initialState.AlwaysOnTop;
         _borderless = initialState.Borderless;
         _bbsUseSage = initialState.BbsUseSage;
+        _autoResizeTo100PercentOnStart = initialState.AutoResizeTo100PercentOnStart;
         _audio = new(initialState.AudioState);
         _audio.StateChanged += state =>
         {
@@ -239,6 +248,40 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
     public void UpdateStatusStats(string? statsText)
     {
         Volatile.Write(ref _statusStatsText, statsText);
+    }
+
+    public void UpdateVideoStats(LibMpvPlaybackStats stats)
+    {
+        ArgumentNullException.ThrowIfNull(stats);
+        var formatted = stats.FormatCompact();
+        if (!string.IsNullOrEmpty(formatted))
+        {
+            Volatile.Write(ref _statusStatsText, formatted);
+        }
+
+        if (stats.VideoWidth <= 0 || stats.VideoHeight <= 0)
+        {
+            return;
+        }
+
+        Volatile.Write(ref _nativeVideoWidth, stats.VideoWidth);
+        Volatile.Write(ref _nativeVideoHeight, stats.VideoHeight);
+
+        if (!_autoResizeTo100PercentOnStart || _appliedInitialAutoResize || _userResized)
+        {
+            return;
+        }
+
+        nint window;
+        lock (_sync)
+        {
+            window = _window;
+        }
+
+        if (window != 0 && IsWindow(window))
+        {
+            _ = PostMessageW(window, WindowMessageApplyAutoScale, 0, 0);
+        }
     }
 
     public LibMpvPlaybackAudioState AudioState => _audio.Current;
@@ -886,6 +929,7 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
 
             case WindowMessageExitSizeMove:
                 _borderlessMaximized = false;
+                _userResized = true;
                 CaptureNormalWindowBounds(window);
                 return 0;
 
@@ -993,6 +1037,10 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
 
             case WindowMessageBbsPostCompleted:
                 CompleteBbsPostOnUiThread(wParam != 0);
+                return 0;
+
+            case WindowMessageApplyAutoScale:
+                TryApplyInitialAutoScale(window);
                 return 0;
 
             case WindowMessageClose:
@@ -1942,6 +1990,56 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
 
         try
         {
+            var scaleMenu = CreatePopupMenu();
+            if (scaleMenu != 0)
+            {
+                var nativeW = Volatile.Read(ref _nativeVideoWidth);
+                var nativeH = Volatile.Read(ref _nativeVideoHeight);
+                var currentVideoW = 0;
+                var currentVideoH = 0;
+                if (GetClientRect(window, out var clientRect))
+                {
+                    currentVideoW = clientRect.Right - clientRect.Left;
+                    currentVideoH = (clientRect.Bottom - clientRect.Top) - BottomBarsHeight;
+                }
+
+                var presets = LibMpvPlaybackWindowState.ScalePresets;
+                for (var i = 0; i < presets.Length; i++)
+                {
+                    var percent = presets[i];
+                    var flags = MenuFlagString;
+                    if (nativeW > 0 && nativeH > 0)
+                    {
+                        var (expectedW, expectedH) = LibMpvPlaybackWindowState.ScaleVideoSize(nativeW, nativeH, percent);
+                        if (Math.Abs(currentVideoW - expectedW) <= 2 && Math.Abs(currentVideoH - expectedH) <= 2)
+                        {
+                            flags |= MenuFlagChecked;
+                        }
+                    }
+
+                    _ = AppendMenuW(scaleMenu, flags, MenuCmdScaleBase + (uint)i, $"{percent}%");
+                }
+
+                _ = AppendMenuW(scaleMenu, MenuFlagSeparator, 0, string.Empty);
+                _ = AppendMenuW(
+                    scaleMenu,
+                    MenuFlagString | (_autoResizeTo100PercentOnStart ? MenuFlagChecked : 0),
+                    MenuCmdToggleAutoResize100,
+                    "起動時に 100% で開く");
+                _ = AppendMenuW(menu, MenuFlagPopup, (nuint)scaleMenu, "倍率");
+            }
+
+            var sizeMenu = CreatePopupMenu();
+            if (sizeMenu != 0)
+            {
+                _ = AppendMenuW(sizeMenu, MenuFlagString, MenuCmdResizeSmall, "640 × 360");
+                _ = AppendMenuW(sizeMenu, MenuFlagString, MenuCmdResizeMedium, "960 × 540");
+                _ = AppendMenuW(sizeMenu, MenuFlagString, MenuCmdResizeHd, "1280 × 720");
+                _ = AppendMenuW(sizeMenu, MenuFlagString, MenuCmdResizeLarge, "1600 × 900");
+                _ = AppendMenuW(menu, MenuFlagPopup, (nuint)sizeMenu, "サイズ");
+            }
+
+            _ = AppendMenuW(menu, MenuFlagSeparator, 0, string.Empty);
             _ = AppendMenuW(menu, MenuFlagString | (_alwaysOnTop ? MenuFlagChecked : 0), MenuCmdToggleAlwaysOnTop, "最前面に固定 (T)");
             _ = AppendMenuW(menu, MenuFlagString | (_borderless ? MenuFlagChecked : 0), MenuCmdToggleBorderless, "枠なし表示 (B)");
             _ = AppendMenuW(menu, MenuFlagString | (_fullscreen ? MenuFlagChecked : 0), MenuCmdToggleFullscreen, "フルスクリーン (F)");
@@ -1970,11 +2068,6 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
             }
 
             _ = AppendMenuW(menu, MenuFlagSeparator, 0, string.Empty);
-            _ = AppendMenuW(menu, MenuFlagString, MenuCmdResizeSmall, "サイズ: 640 × 360");
-            _ = AppendMenuW(menu, MenuFlagString, MenuCmdResizeMedium, "サイズ: 960 × 540");
-            _ = AppendMenuW(menu, MenuFlagString, MenuCmdResizeHd, "サイズ: 1280 × 720");
-            _ = AppendMenuW(menu, MenuFlagString, MenuCmdResizeLarge, "サイズ: 1600 × 900");
-            _ = AppendMenuW(menu, MenuFlagSeparator, 0, string.Empty);
             _ = AppendMenuW(menu, MenuFlagString | (_audio.Current.Muted ? MenuFlagChecked : 0), MenuCmdToggleMute, "ミュート (M)");
 
             var contactUrl = _options.BbsSession?.Snapshot.Target.ThreadUrl
@@ -1992,8 +2085,20 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
             }
 
             var selected = TrackPopupMenuEx(menu, TrackPopupReturnCmd, cursor.X, cursor.Y, window, 0);
+            if (selected >= MenuCmdScaleBase &&
+                selected < MenuCmdScaleBase + (uint)LibMpvPlaybackWindowState.ScalePresets.Length)
+            {
+                var scalePercent = LibMpvPlaybackWindowState.ScalePresets[(int)(selected - MenuCmdScaleBase)];
+                ApplyVideoScale(window, scalePercent);
+                return;
+            }
+
             switch (selected)
             {
+                case MenuCmdToggleAutoResize100:
+                    _autoResizeTo100PercentOnStart = !_autoResizeTo100PercentOnStart;
+                    UpdateSavedWindowState(s => s with { AutoResizeTo100PercentOnStart = _autoResizeTo100PercentOnStart });
+                    break;
                 case MenuCmdToggleAlwaysOnTop:
                     ToggleAlwaysOnTop(window);
                     break;
@@ -2071,6 +2176,34 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
         {
             _ = DestroyMenu(menu);
         }
+    }
+
+    private void ApplyVideoScale(nint window, int scalePercent)
+    {
+        var nativeW = Volatile.Read(ref _nativeVideoWidth);
+        var nativeH = Volatile.Read(ref _nativeVideoHeight);
+        var (width, height) = LibMpvPlaybackWindowState.ScaleVideoSize(nativeW, nativeH, scalePercent);
+        _userResized = true;
+        ResizeVideoArea(window, width, height);
+    }
+
+    private void TryApplyInitialAutoScale(nint window)
+    {
+        if (!_autoResizeTo100PercentOnStart || _appliedInitialAutoResize || _userResized || _fullscreen || _borderlessMaximized)
+        {
+            return;
+        }
+
+        var nativeW = Volatile.Read(ref _nativeVideoWidth);
+        var nativeH = Volatile.Read(ref _nativeVideoHeight);
+        if (nativeW <= 0 || nativeH <= 0)
+        {
+            return;
+        }
+
+        _appliedInitialAutoResize = true;
+        var (width, height) = LibMpvPlaybackWindowState.ScaleVideoSize(nativeW, nativeH, 100);
+        ResizeVideoArea(window, width, height);
     }
 
     private void ApplyVideoAdjustment(LibMpvVideoAdjustment next, string label)

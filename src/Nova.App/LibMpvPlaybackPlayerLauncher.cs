@@ -14,6 +14,7 @@ internal interface ILibMpvPlaybackWindow : IAsyncDisposable
     event Action? ScreenshotRequested { add { } remove { } }
     event Action<LibMpvVideoAdjustment, string>? VideoAdjustmentChanged { add { } remove { } }
     void UpdateStatusStats(string? statsText) { }
+    void UpdateVideoStats(LibMpvPlaybackStats stats) { }
     Task Closed { get; }
 }
 
@@ -258,6 +259,8 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
 
         public void UpdateStatusStats(string? statsText) => _host.UpdateStatusStats(statsText);
 
+        public void UpdateVideoStats(LibMpvPlaybackStats stats) => _host.UpdateVideoStats(stats);
+
         public async ValueTask DisposeAsync()
         {
             _host.AudioStateChanged -= OnAudioStateChanged;
@@ -492,17 +495,28 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
             ILibMpvPlaybackWindow window,
             CancellationToken cancellationToken)
         {
+            // Poll quickly at startup so 100% auto-resize triggers immediately when native video dimensions arrive.
+            for (var i = 0; i < 15; i++)
+            {
+                await Task.Delay(200, cancellationToken).ConfigureAwait(false);
+                var initialStats = client.TryReadStats();
+                if (initialStats is not null)
+                {
+                    window.UpdateVideoStats(initialStats);
+                    if (initialStats.VideoWidth > 0 && initialStats.VideoHeight > 0)
+                    {
+                        break;
+                    }
+                }
+            }
+
             using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
             while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
             {
                 var stats = client.TryReadStats();
                 if (stats is not null)
                 {
-                    var formatted = stats.FormatCompact();
-                    if (!string.IsNullOrEmpty(formatted))
-                    {
-                        window.UpdateStatusStats(formatted);
-                    }
+                    window.UpdateVideoStats(stats);
                 }
             }
         }
