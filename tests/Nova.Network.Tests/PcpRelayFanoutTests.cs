@@ -258,6 +258,31 @@ public sealed class PcpRelayFanoutTests
     }
 
     [Fact]
+    public async Task DefaultOptions_AbsorbsInitialBurstWithoutSlowConsumerTermination()
+    {
+        var defaultFanout = new PcpRelayFanoutOptions();
+        var defaultHttpFlv = new PcpHttpFlvPlaybackOptions();
+        Assert.True(defaultFanout.MaxPendingPacketsPerChild >= 64);
+        Assert.True(defaultHttpFlv.Fanout.MaxPendingPacketsPerChild >= 64);
+
+        await using var fanout = new PcpRelayFanout();
+        var sink = new CollectingRelaySink();
+        await using var child = fanout.AddChild(sink);
+
+        const int burstCount = 64;
+        var payload = new byte[4096];
+        for (var i = 0; i < burstCount; i++)
+        {
+            await fanout.ConsumeAsync(CreatePacket(i, payload), CancellationToken.None);
+        }
+
+        await sink.WaitForCountAsync(burstCount);
+        Assert.Equal(burstCount, sink.Packets.Length);
+        Assert.Null(child.Snapshot.EndReason);
+        Assert.Equal(0, child.Snapshot.DiscardedPacketCount);
+    }
+
+    [Fact]
     public async Task StopChild_ReturnsAtDeadlineAndRetainsBoundedSlotUntilCleanup()
     {
         var options = new PcpRelayFanoutOptions

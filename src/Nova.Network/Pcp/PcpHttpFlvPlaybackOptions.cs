@@ -26,7 +26,7 @@ public sealed record PcpHttpFlvPlaybackOptions
     public PcpRelayFanoutOptions Fanout { get; init; } = new()
     {
         MaxChildren = 1,
-        MaxPendingPacketsPerChild = 8,
+        MaxPendingPacketsPerChild = 512,
         MaxPendingBytesPerChild = 4 * 1024 * 1024,
     };
 

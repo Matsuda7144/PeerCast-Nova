@@ -8,7 +8,7 @@ public sealed record PcpRelayFanoutOptions
 
     public int MaxChildren { get; init; } = 32;
 
-    public int MaxPendingPacketsPerChild { get; init; } = 8;
+    public int MaxPendingPacketsPerChild { get; init; } = 512;
 
     public long MaxPendingBytesPerChild { get; init; } = 4L * 1024 * 1024;
 
