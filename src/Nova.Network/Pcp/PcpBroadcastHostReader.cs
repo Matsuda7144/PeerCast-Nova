@@ -28,6 +28,11 @@ internal static class PcpBroadcastHostReader
             count++; bytes += 8L + child.Content.Length;
             if (child.IsParent)
             {
+                if (child.Name == PcpKnownAtomNames.Channel)
+                {
+                    if (!TryCountChildSubtree(child, ref count, ref bytes)) return [];
+                    continue;
+                }
                 if (child.Name != PcpKnownAtomNames.Host || child.Children.Count > PcpRelayHostCandidateParser.MaximumFields || hosts.Count == MaximumHosts) return [];
                 foreach (var field in child.Children)
                 {
@@ -50,5 +55,23 @@ internal static class PcpBroadcastHostReader
             metadata.ContainsKey("dest") && Id("dest") != local || Byte("ttl") is not (> 0 and <= 32) ||
             Byte("hops") is not (<= 31) || Byte("ttl") + Byte("hops") > 32 || Byte("grp") is not (> 0 and <= 7)) return [];
         return hosts.AsReadOnly();
+    }
+
+    private static bool TryCountChildSubtree(PcpAtom root, ref int count, ref long bytes)
+    {
+        var stack = new Stack<PcpAtom>();
+        foreach (var child in root.Children) stack.Push(child);
+        while (stack.Count > 0)
+        {
+            var current = stack.Pop();
+            count++;
+            bytes += 8L + current.Content.Length;
+            if (bytes > MaximumBytes || count > MaximumAtoms) return false;
+            if (current.IsParent)
+            {
+                foreach (var nested in current.Children) stack.Push(nested);
+            }
+        }
+        return true;
     }
 }

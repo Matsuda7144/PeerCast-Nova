@@ -836,12 +836,17 @@ public sealed partial class PcpDownstreamChildSession :
     private byte[] EncodeHandshakeReply(bool accepted)
     {
         var writer = new ArrayBufferWriter<byte>();
+        var openPort = _remotePeer?.ListeningEndpoint?.Port is > 0 and <= ushort.MaxValue
+            ? (ushort?)_remotePeer.ListeningEndpoint.Port
+            : null;
         PcpAtomTreeCodec.Write(
             writer,
             PcpHeloCodec.CreateOleh(
                 _options.UserAgent,
                 _localSessionId,
-                _options.ServantVersion));
+                _options.ServantVersion,
+                remoteIp: _connection.RemoteEndPoint.Address,
+                openPort: openPort));
         if (!accepted && CanUsePeers && _remotePeer is not null)
             foreach (var peer in PcpReferralPlanner.Select(_peers!, _remotePeer))
                 PcpAtomTreeCodec.Write(writer, PcpReferralPlanner.CreateHost(peer));

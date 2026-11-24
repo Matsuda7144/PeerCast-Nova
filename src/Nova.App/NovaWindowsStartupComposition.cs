@@ -51,6 +51,7 @@ public sealed class NovaWindowsStartupComposition
     private readonly Func<
         GenesisGuiNextPlaybackPreferencesSource,
         GenesisRecordingOutputDirectorySettings,
+        GenesisGuiNextPublicChannelComposition?,
         IPlaybackSessionController> _genesisPlaybackControllerFactory;
 
     public NovaWindowsStartupComposition(NovaWindowsStartupOptions? options = null)
@@ -91,10 +92,11 @@ public sealed class NovaWindowsStartupComposition
             (() => _options.ValidationProfile is { } profile ? profile.CreateNetworkOwner() :
                 new NovaApplicationNetworkOwner(NovaSettingsStore.CreateDefault()));
         _genesisPlaybackControllerFactory = playbackControllerFactory is null
-            ? (paths, settings) => _options.ValidationProfile is { } profile ? profile.CreatePlaybackController(paths) :
+            ? (paths, settings, publicChannels) => _options.ValidationProfile is { } profile ? profile.CreatePlaybackController(paths) :
                 CreateDefaultGenesisPlaybackController(paths, settings,
-                    explicitPlayerPath: _options.PlayerExecutablePath, libMpvLibraryPath: _options.LibMpvLibraryPath)
-            : (_, _) => playbackControllerFactory();
+                    explicitPlayerPath: _options.PlayerExecutablePath, libMpvLibraryPath: _options.LibMpvLibraryPath,
+                    publicChannels: publicChannels)
+            : (_, _, _) => playbackControllerFactory();
     }
 
     public async ValueTask<NovaWindowsStartupResult> RunAsync(
@@ -196,7 +198,7 @@ public sealed class NovaWindowsStartupComposition
                 ? new SystemNovaObsPublishingRuntimeFactory(applicationState, allowLan: _options.ValidationProfile is null)
                 : _publishingRuntimeFactory;
             publishing = NovaGuiNextPublishingComposition.Create(publishingFactory, settings: publishingSettings);
-            playbackController = _genesisPlaybackControllerFactory(paths, recordingSettings);
+            playbackController = _genesisPlaybackControllerFactory(paths, recordingSettings, applicationState?.PublicChannels);
             result = await RunGenesisAsync(
                 createSurface(paths, recordingSettings, publishing.Status, publishing.Commands, applicationState),
                 playbackWindowSurfaceTarget: null,
@@ -266,7 +268,8 @@ public sealed class NovaWindowsStartupComposition
         GenesisRecordingOutputDirectorySettings? recordingSettings = null,
         GenesisRecordingHistoryStore? historyStore = null,
         string? explicitPlayerPath = null,
-        string? libMpvLibraryPath = null)
+        string? libMpvLibraryPath = null,
+        GenesisGuiNextPublicChannelComposition? publicChannels = null)
     {
         ArgumentNullException.ThrowIfNull(pathSource);
         var windowStateStore = LibMpvPlaybackWindowStateStore.CreateSystem();
@@ -295,7 +298,7 @@ public sealed class NovaWindowsStartupComposition
         }
 
         return GuiNextDailyPlaybackSessionController.CreateSystemWithPlayerLauncherFactory(
-            CreateLauncher, recordingSettings, historyStore);
+            CreateLauncher, recordingSettings, historyStore, publicChannels);
     }
 
     internal async ValueTask<NovaWindowsStartupResult> RunGenesisAsync(

@@ -1424,6 +1424,11 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             state.CompleteNatSettingsSave(wParam, (long)lParam);
             return 0;
         }
+        if (message == LivePublicSettingsApplied)
+        {
+            state.CompleteLivePublicSettingsApply(wParam);
+            return 0;
+        }
         if (message == WindowMessageCommand)
         {
             state.ProcessCommand(wParam, lParam);

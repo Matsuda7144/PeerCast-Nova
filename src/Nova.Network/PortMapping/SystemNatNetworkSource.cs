@@ -90,7 +90,6 @@ public sealed class SystemNatNetworkSource : INatNetworkSource, IDisposable
 
     private void Invalidate()
     {
-        lock (gate) { epoch = checked(epoch + 1); }
         Changed?.Invoke();
     }
 

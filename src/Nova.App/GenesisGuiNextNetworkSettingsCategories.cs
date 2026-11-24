@@ -7,7 +7,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge
     private const int ConnectionCategoryId = 1200, YellowPagesCategoryId = 1201, ConnectionIpv6Id = 1202,
         ConnectionInputId = 1210, ConnectionAutoMappingId = 1216, ConnectionWanId = 1217, YpInputId = 1220, YpListId = 1230, YpEnabledId = 1231,
         YpNewId = 1232, YpRemoveId = 1233, YpToggleId = 1234;
-    private const uint NetworkSettingsSaveCompleted = 0x8730, NatSettingsSaveCompleted = 0x8731;
+    private const uint NetworkSettingsSaveCompleted = 0x8730, NatSettingsSaveCompleted = 0x8731,
+        LivePublicSettingsApplied = 0x8732;
     private static int _nextNetworkSettingsToken;
 
     private sealed partial class AppShellState
@@ -216,7 +217,27 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             if (token != _networkSettingsToken || Volatile.Read(ref _detached) != 0 || _connectionSave is not { } save) return;
             _connectionPage?.CompleteSave(save);
             if (save.IsCompleted) _connectionSave = null;
+            if (save.IsCompletedSuccessfully && save.Result.Saved &&
+                _connectionPage is { } page && _viewModel.PublicChannels is { } publicChannels)
+            {
+                _ = ApplyLiveConnectionSettingsAsync(publicChannels, page.Saved, _settingsPane, token);
+            }
             if (ConnectionCategory) RefreshIntegratedSettings(); // never display a late result in another category
+        }
+
+        private async Task ApplyLiveConnectionSettingsAsync(GenesisGuiNextPublicChannelComposition publicChannels,
+            GenesisGuiNextConnectionPreferences saved, nint pane, nuint token)
+        {
+            try { await publicChannels.ApplyLivePublicSettingsAsync(saved).ConfigureAwait(false); }
+            catch { /* 安全にスナップショット状態へ留める */ }
+            if (Volatile.Read(ref _detached) == 0 && pane != 0)
+                _ = PostMessageW(pane, LivePublicSettingsApplied, token, 0);
+        }
+
+        internal void CompleteLivePublicSettingsApply(nuint token)
+        {
+            if (token == _networkSettingsToken && Volatile.Read(ref _detached) == 0 && ConnectionCategory)
+                RefreshIntegratedSettings();
         }
 
         private void RefreshNetworkSettings()

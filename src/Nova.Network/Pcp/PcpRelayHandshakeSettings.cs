@@ -7,7 +7,8 @@ internal sealed record PcpRelayHandshakeSettings(
     int MaxHandshakeAtomBytes,
     int MaxAtomsBeforeTerminal,
     string UserAgent,
-    uint ServantVersion)
+    uint ServantVersion,
+    ushort? AdvertisedListenPort = null)
 {
     public void Validate()
     {
@@ -27,6 +28,12 @@ internal sealed record PcpRelayHandshakeSettings(
         {
             throw new InvalidOperationException(
                 $"{nameof(MaxAtomsBeforeTerminal)} must be positive.");
+        }
+
+        if (AdvertisedListenPort is 0)
+        {
+            throw new InvalidOperationException(
+                $"{nameof(AdvertisedListenPort)} must be positive.");
         }
 
         ArgumentException.ThrowIfNullOrWhiteSpace(UserAgent);

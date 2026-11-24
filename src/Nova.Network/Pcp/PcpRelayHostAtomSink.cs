@@ -9,7 +9,7 @@ internal sealed class PcpRelayHostAtomSink(Action<PcpRelayHostCandidate> observe
     private List<PcpAtom>? _fields, _envelope;
     private bool _invalid;
     private long _bytes;
-    private int _atoms, _hostDepth, _hosts;
+    private int _atoms, _hostDepth, _hosts, _ignoredSubtreeDepth;
     private long _hostBytes;
 
     public void OnParentStarted(PcpParentStarted atom)
@@ -18,12 +18,18 @@ internal sealed class PcpRelayHostAtomSink(Action<PcpRelayHostCandidate> observe
         {
             _envelope = broadcasts is not null && atom.Header.Name == PcpBroadcastHostReader.Broadcast ? [] : null;
             _fields = atom.Header.Name == PcpKnownAtomNames.Host ? [] : null;
-            _hostDepth = 0; _hosts = 0; _atoms = 1; _bytes = 8; _hostBytes = 8;
+            _hostDepth = 0; _hosts = 0; _atoms = 1; _bytes = 8; _hostBytes = 8; _ignoredSubtreeDepth = 0;
             _invalid = atom.Header.Value > (_envelope is null ? PcpRelayHostCandidateParser.MaximumFields : 48);
         }
         else if (_envelope is not null || _fields is not null)
         {
             Count(0);
+            if (_ignoredSubtreeDepth > 0) return;
+            if (_envelope is not null && atom.Depth == 1 && atom.Header.Name == PcpKnownAtomNames.Channel)
+            {
+                _ignoredSubtreeDepth = atom.Depth;
+                return;
+            }
             if (_envelope is not null && atom.Depth == 1 && atom.Header.Name == PcpKnownAtomNames.Host &&
                 atom.Header.Value <= PcpRelayHostCandidateParser.MaximumFields && ++_hosts <= PcpBroadcastHostReader.MaximumHosts)
             { _fields = []; _hostDepth = 1; _hostBytes = 8; }
@@ -35,7 +41,7 @@ internal sealed class PcpRelayHostAtomSink(Action<PcpRelayHostCandidate> observe
     {
         if (_envelope is null && _fields is null || _invalid) return;
         Count(atom.Payload.Length);
-        if (_invalid) return;
+        if (_invalid || _ignoredSubtreeDepth > 0) return;
         var name = atom.Header.Name.ToString();
         if (_fields is not null && atom.Depth == _hostDepth + 1)
         {
@@ -61,6 +67,11 @@ internal sealed class PcpRelayHostAtomSink(Action<PcpRelayHostCandidate> observe
 
     public void OnParentEnded(PcpParentEnded atom)
     {
+        if (_ignoredSubtreeDepth > 0)
+        {
+            if (atom.Depth == _ignoredSubtreeDepth) _ignoredSubtreeDepth = 0;
+            return;
+        }
         if (_fields is not null && atom.Depth == _hostDepth)
         {
             var host = PcpAtom.Parent(PcpKnownAtomNames.Host, _fields);

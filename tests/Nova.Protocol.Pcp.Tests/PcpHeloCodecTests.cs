@@ -1,3 +1,5 @@
+using System.Net;
+
 namespace PeerCast.Nova.Protocol.Pcp.Tests;
 
 public sealed class PcpHeloCodecTests
@@ -83,6 +85,25 @@ public sealed class PcpHeloCodecTests
                     PcpAtom.Leaf(
                         PcpKnownAtomNames.HeloPing,
                         PcpWireValueCodec.EncodeUInt16(7145)))));
+    }
+
+    [Fact]
+    public void CreateOleh_WithRemoteIpAndOpenPort_RoundTripsThroughParseOleh()
+    {
+        var remoteIp = IPAddress.Parse("203.0.113.10");
+        var oleh = PcpHeloCodec.CreateOleh(
+            "PeerCastNova/Test",
+            SessionId,
+            remoteIp: remoteIp,
+            openPort: 7144);
+
+        var result = PcpHeloCodec.ParseOleh(oleh);
+
+        Assert.Equal(SessionId, result.SessionId);
+        Assert.Equal("PeerCastNova/Test", result.Agent);
+        Assert.Equal((uint)1218, result.ServantVersion);
+        Assert.Equal(remoteIp, result.RemoteAddress);
+        Assert.Equal((ushort)7144, result.RemotePort);
     }
 
     private static PcpAtom SessionLeaf()

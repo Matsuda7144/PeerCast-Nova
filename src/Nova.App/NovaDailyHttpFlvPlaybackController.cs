@@ -59,13 +59,14 @@ internal sealed class NovaDailyHttpFlvPlaybackController :
         Func<IDailyPlaybackPlayerLauncher> createPlayerLauncher,
         Action<string> setStatus,
         Action<string> showError,
-        PcpRecordingRuntimeComposition recordingComposition)
+        PcpRecordingRuntimeComposition recordingComposition,
+        GenesisGuiNextPublicChannelComposition? publicChannels = null)
         : this(
             createPlayerLauncher,
             setStatus,
             showError,
             recordingComposition,
-            new GenesisSharedPcpPlaybackRuntime(recordingComposition))
+            new GenesisSharedPcpPlaybackRuntime(recordingComposition, publicChannels))
     {
     }
 
@@ -162,12 +163,14 @@ internal sealed class NovaDailyHttpFlvPlaybackController :
         Action<string> setStatus,
         Action<string> showError,
         GenesisRecordingOutputDirectorySettings? recordingSettings = null,
-        GenesisRecordingHistoryStore? historyStore = null) =>
+        GenesisRecordingHistoryStore? historyStore = null,
+        GenesisGuiNextPublicChannelComposition? publicChannels = null) =>
         new(
             createPlayerLauncher,
             setStatus,
             showError,
-            CreateProductionRecordingComposition(recordingSettings, historyStore));
+            CreateProductionRecordingComposition(recordingSettings, historyStore),
+            publicChannels);
 
     internal static PcpRecordingRuntimeComposition CreateProductionRecordingComposition(
         GenesisRecordingOutputDirectorySettings? settings = null,

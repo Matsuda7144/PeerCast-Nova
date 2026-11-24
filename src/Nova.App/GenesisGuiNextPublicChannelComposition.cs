@@ -80,6 +80,56 @@ internal sealed partial class GenesisGuiNextPublicChannelComposition : IAsyncDis
         return await RegisterAsync(owner, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// 視聴・録画用の共有 PCP コーディネータを公開リレー管理とリレーツリーへ統合する。
+    /// コーディネータ自体の破棄責任は呼び出し元（再生ランタイム）に残す。
+    /// </summary>
+    internal Owner AttachPlaybackViewing(
+        ChannelId channelId,
+        ChannelSessionId sessionId,
+        Func<IPcpDownstreamRelayAdmission, PcpRelayCoordinator> createCoordinator,
+        ChannelStatusTracker tracker)
+    {
+        ArgumentNullException.ThrowIfNull(channelId);
+        ArgumentNullException.ThrowIfNull(sessionId);
+        ArgumentNullException.ThrowIfNull(createCoordinator);
+        ArgumentNullException.ThrowIfNull(tracker);
+
+        var owner = new Owner(
+            this,
+            channelId,
+            sessionId,
+            RelayChannelKind.Viewing,
+            new IPEndPoint(IPAddress.Loopback, 0),
+            ownsRuntime: false,
+            retainDownstreamConsumerLease: true);
+        var coordinator = createCoordinator(owner);
+        owner.ConfigureAttached(coordinator, tracker);
+        try
+        {
+            lock (_gate)
+            {
+                ObjectDisposedException.ThrowIf(_disposeTask is not null, this);
+                var registration = _registry.Register(
+                    owner.ChannelId,
+                    owner.SessionId,
+                    owner.Kind,
+                    owner.Fanout,
+                    () => owner.ViewingRuntime?.DeclaredBitrateKbps);
+                owner.Bind(registration);
+                if (_current.TryGetValue(owner.ChannelId, out var previous)) previous.Retire();
+                _current[owner.ChannelId] = owner;
+                _owners.Add(owner);
+                return owner;
+            }
+        }
+        catch
+        {
+            owner.Retire();
+            throw;
+        }
+    }
+
     private async ValueTask<Owner> RegisterAsync(Owner owner, CancellationToken cancellationToken)
     {
         try
@@ -158,6 +208,8 @@ internal sealed partial class GenesisGuiNextPublicChannelComposition : IAsyncDis
         private readonly object _gate = new();
         private readonly GenesisGuiNextPublicChannelComposition _composition;
         private readonly IPEndPoint _requestedEndPoint;
+        private readonly bool _ownsRuntime;
+        private readonly bool _retainDownstreamConsumerLease;
         private GenesisDownstreamRelayOwnerRegistry.Owner? _registration;
         private IAsyncDisposable? _runtime;
         private Func<CancellationToken, Task>? _activate;
@@ -165,17 +217,21 @@ internal sealed partial class GenesisGuiNextPublicChannelComposition : IAsyncDis
         private Func<PcpDownstreamRelayServerSnapshot>? _snapshot;
         private Task? _runTask;
         private Task? _disposeTask;
+        private bool _attachedActive;
         private bool _retired;
         private readonly TaskCompletionSource _retirement = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         internal Owner(GenesisGuiNextPublicChannelComposition composition, ChannelId channelId,
-            ChannelSessionId sessionId, RelayChannelKind kind, IPEndPoint endpoint)
+            ChannelSessionId sessionId, RelayChannelKind kind, IPEndPoint endpoint,
+            bool ownsRuntime = true, bool retainDownstreamConsumerLease = false)
         {
             _composition = composition;
             ChannelId = channelId;
             SessionId = sessionId;
             Kind = kind;
             _requestedEndPoint = endpoint;
+            _ownsRuntime = ownsRuntime;
+            _retainDownstreamConsumerLease = retainDownstreamConsumerLease;
         }
 
         public ChannelId ChannelId { get; }
@@ -184,7 +240,7 @@ internal sealed partial class GenesisGuiNextPublicChannelComposition : IAsyncDis
         public IPEndPoint RequestedEndPoint => new(_requestedEndPoint.Address, _requestedEndPoint.Port);
         public IPEndPoint LocalEndPoint => _endpoint!();
         public PcpDownstreamRelayServerSnapshot DownstreamSnapshot => _snapshot!();
-        public bool ActivationStarted { get { lock (_gate) { return _runTask is not null; } } }
+        public bool ActivationStarted { get { lock (_gate) { return _runTask is not null || _attachedActive; } } }
         public bool IsRetired { get { lock (_gate) { return _retired; } } }
         public Task Retirement => _retirement.Task;
         public bool IsDisposed { get { lock (_gate) { return _disposeTask?.IsCompleted == true; } } }
@@ -227,6 +283,22 @@ internal sealed partial class GenesisGuiNextPublicChannelComposition : IAsyncDis
                 }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
         }
 
+        internal void ConfigureAttached(PcpRelayCoordinator coordinator, ChannelStatusTracker tracker)
+        {
+            _runtime = coordinator;
+            Fanout = coordinator.DownstreamFanout;
+            _endpoint = () => coordinator.LocalEndPoint;
+            _snapshot = () => coordinator.DownstreamSnapshot;
+            ViewingRuntime = coordinator;
+            _upstreamTracker = tracker;
+            _attachedActive = true;
+            _ = _retirement.Task.ContinueWith(_ =>
+            {
+                try { coordinator.RequestStop(); }
+                catch (ObjectDisposedException) { }
+            }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+        }
+
         internal void Bind(GenesisDownstreamRelayOwnerRegistry.Owner registration)
         {
             _registration = registration;
@@ -236,16 +308,34 @@ internal sealed partial class GenesisGuiNextPublicChannelComposition : IAsyncDis
         public bool TryReserve(long connectionId, [NotNullWhen(true)] out IDisposable? reservation,
             CancellationToken cancellationToken = default)
         {
+            IDisposable? inner;
+            bool retainLease;
+            PcpRelayCoordinator? viewingRuntime;
             lock (_gate)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (_retired || _registration is null)
+                if (_retired || _registration is null || !_registration.TryReserve(connectionId, out inner, cancellationToken))
                 {
                     reservation = null;
                     return false;
                 }
-                return _registration.TryReserve(connectionId, out reservation, cancellationToken);
+                retainLease = _retainDownstreamConsumerLease;
+                viewingRuntime = ViewingRuntime;
             }
+            if (!retainLease)
+            {
+                reservation = inner;
+                return true;
+            }
+            var consumerLease = viewingRuntime?.TryAcquireApplicationConsumerLease();
+            if (consumerLease is null)
+            {
+                inner.Dispose();
+                reservation = null;
+                return false;
+            }
+            reservation = new DownstreamConsumerRetainingReservation(inner, consumerLease);
+            return true;
         }
 
         public PcpDownstreamDisconnectRequest AcceptDisconnect(PcpDownstreamDisconnectTarget target,
@@ -302,8 +392,10 @@ internal sealed partial class GenesisGuiNextPublicChannelComposition : IAsyncDis
                             publicLifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _publicStop.Token);
                             // Record the complete startup before invoking the provider:
                             // Stop must join even a delayed provider, not just route acquisition.
-                            _publicAcquisition = Task.Run(() => _composition.GetPublicHost()
-                                .AcquireAsync(BindPublicRoute, publicLifetime.Token), CancellationToken.None);
+                            _publicAcquisition = Task.Run(
+                                async () => (GenesisSharedPublicRelay.Lease?)await _composition.GetPublicHost()
+                                    .AcquireAsync(BindPublicRoute, publicLifetime.Token).ConfigureAwait(false),
+                                CancellationToken.None);
                         }
                         using (publicLifetime) { _publicLease = await _publicAcquisition.ConfigureAwait(false); }
                         lock (_gate)
@@ -359,19 +451,46 @@ internal sealed partial class GenesisGuiNextPublicChannelComposition : IAsyncDis
             // Never call the collection callback while holding the owner lock.
             await Task.CompletedTask.ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
             Exception? failure = null;
-            try { if (_runtime is not null) await _runtime.DisposeAsync().ConfigureAwait(false); }
+            try { if (_ownsRuntime && _runtime is not null) await _runtime.DisposeAsync().ConfigureAwait(false); }
             catch (Exception error) { failure = error; }
             try { if (_publicCancellation is not null) await _publicCancellation.ConfigureAwait(false); }
             catch (Exception error) { failure = error; }
             if (_publicAcquisition is { } acquiring)
             {
-                try { _publicLease = await acquiring.ConfigureAwait(false); }
+                try { _publicLease ??= await acquiring.ConfigureAwait(false); }
                 catch { if (_composition.PublicSnapshot?.CleanupFailed == true) failure ??= new IOException("Public startup cleanup failed."); }
             }
             try { if (_publicLease is not null) await _publicLease.DisposeAsync().ConfigureAwait(false); }
             catch (Exception error) { failure = failure is null ? error : new AggregateException(failure, error); }
             finally { _publicStop.Dispose(); _composition.Remove(this); }
             if (failure is not null) throw new InvalidOperationException("Channel owner cleanup failed.", failure);
+        }
+
+        private sealed class DownstreamConsumerRetainingReservation(
+            IDisposable inner,
+            IAsyncDisposable consumerLease) : IDisposable
+        {
+            private int _disposed;
+
+            public void Dispose()
+            {
+                if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+                inner.Dispose();
+                _ = DisposeConsumerLeaseAsync();
+            }
+
+            private async Task DisposeConsumerLeaseAsync()
+            {
+                await Task.CompletedTask.ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
+                try
+                {
+                    await consumerLease.DisposeAsync().ConfigureAwait(false);
+                }
+                catch
+                {
+                    // 予約枠の解放は既に完了しており、バックグラウンド停止の未観測例外を防ぐ。
+                }
+            }
         }
     }
 }

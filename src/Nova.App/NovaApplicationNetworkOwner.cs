@@ -74,9 +74,23 @@ internal sealed class NovaApplicationNetworkOwner : INovaApplicationNetworkOwner
             if (legacy?.State is NovaPublicRelayState.Starting or NovaPublicRelayState.Listening or NovaPublicRelayState.Stopping ||
                 legacy?.Failure == NovaPublicRelayFailure.CleanupFailed)
                 throw new GenesisPublicRelayStartException();
-            if (sharedRelay is not null && (sharedRelaySettings != settings ||
-                !Equals(sharedResolver, resolveOwner) && sharedRelay.Snapshot.State != GenesisSharedPublicRelayState.Stopped))
-                throw new GenesisPublicRelayStartException();
+            if (sharedRelay is not null)
+            {
+                var state = sharedRelay.Snapshot.State;
+                if (sharedRelaySettings != settings)
+                {
+                    if (state is not (GenesisSharedPublicRelayState.Stopped or GenesisSharedPublicRelayState.Disposed))
+                        throw new GenesisPublicRelayStartException();
+                    var stale = sharedRelay;
+                    sharedRelay = null;
+                    if (state != GenesisSharedPublicRelayState.Disposed)
+                        _ = stale.DisposeAsync().AsTask();
+                }
+                else if (!Equals(sharedResolver, resolveOwner) && state != GenesisSharedPublicRelayState.Stopped)
+                {
+                    throw new GenesisPublicRelayStartException();
+                }
+            }
             sharedResolver = resolveOwner;
             sharedRelaySettings = settings;
             return sharedRelay ??= new(settings, runtime.Manager,

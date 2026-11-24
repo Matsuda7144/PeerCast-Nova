@@ -59,14 +59,17 @@ internal sealed class GenesisSharedPcpPlaybackRuntime :
     private readonly object _disposeGate = new();
     private readonly Dictionary<ChannelId, SharedOwner> _owners = [];
     private readonly PcpRecordingRuntimeComposition _composition;
+    private readonly GenesisGuiNextPublicChannelComposition? _publicChannels;
     private Task? _disposeTask;
     private bool _disposed;
 
     public GenesisSharedPcpPlaybackRuntime(
-        PcpRecordingRuntimeComposition composition)
+        PcpRecordingRuntimeComposition composition,
+        GenesisGuiNextPublicChannelComposition? publicChannels = null)
     {
         ArgumentNullException.ThrowIfNull(composition);
         _composition = composition;
+        _publicChannels = publicChannels;
     }
 
     internal int RetainedOwnerCount
@@ -158,6 +161,7 @@ internal sealed class GenesisSharedPcpPlaybackRuntime :
                                 _owners.Add(source.ChannelId, owner);
                                 owner.SetRetirementTask(
                                     RetireOwnerAsync(source.ChannelId, owner));
+                                owner.PublicOwner?.StartPublicRouteIfEnabled();
                             }
 
                             attachment = new(
@@ -331,6 +335,7 @@ internal sealed class GenesisSharedPcpPlaybackRuntime :
                                 _owners.Add(source.ChannelId, owner);
                                 owner.SetRetirementTask(
                                     RetireOwnerAsync(source.ChannelId, owner));
+                                owner.PublicOwner?.StartPublicRouteIfEnabled();
                             }
 
                             candidate = new(
@@ -487,12 +492,35 @@ internal sealed class GenesisSharedPcpPlaybackRuntime :
     {
         var sessionId = new ChannelSessionId(Guid.NewGuid());
         var tracker = new ChannelStatusTracker(source.ChannelId, sessionId);
-        var coordinator = _composition.CreateCoordinator(
-            new TcpTransportConnector(),
-            tracker,
-            new IPEndPoint(IPAddress.Loopback, 0),
-            stopWhenNoConsumers: true);
-        return new(source.Host, source.Port, sessionId, coordinator, tracker);
+        if (_publicChannels is null)
+        {
+            var coordinator = _composition.CreateCoordinator(
+                new TcpTransportConnector(),
+                tracker,
+                new IPEndPoint(IPAddress.Loopback, 0),
+                stopWhenNoConsumers: true);
+            return new(source.Host, source.Port, sessionId, coordinator, tracker);
+        }
+
+        PcpRelayCoordinator? attachedCoordinator = null;
+        var coordinatorOptions = _publicChannels.AdvertisedPublicPort is { } advertisedPort
+            ? new PcpRelayCoordinatorOptions
+            {
+                UpstreamSession = new() { AdvertisedListenPort = advertisedPort },
+            }
+            : null;
+        var publicOwner = _publicChannels.AttachPlaybackViewing(
+            source.ChannelId,
+            sessionId,
+            admission => attachedCoordinator = _composition.CreateCoordinator(
+                new TcpTransportConnector(),
+                tracker,
+                new IPEndPoint(IPAddress.Loopback, 0),
+                options: coordinatorOptions,
+                stopWhenNoConsumers: true,
+                admission: admission),
+            tracker);
+        return new(source.Host, source.Port, sessionId, attachedCoordinator!, tracker, publicOwner);
     }
 
     private async Task RetireOwnerAsync(
@@ -533,7 +561,8 @@ internal sealed class GenesisSharedPcpPlaybackRuntime :
         int port,
         ChannelSessionId sessionId,
         PcpRelayCoordinator coordinator,
-        ChannelStatusTracker tracker)
+        ChannelStatusTracker tracker,
+        GenesisGuiNextPublicChannelComposition.Owner? publicOwner = null)
     {
         private readonly object _releaseGate = new();
         private Task? _releaseTask;
@@ -545,6 +574,8 @@ internal sealed class GenesisSharedPcpPlaybackRuntime :
         public ChannelSessionId SessionId { get; } = sessionId;
 
         public PcpRelayCoordinator Coordinator { get; } = coordinator;
+
+        public GenesisGuiNextPublicChannelComposition.Owner? PublicOwner { get; } = publicOwner;
 
         public ChannelFaultSnapshot? Fault => tracker.Snapshot.Fault;
         public ChannelStatusSnapshot Status => tracker.Snapshot;
@@ -564,9 +595,23 @@ internal sealed class GenesisSharedPcpPlaybackRuntime :
         {
             lock (_releaseGate)
             {
-                return _releaseTask ??= composition
-                    .ReleaseCoordinatorAsync(Coordinator)
-                    .AsTask();
+                return _releaseTask ??= ReleaseCoreAsync(composition);
+            }
+        }
+
+        private async Task ReleaseCoreAsync(PcpRecordingRuntimeComposition composition)
+        {
+            PublicOwner?.Retire();
+            try
+            {
+                await composition.ReleaseCoordinatorAsync(Coordinator).ConfigureAwait(false);
+            }
+            finally
+            {
+                if (PublicOwner is not null)
+                {
+                    await PublicOwner.DisposeAsync().ConfigureAwait(false);
+                }
             }
         }
 

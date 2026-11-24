@@ -149,11 +149,12 @@ internal sealed class GuiNextDailyPlaybackSessionController :
     internal static GuiNextDailyPlaybackSessionController CreateSystemWithPlayerLauncherFactory(
         Func<IDailyPlaybackPlayerLauncher> createPlayerLauncher,
         GenesisRecordingOutputDirectorySettings? recordingSettings = null,
-        GenesisRecordingHistoryStore? historyStore = null) =>
+        GenesisRecordingHistoryStore? historyStore = null,
+        GenesisGuiNextPublicChannelComposition? publicChannels = null) =>
         new(NovaDailyHttpFlvPlaybackController.CreateWithPlayerLauncherFactory(
             createPlayerLauncher,
             static _ => { },
-            static _ => { }, recordingSettings, historyStore));
+            static _ => { }, recordingSettings, historyStore, publicChannels));
 
     public ValueTask<PlaybackSessionCommandOutcome> PlayAsync(
         string source,

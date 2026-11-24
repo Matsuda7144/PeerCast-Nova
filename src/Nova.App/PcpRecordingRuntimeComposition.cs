@@ -101,7 +101,8 @@ public sealed class PcpRecordingRuntimeComposition : IAsyncDisposable
         ChannelStatusTracker statusTracker,
         IPEndPoint downstreamEndPoint,
         PcpRelayCoordinatorOptions? options = null,
-        bool stopWhenNoConsumers = false)
+        bool stopWhenNoConsumers = false,
+        IPcpDownstreamRelayAdmission? admission = null)
     {
         lock (lifecycleGate)
         {
@@ -111,7 +112,8 @@ public sealed class PcpRecordingRuntimeComposition : IAsyncDisposable
                 statusTracker,
                 downstreamEndPoint,
                 options,
-                stopWhenNoConsumers);
+                stopWhenNoConsumers,
+                admission);
         }
     }
 

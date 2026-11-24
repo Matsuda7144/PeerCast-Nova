@@ -1,5 +1,9 @@
 using System.Buffers;
+using System.IO.Pipelines;
+using System.Net;
+using System.Text;
 using PeerCast.Nova.Network.Pcp;
+using PeerCast.Nova.Network.Transport;
 using PeerCast.Nova.Protocol.Pcp;
 
 namespace PeerCast.Nova.Network.Tests;
@@ -108,5 +112,99 @@ public sealed class PcpReportedHostTests
         Assert.False(directory.Observe(host with { GlobalEndpoint = new(System.Net.IPAddress.Loopback, 7144), LocalEndpoint = null }, new()));
         Assert.Single(directory.ObserveLocalTree().Reports); Assert.Empty(directory.Snapshot());
         directory.Dispose(); directory.ObserveReport(host, new()); Assert.Empty(directory.ObserveLocalTree().Reports);
+    }
+
+    [Fact]
+    public void BroadcastWithChannelMetadataAndHost_ExtractsHostCandidates()
+    {
+        var cid = PcpPeerDirectoryTests.Channel;
+        var owner = PcpPeerDirectoryTests.Owner;
+        var channelAtom = PcpAtom.Parent(
+            PcpKnownAtomNames.Channel,
+            PcpAtom.Leaf(PcpKnownAtomNames.ChannelId, PcpWireValueCodec.EncodeGuid(cid)),
+            PcpAtom.Parent(
+                PcpKnownAtomNames.ChannelInfo,
+                PcpAtom.Leaf(PcpAtomName.FromAscii("name"), PcpWireValueCodec.EncodeNullTerminatedUtf8("ChannelName"))));
+        var atom = Broadcast(cid, channelAtom, Host(cid));
+
+        var direct = Assert.Single(PcpBroadcastHostReader.Read(atom, cid, owner));
+        Assert.Equal(cid, direct.ChannelId);
+
+        var wire = new ArrayBufferWriter<byte>();
+        PcpAtomTreeCodec.Write(wire, atom);
+        var observed = new List<PcpRelayHostCandidate>();
+        new PcpAtomDecoder().Decode(
+            new ReadOnlySequence<byte>(wire.WrittenMemory),
+            true,
+            new PcpRelayHostAtomSink(_ => { }, new(cid, owner, observed.Add)));
+        var streamed = Assert.Single(observed);
+        Assert.Equal(direct.PeerSessionId, streamed.PeerSessionId);
+    }
+
+    [Fact]
+    public async Task PcpRelayHandshakeClient_AdvertisedListenPort_SendsPortInHelo()
+    {
+        await using var listener = new TcpTransportListener(new IPEndPoint(IPAddress.Loopback, 0));
+        listener.Start();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var heloReceived = new TaskCompletionSource<PcpHeloInfo>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var serverTask = Task.Run(async () =>
+        {
+            await using var server = await listener.AcceptAsync(timeout.Token);
+            var serverReader = PipeReader.Create(server.TransportStream, new StreamPipeReaderOptions(leaveOpen: true));
+            try
+            {
+                _ = await PcpHttpHeaderBlockReader.ReadRequestAsync(serverReader, 32 * 1024, timeout.Token);
+                await server.WriteAsync(
+                    Encoding.ASCII.GetBytes(
+                        "HTTP/1.0 200 OK\r\nServer: PeerCastStation/Test\r\nContent-Type:application/x-peercast-pcp\r\n\r\n"),
+                    timeout.Token);
+                await using var atomReader = new PcpAtomPipeMessageReader(serverReader);
+                var heloAtom = await atomReader.ReadNextAsync(timeout.Token);
+                heloReceived.TrySetResult(PcpHeloCodec.ParseHelo(heloAtom));
+                var reply = new ArrayBufferWriter<byte>();
+                PcpAtomTreeCodec.Write(reply, PcpHeloCodec.CreateOleh("PeerCastStation/Test", Guid.NewGuid()));
+                PcpAtomTreeCodec.Write(reply, PcpAtom.Leaf(PcpKnownAtomNames.Okay, PcpWireValueCodec.EncodeUInt32(1)));
+                await server.WriteAsync(reply.WrittenMemory, timeout.Token);
+            }
+            finally
+            {
+                await serverReader.CompleteAsync();
+            }
+        }, timeout.Token);
+
+        await using var client = await new TcpTransportConnector(new TcpTransportOptions())
+            .ConnectAsync("127.0.0.1", listener.LocalEndPoint.Port, timeout.Token);
+        var clientReader = PipeReader.Create(client.TransportStream, new StreamPipeReaderOptions(leaveOpen: true));
+        try
+        {
+            var result = await PcpRelayHandshakeClient.NegotiateAsync(
+                client,
+                clientReader,
+                "127.0.0.1",
+                listener.LocalEndPoint.Port,
+                PcpPeerDirectoryTests.Channel,
+                Guid.NewGuid(),
+                0,
+                1,
+                new PcpRelayHandshakeSettings(
+                    32 * 1024,
+                    64 * 1024,
+                    16,
+                    "PeerCastNova/Test",
+                    PcpHeloCodec.LegacyServantVersion,
+                    AdvertisedListenPort: 17144),
+                timeout.Token);
+            Assert.Equal(200, result.HttpStatusCode);
+            var helo = await heloReceived.Task.WaitAsync(timeout.Token);
+            Assert.Equal((ushort)17144, helo.OpenPort);
+        }
+        finally
+        {
+            await clientReader.CompleteAsync();
+        }
+
+        await serverTask.WaitAsync(timeout.Token);
     }
 }

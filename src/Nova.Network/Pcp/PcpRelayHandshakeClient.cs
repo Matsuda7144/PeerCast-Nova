@@ -67,6 +67,7 @@ internal static class PcpRelayHandshakeClient
         var helo = PcpHeloCodec.CreateHelo(
             settings.UserAgent,
             localSessionId,
+            openPort: settings.AdvertisedListenPort,
             servantVersion: settings.ServantVersion);
         var encodedHelo = new ArrayBufferWriter<byte>();
         PcpAtomTreeCodec.Write(encodedHelo, helo);

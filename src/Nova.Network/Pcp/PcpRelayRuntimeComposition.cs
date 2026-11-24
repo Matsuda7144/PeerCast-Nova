@@ -75,7 +75,8 @@ public sealed class PcpRelayRuntimeComposition : IAsyncDisposable
         ChannelStatusTracker statusTracker,
         IPEndPoint downstreamEndPoint,
         PcpRelayCoordinatorOptions? options = null,
-        bool stopWhenNoConsumers = false)
+        bool stopWhenNoConsumers = false,
+        IPcpDownstreamRelayAdmission? admission = null)
     {
         ArgumentNullException.ThrowIfNull(upstreamConnector);
         ArgumentNullException.ThrowIfNull(statusTracker);
@@ -94,7 +95,8 @@ public sealed class PcpRelayRuntimeComposition : IAsyncDisposable
                 options,
                 RecordingStreamSourceLeaseRegistry,
                 stopWhenNoConsumers: stopWhenNoConsumers,
-                portMapping: PortMapping);
+                portMapping: PortMapping,
+                admission: admission);
             coordinators.Add(coordinator);
             return coordinator;
         }

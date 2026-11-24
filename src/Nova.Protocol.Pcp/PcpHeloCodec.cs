@@ -59,12 +59,14 @@ public static class PcpHeloCodec
     public static PcpAtom CreateOleh(
         string agent,
         Guid sessionId,
-        uint servantVersion = LegacyServantVersion)
+        uint servantVersion = LegacyServantVersion,
+        IPAddress? remoteIp = null,
+        ushort? openPort = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(agent);
 
-        return PcpAtom.Parent(
-            PcpKnownAtomNames.Oleh,
+        var children = new List<PcpAtom>
+        {
             PcpAtom.Leaf(
                 PcpKnownAtomNames.HeloAgent,
                 PcpWireValueCodec.EncodeNullTerminatedUtf8(agent)),
@@ -73,7 +75,32 @@ public static class PcpHeloCodec
                 PcpWireValueCodec.EncodeGuid(sessionId)),
             PcpAtom.Leaf(
                 PcpKnownAtomNames.HeloVersion,
-                PcpWireValueCodec.EncodeUInt32(servantVersion)));
+                PcpWireValueCodec.EncodeUInt32(servantVersion)),
+        };
+
+        if (remoteIp is not null)
+        {
+            var ipv4 = remoteIp.IsIPv4MappedToIPv6 ? remoteIp.MapToIPv4() : remoteIp;
+            if (ipv4.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+            {
+                children.Add(
+                    PcpAtom.Leaf(
+                        PcpKnownAtomNames.HeloRemoteIp,
+                        PcpWireValueCodec.EncodeLegacyIpv4(ipv4)));
+            }
+        }
+
+        if (openPort is > 0)
+        {
+            children.Add(
+                PcpAtom.Leaf(
+                    PcpKnownAtomNames.HeloPort,
+                    PcpWireValueCodec.EncodeUInt16(openPort.Value)));
+        }
+
+        return PcpAtom.Parent(
+            PcpKnownAtomNames.Oleh,
+            children);
     }
 
     public static PcpHeloInfo ParseHelo(PcpAtom atom)

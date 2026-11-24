@@ -35,6 +35,8 @@ public sealed record PcpChannelSessionOptions
 
     public PcpSmartRelayOptions? SmartRelay { get; init; }
 
+    public ushort? AdvertisedListenPort { get; init; }
+
     public void Validate()
     {
         if (HandshakeTimeout <= TimeSpan.Zero)
@@ -87,6 +89,7 @@ public sealed record PcpChannelSessionOptions
             MaxHandshakeAtomBytes,
             MaxAtomsBeforeTerminal,
             UserAgent,
-            ServantVersion);
+            ServantVersion,
+            AdvertisedListenPort);
     }
 }
