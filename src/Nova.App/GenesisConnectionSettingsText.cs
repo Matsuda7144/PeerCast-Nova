@@ -5,10 +5,9 @@ namespace PeerCast.Nova.App;
 internal static class GenesisConnectionSettingsText
 {
     internal const string Notice =
-        "WAN Relayを公開すると、起動時に指定ポートで待受します。\r\n" +
-        "WAN公開・ポート・帯域・リレー数は次回起動時に反映。IPv6は次回用（未対応）です。\r\n" +
-        "自動開放は即時反映・自動保存。ONならルーターへ開放を試みます。\r\n" +
-        "帯域・リレー数は半角整数。空欄は無制限、0は上限0。IPv4帯域の指定中はLAN/WAN配信を開始できません。";
+        "・ポート・帯域・リレー数・WAN公開は、保存後の次回起動から反映されます（IPv6は未対応）。\r\n" +
+        "・「ポート自動開放」はチェックすると即座に反映・保存され、ルーターへのポート開放を自動試行します。\r\n" +
+        "・帯域・リレー数は半角数字で入力します（空欄＝無制限、0＝許可しない）。※IPv4上り帯域を設定中は配信できません。";
 
     internal static string Summary(GenesisGuiNextConnectionPreferences value)
     {
