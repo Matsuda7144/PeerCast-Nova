@@ -1,4 +1,22 @@
 using PeerCast.Nova.App;
+using PeerCast.Nova.Foundation.Logging;
+
+UnhandledExceptionEventHandler unhandledHandler = (_, eventArgs) =>
+{
+    FileNovaLogger.Default.Log(
+        LogLevel.Critical,
+        $"Unhandled AppDomain exception (IsTerminating={eventArgs.IsTerminating}).",
+        eventArgs.ExceptionObject as Exception);
+};
+EventHandler<UnobservedTaskExceptionEventArgs> unobservedHandler = (_, eventArgs) =>
+{
+    FileNovaLogger.Default.Log(
+        LogLevel.Error,
+        "Unobserved task exception.",
+        eventArgs.Exception);
+};
+AppDomain.CurrentDomain.UnhandledException += unhandledHandler;
+TaskScheduler.UnobservedTaskException += unobservedHandler;
 
 using var cancellationSource = new CancellationTokenSource();
 ConsoleCancelEventHandler cancelHandler = (_, eventArgs) =>
@@ -32,9 +50,16 @@ try
             }).RunGenesisAsync(token);
         });
 }
+catch (Exception exception)
+{
+    FileNovaLogger.Default.Log(LogLevel.Critical, "Fatal exception in Program entrypoint.", exception);
+    throw;
+}
 finally
 {
     Console.CancelKeyPress -= cancelHandler;
+    AppDomain.CurrentDomain.UnhandledException -= unhandledHandler;
+    TaskScheduler.UnobservedTaskException -= unobservedHandler;
 }
 
 static async ValueTask<NovaWindowsStartupResult> RunApplicationAsync(

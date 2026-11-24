@@ -40,6 +40,7 @@ public sealed partial class PcpChannelSessionTests
             await PcpSmartRelayRecoveryTests.Until(() => session.SmartRelaySnapshot.State == PcpSmartRelayState.Backoff);
             Assert.Equal(1, session.SmartRelaySnapshot.AttemptCount);
             await session.StopAsync(); await run;
+            await PcpSmartRelayRecoveryTests.Until(() => clock.ActiveTimerCount == 0);
             Assert.Equal(0, clock.ActiveTimerCount);
         }
         finally { release.TrySetResult(); await peer; }

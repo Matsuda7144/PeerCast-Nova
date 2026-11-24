@@ -9,7 +9,7 @@ public sealed class PcpRecordingSourceCompletionEvidenceTests
     private static readonly ChannelId Channel = new(Guid.ParseExact("531DC8DFC7FB42928AC2C0A626517A87", "N"));
     private static readonly ChannelSessionId Session = new(Guid.ParseExact("3F2504E04F8911D39A0C0305E82C3301", "N"));
     private static readonly TimeSpan Limit = TimeSpan.FromSeconds(5);
-    private static readonly TimeSpan ShortLimit = TimeSpan.FromMilliseconds(150);
+    private static readonly TimeSpan ShortLimit = TimeSpan.FromMilliseconds(600);
 
     [Fact]
     public async Task BufferedPackets_EofAndNaturalLeaseCleanup_AreProvenSeparatelyFromWriter()

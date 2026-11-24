@@ -1,5 +1,7 @@
 using System.Runtime.InteropServices;
 
+using static PeerCast.Nova.App.Win32NativeMethods;
+
 namespace PeerCast.Nova.App;
 
 internal sealed record GenesisNetworkSettingsWindowContent(
@@ -433,74 +435,12 @@ internal sealed partial class GenesisNetworkSettingsWindow : IAsyncDisposable
         nuint subclassId,
         nuint referenceData);
 
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern nint GetModuleHandleW(string? moduleName);
-
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern ushort RegisterClassExW(ref WindowClassEx windowClass);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool UnregisterClassW(string className, nint instance);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern nint CreateWindowExW(
-        uint extendedStyle,
-        string className,
-        string windowName,
-        uint style,
-        int x,
-        int y,
-        int width,
-        int height,
-        nint parent,
-        nint menu,
-        nint instance,
-        nint parameter);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern nint LoadCursorW(nint instance, nint cursorName);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool ShowWindow(nint window, int commandShow);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetForegroundWindow(nint window);
-
-    [DllImport("user32.dll")]
-    private static extern nint SetFocus(nint window);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool PostMessageW(
-        nint window,
-        uint message,
-        nuint wParam,
-        nint lParam);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool DestroyWindow(nint window);
-
-    [DllImport("user32.dll")]
-    private static extern nint DefWindowProcW(
-        nint window,
-        uint message,
-        nuint wParam,
-        nint lParam);
-
-    [DllImport("user32.dll", EntryPoint = "SendMessageW")]
-    private static extern nint SendMessageW(
-        nint window,
-        uint message,
-        nuint wParam,
-        nint lParam);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool IsWindow(nint window);
 
     [DllImport("comctl32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -523,7 +463,4 @@ internal sealed partial class GenesisNetworkSettingsWindow : IAsyncDisposable
         uint message,
         nuint wParam,
         nint lParam);
-
-    [DllImport("gdi32.dll")]
-    private static extern nint GetStockObject(int objectIndex);
 }

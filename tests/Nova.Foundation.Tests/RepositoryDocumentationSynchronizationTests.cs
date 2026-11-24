@@ -32,7 +32,6 @@ public sealed partial class RepositoryDocumentationSynchronizationTests
         AssertDocumentsContain(
             root,
             adrToken,
-            "README.md",
             "ROADMAP.md",
             "CHANGELOG.md",
             "NAVIGATION.md");

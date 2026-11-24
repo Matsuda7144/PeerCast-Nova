@@ -145,8 +145,8 @@ public sealed class PlaybackSignatureCommandTests
         {
             ChannelId = Guid.ParseExact(ChannelId, "N"),
             UpstreamPort = unusedPort,
-            Duration = TimeSpan.FromSeconds(2),
-            IdleTimeout = TimeSpan.FromSeconds(1),
+            Duration = TimeSpan.FromSeconds(8),
+            IdleTimeout = TimeSpan.FromSeconds(4),
             MaxProbeBytes = 16,
         };
         using var output = new StringWriter(

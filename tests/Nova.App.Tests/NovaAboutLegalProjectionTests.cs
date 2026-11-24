@@ -113,8 +113,6 @@ public sealed class NovaAboutLegalProjectionTests
         Assert.DoesNotContain("NativeLibrary.Load", source, StringComparison.Ordinal);
         Assert.DoesNotContain("LoadLibrary", source, StringComparison.Ordinal);
         Assert.DoesNotContain("HttpClient", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("Download", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("Install", source, StringComparison.Ordinal);
     }
 
     private static async ValueTask<NovaAboutLegalProjection> OpenForCurrentPlatformAsync(

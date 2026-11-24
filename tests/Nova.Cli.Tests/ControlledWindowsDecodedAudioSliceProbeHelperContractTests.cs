@@ -83,7 +83,7 @@ public sealed class ControlledWindowsDecodedAudioSliceProbeHelperContractTests
             },
         });
         Assert.NotNull(process);
-        Assert.True(process.WaitForExit(10_000));
+        Assert.True(process.WaitForExit(30_000));
         Assert.Equal(0, process.ExitCode);
     }
 

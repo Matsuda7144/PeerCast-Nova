@@ -1,3 +1,4 @@
+using PeerCast.Nova.Foundation.Logging;
 using PeerCast.Nova.Windows;
 
 namespace PeerCast.Nova.App;
@@ -192,7 +193,11 @@ public sealed class NovaWindowsStartupComposition
                         LoadSystemGuiNextState(cancellationToken, paths);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-                catch { /* Preserve auxiliary-state fallback; LAN has no registry and fails closed. */ }
+                catch (Exception exception)
+                {
+                    /* Preserve auxiliary-state fallback; LAN has no registry and fails closed. */
+                    FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to load GUI Next application state.", exception);
+                }
             }
             var publishingFactory = ReferenceEquals(_publishingRuntimeFactory, SystemNovaObsPublishingRuntimeFactory.Instance) && applicationState is not null
                 ? new SystemNovaObsPublishingRuntimeFactory(applicationState, allowLan: _options.ValidationProfile is null)
@@ -210,8 +215,9 @@ public sealed class NovaWindowsStartupComposition
         {
             result = NovaWindowsStartupResult.Cancelled;
         }
-        catch
+        catch (Exception exception)
         {
+            FileNovaLogger.Default.Log(LogLevel.Error, "Unhandled exception during Genesis startup/run.", exception);
             result = NovaWindowsStartupResult.Faulted;
         }
         finally
@@ -224,36 +230,60 @@ public sealed class NovaWindowsStartupComposition
             if (networkOwner is not null)
             {
                 try { networkShutdown = networkOwner.DisposeAsync().AsTask(); }
-                catch { result = NovaWindowsStartupResult.Faulted; }
+                catch (Exception exception)
+                {
+                    FileNovaLogger.Default.Log(LogLevel.Error, "Failed to initiate network owner shutdown.", exception);
+                    result = NovaWindowsStartupResult.Faulted;
+                }
             }
             if (playbackController is IAsyncDisposable ownedController)
             {
                 try { await ownedController.DisposeAsync().ConfigureAwait(false); }
-                catch { result = NovaWindowsStartupResult.Faulted; }
+                catch (Exception exception)
+                {
+                    FileNovaLogger.Default.Log(LogLevel.Error, "Failed to dispose playback controller.", exception);
+                    result = NovaWindowsStartupResult.Faulted;
+                }
             }
             if (networkShutdown is not null)
             {
                 // Join the owner's existing task; unconfirmed cleanup stays
                 // a failure with its existing safe resource retention.
                 try { await networkShutdown.ConfigureAwait(false); }
-                catch { result = NovaWindowsStartupResult.Faulted; }
+                catch (Exception exception)
+                {
+                    FileNovaLogger.Default.Log(LogLevel.Error, "Failed to complete network owner shutdown.", exception);
+                    result = NovaWindowsStartupResult.Faulted;
+                }
             }
             // GUI and host teardown has completed before releasing this owner.
             if (publishing is not null)
             {
                 try { await publishing.DisposeAsync().ConfigureAwait(false); }
-                catch { result = NovaWindowsStartupResult.Faulted; }
+                catch (Exception exception)
+                {
+                    FileNovaLogger.Default.Log(LogLevel.Error, "Failed to dispose publishing composition.", exception);
+                    result = NovaWindowsStartupResult.Faulted;
+                }
             }
             if (publishingSettings is not null)
             {
                 try { await publishingSettings.DisposeAsync().ConfigureAwait(false); }
-                catch { result = NovaWindowsStartupResult.Faulted; }
+                catch (Exception exception)
+                {
+                    FileNovaLogger.Default.Log(LogLevel.Error, "Failed to dispose publishing settings.", exception);
+                    result = NovaWindowsStartupResult.Faulted;
+                }
             }
             // Registry/policies outlive Publishing's actual child and reservation cleanup.
             if (applicationState is not null)
             {
                 try { await applicationState.DisposeAsync().ConfigureAwait(false); }
-                catch { result = NovaWindowsStartupResult.Faulted; }
+                catch (Exception exception)
+                {
+                    FileNovaLogger.Default.Log(LogLevel.Error, "Failed to dispose GUI Next application state.", exception);
+                    result = NovaWindowsStartupResult.Faulted;
+                }
             }
         }
         return result;
@@ -360,8 +390,9 @@ public sealed class NovaWindowsStartupComposition
         {
             return NovaWindowsStartupResult.Cancelled;
         }
-        catch
+        catch (Exception exception)
         {
+            FileNovaLogger.Default.Log(LogLevel.Error, "Unhandled exception in NovaWindowsStartupComposition.RunCoreAsync.", exception);
             return NovaWindowsStartupResult.Faulted;
         }
     }
@@ -469,8 +500,9 @@ public sealed class NovaWindowsStartupComposition
         {
             return NovaWindowsStartupResult.Cancelled;
         }
-        catch
+        catch (Exception exception)
         {
+            FileNovaLogger.Default.Log(LogLevel.Error, "Unhandled exception in NovaWindowsStartupComposition.RunCoreAsync.", exception);
             return NovaWindowsStartupResult.Faulted;
         }
         finally
