@@ -13,9 +13,13 @@ internal sealed class PcpHttpFlvPlaybackSession :
     private readonly ChannelSessionId _sessionId;
     private readonly PcpRelayFanout _fanout;
     private readonly PcpFlvBootstrapRetention _bootstrap;
+    private readonly int _maximumGenericHeadBytes;
     private readonly Action<PcpHttpFlvPlaybackSession> _onDisposed;
     private readonly Action _onHeaderReady;
     private TaskCompletionSource<bool> _headerReady = NewHeaderReadySource();
+    private byte[]? _genericHead;
+    private byte[]? _genericMagicProbe;
+    private bool _genericStreamReady;
     private Task? _disposeTask;
     private Task<PcpHttpFlvCompletionResult>? _completionTask;
     private Task<bool>? _legacyCompletionTask;
@@ -26,6 +30,9 @@ internal sealed class PcpHttpFlvPlaybackSession :
     private bool _sourceRemoved;
     private int _sourceCleanupFailed;
     internal bool SourceCleanupFailed => Volatile.Read(ref _sourceCleanupFailed) != 0;
+
+    private bool IsStreamReadyLocked =>
+        _bootstrap.StatusSnapshot.HeaderRetained || _genericStreamReady;
 
     public Guid ChannelIdValue => _channelId.Value;
 
@@ -54,6 +61,7 @@ internal sealed class PcpHttpFlvPlaybackSession :
                 MaxChildren = options.MaximumConcurrentStreamClients,
             });
         _bootstrap = new PcpFlvBootstrapRetention(options.Bootstrap);
+        _maximumGenericHeadBytes = options.Bootstrap.MaximumTotalRetainedBytes;
         _onDisposed = onDisposed;
         _onHeaderReady = onHeaderReady;
     }
@@ -85,12 +93,25 @@ internal sealed class PcpHttpFlvPlaybackSession :
             if (packet.Discontinuity is not null)
             {
                 _bootstrap.Reset();
+                _genericHead = null;
+                _genericMagicProbe = null;
+                _genericStreamReady = false;
                 _headerReady = NewHeaderReadySource();
             }
 
             // Observe synchronously while callback-scoped packet memory is valid.
             _bootstrap.Observe(packet.Payload);
-            if (_bootstrap.StatusSnapshot.HeaderRetained)
+            if (!_bootstrap.StatusSnapshot.HeaderRetained)
+            {
+                ObserveNonFlvPacketLocked(packet);
+            }
+            else if (_genericHead is not null || _genericStreamReady)
+            {
+                _genericHead = null;
+                _genericStreamReady = false;
+            }
+
+            if (IsStreamReadyLocked)
             {
                 _headerReady.TrySetResult(true);
                 if (!_headerReadyReported)
@@ -132,7 +153,7 @@ internal sealed class PcpHttpFlvPlaybackSession :
                 return false;
             }
 
-            if (_bootstrap.StatusSnapshot.HeaderRetained)
+            if (IsStreamReadyLocked)
             {
                 return true;
             }
@@ -161,7 +182,7 @@ internal sealed class PcpHttpFlvPlaybackSession :
         lock (_gate)
         {
             ObjectDisposedException.ThrowIf(_disposed || _completing, this);
-            if (!_bootstrap.StatusSnapshot.HeaderRetained ||
+            if (!IsStreamReadyLocked ||
                 !_fanout.TryAddChild(sink, out registration))
             {
                 registration = null;
@@ -171,9 +192,186 @@ internal sealed class PcpHttpFlvPlaybackSession :
 
             // Snapshot and child registration share this lock with ConsumeAsync,
             // so no packet can fall between bootstrap and live delivery.
-            bootstrap = _bootstrap.Snapshot();
+            bootstrap = _bootstrap.StatusSnapshot.HeaderRetained
+                ? _bootstrap.Snapshot()
+                : new PcpFlvBootstrapPayloadSnapshot(
+                    _genericHead is null ? ReadOnlyMemory<byte>.Empty : _genericHead.ToArray(),
+                    default,
+                    default,
+                    default);
             return true;
         }
+    }
+
+    internal string ResolveContentType(ChannelMetadataSnapshot? metadata)
+    {
+        byte[]? probe;
+        lock (_gate)
+        {
+            if (_bootstrap.StatusSnapshot.HeaderRetained)
+            {
+                return "video/x-flv";
+            }
+
+            probe = _genericMagicProbe;
+        }
+
+        return ResolveContentTypeFromMetadataOrMagic(metadata, probe);
+    }
+
+    private void ObserveNonFlvPacketLocked(PcpChannelPacket packet)
+    {
+        var span = packet.Payload.Span;
+        if (_genericMagicProbe is null && !span.IsEmpty)
+        {
+            _genericMagicProbe = span[..Math.Min(span.Length, 16)].ToArray();
+        }
+
+        if (packet.Type == HeadPacketType && !span.IsEmpty)
+        {
+            if (_genericHead is null)
+            {
+                if (span.Length <= _maximumGenericHeadBytes)
+                {
+                    _genericHead = span.ToArray();
+                }
+            }
+            else if (_genericHead.Length + span.Length <= _maximumGenericHeadBytes)
+            {
+                var combined = new byte[_genericHead.Length + span.Length];
+                _genericHead.CopyTo(combined, 0);
+                span.CopyTo(combined.AsSpan(_genericHead.Length));
+                _genericHead = combined;
+            }
+
+            if (_bootstrap.IsHeaderResolved || !LooksLikeFlvPrefix(span))
+            {
+                _genericStreamReady = true;
+            }
+        }
+        else if (packet.Type == DataPacketType && !span.IsEmpty)
+        {
+            if (_genericHead is not null || _bootstrap.IsHeaderResolved || !LooksLikeFlvPrefix(span))
+            {
+                _genericStreamReady = true;
+            }
+        }
+    }
+
+    private static bool LooksLikeFlvPrefix(ReadOnlySpan<byte> bytes)
+    {
+        if (bytes.Length == 0)
+        {
+            return false;
+        }
+
+        if (bytes[0] != (byte)'F')
+        {
+            return false;
+        }
+
+        if (bytes.Length >= 2 && bytes[1] != (byte)'L')
+        {
+            return false;
+        }
+
+        if (bytes.Length >= 3 && bytes[2] != (byte)'V')
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static string ResolveContentTypeFromMetadataOrMagic(
+        ChannelMetadataSnapshot? metadata,
+        byte[]? probe)
+    {
+        var token = (metadata?.StreamType ?? metadata?.StreamExtension ?? metadata?.ContentType)?.Trim();
+        if (!string.IsNullOrEmpty(token))
+        {
+            var upper = token.TrimStart('.').ToUpperInvariant();
+            if (upper.Contains("FLV", StringComparison.Ordinal))
+            {
+                return "video/x-flv";
+            }
+
+            if (upper.Contains("WMV", StringComparison.Ordinal) ||
+                upper.Contains("ASF", StringComparison.Ordinal))
+            {
+                return "video/x-ms-wmv";
+            }
+
+            if (upper.Contains("WEBM", StringComparison.Ordinal))
+            {
+                return "video/webm";
+            }
+
+            if (upper.Contains("MKV", StringComparison.Ordinal) ||
+                upper.Contains("MATROSKA", StringComparison.Ordinal))
+            {
+                return "video/x-matroska";
+            }
+
+            if (upper.Contains("MP4", StringComparison.Ordinal) ||
+                upper.Contains("FMP4", StringComparison.Ordinal) ||
+                upper.Contains("M4V", StringComparison.Ordinal))
+            {
+                return "video/mp4";
+            }
+
+            if (upper is "TS" or "M2TS" or "MPEGTS" ||
+                upper.Contains("MP2T", StringComparison.Ordinal))
+            {
+                return "video/mp2t";
+            }
+
+            if (upper.Contains("OGG", StringComparison.Ordinal) ||
+                upper.Contains("OGM", StringComparison.Ordinal) ||
+                upper.Contains("OGV", StringComparison.Ordinal))
+            {
+                return "application/ogg";
+            }
+
+            if (upper.Contains("MP3", StringComparison.Ordinal) ||
+                upper.Contains("MPEG", StringComparison.Ordinal))
+            {
+                return "audio/mpeg";
+            }
+        }
+
+        if (probe is { Length: >= 4 })
+        {
+            if (probe[0] == 0x30 && probe[1] == 0x26 && probe[2] == 0xB2 && probe[3] == 0x75)
+            {
+                return "video/x-ms-wmv";
+            }
+
+            if (probe[0] == 0x1A && probe[1] == 0x45 && probe[2] == 0xDF && probe[3] == 0xA3)
+            {
+                return "video/x-matroska";
+            }
+
+            if (probe.Length >= 8 &&
+                probe[4] == (byte)'f' && probe[5] == (byte)'t' &&
+                probe[6] == (byte)'y' && probe[7] == (byte)'p')
+            {
+                return "video/mp4";
+            }
+
+            if (probe[0] == (byte)'O' && probe[1] == (byte)'g' &&
+                probe[2] == (byte)'g' && probe[3] == (byte)'S')
+            {
+                return "application/ogg";
+            }
+
+            if (probe[0] == 0x47)
+            {
+                return "video/mp2t";
+            }
+        }
+
+        return "application/octet-stream";
     }
 
     /// <summary>

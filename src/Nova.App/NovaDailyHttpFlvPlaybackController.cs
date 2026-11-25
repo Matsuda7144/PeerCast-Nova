@@ -282,7 +282,7 @@ internal sealed class NovaDailyHttpFlvPlaybackController :
             active.OwnerTask = playbackAttachment.OwnerCompletion;
             active.Attachment = playbackAttachment;
 
-            _setStatus($"{channel.Name}: FLV streamを準備しています…");
+            _setStatus($"{channel.Name}: ストリームを準備しています…");
             Task readyOrEnded;
             try
             {

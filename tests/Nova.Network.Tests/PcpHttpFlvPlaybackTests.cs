@@ -241,6 +241,85 @@ public sealed class PcpHttpFlvPlaybackTests
         Assert.Throws<ArgumentOutOfRangeException>(options.Validate);
     }
 
+    [Theory]
+    [InlineData("3026B2758E66CF11A6D900AA0062CE6C", null, "video/x-ms-wmv")]
+    [InlineData("1A45DFA39F4286810142F7810142F281", null, "video/x-matroska")]
+    [InlineData("1A45DFA39F4286810142F7810142F281", "WEBM", "video/webm")]
+    [InlineData("000000186674797069736F3500000200", null, "video/mp4")]
+    [InlineData("4F676753000200000000000000000100", null, "application/ogg")]
+    public async Task Stream_NonFlvHeadAndLivePackets_ServeImmediatelyWithDetectedContentType(
+        string headHex,
+        string? metadataStreamType,
+        string expectedContentType)
+    {
+        string? readyUrl = null;
+        var metadata = metadataStreamType is null
+            ? null
+            : new ChannelMetadataSnapshot(streamType: metadataStreamType);
+        await using var host = new PcpHttpFlvPlaybackHost(
+            streamUrlReady: url => readyUrl = url,
+            playerChannelInfo: _ => metadata is null
+                ? null
+                : new PcpPlayerChannelInfo(metadata));
+        host.Start();
+        await using var source = host.Create(ChannelId, SessionId);
+
+        var headBytes = Convert.FromHexString(headHex);
+        await source.ConsumeAsync(
+            CreatePacket(0, HeadPacketType, headBytes),
+            CancellationToken.None);
+        Assert.Equal(host.StreamUrlFor(ChannelId), readyUrl);
+
+        using var client = new TcpClient(AddressFamily.InterNetwork);
+        await client.ConnectAsync(IPAddress.Loopback, host.LocalEndPoint.Port);
+        var stream = client.GetStream();
+        await stream.WriteAsync(Encoding.ASCII.GetBytes(
+            $"GET /stream/{ChannelId} HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"));
+
+        var responseHeader = await ReadHttpHeaderAsync(stream);
+        Assert.StartsWith("HTTP/1.1 200 OK\r\n", responseHeader);
+        Assert.Contains($"Content-Type: {expectedContentType}\r\n", responseHeader);
+        Assert.Equal(headBytes, await ReadExactlyAsync(stream, headBytes.Length));
+
+        byte[] liveData = [0xDE, 0xAD, 0xBE, 0xEF];
+        await source.ConsumeAsync(
+            CreatePacket(1, DataPacketType, liveData),
+            CancellationToken.None);
+        Assert.Equal(liveData, await ReadExactlyAsync(stream, liveData.Length));
+    }
+
+    [Fact]
+    public async Task Stream_DataOnlyMpegTsStream_ServesImmediatelyWithoutWaitingForFlvHeader()
+    {
+        string? readyUrl = null;
+        await using var host = new PcpHttpFlvPlaybackHost(
+            streamUrlReady: url => readyUrl = url);
+        host.Start();
+        await using var source = host.Create(ChannelId, SessionId);
+
+        byte[] firstTsPacket = [0x47, 0x40, 0x00, 0x10, 0x00, 0x01, 0x02, 0x03];
+        await source.ConsumeAsync(
+            CreatePacket(0, DataPacketType, firstTsPacket),
+            CancellationToken.None);
+        Assert.Equal(host.StreamUrlFor(ChannelId), readyUrl);
+
+        using var client = new TcpClient(AddressFamily.InterNetwork);
+        await client.ConnectAsync(IPAddress.Loopback, host.LocalEndPoint.Port);
+        var stream = client.GetStream();
+        await stream.WriteAsync(Encoding.ASCII.GetBytes(
+            $"GET /stream/{ChannelId} HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"));
+
+        var responseHeader = await ReadHttpHeaderAsync(stream);
+        Assert.StartsWith("HTTP/1.1 200 OK\r\n", responseHeader);
+        Assert.Contains("Content-Type: video/mp2t\r\n", responseHeader);
+
+        byte[] nextTsPacket = [0x47, 0x01, 0x00, 0x11, 0xAA, 0xBB];
+        await source.ConsumeAsync(
+            CreatePacket(1, DataPacketType, nextTsPacket),
+            CancellationToken.None);
+        Assert.Equal(nextTsPacket, await ReadExactlyAsync(stream, nextTsPacket.Length));
+    }
+
     private static PcpChannelPacket CreatePacket(
         long sequence,
         uint type,

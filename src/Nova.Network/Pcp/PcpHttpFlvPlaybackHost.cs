@@ -17,10 +17,11 @@ public sealed class PcpHttpFlvPlaybackHost :
 {
     private const int MaximumSourceSessions = 8;
     private const string StreamPrefix = "/stream/";
-    private const string SuccessResponse =
+
+    private static string BuildSuccessResponse(string contentType) =>
         "HTTP/1.1 200 OK\r\n" +
         "Server: PeerCastNova\r\n" +
-        "Content-Type: video/x-flv\r\n" +
+        $"Content-Type: {contentType}\r\n" +
         "Cache-Control: no-store\r\n" +
         "Connection: close\r\n\r\n";
 
@@ -304,8 +305,10 @@ public sealed class PcpHttpFlvPlaybackHost :
                 return;
             }
 
+            var contentType = source.ResolveContentType(
+                _playerChannelInfo?.Invoke(source.ChannelIdValue)?.Metadata);
             await sink.WriteResponseHeaderAsync(
-                Encoding.ASCII.GetBytes(SuccessResponse),
+                Encoding.ASCII.GetBytes(BuildSuccessResponse(contentType)),
                 cancellationToken).ConfigureAwait(false);
             await sink.WriteBootstrapAsync(bootstrap, cancellationToken)
                 .ConfigureAwait(false);

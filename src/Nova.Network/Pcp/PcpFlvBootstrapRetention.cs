@@ -70,6 +70,17 @@ internal sealed class PcpFlvBootstrapRetention
         _options.Validate();
     }
 
+    internal bool IsHeaderResolved
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _headerResolved;
+            }
+        }
+    }
+
     public PcpFlvBootstrapStatusSnapshot StatusSnapshot
     {
         get
