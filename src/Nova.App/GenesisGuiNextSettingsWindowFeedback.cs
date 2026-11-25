@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+using static PeerCast.Nova.App.Win32NativeMethods;
 
 namespace PeerCast.Nova.App;
 
@@ -107,14 +107,4 @@ internal static class SystemGenesisGuiNextSettingsWindowFeedback
             _ = MessageBoxW(owner, error, "外観設定", MessageBoxOk | MessageBoxIconWarning);
     }
 
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool IsWindow(nint window);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern int MessageBoxW(
-        nint window,
-        string text,
-        string caption,
-        uint type);
 }

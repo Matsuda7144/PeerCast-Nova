@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 
+using static PeerCast.Nova.App.Win32NativeMethods;
+
 namespace PeerCast.Nova.App;
 
 internal sealed class GenesisChannelContextMenuPlacement
@@ -36,12 +38,6 @@ internal sealed class GenesisChannelContextMenuPlacement
             channelCatalogSession);
     }
 
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern nint FindWindowExW(
-        nint parent,
-        nint childAfter,
-        string? className,
-        string? windowName);
 }
 
 internal static class GenesisChannelContextMenuKeyboard
@@ -695,40 +691,8 @@ internal sealed class GenesisChannelContextMenuBridge : IAsyncDisposable
         nuint wParam,
         nint lParam);
 
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern nint GetModuleHandleW(string? moduleName);
-
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern ushort RegisterClassExW(ref WindowClassEx windowClass);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool UnregisterClassW(string className, nint instance);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern nint CreateWindowExW(
-        uint extendedStyle,
-        string className,
-        string windowName,
-        uint style,
-        int x,
-        int y,
-        int width,
-        int height,
-        nint parent,
-        nint menu,
-        nint instance,
-        nint parameter);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern nint FindWindowExW(
-        nint parent,
-        nint childAfter,
-        string? className,
-        string? windowName);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern nint GetParent(nint window);
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -742,40 +706,6 @@ internal sealed class GenesisChannelContextMenuBridge : IAsyncDisposable
     private static extern nint SetParent(nint child, nint newParent);
 
     [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool MoveWindow(
-        nint window,
-        int x,
-        int y,
-        int width,
-        int height,
-        [MarshalAs(UnmanagedType.Bool)] bool repaint);
-
-    [DllImport("user32.dll", EntryPoint = "SendMessageW")]
-    private static extern nint SendMessageW(
-        nint window,
-        uint message,
-        nuint wParam,
-        nint lParam);
-
-    [DllImport("user32.dll")]
-    private static extern short GetKeyState(int virtualKey);
-
-    [DllImport("user32.dll", SetLastError = true)]
     private static extern nint GetAncestor(nint window, uint flags);
 
-    [DllImport("user32.dll")]
-    private static extern nint DefWindowProcW(
-        nint window,
-        uint message,
-        nuint wParam,
-        nint lParam);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool DestroyWindow(nint window);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool IsWindow(nint window);
 }

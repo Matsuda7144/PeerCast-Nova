@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 
+using static PeerCast.Nova.App.Win32NativeMethods;
+
 namespace PeerCast.Nova.App;
 
 internal static class GenesisSourceKeyboard
@@ -57,12 +59,6 @@ internal sealed class GenesisSourceEnterPlacement
             channelCatalogSession);
     }
 
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern nint FindWindowExW(
-        nint parent,
-        nint childAfter,
-        string? className,
-        string? windowName);
 }
 
 internal sealed class GenesisSourceEnterBridge : IAsyncDisposable
@@ -294,23 +290,10 @@ internal sealed class GenesisSourceEnterBridge : IAsyncDisposable
         SubclassProcedure subclassProcedure,
         nuint subclassIdentifier);
 
-    [DllImport("comctl32.dll")]
-    private static extern nint DefSubclassProc(
-        nint window,
-        uint message,
-        nuint wParam,
-        nint lParam);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern int GetWindowTextLengthW(nint window);
-
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern int GetWindowTextW(
         nint window,
         nint text,
         int maximumCharacters);
 
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool IsWindow(nint window);
 }

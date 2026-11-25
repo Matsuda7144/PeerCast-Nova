@@ -1,3 +1,5 @@
+using static PeerCast.Nova.App.Win32NativeMethods;
+
 namespace PeerCast.Nova.App;
 
 // One shell lifetime, UI thread only. Coalesce intermediate layout/visibility

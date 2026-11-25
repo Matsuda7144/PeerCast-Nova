@@ -1,5 +1,7 @@
 using System.Runtime.InteropServices;
 
+using static PeerCast.Nova.App.Win32NativeMethods;
+
 namespace PeerCast.Nova.App;
 
 // Shared by native controls and owner-draw; it never changes Windows font settings.
@@ -238,19 +240,12 @@ internal static class GenesisWindowUiFont
     private static extern nint GetAncestor(nint window, uint flags);
     [DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(nint window);
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool IsWindow(nint window);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern nint SendMessageW(nint window, uint message, nuint wParam, nint lParam);
     [DllImport("comctl32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetWindowSubclass(nint window, SubclassProcedure procedure, nuint id, nuint data);
     [DllImport("comctl32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool RemoveWindowSubclass(nint window, SubclassProcedure procedure, nuint id);
-    [DllImport("comctl32.dll")]
-    private static extern nint DefSubclassProc(nint window, uint message, nuint wParam, nint lParam);
 }
 
 internal sealed class SystemUiFontNativeApi : IGenesisUiFontNativeApi
@@ -402,10 +397,6 @@ internal sealed class SystemUiFontNativeApi : IGenesisUiFontNativeApi
     [DllImport("user32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SystemParametersInfoW(uint action, uint parameter, ref NonClientMetrics metrics, uint flags);
-    [DllImport("user32.dll")]
-    private static extern nint GetDC(nint window);
-    [DllImport("user32.dll")]
-    private static extern int ReleaseDC(nint window, nint dc);
     [DllImport("gdi32.dll")]
     private static extern int GetDeviceCaps(nint dc, int index);
     [DllImport("gdi32.dll", CharSet = CharSet.Unicode)]
@@ -419,9 +410,6 @@ internal sealed class SystemUiFontNativeApi : IGenesisUiFontNativeApi
     [DllImport("gdi32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool DeleteDC(nint dc);
-    [DllImport("gdi32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool DeleteObject(nint value);
 }
 
 // Managed lifetime/rotation policy, independent of HWND creation. Native teardown

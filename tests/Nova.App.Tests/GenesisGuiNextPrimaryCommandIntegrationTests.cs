@@ -103,11 +103,12 @@ public sealed class GenesisGuiNextPrimaryCommandIntegrationTests
     public void SearchNavigationUsesChannelsProjectionAndFocusesOwnedSearchEdit()
     {
         var shell = ReadSource("GenesisGuiNextAppShellBridge.cs");
+        var navigationModels = ReadSource("GenesisGuiNextNavigationModels.cs");
         var searchBox = ReadSource("GenesisChannelSearchBoxBridge.cs");
 
         Assert.Contains(
             "SearchNavigationItemIndex => GenesisGuiNextPrimaryCommand.Search,",
-            shell,
+            navigationModels,
             StringComparison.Ordinal);
         Assert.Contains(
             "primaryCommand == GenesisGuiNextPrimaryCommand.Search",
@@ -122,16 +123,16 @@ public sealed class GenesisGuiNextPrimaryCommandIntegrationTests
         Assert.Contains("_utilityNavigationSelection.SelectView(_tabs, selectedTab);", shell, StringComparison.Ordinal);
         Assert.Contains("_utilityNavigationSelection.OnSelectedTabChanged();", shell, StringComparison.Ordinal);
 
-        var helperStart = shell.IndexOf(
+        var helperStart = navigationModels.IndexOf(
             "internal sealed class GenesisGuiNextUtilityNavigationSelection",
             StringComparison.Ordinal);
         Assert.True(helperStart >= 0);
-        var helperEnd = shell.IndexOf(
+        var helperEnd = navigationModels.IndexOf(
             "internal sealed record GenesisGuiNextFavoriteButtonPresentation",
             helperStart,
             StringComparison.Ordinal);
         Assert.True(helperEnd > helperStart);
-        var helper = shell[helperStart..helperEnd];
+        var helper = navigationModels[helperStart..helperEnd];
         Assert.Contains("tabs.SelectedTab = GenesisGuiNextTab.Channels;", helper, StringComparison.Ordinal);
         Assert.Contains("SelectUtility(GenesisGuiNextNavigationPresentation.SearchNavigationItemIndex);", helper, StringComparison.Ordinal);
         Assert.Contains("focusSearchEdit()", helper, StringComparison.Ordinal);

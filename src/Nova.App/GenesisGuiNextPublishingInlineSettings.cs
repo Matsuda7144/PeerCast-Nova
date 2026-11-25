@@ -1,5 +1,7 @@
 using System.Runtime.InteropServices;
 
+using static PeerCast.Nova.App.Win32NativeMethods;
+
 namespace PeerCast.Nova.App;
 
 internal sealed partial class GenesisGuiNextAppShellBridge

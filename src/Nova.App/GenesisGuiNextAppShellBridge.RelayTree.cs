@@ -2,6 +2,8 @@ using System.Runtime.InteropServices;
 using PeerCast.Nova.Core.Channels;
 using PeerCast.Nova.Network.Pcp;
 
+using static PeerCast.Nova.App.Win32NativeMethods;
+
 namespace PeerCast.Nova.App;
 
 internal sealed partial class GenesisGuiNextAppShellBridge

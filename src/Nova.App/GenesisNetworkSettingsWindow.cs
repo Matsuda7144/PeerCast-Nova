@@ -438,10 +438,6 @@ internal sealed partial class GenesisNetworkSettingsWindow : IAsyncDisposable
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern ushort RegisterClassExW(ref WindowClassEx windowClass);
 
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool UnregisterClassW(string className, nint instance);
-
     [DllImport("comctl32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetWindowSubclass(
@@ -457,10 +453,4 @@ internal sealed partial class GenesisNetworkSettingsWindow : IAsyncDisposable
         SubclassProcedure subclassProcedure,
         nuint subclassId);
 
-    [DllImport("comctl32.dll")]
-    private static extern nint DefSubclassProc(
-        nint window,
-        uint message,
-        nuint wParam,
-        nint lParam);
 }

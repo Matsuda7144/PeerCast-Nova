@@ -1,5 +1,7 @@
 using System.Runtime.InteropServices;
 
+using static PeerCast.Nova.App.Win32NativeMethods;
+
 namespace PeerCast.Nova.App;
 
 internal interface IGenesisMainWindowNativeSurfaceFactory
@@ -663,40 +665,9 @@ internal sealed class GenesisMainWindowNativeSurface : IAsyncDisposable
         public uint Classes;
     }
 
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern nint CreateWindowExW(
-        uint extendedStyle,
-        string className,
-        string windowName,
-        uint style,
-        int x,
-        int y,
-        int width,
-        int height,
-        nint parent,
-        nint menu,
-        nint instance,
-        nint parameter);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern nint SetFocus(nint window);
-
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetClientRect(nint window, out WindowRectangle rectangle);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool EnableWindow(
-        nint window,
-        [MarshalAs(UnmanagedType.Bool)] bool enable);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern nint SendMessageW(
-        nint window,
-        uint message,
-        nuint wParam,
-        nint lParam);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "SendMessageW")]
     private static extern int SendMessageColumn(
@@ -711,14 +682,6 @@ internal sealed class GenesisMainWindowNativeSurface : IAsyncDisposable
         uint message,
         nuint wParam,
         ref ListViewItem item);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool PostMessageW(
-        nint window,
-        uint message,
-        nuint wParam,
-        nint lParam);
 
     [DllImport("comctl32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 
+using static PeerCast.Nova.App.Win32NativeMethods;
+
 namespace PeerCast.Nova.App;
 
 internal sealed class GenesisChannelDirectContextMenuPlacement
@@ -39,12 +41,6 @@ internal sealed class GenesisChannelDirectContextMenuPlacement
             channelCatalogSession);
     }
 
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern nint FindWindowExW(
-        nint parent,
-        nint childAfter,
-        string? className,
-        string? windowName);
 }
 
 internal static class GenesisChannelDirectContextMenuDispatch
@@ -645,24 +641,7 @@ internal sealed class GenesisChannelDirectContextMenuBridge : IAsyncDisposable
         SubclassProcedure subclassProcedure,
         nuint subclassIdentifier);
 
-    [DllImport("comctl32.dll")]
-    private static extern nint DefSubclassProc(
-        nint window,
-        uint message,
-        nuint wParam,
-        nint lParam);
-
     [DllImport("user32.dll", SetLastError = true)]
     private static extern nint GetAncestor(nint window, uint flags);
 
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetForegroundWindow(nint window);
-
-    [DllImport("user32.dll")]
-    private static extern short GetKeyState(int virtualKey);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool IsWindow(nint window);
 }

@@ -1,5 +1,7 @@
 using System.Runtime.InteropServices;
 
+using static PeerCast.Nova.App.Win32NativeMethods;
+
 namespace PeerCast.Nova.App;
 
 internal sealed class GenesisGuiNextMainWindowKeyboardNavigation : IDisposable
@@ -337,19 +339,7 @@ internal sealed class GenesisGuiNextMainWindowKeyboardNavigation : IDisposable
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool IsWindow(nint window);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool IsChild(nint parent, nint window);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool IsWindowVisible(nint window);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool IsWindowEnabled(nint window);
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern int GetWindowLongW(nint window, int index);
@@ -359,16 +349,7 @@ internal sealed class GenesisGuiNextMainWindowKeyboardNavigation : IDisposable
     private static extern bool GetWindowRect(nint window, out NativeRectangle rectangle);
 
     [DllImport("user32.dll")]
-    private static extern nint GetFocus();
-
-    [DllImport("user32.dll")]
     private static extern nint GetForegroundWindow();
-
-    [DllImport("user32.dll")]
-    private static extern nint SetFocus(nint window);
-
-    [DllImport("user32.dll")]
-    private static extern short GetKeyState(int virtualKey);
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern uint GetWindowThreadProcessId(nint window, out uint processId);

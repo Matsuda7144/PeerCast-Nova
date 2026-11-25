@@ -1,6 +1,8 @@
 using System.Runtime.InteropServices;
 using System.Text;
 
+using static PeerCast.Nova.App.Win32NativeMethods;
+
 namespace PeerCast.Nova.App;
 
 internal enum GenesisChannelContextMenuCommand
@@ -443,13 +445,6 @@ internal static class GenesisChannelContextMenuNative
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool ClientToScreen(nint window, ref WindowPoint point);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern nint SendMessageW(
-        nint window,
-        uint message,
-        nuint wParam,
-        nint lParam);
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern nint CreatePopupMenu();

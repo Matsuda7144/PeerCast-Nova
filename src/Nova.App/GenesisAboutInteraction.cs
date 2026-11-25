@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+using static PeerCast.Nova.App.Win32NativeMethods;
 
 namespace PeerCast.Nova.App;
 
@@ -94,10 +94,4 @@ internal sealed class SystemGenesisAboutDialog : IGenesisAboutDialog
 
     internal static bool IsPresentedResult(int result) => result != 0;
 
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern int MessageBoxW(
-        nint owner,
-        string text,
-        string caption,
-        uint type);
 }

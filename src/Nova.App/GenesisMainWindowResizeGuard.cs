@@ -1,5 +1,7 @@
 using System.Runtime.InteropServices;
 
+using static PeerCast.Nova.App.Win32NativeMethods;
+
 namespace PeerCast.Nova.App;
 
 internal sealed class GenesisMainWindowResizeGuard : IAsyncDisposable
@@ -165,10 +167,6 @@ internal sealed class GenesisMainWindowResizeGuard : IAsyncDisposable
         int height,
         uint flags);
 
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool IsWindow(nint window);
-
     [StructLayout(LayoutKind.Sequential)]
     private struct Point { public int X; public int Y; }
     [StructLayout(LayoutKind.Sequential)]
@@ -190,8 +188,6 @@ internal sealed class GenesisMainWindowResizeGuard : IAsyncDisposable
     [DllImport("comctl32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool RemoveWindowSubclass(nint window, SubclassProcedure procedure, nuint id);
-    [DllImport("comctl32.dll")]
-    private static extern nint DefSubclassProc(nint window, uint message, nuint wParam, nint lParam);
 
     private sealed class NoopLifetime : IAsyncDisposable
     {

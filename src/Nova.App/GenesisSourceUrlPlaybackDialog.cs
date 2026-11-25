@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 
+using static PeerCast.Nova.App.Win32NativeMethods;
+
 namespace PeerCast.Nova.App;
 
 /// <summary>
@@ -790,79 +792,15 @@ internal static class GenesisSourceUrlPlaybackDialog
         nuint subclassIdentifier,
         nuint referenceData);
 
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern nint GetModuleHandleW(string? moduleName);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern nint CreateWindowExW(
-        uint extendedStyle,
-        string className,
-        string windowName,
-        uint style,
-        int x,
-        int y,
-        int width,
-        int height,
-        nint parent,
-        nint menu,
-        nint instance,
-        nint parameter);
-
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern ushort RegisterClassExW(ref WindowClassEx windowClass);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern nint DefWindowProcW(nint window, uint message, nuint wParam, nint lParam);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool DestroyWindow(nint window);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool IsWindow(nint window);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool IsWindowEnabled(nint window);
-
-    [DllImport("user32.dll")]
-    private static extern bool EnableWindow(nint window, [MarshalAs(UnmanagedType.Bool)] bool enable);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool ShowWindow(nint window, int command);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetForegroundWindow(nint window);
-
-    [DllImport("user32.dll")]
-    private static extern nint SetFocus(nint window);
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetWindowRect(nint window, out WindowRectangle rectangle);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern int GetWindowTextLengthW(nint window);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern int GetWindowTextW(nint window, nint text, int maximumCharacters);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetWindowTextW(nint window, string text);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern nint SendMessageW(nint window, uint message, nuint wParam, nint lParam);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool PostMessageW(nint window, uint message, nuint wParam, nint lParam);
-
-    [DllImport("gdi32.dll")]
-    private static extern nint GetStockObject(int objectId);
 
     [DllImport("comctl32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -879,15 +817,8 @@ internal static class GenesisSourceUrlPlaybackDialog
         SubclassProcedure subclassProcedure,
         nuint subclassIdentifier);
 
-    [DllImport("comctl32.dll")]
-    private static extern nint DefSubclassProc(nint window, uint message, nuint wParam, nint lParam);
-
     [DllImport("gdi32.dll")]
     private static extern nint CreateSolidBrush(uint color);
-
-    [DllImport("gdi32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool DeleteObject(nint handle);
 
     [DllImport("gdi32.dll")]
     private static extern int SetBkMode(nint deviceContext, int mode);
@@ -913,6 +844,4 @@ internal static class GenesisSourceUrlPlaybackDialog
     [DllImport("user32.dll")]
     private static extern int FillRect(nint deviceContext, ref Rectangle rectangle, nint brush);
 
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern nint LoadCursorW(nint instance, nint cursorName);
 }

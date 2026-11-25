@@ -159,11 +159,14 @@ public sealed class GenesisGuiNextPlaybackCommandTests
         new(name, $"pcp://example/{token}", $"[{token}]");
 
     private static string? GetImportModule(string methodName) =>
-        typeof(GenesisSourceUrlPlaybackDialog)
-            .GetMethod(
+        (typeof(GenesisSourceUrlPlaybackDialog).GetMethod(
                 methodName,
                 System.Reflection.BindingFlags.NonPublic |
                     System.Reflection.BindingFlags.Static)
+            ?? typeof(Win32NativeMethods).GetMethod(
+                methodName,
+                System.Reflection.BindingFlags.NonPublic |
+                    System.Reflection.BindingFlags.Static))
             ?.GetCustomAttributes(typeof(System.Runtime.InteropServices.DllImportAttribute), inherit: false)
             .Cast<System.Runtime.InteropServices.DllImportAttribute>()
             .SingleOrDefault()

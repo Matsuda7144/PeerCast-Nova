@@ -1,5 +1,7 @@
 using System.Runtime.InteropServices;
 
+using static PeerCast.Nova.App.Win32NativeMethods;
+
 namespace PeerCast.Nova.App;
 
 internal sealed record GenesisChannelNotificationRuntime(
@@ -281,10 +283,6 @@ internal sealed class SystemGenesisChannelNotificationPresenter :
     private static extern bool Shell_NotifyIconW(
         uint message,
         ref NotifyIconData data);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool IsWindow(nint window);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern nint LoadIconW(nint instance, nint iconName);
