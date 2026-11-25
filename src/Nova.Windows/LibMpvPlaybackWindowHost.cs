@@ -671,7 +671,8 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
                 {
                     if (HasBbs && message.Window == _bbsInputEdit)
                     {
-                        if (message.WParam == VirtualKeyReturn && (GetKeyState(VirtualKeyShift) & 0x8000) != 0)
+                        // 1 行入力欄のため素の Enter で送信、Shift+Enter で改行とする。
+                        if (message.WParam == VirtualKeyReturn && (GetKeyState(VirtualKeyShift) & 0x8000) == 0)
                         {
                             SubmitBbsPost();
                             continue;

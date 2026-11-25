@@ -143,6 +143,7 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
             ("load-scripts", "no"),
             ("input-default-bindings", "no"),
             ("wid", "42"),
+            ("hwdec", "auto-safe"),
             ("demuxer", "lavf"),
             ("demuxer-lavf-format", demuxer),
             ("volume", "75"),

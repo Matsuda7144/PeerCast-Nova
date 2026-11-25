@@ -65,7 +65,7 @@ public sealed class NovaAboutLegalProjectionTests
     [Fact]
     public async Task NonWindowsFailsClosedBeforeDispatcherOrTarget()
     {
-        if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22_000))
+        if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 17_763))
         {
             return;
         }
@@ -119,7 +119,7 @@ public sealed class NovaAboutLegalProjectionTests
         INovaAboutLegalDispatcher dispatcher,
         INovaAboutLegalProjectionTarget target)
     {
-        if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22_000))
+        if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 17_763))
         {
             return await NovaAboutLegalProjection.OpenAsync(dispatcher, target);
         }

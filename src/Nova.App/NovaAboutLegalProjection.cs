@@ -50,7 +50,7 @@ public sealed record NovaAboutLegalProjection(
         await OpenAsync(
             dispatcher,
             target,
-            static () => OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22_000),
+            static () => OperatingSystem.IsWindowsVersionAtLeast(10, 0, 17_763),
             cancellationToken).ConfigureAwait(false);
 
     internal static async ValueTask<NovaAboutLegalProjection> OpenAsync(

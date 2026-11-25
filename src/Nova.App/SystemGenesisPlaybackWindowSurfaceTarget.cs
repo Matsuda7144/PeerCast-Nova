@@ -21,7 +21,7 @@ internal sealed class SystemGenesisPlaybackWindowSurfaceTarget :
     public SystemGenesisPlaybackWindowSurfaceTarget()
         : this(
             SystemGenesisPlaybackWindowNativeSurfaceFactory.Instance,
-            static () => OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22_000))
+            static () => OperatingSystem.IsWindowsVersionAtLeast(10, 0, 17_763))
     {
     }
 

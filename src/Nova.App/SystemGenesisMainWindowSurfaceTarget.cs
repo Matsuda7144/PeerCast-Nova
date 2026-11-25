@@ -18,7 +18,7 @@ internal sealed class SystemGenesisMainWindowSurfaceTarget :
     public SystemGenesisMainWindowSurfaceTarget()
         : this(
             SystemGenesisMainWindowNativeSurfaceFactory.Instance,
-            static () => OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22_000))
+            static () => OperatingSystem.IsWindowsVersionAtLeast(10, 0, 17_763))
     {
     }
 

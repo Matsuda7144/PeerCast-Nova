@@ -149,6 +149,7 @@ internal sealed class LibMpvPlaybackClient : ILibMpvPlaybackClient
         setOption("load-scripts", "no");
         setOption("input-default-bindings", "no");
         setOption("wid", windowId.ToString(CultureInfo.InvariantCulture));
+        setOption("hwdec", "auto-safe");
         setOption("demuxer", "lavf");
         setOption("demuxer-lavf-format", DemuxerFormatFor(container));
         setOption("volume", audio.Volume.ToString(CultureInfo.InvariantCulture));

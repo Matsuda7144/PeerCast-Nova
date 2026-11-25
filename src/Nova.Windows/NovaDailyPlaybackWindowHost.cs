@@ -125,7 +125,7 @@ public sealed class NovaDailyPlaybackWindowHost : IAsyncDisposable
                 throw new InvalidOperationException("The daily playback window can only be started once.");
             }
 
-            if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22_000))
+            if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 17_763))
             {
                 return NovaDailyPlaybackWindowResult.PlatformUnsupported;
             }
