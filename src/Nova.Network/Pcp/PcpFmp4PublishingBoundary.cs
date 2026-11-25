@@ -246,13 +246,14 @@ public sealed class PcpFmp4PublishingBoundary : IAsyncDisposable
             return false;
         }
 
-        var wireEnd = (ulong)wirePosition + (ulong)byteCount;
-        if (wireEnd > uint.MaxValue || byteCount > long.MaxValue - streamPosition)
+        if (byteCount > long.MaxValue - streamPosition)
         {
             return false;
         }
 
-        nextWirePosition = (uint)wireEnd;
+        // PCP の 32bit WirePosition は 4GB 到達時にラップアラウンドを許容し、
+        // 64bit StreamPosition の上限のみ PositionOverflow として拒否する。
+        nextWirePosition = unchecked((uint)((ulong)wirePosition + (ulong)byteCount));
         nextStreamPosition = streamPosition + byteCount;
         return true;
     }

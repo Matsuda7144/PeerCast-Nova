@@ -403,15 +403,19 @@ public sealed class PcpFmp4PublishingBoundaryTests
             SessionId,
             wireConsumer,
             options,
-            uint.MaxValue,
-            0,
+            uint.MaxValue - 1,
+            (long)uint.MaxValue - 1,
             0);
         Assert.Equal(
-            PcpFmp4PublishingResult.PositionOverflow,
+            PcpFmp4PublishingResult.Published,
             await wireBoundary.PublishSegmentAsync(
-                new byte[] { 1 },
+                new byte[] { 1, 2, 3, 4 },
                 PcpFmp4PublishingSegmentRole.Initialization));
-        Assert.Empty(wireConsumer.Packets);
+        var wrappedPacket = Assert.Single(wireConsumer.Packets);
+        Assert.Equal(uint.MaxValue - 1, wrappedPacket.WirePosition);
+        Assert.Equal((long)uint.MaxValue - 1, wrappedPacket.StreamPosition);
+        Assert.Equal(2u, wireBoundary.Snapshot.NextWirePosition);
+        Assert.Equal((long)uint.MaxValue + 3, wireBoundary.Snapshot.NextStreamPosition);
 
         var streamConsumer = new RecordingConsumer();
         await using var streamBoundary = new PcpFmp4PublishingBoundary(
@@ -447,12 +451,12 @@ public sealed class PcpFmp4PublishingBoundaryTests
 
         Assert.True(PcpFmp4PublishingBoundary.TryAdvancePositions(
             uint.MaxValue - 1,
-            long.MaxValue - 1,
-            1,
-            out var nextWire,
-            out var nextStream));
-        Assert.Equal(uint.MaxValue, nextWire);
-        Assert.Equal(long.MaxValue, nextStream);
+            (long)uint.MaxValue - 1,
+            4,
+            out var wrappedWire,
+            out var continuedStream));
+        Assert.Equal(2u, wrappedWire);
+        Assert.Equal((long)uint.MaxValue + 3, continuedStream);
         Assert.False(PcpFmp4PublishingBoundary.TryAdvancePositions(
             uint.MaxValue,
             long.MaxValue,

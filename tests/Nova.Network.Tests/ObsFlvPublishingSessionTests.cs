@@ -191,6 +191,66 @@ public sealed class ObsFlvPublishingSessionTests
         Assert.Equal(0x22, tag[13]);
     }
 
+    [Fact]
+    public async Task WirePosition_wraps_around_4GB_boundary_while_stream_position_and_receiver_tracker_stay_continuous()
+    {
+        const long startByteCount = (long)uint.MaxValue - 16;
+        var consumer = new ObsRtmpTestConsumer();
+        var publisher = new ObsFlvPublishingSession(
+            Channel,
+            Session,
+            consumer,
+            new ObsRtmpIngestOptions { MaximumPacketBytes = 32 },
+            initialByteCount: startByteCount);
+
+        await ConfigureAsync(publisher);
+        await publisher.AcceptAsync(Message(9, Idr, 100), CancellationToken.None);
+        await publisher.AcceptAsync(Message(8, Audio, 120), CancellationToken.None);
+
+        var packets = consumer.Packets.ToArray();
+        Assert.True(packets.Length >= 4);
+        Assert.True(publisher.ByteCount > uint.MaxValue);
+
+        var expectedStreamPosition = startByteCount;
+        var tracker = new PcpStreamPositionTracker();
+        var sawWrap = false;
+        foreach (var packet in packets)
+        {
+            Assert.Equal(expectedStreamPosition, packet.StreamPosition);
+            Assert.Equal(unchecked((uint)expectedStreamPosition), packet.WirePosition);
+
+            var observation = tracker.Observe(packet.WirePosition);
+            Assert.NotEqual(PcpStreamPositionObservationKind.BackwardDiscontinuity, observation.Kind);
+            if (observation.Kind == PcpStreamPositionObservationKind.Wrapped)
+            {
+                sawWrap = true;
+            }
+
+            expectedStreamPosition += packet.Payload.Length;
+        }
+
+        Assert.True(sawWrap);
+        Assert.Equal(expectedStreamPosition, publisher.ByteCount);
+    }
+
+    [Fact]
+    public async Task SixtyFourBit_stream_position_overflow_is_rejected_with_PositionLimit()
+    {
+        var consumer = new ObsRtmpTestConsumer();
+        var publisher = new ObsFlvPublishingSession(
+            Channel,
+            Session,
+            consumer,
+            new ObsRtmpIngestOptions(),
+            initialByteCount: long.MaxValue - 8);
+
+        var exception = await Assert.ThrowsAsync<InvalidDataException>(async () =>
+            await ConfigureAsync(publisher));
+
+        Assert.Equal(ObsRtmpRejectionReason.PositionLimit, ObsRtmpRejection.Get(exception)?.Reason);
+        Assert.Empty(consumer.Packets);
+    }
+
     internal static ObsFlvPublishingSession Create(ObsRtmpTestConsumer consumer, ObsRtmpIngestOptions? options = null) =>
         new(Channel, Session, consumer, options ?? new());
 

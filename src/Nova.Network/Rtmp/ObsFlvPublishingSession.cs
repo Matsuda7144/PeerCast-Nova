@@ -14,7 +14,8 @@ internal sealed class ObsFlvPublishingSession(
     ChannelSessionId sessionId,
     IPcpChannelPacketConsumer? consumer,
     ObsRtmpIngestOptions options,
-    IObsRtmpEncodedMediaConsumer? encodedConsumer = null)
+    IObsRtmpEncodedMediaConsumer? encodedConsumer = null,
+    long initialByteCount = 0)
 {
     private byte[]? _audio;
     private byte[]? _video;
@@ -26,7 +27,7 @@ internal sealed class ObsFlvPublishingSession(
 
     public long PacketCount { get; private set; }
 
-    public long ByteCount { get; private set; }
+    public long ByteCount { get; private set; } = initialByteCount;
 
     public async ValueTask AcceptAsync(RtmpMessage message, CancellationToken cancellationToken)
     {
@@ -284,18 +285,20 @@ internal sealed class ObsFlvPublishingSession(
 
     private async ValueTask PublishAsync(byte[] bytes, uint type, CancellationToken cancellationToken)
     {
-        if (ByteCount > uint.MaxValue - (long)bytes.Length)
+        if (ByteCount > long.MaxValue - bytes.Length)
         {
             throw ObsRtmpRejection.Create(ObsRtmpRejectionStage.FlvBootstrap,
-                ObsRtmpRejectionReason.PositionLimit, "The single-generation PCP position budget is exhausted.");
+                ObsRtmpRejectionReason.PositionLimit, "The 64-bit PCP stream position budget is exhausted.");
         }
 
         for (var offset = 0; offset < bytes.Length;)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var count = Math.Min(options.MaximumPacketBytes, bytes.Length - offset);
+            // PCP の 32bit pos（WirePosition）は 4GB 到達時に正常にラップアラウンドし、
+            // 64bit StreamPosition（ByteCount）は単調増加を維持する。
             var packet = new PcpChannelPacket(
-                channelId, sessionId, PacketCount, type, (uint)ByteCount, ByteCount,
+                channelId, sessionId, PacketCount, type, unchecked((uint)ByteCount), ByteCount,
                 bytes.AsMemory(offset, count), discontinuity: null);
             try
             {
