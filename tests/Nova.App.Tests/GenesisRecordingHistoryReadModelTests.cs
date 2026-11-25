@@ -143,7 +143,9 @@ public sealed class GenesisRecordingHistoryReadModelTests : IDisposable
         Assert.DoesNotContain("credential-secret", fact.ToString(), StringComparison.Ordinal);
         Assert.Null(fact.WriteResult);
         Assert.Empty(await runtime.GetActiveRecordingSessionsAsync());
-        Assert.Empty(Directory.GetFiles(_directory));
+        var savedFile = Assert.Single(Directory.GetFiles(_directory));
+        Assert.False(savedFile.EndsWith(".partial", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(new byte[] { 1 }, await File.ReadAllBytesAsync(savedFile));
     }
 
     [Fact]

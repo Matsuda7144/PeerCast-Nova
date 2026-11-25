@@ -315,6 +315,7 @@ public sealed partial class PcpRelayFanoutRecordingStreamSourceLeaseFactory :
         private int _workerTokenObserved;
         private long? _expectedSourceSequence;
         private long _recordingSequence;
+        private bool _completedGracefullyOnStreamBreak;
         private int _terminalRequested;
         private int _disposed;
 
@@ -419,16 +420,36 @@ public sealed partial class PcpRelayFanoutRecordingStreamSourceLeaseFactory :
 
                 if (Volatile.Read(ref _terminalRequested) != 0)
                 {
+                    if (_completedGracefullyOnStreamBreak)
+                    {
+                        return;
+                    }
+
                     throw new IOException(
                         "The recording source owner has completed.");
                 }
 
-                if (!packet.IsRetainedHeadReplay &&
+                var hasSequenceGap =
+                    !packet.IsRetainedHeadReplay &&
                     _expectedSourceSequence is { } expected &&
-                    packet.Sequence != expected)
+                    packet.Sequence != expected;
+
+                if (_recordingSequence > 0 &&
+                    (hasSequenceGap || packet.Discontinuity is not null))
+                {
+                    // すでに録画データを受信済みの場合は、途中のパケット欠損や不連続で
+                    // 録画ファイルを破棄せず正常 EOF で確定保存させる。
+                    _completedGracefullyOnStreamBreak = true;
+                    await CompleteStreamAsync(
+                        terminalFault: null,
+                        stopChild: false).ConfigureAwait(false);
+                    return;
+                }
+
+                if (hasSequenceGap)
                 {
                     throw new InvalidDataException(
-                        $"Expected PCP packet sequence {expected} but observed {packet.Sequence}.");
+                        $"Expected PCP packet sequence {_expectedSourceSequence} but observed {packet.Sequence}.");
                 }
 
                 var recordingPacket = new PcpChannelPacket(

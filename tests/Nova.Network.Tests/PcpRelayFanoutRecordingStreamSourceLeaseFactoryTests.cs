@@ -216,7 +216,7 @@ public sealed class PcpRelayFanoutRecordingStreamSourceLeaseFactoryTests :
     }
 
     [Fact]
-    public async Task LiveSourceSequenceGap_IsStillRejected()
+    public async Task LiveSourceSequenceGap_PreservesReceivedBytesAsCleanEof()
     {
         await using var fanout = new PcpRelayFanout();
         var factory = new PcpRelayFanoutRecordingStreamSourceLeaseFactory(
@@ -240,10 +240,44 @@ public sealed class PcpRelayFanoutRecordingStreamSourceLeaseFactoryTests :
             TimeSpan.FromSeconds(2)));
 
         using var recordedPayload = new MemoryStream();
-        var exception = await Assert.ThrowsAsync<InvalidDataException>(
-            async () => await readStream.CopyToAsync(recordedPayload));
+        await readStream.CopyToAsync(recordedPayload);
 
-        Assert.Contains("observed 22", exception.Message, StringComparison.Ordinal);
+        Assert.Equal([0x20], recordedPayload.ToArray());
+        await lease.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task DiscontinuityAfterReceivedPacket_PreservesReceivedBytesAsCleanEof()
+    {
+        await using var fanout = new PcpRelayFanout();
+        var factory = new PcpRelayFanoutRecordingStreamSourceLeaseFactory(
+            ChannelId,
+            SessionId,
+            fanout);
+        factory.StartAccepting();
+        var lease = await factory.AcquireAsync(
+            CreateRequest(),
+            CancellationToken.None);
+        Assert.NotNull(lease);
+        var readStream = lease.ReadStream;
+
+        await fanout.ConsumeAsync(
+            CreatePacket(10, [0x10, 0x11]),
+            CancellationToken.None);
+        await fanout.ConsumeAsync(
+            CreatePacket(
+                11,
+                [0x21],
+                type: 0x61746164,
+                discontinuity: new PcpStreamDiscontinuity(100, 50, 100)),
+            CancellationToken.None);
+        Assert.True(await fanout.WaitForIdleAsync(
+            TimeSpan.FromSeconds(2)));
+
+        using var recordedPayload = new MemoryStream();
+        await readStream.CopyToAsync(recordedPayload);
+
+        Assert.Equal([0x10, 0x11], recordedPayload.ToArray());
         await lease.DisposeAsync();
     }
 

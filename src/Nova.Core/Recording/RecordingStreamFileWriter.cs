@@ -1,3 +1,5 @@
+using System.Runtime.ExceptionServices;
+
 namespace PeerCast.Nova.Core.Recording;
 
 /// <summary>
@@ -47,6 +49,7 @@ public static class RecordingStreamFileWriter
             path,
             failureObserver,
             allowNoDecodableVideoStart: true,
+            preserveWrittenBytesOnReadFailure: true,
             stoppingToken);
     }
 
@@ -61,6 +64,7 @@ public static class RecordingStreamFileWriter
             path,
             failureObserver,
             allowNoDecodableVideoStart: false,
+            preserveWrittenBytesOnReadFailure: false,
             stoppingToken).ConfigureAwait(false);
         return outcome.WriteResult ?? throw new InvalidOperationException(
             "The recording file writer did not produce a finalized file.");
@@ -71,6 +75,7 @@ public static class RecordingStreamFileWriter
         string path,
         Action<RecordingFailureStage, Exception>? failureObserver,
         bool allowNoDecodableVideoStart,
+        bool preserveWrittenBytesOnReadFailure,
         CancellationToken stoppingToken)
     {
         ArgumentNullException.ThrowIfNull(source);
@@ -132,6 +137,8 @@ public static class RecordingStreamFileWriter
         var completionKind =
             RecordingFileWriteCompletionKind.EndOfStream;
         var drainingDecodableStartOutput = false;
+        Exception? preservedReadFailure = null;
+        var preservedReadFailureStage = RecordingFailureStage.SourceRead;
 
         try
         {
@@ -193,6 +200,17 @@ public static class RecordingStreamFileWriter
                     }
                     catch (RecordingStreamTransformException exception)
                     {
+                        if (preserveWrittenBytesOnReadFailure &&
+                            bytesWritten > 0 &&
+                            source is not IRecordingFileWriteOutcomeSource { NoDecodableVideoStart: true })
+                        {
+                            // すでに書き込み済みの有効な録画データがある場合は .partial を削除せず
+                            // 確定保存したうえで障害を報告する。
+                            preservedReadFailure = exception;
+                            preservedReadFailureStage = RecordingFailureStage.StreamTransform;
+                            break;
+                        }
+
                         ReportFailure(
                             failureObserver,
                             RecordingFailureStage.StreamTransform,
@@ -201,6 +219,17 @@ public static class RecordingStreamFileWriter
                     }
                     catch (Exception exception)
                     {
+                        if (preserveWrittenBytesOnReadFailure &&
+                            bytesWritten > 0 &&
+                            source is not IRecordingFileWriteOutcomeSource { NoDecodableVideoStart: true })
+                        {
+                            // 上流切断などの途中障害でも、それまで書き込んだ録画データを
+                            // 確定保存したうえで障害を報告する。
+                            preservedReadFailure = exception;
+                            preservedReadFailureStage = RecordingFailureStage.SourceRead;
+                            break;
+                        }
+
                         ReportFailure(
                             failureObserver,
                             RecordingFailureStage.SourceRead,
@@ -297,6 +326,15 @@ public static class RecordingStreamFileWriter
                     RecordingFailureStage.FileFinalize,
                     exception);
                 throw;
+            }
+
+            if (preservedReadFailure is not null)
+            {
+                ReportFailure(
+                    failureObserver,
+                    preservedReadFailureStage,
+                    preservedReadFailure);
+                ExceptionDispatchInfo.Capture(preservedReadFailure).Throw();
             }
 
             var result = new RecordingFileWriteResult(

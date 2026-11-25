@@ -92,10 +92,13 @@ public sealed partial class PcpRelayCoordinatorTests
         Assert.Equal(0, runtime.RecordingStreamSourceLeaseRegistry.Count);
 
         using var recordedPayload = new MemoryStream();
-        await Assert.ThrowsAsync<IOException>(
-            async () => await recordingReader.CopyToAsync(
-                recordedPayload,
-                timeoutSource.Token));
+        await recordingReader.CopyToAsync(
+            recordedPayload,
+            timeoutSource.Token);
+
+        Assert.Equal(
+            new byte[] { 0x10, 0x20, 0x30 },
+            recordedPayload.ToArray());
 
         Assert.Equal(
             new byte[][] { [0x10, 0x20], [0x30] },
@@ -315,6 +318,101 @@ public sealed partial class PcpRelayCoordinatorTests
             releaseSecondPacket.TrySetResult();
             closeUpstream.TrySetResult();
 
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task RecordingRuntime_UpstreamQuitFinalizesRecordedFileInsteadOfDeletingPartial()
+    {
+        var directory = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(),
+            "PeerCast-Nova-PcpRecordingQuitFinalizesTests",
+            Guid.NewGuid().ToString("N"));
+        byte[] firstPayload = [0x11, 0x22, 0x33, 0x44];
+        byte[] secondPayload = [0x55, 0x66, 0x77];
+        var releasePackets = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        try
+        {
+            var transportOptions = CreateTransportOptions();
+            await using var upstreamListener = new TcpTransportListener(
+                new IPEndPoint(IPAddress.Loopback, 0),
+                transportOptions);
+            upstreamListener.Start();
+            using var timeoutSource = new CancellationTokenSource(TestTimeout);
+            var upstreamTask = RunAcceptedUpstreamAttemptAsync(
+                upstreamListener,
+                expectedPosition: 0,
+                releasePackets.Task,
+                [
+                    CreatePacketAtom(position: 100, firstPayload),
+                    CreatePacketAtom(position: 104, secondPayload),
+                    CreateQuitAtom(),
+                ],
+                timeoutSource.Token);
+
+            await using (var relayRuntime = new PcpRelayRuntimeComposition())
+            await using (var recordingRuntime = new RecordingRuntime(
+                relayRuntime.RecordingSourceProvider,
+                new DefaultRecordingFilePathProvider(directory)))
+            {
+                var tracker = CreateTracker();
+                var coordinator = relayRuntime.CreateCoordinator(
+                    new TcpTransportConnector(transportOptions),
+                    tracker,
+                    new IPEndPoint(IPAddress.Loopback, 0));
+                var runTask = coordinator.RunAsync(
+                    upstreamListener.LocalEndPoint.Address.ToString(),
+                    upstreamListener.LocalEndPoint.Port,
+                    cancellationToken: timeoutSource.Token);
+
+                Assert.Equal(
+                    PcpRelayCoordinatorReadinessOutcome.Ready,
+                    await coordinator.WaitForReadinessAsync(timeoutSource.Token));
+                await WaitForConditionAsync(
+                    () => relayRuntime.RecordingStreamSourceLeaseRegistry.Count == 1,
+                    timeoutSource.Token);
+
+                var started = await recordingRuntime.StartManualAsync(
+                    new RecordingCandidate(
+                        tracker.Snapshot.ChannelId,
+                        new ChannelMetadataSnapshot(
+                            name: "Channel",
+                            streamExtension: "bin")),
+                    timeoutSource.Token);
+                Assert.Equal(RecordingManualStartResultKind.Started, started.Kind);
+
+                releasePackets.TrySetResult();
+
+                var result = await runTask.WaitAsync(timeoutSource.Token);
+                await upstreamTask.WaitAsync(timeoutSource.Token);
+                Assert.Equal(PcpRelayCoordinatorEndReason.UpstreamEnded, result.EndReason);
+
+                await WaitForConditionAsync(
+                    () => Directory.Exists(directory) &&
+                        Directory.GetFiles(directory).Any(static path =>
+                            !path.EndsWith(".partial", StringComparison.OrdinalIgnoreCase)),
+                    timeoutSource.Token);
+
+                var finalFiles = Directory.GetFiles(directory)
+                    .Where(static path => !path.EndsWith(
+                        ".partial",
+                        StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+                var finalPath = Assert.Single(finalFiles);
+                Assert.Equal(
+                    firstPayload.Concat(secondPayload).ToArray(),
+                    await File.ReadAllBytesAsync(finalPath, timeoutSource.Token));
+            }
+        }
+        finally
+        {
+            releasePackets.TrySetResult();
             if (Directory.Exists(directory))
             {
                 Directory.Delete(directory, recursive: true);

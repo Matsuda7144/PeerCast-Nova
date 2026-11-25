@@ -380,6 +380,73 @@ public sealed class RecordingFileSinkTests : IDisposable
     }
 
     [Fact]
+    public async Task SourceFailureAfterBytesWritten_PreservesWrittenBytesWhileReportingFault()
+    {
+        var path = GetPath("preserved-after-fault.bin");
+        byte[] expectedBytes = [0x10, 0x20, 0x30, 0x40];
+        var sink = CreateSink(
+            _ => new FailAfterFirstChunkStream(expectedBytes),
+            path);
+
+        var started = await sink.StartAsync(
+            CreateStartRequest(),
+            CancellationToken.None);
+        var session = started.Session!;
+
+        await WaitForStatusAsync(
+            sink,
+            session,
+            RecordingFileSinkSessionStatusKind.Faulted);
+
+        Assert.True(File.Exists(path));
+        Assert.Equal(expectedBytes, await File.ReadAllBytesAsync(path));
+        Assert.Equal([path], Directory.GetFiles(directory));
+
+        var stopped = await sink.StopAsync(
+            new RecordingSinkStopRequest(session),
+            CancellationToken.None);
+        Assert.Equal(RecordingSinkStopResultKind.Faulted, stopped.Kind);
+        Assert.Equal(RecordingFailureStage.SourceRead, stopped.Fault!.Stage);
+    }
+
+    private sealed class FailAfterFirstChunkStream(byte[] firstChunk) : Stream
+    {
+        private bool delivered;
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) =>
+            throw new NotSupportedException();
+
+        public override ValueTask<int> ReadAsync(
+            Memory<byte> buffer,
+            CancellationToken cancellationToken = default)
+        {
+            if (!delivered)
+            {
+                delivered = true;
+                firstChunk.CopyTo(buffer);
+                return ValueTask.FromResult(firstChunk.Length);
+            }
+
+            return ValueTask.FromException<int>(new IOException("Mid-stream failure."));
+        }
+
+        public override void Flush() => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
+
+    [Fact]
     public async Task FinalizeFailure_IsReportedWithoutExposingPath()
     {
         var path = GetPath("existing.bin");

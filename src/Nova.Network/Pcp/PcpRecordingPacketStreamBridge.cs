@@ -15,6 +15,7 @@ public sealed class PcpRecordingPacketStreamBridge :
     private readonly Pipe pipe;
     private readonly SemaphoreSlim writerGate = new(1, 1);
     private long expectedSequence;
+    private bool hasConsumedPacket;
     private int streamOpened;
     private int writerCompleted;
     private int disposed;
@@ -87,6 +88,22 @@ public sealed class PcpRecordingPacketStreamBridge :
             ThrowIfDisposed();
             ThrowIfWriterCompleted();
 
+            if (packet.ChannelId != ChannelId)
+            {
+                throw new InvalidDataException(
+                    "A PCP recording bridge cannot accept a packet from another channel.");
+            }
+
+            if (hasConsumedPacket &&
+                (packet.Sequence != expectedSequence || packet.Discontinuity is not null))
+            {
+                // すでに受信済みの録画データを保護するため、途中の連番ギャップや不連続では
+                // 例外で破棄せず正常 EOF としてストリームを閉じる。
+                await CompleteWriterUnderGateAsync(
+                    exception: null).ConfigureAwait(false);
+                return;
+            }
+
             ValidatePacket(packet);
 
             if (!packet.Payload.IsEmpty)
@@ -108,6 +125,7 @@ public sealed class PcpRecordingPacketStreamBridge :
                 }
             }
 
+            hasConsumedPacket = true;
             expectedSequence = checked(
                 expectedSequence + 1);
         }

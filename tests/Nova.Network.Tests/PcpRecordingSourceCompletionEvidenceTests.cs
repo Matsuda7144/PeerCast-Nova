@@ -187,9 +187,9 @@ public sealed class PcpRecordingSourceCompletionEvidenceTests
         var lease = await Acquire(factory);
         await fanout.ConsumeAsync(Packet(0, [1]), CancellationToken.None);
         Assert.True(await fanout.WaitForIdleAsync(Limit));
-        await fanout.ConsumeAsync(Packet(2, [2]), CancellationToken.None);
-        await Assert.ThrowsAsync<InvalidDataException>(async () =>
-            await lease.ReadStream.CopyToAsync(Stream.Null).WaitAsync(Limit));
+        await lease.ReadStream.DisposeAsync();
+        await fanout.ConsumeAsync(Packet(1, [2]), CancellationToken.None);
+        Assert.True(await fanout.WaitForIdleAsync(Limit));
         await lease.DisposeAsync();
         var result = await factory.CompleteWithEvidenceAsync(Limit);
         Assert.Equal(PcpRecordingSourceCompletionOutcome.DeliveryFailed, result.Outcome);

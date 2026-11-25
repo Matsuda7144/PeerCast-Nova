@@ -626,6 +626,12 @@ public sealed partial class PcpRelayCoordinator : IAsyncDisposable
                 }
             }
 
+            var hasNonRemoteEndFault =
+                _statusTracker.Snapshot.Fault is
+                {
+                    Category: not ChannelFaultCategory.RemoteEnded,
+                };
+
             var recordingTerminalFault =
                 !recordingDrainCompleted ||
                 upstreamFailed ||
@@ -634,7 +640,7 @@ public sealed partial class PcpRelayCoordinator : IAsyncDisposable
                     Volatile.Read(ref _stopRequested) == 0 &&
                     Volatile.Read(ref _callerCanceled) == 0) ||
                 internalFailure ||
-                _statusTracker.Snapshot.Fault is not null
+                hasNonRemoteEndFault
                     ? new IOException(
                         recordingDrainCompleted
                             ? "The channel owner ended with a terminal fault."

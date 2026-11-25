@@ -112,19 +112,49 @@ public sealed class FlvRecordingTimestampNormalizingStreamTests : IDisposable
         Assert.Equal(CreateExpectedNormalizedBytes(input), result.Output);
     }
 
-    [Theory]
-    [InlineData(4_127_508u)]
-    [InlineData(0u)]
-    public async Task Normalize_BackwardsOrResetTimestamp_FailsAsStreamTransform(uint nextTimestamp)
+    [Fact]
+    public async Task Normalize_SmallBackwardsTimestampJitter_ClampsMonotonicallyAndContinues()
     {
         var input = BuildFlv(
             AudioMedia(4_127_509, 0x11),
-            VideoMedia(nextTimestamp, 0x22));
-        var result = await NormalizeExpectFailureAsync(input, [1, 4, 3]);
+            VideoMedia(4_127_508, 0x22),
+            AudioMedia(4_127_520, 0x33));
+        var result = await NormalizeAsync(input, [1, 4, 3]);
+        var media = ParseTags(result.Output).Where(tag => tag.IsMedia).ToArray();
 
-        Assert.Equal(RecordingFailureStage.StreamTransform, result.FaultStage);
-        Assert.False(File.Exists(result.Path));
-        Assert.Empty(Directory.GetFiles(directory));
+        Assert.Equal([0u, 0u, 11u], media.Select(tag => tag.Timestamp));
+        Assert.Null(result.FaultStage);
+        Assert.Equal(RecordingFileWriteCompletionKind.EndOfStream, result.WriteResult.CompletionKind);
+    }
+
+    [Fact]
+    public async Task Normalize_LargeTimestampReset_FinalizesPreviousCompleteTags()
+    {
+        var input = BuildFlv(
+            AudioMedia(4_127_509, 0x11),
+            VideoMedia(0u, 0x22));
+        var result = await NormalizeAsync(input, [1, 4, 3]);
+        var media = ParseTags(result.Output).Where(tag => tag.IsMedia).ToArray();
+
+        Assert.Single(media);
+        Assert.Equal(0u, media[0].Timestamp);
+        Assert.Null(result.FaultStage);
+        Assert.Equal(RecordingFileWriteCompletionKind.EndOfStream, result.WriteResult.CompletionKind);
+    }
+
+    [Theory]
+    [MemberData(nameof(TruncatedTrailingTagInputs))]
+    public async Task Normalize_TruncatedTrailingTagAfterCompleteTags_FinalizesCompletePrefix(
+        string scenario,
+        byte[] input,
+        byte[] expectedCompletePrefix)
+    {
+        _ = scenario;
+        var result = await NormalizeAsync(input, [1, 2, 3, 5]);
+
+        Assert.Null(result.FaultStage);
+        Assert.Equal(RecordingFileWriteCompletionKind.EndOfStream, result.WriteResult.CompletionKind);
+        Assert.Equal(CreateExpectedNormalizedBytes(expectedCompletePrefix), result.Output);
     }
 
     [Theory]
@@ -255,11 +285,23 @@ public sealed class FlvRecordingTimestampNormalizingStreamTests : IDisposable
 
         yield return ["truncated header", valid[..7]];
         yield return ["truncated tag header", valid[..(tagStart + 7)]];
-        yield return ["truncated tag payload", valid[..^7]];
-        yield return ["truncated PreviousTagSize", valid[..^1]];
 
         var missingInitialPreviousTagSize = CreateHeader()[..^1];
         yield return ["truncated initial PreviousTagSize", missingInitialPreviousTagSize];
+    }
+
+    public static IEnumerable<object[]> TruncatedTrailingTagInputs()
+    {
+        var completePrefix = BuildFlv(
+            AacConfiguration(0),
+            AudioMedia(100, 0x11, 0x22));
+        var valid = BuildFlv(
+            AacConfiguration(0),
+            AudioMedia(100, 0x11, 0x22),
+            VideoMedia(110, 0x33, 0x44));
+
+        yield return ["truncated tag payload", valid[..^7], completePrefix];
+        yield return ["truncated PreviousTagSize", valid[..^1], completePrefix];
     }
 
     public void Dispose()

@@ -24,12 +24,14 @@ internal sealed class FlvRecordingTimestampNormalizingStream : Stream,
     private const int PreviousTagSizeLength = 4;
     private const int MaximumFlvHeaderLength = 64 * 1024;
     private const int MaximumTagDataLength = 0x00FF_FFFF;
+    private const uint MaximumBackwardsJitterMilliseconds = 5_000;
 
     private readonly Stream source;
     private byte[]? pendingOutput;
     private int pendingOutputOffset;
     private uint? baselineTimestamp;
     private uint? lastMediaTimestamp;
+    private long emittedCompleteTagCount;
     private bool headerRead;
     private bool sourceEnded;
     private bool isDisposed;
@@ -241,12 +243,14 @@ internal sealed class FlvRecordingTimestampNormalizingStream : Stream,
     private async ValueTask<byte[]?> ReadNextTagAsync(
         CancellationToken cancellationToken)
     {
+        var allowTruncatedEnd = emittedCompleteTagCount > 0;
         var tagHeader = new byte[TagHeaderLength];
         if (!await ReadExactlyAsync(
                 tagHeader,
                 allowCleanEnd: true,
                 "FLV tag header",
-                cancellationToken).ConfigureAwait(false))
+                cancellationToken,
+                allowTruncatedEnd: allowTruncatedEnd).ConfigureAwait(false))
         {
             return null;
         }
@@ -262,11 +266,15 @@ internal sealed class FlvRecordingTimestampNormalizingStream : Stream,
             TagHeaderLength + dataLength + PreviousTagSizeLength);
         var tag = new byte[tagLength];
         tagHeader.CopyTo(tag, 0);
-        _ = await ReadExactlyAsync(
-            tag.AsMemory(TagHeaderLength),
-            allowCleanEnd: false,
-            "FLV tag data and PreviousTagSize",
-            cancellationToken).ConfigureAwait(false);
+        if (!await ReadExactlyAsync(
+                tag.AsMemory(TagHeaderLength),
+                allowCleanEnd: false,
+                "FLV tag data and PreviousTagSize",
+                cancellationToken,
+                allowTruncatedEnd: allowTruncatedEnd).ConfigureAwait(false))
+        {
+            return null;
+        }
 
         if (ReadUInt24(tag.AsSpan(8, 3)) != 0)
         {
@@ -297,7 +305,21 @@ internal sealed class FlvRecordingTimestampNormalizingStream : Stream,
             if (lastMediaTimestamp is { } previousTimestamp &&
                 timestamp < previousTimestamp)
             {
-                throw InvalidFlv("The FLV media timestamp moved backwards.", RecordingTransformThrowSite.TimestampNormalizationMediaTimestamp);
+                var backwardsDelta = previousTimestamp - timestamp;
+                if (backwardsDelta <= MaximumBackwardsJitterMilliseconds)
+                {
+                    // 音声・映像タグ間の軽微なタイムスタンプ前後は単調非減少へクランプして録画を継続する。
+                    timestamp = previousTimestamp;
+                }
+                else if (emittedCompleteTagCount > 0)
+                {
+                    // 大幅なタイムラインリセット時は既に出力済みの完全なタグまでを正常 EOF として保存する。
+                    return null;
+                }
+                else
+                {
+                    throw InvalidFlv("The FLV media timestamp moved backwards.", RecordingTransformThrowSite.TimestampNormalizationMediaTimestamp);
+                }
             }
 
             baselineTimestamp ??= timestamp;
@@ -305,6 +327,7 @@ internal sealed class FlvRecordingTimestampNormalizingStream : Stream,
             WriteTimestamp(tag, timestamp - baselineTimestamp.Value);
         }
 
+        emittedCompleteTagCount++;
         return tag;
     }
 
@@ -312,7 +335,8 @@ internal sealed class FlvRecordingTimestampNormalizingStream : Stream,
         Memory<byte> destination,
         bool allowCleanEnd,
         string description,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool allowTruncatedEnd = false)
     {
         var totalRead = 0;
         while (totalRead < destination.Length)
@@ -325,7 +349,7 @@ internal sealed class FlvRecordingTimestampNormalizingStream : Stream,
             ObservePendingDecodableStartOutput();
             if (read == 0)
             {
-                if (allowCleanEnd && totalRead == 0)
+                if ((allowCleanEnd && totalRead == 0) || allowTruncatedEnd)
                 {
                     return false;
                 }
