@@ -95,6 +95,49 @@ public sealed class GenesisGuiNextFavoriteNotificationRestartTests
         Assert.Equal(1, soundPlayer.PlayCount);
     }
 
+    [Fact]
+    public async Task PersistedFavoriteTriggersNotificationForNextBroadcastWithDifferentChannelId()
+    {
+        using var temporary = new TemporaryDirectory();
+        var path = Path.Combine(temporary.Path, "favorites.json");
+        var favoriteStore = new JsonGenesisFavoriteChannelStore(path);
+        var previousSession = Channel("StreamerA", "pcp://old.example/session1");
+        await favoriteStore.SaveAsync([
+            GenesisFavoriteChannel.FromChannel(previousSession),
+        ]);
+
+        await using var state = await GenesisGuiNextApplicationState.LoadAsync(
+            favoriteStore,
+            StaticNotificationStore.Instance,
+            SilentSoundPlayer.Instance);
+        var nextSession = new GenesisChannelItem(
+            "streamera",
+            "pcp://new.example/session2",
+            Description: "next broadcast",
+            Type: "FLV",
+            ChannelId: "FEDCBA9876543210FEDCBA9876543210");
+        var presenter = new RecordingPresenter();
+        var soundPlayer = new RecordingSoundPlayer();
+        var preferences = new GenesisChannelNotificationPreferences(
+            NotifyNewChannels: false,
+            NotifyFavoriteChannels: true,
+            PlaySound: true);
+        var publisher = new GenesisChannelNotificationPublisher(
+            state.Favorites,
+            () => preferences,
+            new GenesisChannelNotificationDispatcher(presenter, soundPlayer));
+
+        await publisher.PublishAsync(Activation(nextSession));
+
+        var notification = Assert.Single(presenter.Notifications);
+        Assert.Same(nextSession, notification.Channel);
+        Assert.Equal(
+            GenesisChannelNotificationReason.FavoriteChannel,
+            notification.Reasons);
+        Assert.True(notification.PlaySound);
+        Assert.Equal(1, soundPlayer.PlayCount);
+    }
+
     private static GenesisChannelPresenceSnapshot Activation(
         GenesisChannelItem channel)
     {

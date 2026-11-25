@@ -24,6 +24,38 @@ internal sealed record GenesisFavoriteChannel(
 {
     public string? LastKnownYellowPage { get; init; }
 
+    public bool Matches(GenesisChannelItem channel)
+    {
+        ArgumentNullException.ThrowIfNull(channel);
+        if (string.Equals(
+            StableKey,
+            GenesisChannelIdentity.GetStableKey(channel),
+            StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return MatchesName(channel.Name);
+    }
+
+    public bool MatchesName(string? channelName)
+    {
+        var normalizedFavoriteName = NormalizeMatchName(Name);
+        var normalizedChannelName = NormalizeMatchName(channelName);
+        return normalizedFavoriteName is not null &&
+            normalizedChannelName is not null &&
+            string.Equals(
+                normalizedFavoriteName,
+                normalizedChannelName,
+                StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal static string? NormalizeMatchName(string? name)
+    {
+        var normalized = name?.Trim();
+        return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
+    }
+
     public static GenesisFavoriteChannel FromChannel(GenesisChannelItem channel)
     {
         ArgumentNullException.ThrowIfNull(channel);
@@ -111,7 +143,7 @@ internal sealed class GenesisFavoriteChannelCollection
         var favorite = GenesisFavoriteChannel.FromChannel(channel);
         lock (_sync)
         {
-            var index = FindIndex(favorite.StableKey);
+            var index = FindMatchIndex(channel);
             if (index < 0)
             {
                 var next = new List<GenesisFavoriteChannel>(_favorites)
@@ -147,7 +179,24 @@ internal sealed class GenesisFavoriteChannelCollection
     public bool Remove(GenesisChannelItem channel)
     {
         ArgumentNullException.ThrowIfNull(channel);
-        return Remove(GenesisChannelIdentity.GetStableKey(channel));
+        lock (_sync)
+        {
+            var index = FindMatchIndex(channel);
+            if (index < 0)
+            {
+                return false;
+            }
+
+            var next = new List<GenesisFavoriteChannel>(_favorites);
+            next.RemoveAt(index);
+            if (!TryPersistExplicitMutation(next))
+            {
+                return false;
+            }
+
+            _favorites.RemoveAt(index);
+            return true;
+        }
     }
 
     public bool Remove(string stableKey)
@@ -176,10 +225,9 @@ internal sealed class GenesisFavoriteChannelCollection
     public bool Contains(GenesisChannelItem channel)
     {
         ArgumentNullException.ThrowIfNull(channel);
-        var stableKey = GenesisChannelIdentity.GetStableKey(channel);
         lock (_sync)
         {
-            return FindIndex(stableKey) >= 0;
+            return FindMatchIndex(channel) >= 0;
         }
     }
 
@@ -188,12 +236,18 @@ internal sealed class GenesisFavoriteChannelCollection
         ArgumentNullException.ThrowIfNull(currentChannels);
         var currentByIdentity = new Dictionary<string, GenesisChannelItem>(
             StringComparer.Ordinal);
+        var currentByName = new Dictionary<string, GenesisChannelItem>(
+            StringComparer.OrdinalIgnoreCase);
         foreach (var channel in currentChannels)
         {
             ArgumentNullException.ThrowIfNull(channel);
             currentByIdentity.TryAdd(
                 GenesisChannelIdentity.GetStableKey(channel),
                 channel);
+            if (GenesisFavoriteChannel.NormalizeMatchName(channel.Name) is { } normalizedName)
+            {
+                currentByName.TryAdd(normalizedName, channel);
+            }
         }
 
         var changed = false;
@@ -202,13 +256,23 @@ internal sealed class GenesisFavoriteChannelCollection
             for (var index = 0; index < _favorites.Count; index++)
             {
                 var current = _favorites[index];
-                if (!currentByIdentity.TryGetValue(current.StableKey, out var channel))
+                if (!TryFindCurrentChannel(
+                        current,
+                        currentByIdentity,
+                        currentByName,
+                        out var channel))
                 {
                     continue;
                 }
 
                 var refreshed = GenesisFavoriteChannel.FromChannel(channel);
                 if (Equals(current, refreshed))
+                {
+                    continue;
+                }
+
+                var duplicateIndex = FindIndex(refreshed.StableKey);
+                if (duplicateIndex >= 0 && duplicateIndex != index)
                 {
                     continue;
                 }
@@ -268,6 +332,46 @@ internal sealed class GenesisFavoriteChannelCollection
 
         return -1;
     }
+
+    private int FindMatchIndex(GenesisChannelItem channel)
+    {
+        var stableKeyIndex = FindIndex(GenesisChannelIdentity.GetStableKey(channel));
+        if (stableKeyIndex >= 0)
+        {
+            return stableKeyIndex;
+        }
+
+        for (var index = 0; index < _favorites.Count; index++)
+        {
+            if (_favorites[index].MatchesName(channel.Name))
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    internal static bool TryFindCurrentChannel(
+        GenesisFavoriteChannel favorite,
+        Dictionary<string, GenesisChannelItem> currentByIdentity,
+        Dictionary<string, GenesisChannelItem> currentByName,
+        out GenesisChannelItem channel)
+    {
+        if (currentByIdentity.TryGetValue(favorite.StableKey, out channel!))
+        {
+            return true;
+        }
+
+        if (GenesisFavoriteChannel.NormalizeMatchName(favorite.Name) is { } normalizedName &&
+            currentByName.TryGetValue(normalizedName, out channel!))
+        {
+            return true;
+        }
+
+        channel = null!;
+        return false;
+    }
 }
 
 internal sealed record GenesisFavoriteChannelProjectionEntry(
@@ -305,12 +409,18 @@ internal static class GenesisFavoriteChannelProjection
 
         var currentByIdentity = new Dictionary<string, GenesisChannelItem>(
             StringComparer.Ordinal);
+        var currentByName = new Dictionary<string, GenesisChannelItem>(
+            StringComparer.OrdinalIgnoreCase);
         foreach (var channel in currentChannels)
         {
             ArgumentNullException.ThrowIfNull(channel);
             currentByIdentity.TryAdd(
                 GenesisChannelIdentity.GetStableKey(channel),
                 channel);
+            if (GenesisFavoriteChannel.NormalizeMatchName(channel.Name) is { } normalizedName)
+            {
+                currentByName.TryAdd(normalizedName, channel);
+            }
         }
 
         var projection = new GenesisFavoriteChannelProjectionEntry[favorites.Count];
@@ -318,7 +428,11 @@ internal static class GenesisFavoriteChannelProjection
         {
             var favorite = favorites[index];
             ArgumentNullException.ThrowIfNull(favorite);
-            currentByIdentity.TryGetValue(favorite.StableKey, out var currentChannel);
+            _ = GenesisFavoriteChannelCollection.TryFindCurrentChannel(
+                favorite,
+                currentByIdentity,
+                currentByName,
+                out var currentChannel);
             projection[index] = new(favorite, currentChannel);
         }
 

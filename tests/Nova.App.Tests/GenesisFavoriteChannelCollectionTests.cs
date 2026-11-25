@@ -225,6 +225,46 @@ public sealed class GenesisFavoriteChannelCollectionTests
             new GenesisFavoriteChannelCollection(duplicates));
     }
 
+    [Fact]
+    public void FavoriteMatchesNextBroadcastSessionWithNewChannelIdByChannelName()
+    {
+        var collection = new GenesisFavoriteChannelCollection();
+        var previousBroadcast = Channel(
+            "PeCaTestChannel",
+            FirstChannelId,
+            "pcp://old.example/first",
+            "frame 1");
+        Assert.Equal(
+            GenesisFavoriteChannelMutationResult.Added,
+            collection.AddOrUpdate(previousBroadcast));
+
+        var nextBroadcast = Channel(
+            " pecatestchannel ",
+            SecondChannelId,
+            "pcp://new.example/second",
+            "frame 2");
+
+        Assert.True(collection.Contains(nextBroadcast));
+
+        var projection = collection.Project([nextBroadcast]);
+        var entry = Assert.Single(projection);
+        Assert.True(entry.IsOnline);
+        Assert.Same(nextBroadcast, entry.CurrentChannel);
+        Assert.Equal(nextBroadcast.Source, entry.PlayableSource);
+
+        Assert.True(collection.RefreshKnownMetadata([nextBroadcast]));
+        var refreshed = Assert.Single(collection.Snapshot);
+        Assert.Equal($"id:{SecondChannelId}", refreshed.StableKey);
+        Assert.Equal(SecondChannelId, refreshed.ChannelId);
+        Assert.Equal(nextBroadcast.Source, refreshed.LastKnownSource);
+
+        Assert.Equal(
+            GenesisFavoriteChannelMutationResult.Unchanged,
+            collection.AddOrUpdate(nextBroadcast));
+        Assert.True(collection.Remove(nextBroadcast));
+        Assert.Empty(collection.Snapshot);
+    }
+
     private static GenesisChannelItem Channel(
         string name,
         string channelId,

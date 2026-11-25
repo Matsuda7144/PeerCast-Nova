@@ -866,7 +866,10 @@ internal sealed partial class GenesisGuiNextTabsViewModel : INotifyPropertyChang
 
         return Array.AsReadOnly(
             favorites
-                .Where(favorite => stableKeys.Contains(favorite.Favorite.StableKey))
+                .Where(favorite =>
+                    stableKeys.Contains(favorite.Favorite.StableKey) ||
+                    (favorite.CurrentChannel is { } current &&
+                        stableKeys.Contains(GenesisChannelIdentity.GetStableKey(current))))
                 .ToArray());
     }
 

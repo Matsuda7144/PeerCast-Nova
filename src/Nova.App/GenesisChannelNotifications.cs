@@ -42,10 +42,15 @@ internal static class GenesisChannelNotificationProjection
         ArgumentNullException.ThrowIfNull(preferences);
 
         var favoriteKeys = new HashSet<string>(StringComparer.Ordinal);
+        var favoriteNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var favorite in favorites)
         {
             ArgumentNullException.ThrowIfNull(favorite);
             favoriteKeys.Add(favorite.StableKey);
+            if (GenesisFavoriteChannel.NormalizeMatchName(favorite.Name) is { } normalizedName)
+            {
+                favoriteNames.Add(normalizedName);
+            }
         }
 
         var notifications = new List<GenesisChannelNotification>();
@@ -62,8 +67,12 @@ internal static class GenesisChannelNotificationProjection
                 reasons |= GenesisChannelNotificationReason.NewChannel;
             }
 
-            if (preferences.NotifyFavoriteChannels &&
-                favoriteKeys.Contains(transition.Entry.StableKey))
+            var isFavoriteMatch =
+                favoriteKeys.Contains(transition.Entry.StableKey) ||
+                (GenesisFavoriteChannel.NormalizeMatchName(transition.Entry.Channel.Name) is { } channelName &&
+                    favoriteNames.Contains(channelName));
+
+            if (preferences.NotifyFavoriteChannels && isFavoriteMatch)
             {
                 reasons |= GenesisChannelNotificationReason.FavoriteChannel;
             }
