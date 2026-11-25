@@ -29,7 +29,18 @@ public sealed class GenesisGuiNextYellowPageFilterTests
         var beta = Channel(
             "Beta",
             "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB");
-        var presence = new GenesisChannelPresenceTracker().ApplySuccessfulRefresh(
+        var tracker = new GenesisChannelPresenceTracker();
+        tracker.ApplySuccessfulRefresh(new GenesisAggregatedChannelCatalogSnapshot(
+            [],
+            [
+                new GenesisYellowPageCatalogReadStatus(
+                    new GenesisYellowPageDefinition("yp-a", "YP A", new Uri("https://yp-a.example/index.txt")),
+                    GenesisYellowPageCatalogReadState.Succeeded),
+                new GenesisYellowPageCatalogReadStatus(
+                    new GenesisYellowPageDefinition("yp-b", "YP B", new Uri("https://yp-b.example/index.txt")),
+                    GenesisYellowPageCatalogReadState.Succeeded),
+            ]));
+        var presence = tracker.ApplySuccessfulRefresh(
             Snapshot(
                 (alpha, "yp-a", "YP A"),
                 (beta, "yp-b", "YP B")));
@@ -79,7 +90,18 @@ public sealed class GenesisGuiNextYellowPageFilterTests
             "pcp://example/beta",
             Description: "Late night music",
             ChannelId: "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB");
-        var presence = new GenesisChannelPresenceTracker().ApplySuccessfulRefresh(
+        var tracker = new GenesisChannelPresenceTracker();
+        tracker.ApplySuccessfulRefresh(new GenesisAggregatedChannelCatalogSnapshot(
+            [],
+            [
+                new GenesisYellowPageCatalogReadStatus(
+                    new GenesisYellowPageDefinition("yp-a", "YP A", new Uri("https://yp-a.example/index.txt")),
+                    GenesisYellowPageCatalogReadState.Succeeded),
+                new GenesisYellowPageCatalogReadStatus(
+                    new GenesisYellowPageDefinition("yp-b", "YP B", new Uri("https://yp-b.example/index.txt")),
+                    GenesisYellowPageCatalogReadState.Succeeded),
+            ]));
+        var presence = tracker.ApplySuccessfulRefresh(
             Snapshot(
                 (alpha, "yp-a", "YP A"),
                 (beta, "yp-b", "YP B")));

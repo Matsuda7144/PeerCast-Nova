@@ -12,6 +12,7 @@ public sealed class GenesisChannelViewProjectionTests
     public void PresenceProjectionSharesCurrentChannelInstances()
     {
         var tracker = new GenesisChannelPresenceTracker();
+        tracker.ApplySuccessfulRefresh(EmptySucceeded());
         var first = Channel(
             "First",
             "0123456789ABCDEF0123456789ABCDEF");

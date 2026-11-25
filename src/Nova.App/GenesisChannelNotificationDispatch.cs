@@ -182,6 +182,7 @@ internal sealed class GenesisChannelNotificationPublisher :
             _favorites.Snapshot,
             preferences);
 
+        var playedSoundInGeneration = false;
         foreach (var notification in notifications)
         {
             if (cancellationToken.IsCancellationRequested)
@@ -189,10 +190,19 @@ internal sealed class GenesisChannelNotificationPublisher :
                 return;
             }
 
+            // 1 回の更新サイクルで複数チャンネルが同時に新着となっても効果音は最大 1 回に抑止する。
+            var effectiveNotification = notification.PlaySound && playedSoundInGeneration
+                ? notification with { PlaySound = false }
+                : notification;
+
             try
             {
-                await _dispatcher.DispatchAsync(notification, cancellationToken)
+                await _dispatcher.DispatchAsync(effectiveNotification, cancellationToken)
                     .ConfigureAwait(false);
+                if (effectiveNotification.PlaySound)
+                {
+                    playedSoundInGeneration = true;
+                }
             }
             catch (OperationCanceledException)
                 when (cancellationToken.IsCancellationRequested)

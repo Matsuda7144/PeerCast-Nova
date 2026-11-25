@@ -30,7 +30,8 @@ public sealed class GenesisChannelManualRefreshGuiNextTests
         Assert.Equal(
             GenesisChannelCatalogRefreshResult.Completed,
             await session.RefreshAsync());
-        Assert.Same(first, Assert.Single(tabs.NewChannels));
+        Assert.Same(first, Assert.Single(tabs.Channels));
+        Assert.Empty(tabs.NewChannels);
 
         Assert.Equal(
             GenesisChannelCatalogRefreshResult.Completed,

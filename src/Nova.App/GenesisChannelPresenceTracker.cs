@@ -80,6 +80,7 @@ internal sealed class GenesisChannelPresenceTracker
     private readonly Dictionary<string, PresenceRecord> _records =
         new(StringComparer.Ordinal);
     private readonly List<string> _order = [];
+    private bool _hasBaseline;
 
     public GenesisChannelPresenceSnapshot ApplySuccessfulRefresh(
         GenesisAggregatedChannelCatalogSnapshot snapshot)
@@ -92,10 +93,19 @@ internal sealed class GenesisChannelPresenceTracker
             new Dictionary<string, GenesisYellowPageCatalogReadState>(
                 StringComparer.Ordinal);
 
+        var hasSuccessfulYellowPage = false;
         foreach (var status in snapshot.YellowPages)
         {
             yellowPageStates[status.Definition.Id] = status.State;
+            if (status.State == GenesisYellowPageCatalogReadState.Succeeded)
+            {
+                hasSuccessfulYellowPage = true;
+            }
         }
+
+        // 起動直後の初回 YP 取得はベースラインとして記録し、既存全チャンネルの
+        // 新着扱いおよび通知・効果音連打を抑止する。
+        var isInitialBaseline = !_hasBaseline;
 
         foreach (var entry in snapshot.Entries)
         {
@@ -107,13 +117,17 @@ internal sealed class GenesisChannelPresenceTracker
 
             if (!_records.TryGetValue(stableKey, out var record))
             {
-                record = new PresenceRecord(entry.Channel);
+                record = new PresenceRecord(entry.Channel, isNew: !isInitialBaseline);
                 record.AddKnownYellowPages(entry.YellowPageIds);
                 _records.Add(stableKey, record);
                 _order.Add(stableKey);
-                transitions.Add(new(
-                    GenesisChannelPresenceTransitionKind.BecameActive,
-                    record.ToEntry(stableKey)));
+                if (!isInitialBaseline)
+                {
+                    transitions.Add(new(
+                        GenesisChannelPresenceTransitionKind.BecameActive,
+                        record.ToEntry(stableKey)));
+                }
+
                 continue;
             }
 
@@ -163,6 +177,11 @@ internal sealed class GenesisChannelPresenceTracker
             transitions.Add(new(
                 GenesisChannelPresenceTransitionKind.BecameEnded,
                 record.ToEntry(stableKey)));
+        }
+
+        if (isInitialBaseline && (hasSuccessfulYellowPage || snapshot.Entries.Count > 0))
+        {
+            _hasBaseline = true;
         }
 
         return BuildSnapshot(transitions, snapshot.YellowPages);
@@ -219,12 +238,12 @@ internal sealed class GenesisChannelPresenceTracker
             new(StringComparer.Ordinal);
         private readonly List<string> _knownYellowPageOrder = [];
 
-        public PresenceRecord(GenesisChannelItem channel)
+        public PresenceRecord(GenesisChannelItem channel, bool isNew)
         {
             Channel = channel;
             State = GenesisChannelPresenceState.Active;
             IsCurrentlyObserved = true;
-            IsNew = true;
+            IsNew = isNew;
         }
 
         public GenesisChannelItem Channel { get; set; }

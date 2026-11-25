@@ -3,26 +3,38 @@ namespace PeerCast.Nova.App.Tests;
 public sealed class GenesisChannelPresenceTrackerTests
 {
     [Fact]
-    public void InitialObservationBecomesActiveAndNew()
+    public void InitialObservationEstablishesBaselineWithoutNewOrActivation()
     {
         var tracker = new GenesisChannelPresenceTracker();
-        var channel = Channel("Initial");
-        var result = tracker.ApplySuccessfulRefresh(Snapshot(
-            [Entry(channel, "yp")],
+        var initial = Channel("Initial");
+        var baseline = tracker.ApplySuccessfulRefresh(Snapshot(
+            [Entry(initial, "yp")],
             [Status("yp", GenesisYellowPageCatalogReadState.Succeeded)]));
 
-        var active = Assert.Single(result.Active);
-        Assert.Same(channel, active.Channel);
+        var active = Assert.Single(baseline.Active);
+        Assert.Same(initial, active.Channel);
         Assert.True(active.IsCurrentlyObserved);
-        Assert.True(active.IsNew);
+        Assert.False(active.IsNew);
         Assert.Equal(0, active.ConsecutiveMissingSuccessfulRefreshes);
-        Assert.Same(active, Assert.Single(result.New));
+        Assert.Empty(baseline.New);
+        Assert.Empty(baseline.Transitions);
 
-        var transition = Assert.Single(result.Transitions);
+        var added = new GenesisChannelItem(
+            "Added",
+            "pcp://example/added",
+            ChannelId: "FEDCBA9876543210FEDCBA9876543210");
+        var next = tracker.ApplySuccessfulRefresh(Snapshot(
+            [Entry(initial, "yp"), Entry(added, "yp")],
+            [Status("yp", GenesisYellowPageCatalogReadState.Succeeded)]));
+
+        var newEntry = Assert.Single(next.New);
+        Assert.Same(added, newEntry.Channel);
+        Assert.True(newEntry.IsNew);
+        var transition = Assert.Single(next.Transitions);
         Assert.Equal(
             GenesisChannelPresenceTransitionKind.BecameActive,
             transition.Kind);
-        Assert.Equal(active.StableKey, transition.Entry.StableKey);
+        Assert.Equal(newEntry.StableKey, transition.Entry.StableKey);
     }
 
     [Fact]
@@ -95,6 +107,7 @@ public sealed class GenesisChannelPresenceTrackerTests
     public void FailedSupplyingYellowPageDoesNotIncrementAbsence()
     {
         var tracker = new GenesisChannelPresenceTracker();
+        tracker.ApplySuccessfulRefresh(EmptySucceeded("first"));
         tracker.ApplySuccessfulRefresh(Snapshot(
             [Entry(Channel("Initial"), "first")],
             [Status("first", GenesisYellowPageCatalogReadState.Succeeded)]));
@@ -157,6 +170,7 @@ public sealed class GenesisChannelPresenceTrackerTests
     public void NoSuccessfulYellowPageEvidenceDoesNotAgePresence()
     {
         var tracker = new GenesisChannelPresenceTracker();
+        tracker.ApplySuccessfulRefresh(EmptySucceeded("yp"));
         tracker.ApplySuccessfulRefresh(Snapshot(
             [Entry(Channel("Initial"), "yp")],
             [Status("yp", GenesisYellowPageCatalogReadState.Succeeded)]));

@@ -70,13 +70,19 @@ public sealed class GenesisGuiNextFavoriteNotificationRestartTests
             () => preferences,
             new GenesisChannelNotificationDispatcher(presenter, soundPlayer));
         var viewModel = new GenesisMainViewModel(new FakePlaybackSessionController());
+        var catalog = new SequencedAggregatedCatalog(
+            EmptySnapshot(),
+            Snapshot(current));
         var coordinator = new GenesisChannelCatalogCoordinator(
-            new FixedAggregatedCatalog(Snapshot(current)),
+            catalog,
             viewModel,
             new GenesisGuiNextChannelPresencePublisher(
                 state.Tabs,
                 notificationPublisher));
 
+        Assert.Equal(
+            GenesisChannelCatalogRefreshResult.Completed,
+            await coordinator.RefreshAsync());
         var result = await coordinator.RefreshAsync();
 
         Assert.Equal(GenesisChannelCatalogRefreshResult.Completed, result);
@@ -170,6 +176,16 @@ public sealed class GenesisGuiNextFavoriteNotificationRestartTests
                     new Uri("https://yp.example/index.txt")),
                 GenesisYellowPageCatalogReadState.Succeeded)]);
 
+    private static GenesisAggregatedChannelCatalogSnapshot EmptySnapshot() =>
+        new(
+            [],
+            [new GenesisYellowPageCatalogReadStatus(
+                new GenesisYellowPageDefinition(
+                    "yp",
+                    "YP",
+                    new Uri("https://yp.example/index.txt")),
+                GenesisYellowPageCatalogReadState.Succeeded)]);
+
     private static GenesisChannelItem Channel(string name, string source) =>
         new(
             name,
@@ -178,20 +194,17 @@ public sealed class GenesisGuiNextFavoriteNotificationRestartTests
             Type: "FLV",
             ChannelId: ChannelId);
 
-    private sealed class FixedAggregatedCatalog : IGenesisAggregatedChannelCatalog
+    private sealed class SequencedAggregatedCatalog(
+        params GenesisAggregatedChannelCatalogSnapshot[] snapshots) : IGenesisAggregatedChannelCatalog
     {
-        private readonly GenesisAggregatedChannelCatalogSnapshot _snapshot;
-
-        public FixedAggregatedCatalog(GenesisAggregatedChannelCatalogSnapshot snapshot)
-        {
-            _snapshot = snapshot;
-        }
+        private int _index;
 
         public ValueTask<GenesisAggregatedChannelCatalogSnapshot> ReadDetailedAsync(
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            return ValueTask.FromResult(_snapshot);
+            var current = snapshots[Math.Min(_index++, snapshots.Length - 1)];
+            return ValueTask.FromResult(current);
         }
 
         public ValueTask<GenesisChannelCatalogSnapshot> ReadAsync(

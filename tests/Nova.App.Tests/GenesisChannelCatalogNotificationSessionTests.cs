@@ -21,11 +21,8 @@ public sealed class GenesisChannelCatalogNotificationSessionTests
 
         Assert.Equal(GenesisChannelCatalogRefreshResult.Completed, result);
         Assert.Equal(1, publisher.PublishCount);
-        var transition = Assert.Single(publisher.LastPresence!.Transitions);
-        Assert.Equal(
-            GenesisChannelPresenceTransitionKind.BecameActive,
-            transition.Kind);
-        Assert.Same(channel, transition.Entry.Channel);
+        Assert.Empty(publisher.LastPresence!.Transitions);
+        Assert.Same(channel, Assert.Single(publisher.LastPresence.Active).Channel);
         Assert.Same(channel, Assert.Single(viewModel.Channels));
     }
 

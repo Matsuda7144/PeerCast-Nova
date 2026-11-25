@@ -274,7 +274,15 @@ public sealed class GenesisGuiNextTabsViewModelTests
     private static GenesisChannelPresenceSnapshot Presence(
         GenesisChannelItem channel)
     {
+        var status = new GenesisYellowPageCatalogReadStatus(
+            new GenesisYellowPageDefinition(
+                "yp",
+                "YP",
+                new Uri("https://yp.example/index.txt")),
+            GenesisYellowPageCatalogReadState.Succeeded);
         var tracker = new GenesisChannelPresenceTracker();
+        tracker.ApplySuccessfulRefresh(
+            new GenesisAggregatedChannelCatalogSnapshot([], [status]));
         return tracker.ApplySuccessfulRefresh(
             new GenesisAggregatedChannelCatalogSnapshot(
                 [
@@ -282,13 +290,6 @@ public sealed class GenesisGuiNextTabsViewModelTests
                         channel,
                         Array.AsReadOnly(YellowPageIds)),
                 ],
-                [
-                    new GenesisYellowPageCatalogReadStatus(
-                        new GenesisYellowPageDefinition(
-                            "yp",
-                            "YP",
-                            new Uri("https://yp.example/index.txt")),
-                        GenesisYellowPageCatalogReadState.Succeeded),
-                ]));
+                [status]));
     }
 }

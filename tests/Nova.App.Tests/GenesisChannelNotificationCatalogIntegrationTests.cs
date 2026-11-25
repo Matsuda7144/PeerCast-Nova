@@ -18,6 +18,7 @@ public sealed class GenesisChannelNotificationCatalogIntegrationTests
             Description: "metadata",
             ChannelId: channelId);
         var catalog = new SequencedAggregatedCatalog();
+        catalog.Enqueue(EmptySnapshot());
         catalog.Enqueue(Snapshot(initial));
         catalog.Enqueue(Snapshot(updated));
         var presenter = new RecordingPresenter();
@@ -32,6 +33,9 @@ public sealed class GenesisChannelNotificationCatalogIntegrationTests
             viewModel,
             publisher);
 
+        Assert.Equal(
+            GenesisChannelCatalogRefreshResult.Completed,
+            await coordinator.RefreshAsync());
         Assert.Equal(
             GenesisChannelCatalogRefreshResult.Completed,
             await coordinator.RefreshAsync());
@@ -60,12 +64,18 @@ public sealed class GenesisChannelNotificationCatalogIntegrationTests
             ChannelId: channelId);
         var first = Definition("first");
         var second = Definition("second");
+        var firstCatalog = new SequencedCatalog();
+        firstCatalog.Enqueue(GenesisChannelCatalogSnapshot.Empty);
+        firstCatalog.Enqueue(new([firstChannel]));
+        var secondCatalog = new SequencedCatalog();
+        secondCatalog.Enqueue(GenesisChannelCatalogSnapshot.Empty);
+        secondCatalog.Enqueue(new([secondChannel]));
         var catalog = new GenesisAggregatingYellowPageChannelCatalog(
             new GenesisYellowPageConfiguration([first, second]),
             new FixedCatalogFactory(new Dictionary<string, IGenesisChannelCatalog>
             {
-                ["first"] = new FixedCatalog(new([firstChannel])),
-                ["second"] = new FixedCatalog(new([secondChannel])),
+                ["first"] = firstCatalog,
+                ["second"] = secondCatalog,
             }));
         var presenter = new RecordingPresenter();
         var soundPlayer = new RecordingSoundPlayer();
@@ -79,6 +89,9 @@ public sealed class GenesisChannelNotificationCatalogIntegrationTests
             viewModel,
             publisher);
 
+        Assert.Equal(
+            GenesisChannelCatalogRefreshResult.Completed,
+            await coordinator.RefreshAsync());
         Assert.Equal(
             GenesisChannelCatalogRefreshResult.Completed,
             await coordinator.RefreshAsync());
@@ -113,6 +126,7 @@ public sealed class GenesisChannelNotificationCatalogIntegrationTests
         var first = Definition("first");
         var second = Definition("second");
         var firstCatalog = new SequencedCatalog();
+        firstCatalog.Enqueue(GenesisChannelCatalogSnapshot.Empty);
         firstCatalog.Enqueue(new([channel]));
         firstCatalog.EnqueueFailure();
         firstCatalog.Enqueue(new([channel]));
@@ -135,6 +149,9 @@ public sealed class GenesisChannelNotificationCatalogIntegrationTests
             viewModel,
             publisher);
 
+        Assert.Equal(
+            GenesisChannelCatalogRefreshResult.Completed,
+            await coordinator.RefreshAsync());
         Assert.Equal(
             GenesisChannelCatalogRefreshResult.Completed,
             await coordinator.RefreshAsync());
@@ -224,25 +241,13 @@ public sealed class GenesisChannelNotificationCatalogIntegrationTests
             GenesisChannelCatalogRefreshResult.Completed,
             await coordinator.RefreshAsync());
 
-        var expectedInitial = initial with { YellowPage = "first" };
         var expectedReturned = returned with { YellowPage = "first" };
-        Assert.Collection(
-            presenter.Notifications,
-            notification =>
-            {
-                Assert.Equal(expectedInitial, notification.Channel);
-                Assert.Equal(
-                    GenesisChannelNotificationReason.NewChannel,
-                    notification.Reasons);
-            },
-            notification =>
-            {
-                Assert.Equal(expectedReturned, notification.Channel);
-                Assert.Equal(
-                    GenesisChannelNotificationReason.NewChannel,
-                    notification.Reasons);
-            });
-        Assert.Equal(2, soundPlayer.PlayCount);
+        var notification = Assert.Single(presenter.Notifications);
+        Assert.Equal(expectedReturned, notification.Channel);
+        Assert.Equal(
+            GenesisChannelNotificationReason.NewChannel,
+            notification.Reasons);
+        Assert.Equal(1, soundPlayer.PlayCount);
         Assert.Equal(expectedReturned, Assert.Single(viewModel.Channels));
 
         var reactivated = coordinator.PresenceSnapshot!;
@@ -263,6 +268,7 @@ public sealed class GenesisChannelNotificationCatalogIntegrationTests
             "pcp://example/channel",
             ChannelId: "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB");
         var catalog = new SequencedAggregatedCatalog();
+        catalog.Enqueue(EmptySnapshot());
         catalog.Enqueue(Snapshot(channel));
         var viewModel = new GenesisMainViewModel(new FakePlaybackSessionController());
         var coordinator = new GenesisChannelCatalogCoordinator(
@@ -270,6 +276,9 @@ public sealed class GenesisChannelNotificationCatalogIntegrationTests
             viewModel,
             new ThrowingPublisher());
 
+        Assert.Equal(
+            GenesisChannelCatalogRefreshResult.Completed,
+            await coordinator.RefreshAsync());
         var result = await coordinator.RefreshAsync();
 
         Assert.Equal(GenesisChannelCatalogRefreshResult.Completed, result);
@@ -281,12 +290,71 @@ public sealed class GenesisChannelNotificationCatalogIntegrationTests
             transition.Kind);
     }
 
+    [Fact]
+    public async Task InitialBaselineRefreshSuppressesNotificationsAndSoundsForExistingChannels()
+    {
+        var existingA = new GenesisChannelItem(
+            "Existing A",
+            "pcp://example/a",
+            ChannelId: "11111111111111111111111111111111");
+        var existingB = new GenesisChannelItem(
+            "Existing B",
+            "pcp://example/b",
+            ChannelId: "22222222222222222222222222222222");
+        var newC = new GenesisChannelItem(
+            "New C",
+            "pcp://example/c",
+            ChannelId: "33333333333333333333333333333333");
+        var newD = new GenesisChannelItem(
+            "New D",
+            "pcp://example/d",
+            ChannelId: "44444444444444444444444444444444");
+        var catalog = new SequencedAggregatedCatalog();
+        catalog.Enqueue(Snapshot(existingA, existingB));
+        catalog.Enqueue(Snapshot(existingA, existingB, newC, newD));
+        var presenter = new RecordingPresenter();
+        var soundPlayer = new RecordingSoundPlayer();
+        var publisher = new GenesisChannelNotificationPublisher(
+            new GenesisFavoriteChannelCollection([GenesisFavoriteChannel.FromChannel(existingA)]),
+            static () => GenesisChannelNotificationPreferences.Default,
+            new GenesisChannelNotificationDispatcher(presenter, soundPlayer));
+        var viewModel = new GenesisMainViewModel(new FakePlaybackSessionController());
+        var coordinator = new GenesisChannelCatalogCoordinator(
+            catalog,
+            viewModel,
+            publisher);
+
+        Assert.Equal(
+            GenesisChannelCatalogRefreshResult.Completed,
+            await coordinator.RefreshAsync());
+
+        Assert.Equal(2, viewModel.Channels.Count);
+        Assert.Empty(coordinator.PresenceSnapshot!.New);
+        Assert.Empty(presenter.Notifications);
+        Assert.Equal(0, soundPlayer.PlayCount);
+
+        Assert.Equal(
+            GenesisChannelCatalogRefreshResult.Completed,
+            await coordinator.RefreshAsync());
+
+        Assert.Equal(4, viewModel.Channels.Count);
+        Assert.Equal(2, coordinator.PresenceSnapshot!.New.Count);
+        Assert.Equal(2, presenter.Notifications.Count);
+        // 1 回の更新で複数チャンネルが同時開始しても効果音は最大 1 回に抑止される。
+        Assert.Equal(1, soundPlayer.PlayCount);
+    }
+
+    private static GenesisAggregatedChannelCatalogSnapshot EmptySnapshot() =>
+        Snapshot();
+
     private static GenesisAggregatedChannelCatalogSnapshot Snapshot(
-        GenesisChannelItem channel) =>
+        params GenesisChannelItem[] channels) =>
         new(
-            [new GenesisAggregatedChannelCatalogEntry(
-                channel,
-                Array.AsReadOnly(YellowPageIds))],
+            channels
+                .Select(static channel => new GenesisAggregatedChannelCatalogEntry(
+                    channel,
+                    Array.AsReadOnly(YellowPageIds)))
+                .ToArray(),
             [new GenesisYellowPageCatalogReadStatus(
                 new GenesisYellowPageDefinition(
                     "yp",
