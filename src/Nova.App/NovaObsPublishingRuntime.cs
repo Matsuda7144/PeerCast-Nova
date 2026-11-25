@@ -71,12 +71,18 @@ internal sealed class SystemNovaObsPublishingRuntimeFactory : INovaObsPublishing
     internal GenesisDownstreamRelayOwnerRegistry.Owner Register(ChannelId channel, ChannelSessionId session, PcpRelayFanout fanout) =>
         Register(channel, session, fanout, null, publicRelay: true);
 
+    internal GenesisDownstreamRelayOwnerRegistry.Owner Register(ChannelId channel, ChannelSessionId session, PcpRelayFanout fanout,
+        int? bitrateKbps) =>
+        Register(channel, session, fanout, bitrateKbps, publicRelay: true);
+
     private GenesisDownstreamRelayOwnerRegistry.Owner Register(ChannelId channel, ChannelSessionId session, PcpRelayFanout fanout,
         int? bitrateKbps, bool publicRelay)
     {
         if (_state is null || publicRelay && (!_allowLan || _state.Connection.LoadFailed))
             throw new ObsPublishLanException(ObsPublishLanFailure.AdmissionUnavailable);
-        if (publicRelay && _state.NetworkPolicies.Bandwidth.Limits.Ipv4Kbps is not null)
+        // 配信ビットレートが正の値で申告されていれば UpstreamBandwidthPolicy による帯域制御が可能。
+        // ビットレート不明のまま IPv4 上り帯域上限が設定されている場合のみ拒否する。
+        if (publicRelay && _state.NetworkPolicies.Bandwidth.Limits.Ipv4Kbps is not null && bitrateKbps is null or <= 0)
             throw new ObsPublishLanException(ObsPublishLanFailure.BandwidthUnsupported);
         try { return _state.DownstreamRelays.Register(channel, session, RelayChannelKind.Broadcast, fanout, () => bitrateKbps); }
         catch { throw new ObsPublishLanException(ObsPublishLanFailure.AdmissionUnavailable); }

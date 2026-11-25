@@ -64,6 +64,25 @@ internal static class GenesisChannelDirectContextMenuDispatch
         openMenu(row);
         return true;
     }
+
+    public static bool CanOpenEmptyListMenu(
+        GenesisGuiNextTabsViewModel? guiNextTabs,
+        bool isRecordingHistoryView)
+    {
+        if (isRecordingHistoryView)
+        {
+            return false;
+        }
+
+        if (guiNextTabs is null)
+        {
+            return true;
+        }
+
+        return guiNextTabs.SelectedTab is GenesisGuiNextTab.Channels or
+            GenesisGuiNextTab.New or
+            GenesisGuiNextTab.Favorites;
+    }
 }
 
 internal static class GenesisChannelDirectContextMenuRowResolver
@@ -400,10 +419,45 @@ internal sealed class GenesisChannelDirectContextMenuBridge : IAsyncDisposable
                 registeredRow,
                 _viewModel,
                 _guiNextTabs);
+            if (row is null)
+            {
+                if (GenesisChannelDirectContextMenuDispatch.CanOpenEmptyListMenu(
+                        _guiNextTabs,
+                        _interaction.IsRecordingHistoryView))
+                {
+                    OpenEmptyListMenu();
+                }
+
+                return;
+            }
+
             _ = GenesisChannelDirectContextMenuDispatch.TryOpen(
                 row,
                 candidate => SynchronizeSelection(rowIndex, candidate),
                 OpenMenu);
+        }
+
+        private void OpenEmptyListMenu()
+        {
+            var owner = ResolveOwner();
+            _ = SetForegroundWindow(owner);
+            var command = GenesisChannelContextMenuNative.ShowEmptyList(
+                owner,
+                _commandLanes.CanStartRefresh && _interaction.CanRefreshCurrentView);
+            if (command == GenesisChannelContextMenuCommand.ManualSourceUrl)
+            {
+                _ = GenesisSourceUrlPlaybackDialog.TryShow(
+                    owner,
+                    _viewModel,
+                    _interaction);
+            }
+            else if (command == GenesisChannelContextMenuCommand.Refresh &&
+                _commandLanes.CanStartRefresh &&
+                _interaction.CanRefreshCurrentView)
+            {
+                _commandLanes.TrackRefresh(ObserveCommandAsync(
+                    _interaction.RefreshCurrentViewAsync()));
+            }
         }
 
         private void ShowSelectedContextMenu()

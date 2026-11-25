@@ -118,6 +118,58 @@ internal static class GenesisChannelContextMenuNative
         return ShowAt(owner, cursor, canPlay, favoriteText, actions);
     }
 
+    internal static GenesisChannelContextMenuCommand ShowEmptyList(
+        nint owner,
+        bool canRefresh)
+    {
+        if (owner == 0 || !GetCursorPos(out var cursor))
+        {
+            return GenesisChannelContextMenuCommand.None;
+        }
+
+        var menu = CreatePopupMenu();
+        if (menu == 0)
+        {
+            return FailMenuOpen(owner);
+        }
+
+        try
+        {
+            if (!AppendMenuW(
+                    menu,
+                    canRefresh ? MenuFlagString : MenuFlagGrayed,
+                    (nuint)GenesisChannelContextMenuCommand.Refresh,
+                    "更新\tF5") ||
+                !AppendMenuW(menu, MenuFlagSeparator, 0, string.Empty) ||
+                !AppendMenuW(
+                    menu,
+                    MenuFlagString,
+                    (nuint)GenesisChannelContextMenuCommand.ManualSourceUrl,
+                    "URLを指定して再生…"))
+            {
+                return FailMenuOpen(owner);
+            }
+
+            var selected = TrackPopupMenuEx(
+                menu,
+                TrackPopupMenuReturnCommand | TrackPopupMenuRightButton,
+                cursor.X,
+                cursor.Y,
+                owner,
+                0);
+            return selected switch
+            {
+                (int)GenesisChannelContextMenuCommand.Refresh => GenesisChannelContextMenuCommand.Refresh,
+                (int)GenesisChannelContextMenuCommand.ManualSourceUrl => GenesisChannelContextMenuCommand.ManualSourceUrl,
+                _ => GenesisChannelContextMenuCommand.None,
+            };
+        }
+        finally
+        {
+            _ = DestroyMenu(menu);
+        }
+    }
+
     public static GenesisChannelContextMenuCommand ShowForRow(
         nint owner,
         nint listView,

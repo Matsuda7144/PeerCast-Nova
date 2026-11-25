@@ -23,6 +23,16 @@ public sealed class PublishingLanTests
     }
 
     [Fact]
+    public async Task NumericBandwidthAllowsRegistrationWhenBroadcastBitrateIsDeclared()
+    {
+        await using var fixture = await PublicChannelTestFixture.CreateAsync(new() { TotalUpstreamIpv4Kbps = 2000 });
+        await using var fanout = new PcpRelayFanout();
+        var factory = new SystemNovaObsPublishingRuntimeFactory(fixture.State);
+        using var owner = factory.Register(new(Guid.NewGuid()), new(Guid.NewGuid()), fanout, bitrateKbps: 1000);
+        Assert.NotNull(owner);
+    }
+
+    [Fact]
     public async Task NoContextOrRetiredContextCannotFallOpen()
     {
         await using var fixture = await PublicChannelTestFixture.CreateAsync();
