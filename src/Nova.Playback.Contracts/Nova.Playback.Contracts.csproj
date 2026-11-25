@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>PeerCast.Nova.Playback.Contracts</AssemblyName>
+    <RootNamespace>PeerCast.Nova.Playback</RootNamespace>
+  </PropertyGroup>
+</Project>

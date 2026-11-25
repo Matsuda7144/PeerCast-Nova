@@ -5,5 +5,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Nova.Network/Nova.Network.csproj" />
+    <ProjectReference Include="../Nova.Playback.Contracts/Nova.Playback.Contracts.csproj" />
   </ItemGroup>
 </Project>

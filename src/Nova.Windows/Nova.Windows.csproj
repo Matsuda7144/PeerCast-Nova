@@ -6,7 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Nova.Playback\Nova.Playback.csproj" />
+    <ProjectReference Include="..\Nova.Playback.Contracts\Nova.Playback.Contracts.csproj" />
   </ItemGroup>
 
 </Project>
