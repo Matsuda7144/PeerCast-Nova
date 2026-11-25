@@ -41,6 +41,7 @@ public sealed partial class SmartRelayWanTests
         await using var viewing = await state.ViewingAsync(token, bitrateKbps: 500);
         await using var child = await WirePeer.Connect(viewing.Owner.LocalEndPoint.Port, viewing.Owner.ChannelId, token);
         Assert.Equal(200, child.Handshake.HttpStatusCode);
+        Assert.Equal(PcpKnownAtomNames.Channel, (await child.ReadAtom(token)).Name);
         Assert.Equal(2, policy.ReservedCount);
         Assert.Equal(1000, policy.Snapshot.ReservedIpv4Kbps);
         await using var other = await state.ViewingAsync(token, bitrateKbps: 1);

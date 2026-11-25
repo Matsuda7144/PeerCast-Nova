@@ -484,6 +484,114 @@ public sealed partial class PcpRelayCoordinatorTests
     }
 
     [Fact]
+    public async Task Coordinator_RelaysUpstreamBroadcastMetadataToDownstreamPeer()
+    {
+        const uint headType = 0x64616568;
+        const uint dataType = 0x61746164;
+        var transportOptions = CreateTransportOptions();
+        await using var upstreamListener = new TcpTransportListener(
+            new IPEndPoint(IPAddress.Loopback, 0),
+            transportOptions);
+        upstreamListener.Start();
+        using var timeoutSource = new CancellationTokenSource(TestTimeout);
+        var releasePackets = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseDataAfterHead = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var broadcastMetadataAtom = PcpAtom.Parent(
+            PcpKnownAtomNames.Broadcast,
+            PcpAtom.Leaf(
+                PcpKnownAtomNames.BroadcastChannelId,
+                PcpWireValueCodec.EncodeGuid(ChannelGuid)),
+            PcpAtom.Parent(
+                PcpKnownAtomNames.Channel,
+                PcpAtom.Parent(
+                    PcpKnownAtomNames.ChannelInfo,
+                    PcpAtom.Leaf(
+                        PcpKnownAtomNames.Name,
+                        PcpWireValueCodec.EncodeNullTerminatedUtf8("Relayed Live")),
+                    PcpAtom.Leaf(
+                        PcpKnownAtomNames.Comment,
+                        PcpWireValueCodec.EncodeNullTerminatedUtf8("Live Update")),
+                    PcpAtom.Leaf(
+                        PcpKnownAtomNames.Bitrate,
+                        PcpWireValueCodec.EncodeUInt32(1200))),
+                PcpAtom.Parent(
+                    PcpKnownAtomNames.ChannelTrack,
+                    PcpAtom.Leaf(
+                        PcpKnownAtomNames.Title,
+                        PcpWireValueCodec.EncodeNullTerminatedUtf8("Track 1")),
+                    PcpAtom.Leaf(
+                        PcpKnownAtomNames.Creator,
+                        PcpWireValueCodec.EncodeNullTerminatedUtf8("Artist 1")))));
+        var upstreamTask = RunAcceptedUpstreamAttemptAsync(
+            upstreamListener,
+            expectedPosition: 0,
+            releasePackets.Task,
+            [
+                broadcastMetadataAtom,
+                CreatePacketAtom(position: 100, [0x48], packetType: headType),
+                CreatePacketAtom(position: 101, [0x44], packetType: dataType),
+                CreateQuitAtom(),
+            ],
+            timeoutSource.Token,
+            releaseRemainingPackets: releaseDataAfterHead.Task);
+        var tracker = CreateTracker();
+        await using var coordinator = CreateCoordinator(
+            transportOptions,
+            tracker,
+            maxReconnectAttempts: 0);
+        var runTask = coordinator.RunAsync(
+            upstreamListener.LocalEndPoint.Address.ToString(),
+            upstreamListener.LocalEndPoint.Port,
+            cancellationToken: timeoutSource.Token);
+        var readiness = await coordinator.WaitForReadinessAsync(timeoutSource.Token);
+        releasePackets.TrySetResult();
+        await WaitForConditionAsync(
+            () => tracker.Snapshot.Metadata.Name == "Relayed Live",
+            timeoutSource.Token);
+        await using var downstream = await ConnectDownstreamAsync(
+            coordinator.LocalEndPoint,
+            transportOptions,
+            timeoutSource.Token);
+        var metadataAtom = await downstream.ReadNextAtomAsync(timeoutSource.Token);
+        releaseDataAfterHead.TrySetResult();
+        var packets = await downstream.ReadChannelPacketsAsync(2, timeoutSource.Token);
+        var result = await runTask.WaitAsync(timeoutSource.Token);
+        await upstreamTask;
+
+        Assert.Equal(PcpRelayCoordinatorReadinessOutcome.Ready, readiness);
+        Assert.Equal(PcpKnownAtomNames.Channel, metadataAtom.Name);
+        var info = metadataAtom.FindFirst(PcpKnownAtomNames.ChannelInfo);
+        var track = metadataAtom.FindFirst(PcpKnownAtomNames.ChannelTrack);
+        Assert.NotNull(info);
+        Assert.NotNull(track);
+        Assert.Equal(
+            "Relayed Live",
+            PcpWireValueCodec.DecodeNullTerminatedUtf8(
+                info!.FindFirst(PcpKnownAtomNames.Name)!.Content.Span));
+        Assert.Equal(
+            "Live Update",
+            PcpWireValueCodec.DecodeNullTerminatedUtf8(
+                info.FindFirst(PcpKnownAtomNames.Comment)!.Content.Span));
+        Assert.Equal(
+            1200u,
+            PcpWireValueCodec.DecodeUInt32(
+                info.FindFirst(PcpKnownAtomNames.Bitrate)!.Content.Span));
+        Assert.Equal(
+            "Track 1",
+            PcpWireValueCodec.DecodeNullTerminatedUtf8(
+                track!.FindFirst(PcpKnownAtomNames.Title)!.Content.Span));
+        Assert.Equal(
+            "Artist 1",
+            PcpWireValueCodec.DecodeNullTerminatedUtf8(
+                track.FindFirst(PcpKnownAtomNames.Creator)!.Content.Span));
+        Assert.Equal(2, packets.Length);
+        Assert.Equal(PcpRelayCoordinatorEndReason.UpstreamEnded, result.EndReason);
+        Assert.True(result.ShutdownCompleted);
+    }
+
+    [Fact]
     public async Task SharedOwner_PlaybackAndRecordingShareOneUpstreamAndStopIndependently()
     {
         const uint headType = 0x64616568;
@@ -1783,6 +1891,14 @@ public sealed partial class PcpRelayCoordinatorTests
             return payloads.ToArray();
         }
 
+        public async Task<PcpAtom> ReadNextAtomAsync(CancellationToken token)
+        {
+            await using var atoms = new PcpAtomPipeMessageReader(
+                _pipeReader,
+                maxBufferedBytes: 1024 * 1024);
+            return await atoms.ReadNextAsync(token);
+        }
+
         public async Task<PcpQuitInfo> ReadQuitAsync(CancellationToken token)
         {
             await using var atoms = new PcpAtomPipeMessageReader(_pipeReader);
@@ -1801,10 +1917,15 @@ public sealed partial class PcpRelayCoordinatorTests
             while (packets.Count < count)
             {
                 var channel = await atomReader.ReadNextAsync(cancellationToken);
+                Assert.Equal(PcpKnownAtomNames.Channel, channel.Name);
                 var packet = channel.FindFirst(PcpKnownAtomNames.ChannelPacket);
+                if (packet is null && channel.FindFirst(PcpKnownAtomNames.ChannelInfo) is not null)
+                {
+                    continue;
+                }
+
                 var type = packet?.FindFirst(PcpKnownAtomNames.Type);
                 var data = packet?.FindFirst(PcpKnownAtomNames.Data);
-                Assert.Equal(PcpKnownAtomNames.Channel, channel.Name);
                 Assert.NotNull(type);
                 Assert.NotNull(data);
                 packets.Add((

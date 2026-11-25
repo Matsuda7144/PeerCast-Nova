@@ -178,6 +178,40 @@ public sealed class PcpChannelControlSinkTests
         Assert.Throws<InvalidDataException>(() => DecodeSingle(atom));
     }
 
+    [Fact]
+    public void Decode_BroadcastChannelInfoAndTrack_UsesBroadcastChannelIdFallback()
+    {
+        var atom = PcpAtom.Parent(
+            PcpKnownAtomNames.Broadcast,
+            PcpAtom.Leaf(
+                PcpKnownAtomNames.BroadcastChannelId,
+                PcpWireValueCodec.EncodeGuid(ChannelId)),
+            PcpAtom.Parent(
+                PcpKnownAtomNames.Channel,
+                PcpAtom.Parent(
+                    PcpKnownAtomNames.ChannelInfo,
+                    TextLeaf(PcpKnownAtomNames.Name, "Live Broadcast"),
+                    TextLeaf(PcpKnownAtomNames.Comment, "Updated comment"),
+                    PcpAtom.Leaf(
+                        PcpKnownAtomNames.Bitrate,
+                        PcpWireValueCodec.EncodeUInt32(1500))),
+                PcpAtom.Parent(
+                    PcpKnownAtomNames.ChannelTrack,
+                    TextLeaf(PcpKnownAtomNames.Title, "Song A"),
+                    TextLeaf(PcpKnownAtomNames.Creator, "Artist B"))));
+
+        var message = DecodeSingle(atom);
+
+        Assert.True(message.IsBroadcast);
+        Assert.Equal(ChannelId, message.ChannelId);
+        Assert.Null(message.Packet);
+        Assert.Equal("Live Broadcast", message.Info?.Name);
+        Assert.Equal("Updated comment", message.Info?.Comment);
+        Assert.Equal(1500u, message.Info?.BitrateKbps);
+        Assert.Equal("Song A", message.Track?.Title);
+        Assert.Equal("Artist B", message.Track?.Creator);
+    }
+
     private static PcpChannelControlMessage DecodeSingle(
         PcpAtom atom,
         PcpChannelControlLimits? limits = null)

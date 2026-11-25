@@ -13,6 +13,12 @@ public sealed partial class SmartRelayWanTests
         await channel.Owner.PublicReady;
         await using var local = await WirePeer.Connect(channel.Owner.LocalEndPoint.Port, channel.Owner.ChannelId, test.Token);
         await using var shared = await WirePeer.Connect(test.Port, channel.Owner.ChannelId, test.Token);
+        foreach (var peer in new[] { local, shared })
+        {
+            var metadata = await peer.ReadAtom(test.Token);
+            Assert.Equal(PeerCast.Nova.Protocol.Pcp.PcpKnownAtomNames.Channel, metadata.Name);
+            Assert.NotNull(metadata.FindFirst(PeerCast.Nova.Protocol.Pcp.PcpKnownAtomNames.ChannelInfo));
+        }
         var policy = test.Base.State.NetworkPolicies.Relays;
         await UntilAsync(() => policy.Traffic.Snapshot.CompletedWriteBytes == local.ReceivedBytes + shared.ReceivedBytes, test.Token);
         var before = policy.Traffic.Snapshot.CompletedWriteBytes;
@@ -56,6 +62,12 @@ public sealed partial class SmartRelayWanTests
         await using var shared = await WirePeer.Connect(test.Port, one.Owner.ChannelId, test.Token);
         await using var other = await WirePeer.Connect(test.Port, two.Owner.ChannelId, test.Token);
         Assert.All(new[] { local, shared, other }, p => Assert.Equal(200, p.Handshake.HttpStatusCode));
+        foreach (var peer in new[] { local, shared, other })
+        {
+            var metadata = await peer.ReadAtom(test.Token);
+            Assert.Equal(PeerCast.Nova.Protocol.Pcp.PcpKnownAtomNames.Channel, metadata.Name);
+            Assert.NotNull(metadata.FindFirst(PeerCast.Nova.Protocol.Pcp.PcpKnownAtomNames.ChannelInfo));
+        }
         long Received() => local.ReceivedBytes + shared.ReceivedBytes + other.ReceivedBytes;
         await UntilAsync(() => policy.Traffic.Snapshot.CompletedWriteBytes == Received(), test.Token);
         var before = Received();

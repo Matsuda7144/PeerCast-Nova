@@ -7,6 +7,8 @@ public static class PcpKnownAtomNames
     public static readonly PcpAtomName Okay = PcpAtomName.FromAscii("ok");
     public static readonly PcpAtomName Quit = PcpAtomName.FromAscii("quit");
     public static readonly PcpAtomName Host = PcpAtomName.FromAscii("host");
+    public static readonly PcpAtomName Broadcast = PcpAtomName.FromAscii("bcst");
+    public static readonly PcpAtomName BroadcastChannelId = PcpAtomName.FromAscii("cid");
     public static readonly PcpAtomName Channel = PcpAtomName.FromAscii("chan");
 
     public static readonly PcpAtomName ChannelId = PcpAtomName.FromAscii("id");

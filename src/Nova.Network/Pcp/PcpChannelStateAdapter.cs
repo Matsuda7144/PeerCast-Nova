@@ -35,6 +35,15 @@ public sealed class PcpChannelStateAdapter
 
         if (current.ChannelId.Value != message.ChannelId)
         {
+            if (message.IsBroadcast)
+            {
+                // 他チャンネル宛の BCST -> CHAN はセッションを壊さず安全に無視する。
+                return new PcpChannelApplyResult(
+                    current,
+                    Packet: null,
+                    Discontinuity: null);
+            }
+
             throw new InvalidDataException(
                 "The CHAN message does not belong to this channel session.");
         }

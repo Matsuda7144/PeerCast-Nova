@@ -5,6 +5,10 @@ namespace PeerCast.Nova.Network.Pcp;
 
 public sealed partial class PcpDownstreamRelayServer
 {
+    private ReadOnlyMemory<byte> ResolveInitialMetadata() =>
+        !_initialMetadata.IsEmpty
+            ? _initialMetadata
+            : _initialMetadataProvider?.Invoke() ?? default;
     // The shared listener lends its existing reader/transport. This channel's
     // original server still owns child admission, peers and recovery accounting.
     internal async ValueTask<PcpDownstreamChildResult> RunRoutedAsync(TcpTransportConnection connection,
@@ -32,7 +36,7 @@ public sealed partial class PcpDownstreamRelayServer
             session = PcpDownstreamChildSession.CreateRouted(connection, reader, request, _fanout, _localSessionId,
                 _childOptions, packetWriter: PacketWriterFactory?.Invoke(connection),
                 admission: _admission, childAdmission: _childAdmission, peers: Peers,
-                wanIngress: ingress, initialMetadata: _initialMetadata, traffic: TrafficScope);
+                wanIngress: ingress, initialMetadata: ResolveInitialMetadata(), traffic: TrafficScope);
             lock (_gate) entry.Session = session;
             result = await session.RunAsync(lifetime.Token).ConfigureAwait(false);
             return result;

@@ -4,7 +4,8 @@ public sealed record PcpChannelControlMessage(
     Guid ChannelId,
     PcpChannelPacketHeader? Packet,
     PcpChannelInfo? Info,
-    PcpChannelTrack? Track);
+    PcpChannelTrack? Track,
+    bool IsBroadcast = false);
 
 /// <summary>
 /// Describes packet control fields without retaining the media payload.

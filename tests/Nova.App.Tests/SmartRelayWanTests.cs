@@ -258,8 +258,14 @@ public sealed partial class SmartRelayWanTests
         internal ValueTask Quit(CancellationToken token) => Send(PcpQuitCodec.Create(1000), token);
         internal async Task<byte[]> Payload(CancellationToken token)
         {
-            var atom = await ReadAtom(token);
-            return atom.FindFirst(PcpKnownAtomNames.ChannelPacket)!.FindFirst(PcpKnownAtomNames.Data)!.Content.ToArray();
+            while (true)
+            {
+                var atom = await ReadAtom(token);
+                if (atom.FindFirst(PcpKnownAtomNames.ChannelPacket) is { } packet)
+                {
+                    return packet.FindFirst(PcpKnownAtomNames.Data)!.Content.ToArray();
+                }
+            }
         }
         internal async Task<PcpAtom> ReadAtom(CancellationToken token)
         {

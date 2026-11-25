@@ -161,6 +161,34 @@ public sealed class PcpChannelStateAdapterTests
     }
 
     [Fact]
+    public void Apply_BroadcastMetadataUpdatesTrackerAndIgnoresForeignChannel()
+    {
+        var tracker = CreateReceivingTracker();
+        var adapter = new PcpChannelStateAdapter(tracker);
+        var foreignBroadcast = new PcpChannelControlMessage(
+            Guid.ParseExact("6F9619FF8B86D011B42D00C04FC964FF", "N"),
+            Packet: null,
+            Info: CreateFullInfo(),
+            Track: CreateFullTrack(),
+            IsBroadcast: true);
+
+        var ignored = adapter.Apply(foreignBroadcast);
+        Assert.Null(ignored.Snapshot.Metadata.Name);
+
+        var matchingBroadcast = new PcpChannelControlMessage(
+            ChannelGuid,
+            Packet: null,
+            Info: CreateFullInfo(),
+            Track: CreateFullTrack(),
+            IsBroadcast: true);
+
+        var updated = adapter.Apply(matchingBroadcast);
+        Assert.Equal("Synthetic channel", updated.Snapshot.Metadata.Name);
+        Assert.Equal("Synthetic comment", updated.Snapshot.Metadata.Comment);
+        Assert.Equal("Synthetic title", updated.Snapshot.Metadata.Track?.Title);
+    }
+
+    [Fact]
     public void Apply_BitrateOutsideCoreRangeThrowsBeforePositionMutation()
     {
         var tracker = CreateReceivingTracker();

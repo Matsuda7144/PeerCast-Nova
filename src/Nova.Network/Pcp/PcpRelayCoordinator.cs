@@ -108,7 +108,10 @@ public sealed partial class PcpRelayCoordinator : IAsyncDisposable
             copiedOptions.DownstreamTransport,
             copiedOptions.DownstreamChild,
             portMapping,
-            admission);
+            admission,
+            initialMetadataProvider: () => PcpInitialChannelMetadata.TryEncode(
+                statusTracker.Snapshot.ChannelId.Value,
+                statusTracker.Snapshot.Metadata));
         _upstreamSession = new PcpChannelSession(
             new TcpTransportConnectorAdapter(upstreamConnector),
             statusTracker,

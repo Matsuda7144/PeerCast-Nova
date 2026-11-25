@@ -28,6 +28,7 @@ public sealed partial class PcpDownstreamRelayServer : IAsyncDisposable
     private long _pacingLimitedCount;
     private PcpDownstreamTrafficMeter TrafficScope => (_admission as IPcpDownstreamRelayTraffic)?.Traffic ?? _traffic;
     private readonly ReadOnlyMemory<byte> _initialMetadata;
+    private readonly Func<ReadOnlyMemory<byte>>? _initialMetadataProvider;
     private readonly CancellationTokenSource _stopSource = new();
     private readonly CancellationTokenSource _acceptStop = new();
     private readonly PcpRelayChildAdmission _childAdmission = new();
@@ -105,7 +106,8 @@ public sealed partial class PcpDownstreamRelayServer : IAsyncDisposable
         IPcpDownstreamRelayAdmission? admission = null,
         ChannelMetadataSnapshot? initialMetadata = null,
         Func<IPAddress?, bool>? acceptRemoteAddress = null,
-        PcpWanIngressOptions? wanOptions = null)
+        PcpWanIngressOptions? wanOptions = null,
+        Func<ReadOnlyMemory<byte>>? initialMetadataProvider = null)
     {
         ArgumentNullException.ThrowIfNull(localEndPoint);
         ArgumentNullException.ThrowIfNull(fanout);
@@ -130,6 +132,7 @@ public sealed partial class PcpDownstreamRelayServer : IAsyncDisposable
             : childOptions with { };
         _childOptions.Validate();
         _initialMetadata = initialMetadata is null ? default : PcpInitialChannelMetadata.Encode(channelId.Value, initialMetadata);
+        _initialMetadataProvider = initialMetadataProvider;
 
         _listener = new TcpTransportListener(
             localEndPoint,
@@ -649,7 +652,7 @@ public sealed partial class PcpDownstreamRelayServer : IAsyncDisposable
                 admission: _admission,
                 childAdmission: _childAdmission,
                 quiescenceObserver: QuiescenceObserver,
-                initialMetadata: _initialMetadata,
+                initialMetadata: ResolveInitialMetadata(),
                 wanIngress: entry.WanLease,
                 peers: Peers,
                 traffic: TrafficScope);

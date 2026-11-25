@@ -12,6 +12,9 @@ public sealed class PcpChannelControlSink : IPcpAtomSink
     private readonly PcpChannelControlLimits _limits;
     private readonly List<PcpAtomName> _parents = [];
     private ChannelBuilder? _channel;
+    private int _channelDepth = -1;
+    private bool _channelIsBroadcast;
+    private Guid? _broadcastChannelId;
 
     public PcpChannelControlSink(
         Action<PcpChannelControlMessage> onMessage,
@@ -30,7 +33,11 @@ public sealed class PcpChannelControlSink : IPcpAtomSink
     {
         RequireStartDepth(atom.Depth);
 
-        if (atom.Depth == 0 && atom.Header.Name == PcpKnownAtomNames.Channel)
+        if (atom.Depth == 0 && atom.Header.Name == PcpKnownAtomNames.Broadcast)
+        {
+            _broadcastChannelId = null;
+        }
+        else if (atom.Depth == 0 && atom.Header.Name == PcpKnownAtomNames.Channel)
         {
             if (_channel is not null)
             {
@@ -39,10 +46,25 @@ public sealed class PcpChannelControlSink : IPcpAtomSink
             }
 
             _channel = new ChannelBuilder();
+            _channelDepth = 0;
+            _channelIsBroadcast = false;
+        }
+        else if (atom.Depth == 1 &&
+            _parents.Count > 0 &&
+            _parents[0] == PcpKnownAtomNames.Broadcast &&
+            atom.Header.Name == PcpKnownAtomNames.Channel)
+        {
+            if (_channel is null)
+            {
+                _channel = new ChannelBuilder();
+                _channelDepth = 1;
+                _channelIsBroadcast = true;
+            }
         }
         else if (_channel is not null &&
-            atom.Depth == 1 &&
-            _parents[0] == PcpKnownAtomNames.Channel)
+            atom.Depth == _channelDepth + 1 &&
+            _parents.Count > _channelDepth &&
+            _parents[_channelDepth] == PcpKnownAtomNames.Channel)
         {
             _channel.StartSection(atom.Header.Name);
         }
@@ -59,14 +81,25 @@ public sealed class PcpChannelControlSink : IPcpAtomSink
             throw new InvalidDataException("A CHAN atom must be a parent.");
         }
 
+        if (atom.Depth == 1 &&
+            _parents.Count > 0 &&
+            _parents[0] == PcpKnownAtomNames.Broadcast &&
+            atom.Header.Name == PcpKnownAtomNames.BroadcastChannelId &&
+            atom.Payload.Length == 16)
+        {
+            _broadcastChannelId = DecodeGuid(atom);
+            return;
+        }
+
         if (_channel is null ||
-            _parents.Count == 0 ||
-            _parents[0] != PcpKnownAtomNames.Channel)
+            _channelDepth < 0 ||
+            _parents.Count <= _channelDepth ||
+            _parents[_channelDepth] != PcpKnownAtomNames.Channel)
         {
             return;
         }
 
-        if (atom.Depth == 1)
+        if (atom.Depth == _channelDepth + 1)
         {
             if (atom.Header.Name == PcpKnownAtomNames.ChannelPacket ||
                 atom.Header.Name == PcpKnownAtomNames.ChannelInfo ||
@@ -80,12 +113,12 @@ public sealed class PcpChannelControlSink : IPcpAtomSink
             return;
         }
 
-        if (atom.Depth != 2)
+        if (atom.Depth != _channelDepth + 2)
         {
             return;
         }
 
-        var section = _parents[1];
+        var section = _parents[_channelDepth + 1];
 
         if (section == PcpKnownAtomNames.ChannelPacket)
         {
@@ -113,14 +146,32 @@ public sealed class PcpChannelControlSink : IPcpAtomSink
 
         PcpChannelControlMessage? completedMessage = null;
 
-        if (atom.Depth == 0 && atom.Name == PcpKnownAtomNames.Channel)
+        if (_channel is not null &&
+            atom.Depth == _channelDepth &&
+            atom.Name == PcpKnownAtomNames.Channel)
         {
-            completedMessage = (_channel ??
-                throw new InvalidDataException(
-                    "The CHAN parser has no active message."))
-                .Build();
-
+            var builder = _channel;
+            var isBroadcast = _channelIsBroadcast;
             _channel = null;
+            _channelDepth = -1;
+            _channelIsBroadcast = false;
+
+            if (isBroadcast)
+            {
+                builder.ChannelId ??= _broadcastChannelId;
+                if (builder.ChannelId is { } broadcastId && broadcastId != Guid.Empty)
+                {
+                    completedMessage = builder.Build(isBroadcast: true);
+                }
+            }
+            else
+            {
+                completedMessage = builder.Build(isBroadcast: false);
+            }
+        }
+        else if (atom.Depth == 0 && atom.Name == PcpKnownAtomNames.Broadcast)
+        {
+            _broadcastChannelId = null;
         }
 
         _parents.RemoveAt(_parents.Count - 1);
@@ -414,7 +465,7 @@ public sealed class PcpChannelControlSink : IPcpAtomSink
             }
         }
 
-        public PcpChannelControlMessage Build()
+        public PcpChannelControlMessage Build(bool isBroadcast = false)
         {
             if (ChannelId is null || ChannelId == Guid.Empty)
             {
@@ -473,7 +524,8 @@ public sealed class PcpChannelControlSink : IPcpAtomSink
                 ChannelId.Value,
                 packet,
                 info,
-                track);
+                track,
+                isBroadcast);
         }
     }
 }
