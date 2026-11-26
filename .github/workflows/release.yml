@@ -87,7 +87,30 @@ jobs:
           $selfContainedZip = "artifacts/release/PeerCast-Nova-$version-win-x64-self-contained.zip"
           Compress-Archive -Path "artifacts/publish-self-contained/*" -DestinationPath $selfContainedZip -Force
 
-          $hashes = Get-ChildItem -Path "artifacts/release/*" -File | Sort-Object Name | ForEach-Object {
+      - name: Build Windows x64 Installer (Inno Setup)
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.value }}"
+          $iscc = Get-Command "ISCC.exe" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
+          if ([string]::IsNullOrWhiteSpace($iscc)) {
+            $defaultIscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+            if (Test-Path $defaultIscc) {
+              $iscc = $defaultIscc
+            }
+          }
+          if ([string]::IsNullOrWhiteSpace($iscc)) {
+            throw "Inno Setup 6 (ISCC.exe) was not found."
+          }
+
+          $publishDir = (Resolve-Path "artifacts/publish-self-contained").Path
+          $outputDir = (Resolve-Path "artifacts/release").Path
+          & $iscc "/DAppVersion=$version" "/DPublishDir=$publishDir" "/DOutputDir=$outputDir" "packaging/PeerCast-Nova.iss"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Generate SHA256SUMS
+        shell: pwsh
+        run: |
+          $hashes = Get-ChildItem -Path "artifacts/release/*" -File | Where-Object { $_.Name -ne "SHA256SUMS.txt" } | Sort-Object Name | ForEach-Object {
             $hash = (Get-FileHash -Path $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
             "$hash  $($_.Name)"
           }

@@ -100,6 +100,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             var notification = _settingsCategory == GenesisIntegratedSettingsCategory.Notifications;
             void Show(nint control, bool visible) => _ = ShowWindow(control, visible ? ShowWindowShowNoActivate : ShowWindowHide);
             Show(_classicChoice, general); Show(_modernChoice, general);
+            Show(_updateTitle, general); Show(_updateStatus, general);
+            Show(_checkUpdates, general); Show(_openReleasePage, general);
             Show(_generalNotice, true); // YP hides this shared text; restore it for every other category.
             Show(_generalStatus, true);
             Show(_generalRuntime, !notification); Show(_generalConfigured, !notification);
@@ -406,6 +408,37 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                     }
 
                     RefreshIntegratedSettings();
+                });
+            });
+        }
+
+        private void StartUpdateCheck()
+        {
+            if (_checkingUpdates || _settingsPane == 0)
+            {
+                return;
+            }
+
+            _checkingUpdates = true;
+            RefreshIntegratedSettings();
+
+            _ = Task.Run(async () =>
+            {
+                using var checker = new NovaReleaseUpdateChecker();
+                var result = await checker.CheckForUpdatesAsync().ConfigureAwait(false);
+                PostPublishingUi(() =>
+                {
+                    if (_settingsPane == 0)
+                    {
+                        return;
+                    }
+
+                    _checkingUpdates = false;
+                    _lastUpdateResult = result;
+                    if (_settingsCategory == GenesisIntegratedSettingsCategory.General)
+                    {
+                        RefreshIntegratedSettings();
+                    }
                 });
             });
         }

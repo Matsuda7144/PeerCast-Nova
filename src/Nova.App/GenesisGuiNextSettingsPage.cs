@@ -9,16 +9,21 @@ internal sealed partial class GenesisGuiNextAppShellBridge
 {
     [DllImport("user32.dll")] private static extern nint SetFocus(nint window);
     private const int GeneralCategoryId = 1180, LegacySettingsId = 1181, ClassicChoiceId = 1182,
-        ModernChoiceId = 1183, GeneralSaveId = 1184, GeneralCancelId = 1185, GeneralBackId = 1186;
+        ModernChoiceId = 1183, GeneralSaveId = 1184, GeneralCancelId = 1185, GeneralBackId = 1186,
+        CheckUpdatesId = 1187, OpenReleasePageId = 1188;
 
     private sealed partial class AppShellState
     {
         private nint _settingsPane, _settingsTitle, _generalTitle, _generalRuntime, _generalConfigured, _generalNotice, _generalStatus;
+        private nint _updateTitle, _updateStatus;
         private nint _generalCategory, _legacySettings, _classicChoice, _modernChoice, _generalSave, _generalCancel, _generalBack;
+        private nint _checkUpdates, _openReleasePage;
         private GenesisGeneralSettingsPage? _generalSettings;
+        private bool _checkingUpdates;
+        private NovaUpdateCheckResult? _lastUpdateResult;
         private bool SettingsPageOpen => _settingsCategory is not null;
-        private nint[] SettingsButtons => _settingsPane == 0 ? [] : [_generalCategory, _legacySettings, _classicChoice, _modernChoice, _generalSave, _generalCancel, _generalBack, .. AdditionalSettingsButtons];
-        private nint[] SettingsTexts => _settingsPane == 0 ? [] : [_settingsTitle, _generalTitle, _generalRuntime, _generalConfigured, _generalNotice, _generalStatus, _externalPlayerArgsLabel];
+        private nint[] SettingsButtons => _settingsPane == 0 ? [] : [_generalCategory, _legacySettings, _classicChoice, _modernChoice, _checkUpdates, _openReleasePage, _generalSave, _generalCancel, _generalBack, .. AdditionalSettingsButtons];
+        private nint[] SettingsTexts => _settingsPane == 0 ? [] : [_settingsTitle, _generalTitle, _generalRuntime, _generalConfigured, _generalNotice, _generalStatus, _updateTitle, _updateStatus, _externalPlayerArgsLabel];
         private nint[] SettingsVisualControls => _settingsPane == 0 ? [] : [.. SettingsButtons, .. SettingsTexts, _settingsPath, _externalPlayerArgs, .. SettingsChecks, .. NetworkSettingsInputs, .. NetworkSettingsTexts, _ypList];
 
         internal void CreateIntegratedSettings(string className, nint instance)
@@ -36,10 +41,14 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             _generalConfigured = Text(string.Empty);
             _generalNotice = Text(GenesisAppearanceSettings.NextStartNotice + "\r\nUPnP/NATなどの詳細設定は「従来の設定を開く…」から変更できます。");
             _generalStatus = Text(string.Empty);
+            _updateTitle = Text($"アプリの更新（現在: {NovaReleaseUpdateChecker.GetCurrentVersion().ToTagString()}）");
+            _updateStatus = Text("「更新を確認」を押すと GitHub Releases の最新バージョンを確認します。");
             _generalCategory = Button("一般", GeneralCategoryId);
             _legacySettings = Button("従来の設定を開く…", LegacySettingsId);
             _classicChoice = Button("Classic", ClassicChoiceId);
             _modernChoice = Button("Modern", ModernChoiceId);
+            _checkUpdates = Button("更新を確認", CheckUpdatesId);
+            _openReleasePage = Button("配布ページを開く", OpenReleasePageId);
             _generalBack = Button("戻る", GeneralBackId);
             _generalCancel = Button("キャンセル", GeneralCancelId);
             _generalSave = Button("保存", GeneralSaveId);
@@ -128,6 +137,15 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             {
                 if (id == ClassicChoiceId && control == _classicChoice) _generalSettings!.Select(NovaGuiMode.Classic);
                 else if (id == ModernChoiceId && control == _modernChoice) _generalSettings!.Select(NovaGuiMode.Modern);
+                else if (id == CheckUpdatesId && control == _checkUpdates) { StartUpdateCheck(); return true; }
+                else if (id == OpenReleasePageId && control == _openReleasePage)
+                {
+                    if (!NovaReleaseUpdateChecker.TryOpenApprovedReleaseUrl(_lastUpdateResult?.ReleasePageUrl))
+                    {
+                        _ = SetWindowTextW(_updateStatus, "配布ページを開けませんでした。URL を確認してください。");
+                    }
+                    return true;
+                }
                 else if (id == GeneralSaveId && control == _generalSave) _ = _generalSettings!.Save();
                 else if (id == GeneralCancelId && control == _generalCancel) _generalSettings!.Cancel();
                 else return false;
@@ -176,6 +194,18 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 _ = SetWindowTextW(_generalStatus, page.Message);
                 _ = EnableWindow(_generalSave, page.IsDirty);
                 _ = EnableWindow(_generalCancel, page.IsDirty);
+                var currentVersion = NovaReleaseUpdateChecker.GetCurrentVersion().ToTagString();
+                _ = SetWindowTextW(_updateTitle, $"アプリの更新（現在: {currentVersion}）");
+                var updateStatusText = _checkingUpdates
+                    ? "GitHub Releases で最新バージョンを確認しています…"
+                    : _lastUpdateResult?.Message ?? "「更新を確認」を押すと GitHub Releases の最新バージョンを確認します。";
+                _ = SetWindowTextW(_updateStatus, updateStatusText);
+                _ = SetWindowTextW(_checkUpdates, _checkingUpdates ? "確認中…" : "更新を確認");
+                _ = EnableWindow(_checkUpdates, !_checkingUpdates);
+                var canOpenRelease = !_checkingUpdates &&
+                    _lastUpdateResult?.Status == NovaUpdateCheckStatus.UpdateAvailable &&
+                    NovaReleaseUpdateChecker.IsApprovedReleasePageUrl(_lastUpdateResult.ReleasePageUrl);
+                _ = EnableWindow(_openReleasePage, canOpenRelease);
             }
             else RefreshAdditionalSettings();
             _ = RedrawWindow(_settingsPane, 0, 0, 0x0001 | 0x0004 | 0x0080);
@@ -190,8 +220,10 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             Place(_settingsTitle, layout.Title); Place(_generalTitle, layout.CardTitle);
             Place(_generalRuntime, layout.Runtime); Place(_generalConfigured, layout.Configured);
             Place(_generalNotice, layout.Notice); Place(_generalStatus, layout.Status);
+            Place(_updateTitle, layout.UpdateTitle); Place(_updateStatus, layout.UpdateStatus);
             Place(_generalCategory, GenesisGuiNextSettingsLayout.General); Place(_legacySettings, layout.Legacy);
             Place(_classicChoice, GenesisGuiNextSettingsLayout.Classic); Place(_modernChoice, GenesisGuiNextSettingsLayout.Modern);
+            Place(_checkUpdates, GenesisGuiNextSettingsLayout.CheckUpdates); Place(_openReleasePage, GenesisGuiNextSettingsLayout.OpenReleasePage);
             Place(_generalSave, layout.Save); Place(_generalCancel, layout.Cancel); Place(_generalBack, layout.Back);
             PlaceSettingsCategory(layout);
         }
@@ -232,12 +264,14 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             {
                 if (dc == 0 || !GetClientRect(control, out var box)) return true;
                 _ = FillRect(dc, ref box, control == _settingsTitle ? _mainBrush : _topBrush);
-                var title = control == _settingsTitle || control == _generalTitle;
-                var color = ((control == _generalStatus || control == _connectionStatus) && SettingsError || control == _natSettingsStatus && _natSettingsError) ? GenesisGuiNextDesign.Warning :
+                var title = control == _settingsTitle || control == _generalTitle || control == _updateTitle;
+                var color = ((control == _generalStatus || control == _connectionStatus) && SettingsError ||
+                    control == _natSettingsStatus && _natSettingsError ||
+                    control == _updateStatus && !_checkingUpdates && _lastUpdateResult?.Status == NovaUpdateCheckStatus.Failed) ? GenesisGuiNextDesign.Warning :
                     title ? GenesisGuiNextDesign.Text : GenesisGuiNextDesign.SecondaryText;
                 DrawCardLabel(dc, box, ReadCardControlText(control), color,
                     title ? _cardTitleFont?.Handle ?? 0 : _visualFont?.Handle ?? 0, control,
-                    control == _generalNotice || control == _generalStatus || control == _natSettingsStatus || ConnectionCategory && ConnectionBodyTexts.Contains(control) ? 0x0010u | 0x8000 : DrawTextSingleLine | DrawTextVerticalCenter | 0x8000);
+                    control == _generalNotice || control == _generalStatus || control == _updateStatus || control == _natSettingsStatus || ConnectionCategory && ConnectionBodyTexts.Contains(control) ? 0x0010u | 0x8000 : DrawTextSingleLine | DrawTextVerticalCenter | 0x8000);
                 return true;
             }
             finally { _ = EndCardPaint(control, ref paint); }
