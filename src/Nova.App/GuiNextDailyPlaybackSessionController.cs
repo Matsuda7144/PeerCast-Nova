@@ -186,6 +186,7 @@ internal sealed class GuiNextDailyPlaybackSessionController :
             ? parsed.ChannelId.Value.ToString("N").ToUpperInvariant()
             : request.ChannelId.Trim();
 
+        bool preservePlaying;
         lock (_gate)
         {
             if (_disposed)
@@ -204,20 +205,27 @@ internal sealed class GuiNextDailyPlaybackSessionController :
                 return Outcome(PlaybackSessionCommandResult.Rejected, _snapshot);
             }
 
-            _snapshot = new PlaybackSessionSnapshot(
-                PlaybackSessionState.Starting,
-                source,
-                null)
+            preservePlaying = request.KeepExistingSessions && _snapshot.State == PlaybackSessionState.Playing;
+            if (!preservePlaying)
             {
-                ChannelName = channelName,
-                ChannelId = channelId,
-            };
-            _playStarting = true;
-            _stopRequested = false;
-            _pendingTermination = null;
+                _snapshot = new PlaybackSessionSnapshot(
+                    PlaybackSessionState.Starting,
+                    source,
+                    null)
+                {
+                    ChannelName = channelName,
+                    ChannelId = channelId,
+                };
+                _playStarting = true;
+                _stopRequested = false;
+                _pendingTermination = null;
+            }
         }
 
-        NotifySnapshotChanged();
+        if (!preservePlaying)
+        {
+            NotifySnapshotChanged();
+        }
 
         try
         {
@@ -225,10 +233,34 @@ internal sealed class GuiNextDailyPlaybackSessionController :
                 string.Equals(catalog.Source, source, StringComparison.Ordinal) && ChannelIdMatches(catalog.ChannelId, parsed.ChannelId)
                     ? catalog with { Name = channelName, Source = source, ChannelId = channelId }
                     : new GenesisChannelItem(channelName, source, ChannelId: channelId);
-            await _dailyController.PlayAsync(
-                    channel,
-                    cancellationToken)
-                .ConfigureAwait(false);
+            if (request.KeepExistingSessions)
+            {
+                await _dailyController.PlayAdditionalAsync(
+                        channel,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            else
+            {
+                await _dailyController.PlayAsync(
+                        channel,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            if (preservePlaying)
+            {
+                return Outcome(
+                    PlaybackSessionCommandResult.Completed,
+                    new PlaybackSessionSnapshot(
+                        PlaybackSessionState.Playing,
+                        source,
+                        null)
+                    {
+                        ChannelName = channelName,
+                        ChannelId = channelId,
+                    });
+            }
 
             PlaybackSessionCommandOutcome outcome;
             lock (_gate)
@@ -268,6 +300,11 @@ internal sealed class GuiNextDailyPlaybackSessionController :
         }
         catch (OperationCanceledException)
         {
+            if (preservePlaying)
+            {
+                return Outcome(PlaybackSessionCommandResult.Cancelled, Snapshot);
+            }
+
             PlaybackSessionSnapshot snapshot;
             lock (_gate)
             {
@@ -296,14 +333,18 @@ internal sealed class GuiNextDailyPlaybackSessionController :
                 ChannelName = channelName,
                 ChannelId = channelId,
             };
-            lock (_gate)
+            if (!preservePlaying)
             {
-                _playStarting = false;
-                _pendingTermination = null;
-                _snapshot = failed;
+                lock (_gate)
+                {
+                    _playStarting = false;
+                    _pendingTermination = null;
+                    _snapshot = failed;
+                }
+
+                NotifySnapshotChanged();
             }
 
-            NotifySnapshotChanged();
             return Outcome(PlaybackSessionCommandResult.Faulted, failed);
         }
     }

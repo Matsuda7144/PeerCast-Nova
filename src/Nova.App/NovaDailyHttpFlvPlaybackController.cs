@@ -11,6 +11,9 @@ internal interface INovaDailyPlaybackController : IAsyncDisposable
 
     Task PlayAsync(GenesisChannelItem channel, CancellationToken cancellationToken);
 
+    Task PlayAdditionalAsync(GenesisChannelItem channel, CancellationToken cancellationToken) =>
+        PlayAsync(channel, cancellationToken);
+
     Task StopAsync();
 }
 
@@ -35,9 +38,21 @@ internal sealed class NovaDailyHttpFlvPlaybackController :
         _automaticRecordingController;
     private readonly Action<string> _setStatus;
     private readonly Action<string> _showError;
+    private readonly List<ActivePlayback> _additionalPlaybacks = [];
     private ActivePlayback? _active;
     private CancellationTokenSource? _startupCancellation;
     private bool _disposed;
+
+    internal int ActivePlaybackCount
+    {
+        get
+        {
+            lock (_stateGate)
+            {
+                return (_active is not null ? 1 : 0) + _additionalPlaybacks.Count;
+            }
+        }
+    }
 
     public event Action<NovaDailyPlaybackTermination>? PlaybackEnded;
 
@@ -122,6 +137,16 @@ internal sealed class NovaDailyHttpFlvPlaybackController :
                 {
                     active.CatalogChannel = updated;
                     active.CatalogTimestamp = Stopwatch.GetTimestamp();
+                }
+            }
+
+            foreach (var additional in _additionalPlaybacks)
+            {
+                var updated = channels.FirstOrDefault(c => DailyPcpPlaybackSourceParser.TryParse(c.Source, out var s) && s?.ChannelId.Value == additional.ChannelId);
+                if (updated is not null)
+                {
+                    additional.CatalogChannel = updated;
+                    additional.CatalogTimestamp = Stopwatch.GetTimestamp();
                 }
             }
         }
@@ -334,6 +359,113 @@ internal sealed class NovaDailyHttpFlvPlaybackController :
         }
     }
 
+    public async Task PlayAdditionalAsync(
+        GenesisChannelItem channel,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(channel);
+        await _commands.WaitAsync(cancellationToken).ConfigureAwait(false);
+        using var startupCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken);
+        ActivePlayback? startingPlayback = null;
+
+        try
+        {
+            lock (_stateGate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                _startupCancellation = startupCancellation;
+            }
+
+            if (!DailyPcpPlaybackSourceParser.TryParse(channel.Source, out var source) ||
+                source is null)
+            {
+                throw new InvalidOperationException(
+                    "The selected channel does not provide a valid pcp://.../channel/<id> source.");
+            }
+
+            var playerLauncher = _createPlayerLauncher();
+            playerLauncher.ValidateConfiguration();
+            startupCancellation.Token.ThrowIfCancellationRequested();
+
+            var ready = new TaskCompletionSource<string>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            ActivePlayback? additional = null;
+            var host = new PcpHttpFlvPlaybackHost(
+                streamUrlReady: streamUrl => ready.TrySetResult(streamUrl),
+                playerChannelInfo: id => ReadPlayerInfo(additional, id));
+            additional = new ActivePlayback(host) { ChannelId = source.ChannelId.Value, CatalogChannel = channel };
+            startingPlayback = additional;
+            lock (_stateGate)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                _additionalPlaybacks.Add(additional);
+            }
+
+            _setStatus($"{channel.Name}: PCP接続中…");
+            host.Start();
+            var playbackAttachment = await _sharedPlaybackRuntime.AttachPlaybackAsync(
+                source,
+                (channelId, sessionId) => host.Create(channelId, sessionId),
+                startupCancellation.Token).ConfigureAwait(false);
+            additional.Consumer = playbackAttachment.Consumer;
+            additional.Registration = playbackAttachment.Registration;
+            additional.OwnerTask = playbackAttachment.OwnerCompletion;
+            additional.Attachment = playbackAttachment;
+
+            _setStatus($"{channel.Name}: ストリームを準備しています…");
+            Task readyOrEnded;
+            try
+            {
+                readyOrEnded = await Task.WhenAny(ready.Task, additional.OwnerTask)
+                    .WaitAsync(BootstrapTimeout, startupCancellation.Token)
+                    .ConfigureAwait(false);
+            }
+            catch (TimeoutException)
+            {
+                throw NovaDailyPlaybackStartupException.HeaderTimeout();
+            }
+
+            if (ReferenceEquals(readyOrEnded, additional.OwnerTask))
+            {
+                var result = await additional.OwnerTask.ConfigureAwait(false);
+                throw NovaDailyPlaybackStartupException.FromResult(result, playbackAttachment.ReadFault?.Invoke());
+            }
+
+            var streamUrl = await ready.Task.ConfigureAwait(false);
+            startupCancellation.Token.ThrowIfCancellationRequested();
+            _setStatus($"{channel.Name}: プレイヤー起動中…");
+            var info = ReadPlayerInfo(additional, source.ChannelId.Value);
+            additional.Player = await playerLauncher.LaunchAsync(
+                new(streamUrl, host.PlaylistUrlFor(source.ChannelId),
+                    info?.Metadata.Name ?? channel.Name, info is null ? channel.ContactUrl : info.Metadata.ContactUrl),
+                startupCancellation.Token).ConfigureAwait(false);
+            _setStatus($"{channel.Name}: 別ウィンドウで再生中");
+            _ = ObserveAdditionalPlaybackEndAsync(additional, channel.Name);
+        }
+        catch
+        {
+            if (startingPlayback is not null)
+            {
+                await DisposeAdditionalInstanceAsync(startingPlayback).ConfigureAwait(false);
+            }
+
+            throw;
+        }
+        finally
+        {
+            lock (_stateGate)
+            {
+                if (ReferenceEquals(_startupCancellation, startupCancellation))
+                {
+                    _startupCancellation = null;
+                }
+            }
+
+            _commands.Release();
+        }
+    }
+
     public async Task StopAsync()
     {
         lock (_stateGate)
@@ -351,7 +483,7 @@ internal sealed class NovaDailyHttpFlvPlaybackController :
         await _commands.WaitAsync().ConfigureAwait(false);
         try
         {
-            await StopActiveCoreAsync().ConfigureAwait(false);
+            await StopAllPlaybacksCoreAsync().ConfigureAwait(false);
             _setStatus("Ready");
         }
         finally
@@ -398,7 +530,7 @@ internal sealed class NovaDailyHttpFlvPlaybackController :
         await _commands.WaitAsync().ConfigureAwait(false);
         try
         {
-            await StopActiveCoreAsync().ConfigureAwait(false);
+            await StopAllPlaybacksCoreAsync().ConfigureAwait(false);
         }
         catch (Exception exception)
         {
@@ -460,6 +592,86 @@ internal sealed class NovaDailyHttpFlvPlaybackController :
         }
     }
 
+    private async Task StopAllPlaybacksCoreAsync()
+    {
+        List<Exception>? failures = null;
+        try
+        {
+            await StopActiveCoreAsync().ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            (failures ??= []).Add(exception);
+        }
+
+        try
+        {
+            await StopAllAdditionalCoreAsync().ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            (failures ??= []).Add(exception);
+        }
+
+        if (failures is { Count: > 0 })
+        {
+            throw failures.Count == 1
+                ? failures[0]
+                : new AggregateException("The playback sessions did not clean up completely.", failures);
+        }
+    }
+
+    private async Task StopAllAdditionalCoreAsync()
+    {
+        ActivePlayback[] additionals;
+        lock (_stateGate)
+        {
+            if (_additionalPlaybacks.Count == 0)
+            {
+                return;
+            }
+
+            additionals = [.. _additionalPlaybacks];
+            _additionalPlaybacks.Clear();
+        }
+
+        List<Exception>? failures = null;
+        foreach (var additional in additionals)
+        {
+            try
+            {
+                await DisposePlaybackInstanceAsync(additional).ConfigureAwait(false);
+            }
+            catch (Exception exception)
+            {
+                (failures ??= []).Add(exception);
+            }
+        }
+
+        if (failures is { Count: > 0 })
+        {
+            throw failures.Count == 1
+                ? failures[0]
+                : new AggregateException("Additional playback sessions did not clean up completely.", failures);
+        }
+    }
+
+    private async Task DisposeAdditionalInstanceAsync(ActivePlayback additional)
+    {
+        bool removed;
+        lock (_stateGate)
+        {
+            removed = _additionalPlaybacks.Remove(additional);
+        }
+
+        if (!removed)
+        {
+            return;
+        }
+
+        await DisposePlaybackInstanceAsync(additional).ConfigureAwait(false);
+    }
+
     private async Task StopActiveCoreAsync()
     {
         ActivePlayback? active;
@@ -474,6 +686,11 @@ internal sealed class NovaDailyHttpFlvPlaybackController :
             return;
         }
 
+        await DisposePlaybackInstanceAsync(active).ConfigureAwait(false);
+    }
+
+    private static async Task DisposePlaybackInstanceAsync(ActivePlayback active)
+    {
         List<Exception>? failures = null;
         await CleanupStepAsync(
             () => active.Player?.DisposeAsync().AsTask() ?? Task.CompletedTask,
@@ -500,6 +717,71 @@ internal sealed class NovaDailyHttpFlvPlaybackController :
         if (failures is { Count: > 0 })
         {
             throw new AggregateException("The playback session did not clean up completely.", failures);
+        }
+    }
+
+    private async Task ObserveAdditionalPlaybackEndAsync(
+        ActivePlayback additional,
+        string channelName)
+    {
+        try
+        {
+            var ownerTask = additional.OwnerTask;
+            var playerCompletion = additional.Player!.Completion;
+            var endedTask = ownerTask is null
+                ? playerCompletion
+                : await Task.WhenAny(ownerTask, playerCompletion)
+                    .ConfigureAwait(false);
+            bool failed;
+            if (ownerTask is not null && ReferenceEquals(endedTask, ownerTask))
+            {
+                failed = await IsSharedOwnerTerminalFailureAsync(ownerTask)
+                    .ConfigureAwait(false);
+            }
+            else
+            {
+                await endedTask.ConfigureAwait(false);
+                failed = false;
+            }
+
+            await _commands.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                await DisposeAdditionalInstanceAsync(additional).ConfigureAwait(false);
+                _setStatus(failed
+                    ? $"{channelName}: 別ウィンドウ再生が予期せず終了しました"
+                    : ActivePlaybackCount > 0 ? "再生中" : "Ready");
+            }
+            finally
+            {
+                _commands.Release();
+            }
+        }
+        catch (Exception exception)
+        {
+            try
+            {
+                _showError($"別ウィンドウ再生が終了しました: {exception.Message}");
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                await _commands.WaitAsync().ConfigureAwait(false);
+                try
+                {
+                    await DisposeAdditionalInstanceAsync(additional).ConfigureAwait(false);
+                }
+                finally
+                {
+                    _commands.Release();
+                }
+            }
+            catch
+            {
+            }
         }
     }
 
@@ -664,7 +946,14 @@ internal sealed class NovaDailyHttpFlvPlaybackController :
     {
         lock (_stateGate)
         {
-            if (active is null || !ReferenceEquals(active, _active) || active.ChannelId != id || active.CatalogChannel is null) return null;
+            if (active is null ||
+                (!ReferenceEquals(active, _active) && !_additionalPlaybacks.Contains(active)) ||
+                active.ChannelId != id ||
+                active.CatalogChannel is null)
+            {
+                return null;
+            }
+
             return GenesisPlayerChannelInfo.Create(active.CatalogChannel, active.Attachment?.ReadStatus?.Invoke(),
                 active.Attachment?.ReadPeerCounts?.Invoke(), Stopwatch.GetElapsedTime(active.StartTimestamp),
                 Stopwatch.GetElapsedTime(active.CatalogTimestamp));

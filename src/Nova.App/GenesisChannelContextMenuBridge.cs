@@ -586,6 +586,13 @@ internal sealed class GenesisChannelContextMenuBridge : IAsyncDisposable
                 _commandLanes.TrackPlayback(ObserveCommandAsync(
                     _interaction.PlaySourceAsync(interactiveChannel.Source)));
             }
+            else if (command == GenesisChannelContextMenuCommand.PlayInNewWindow &&
+                row.InteractiveChannel is { } newWindowChannel &&
+                _commandLanes.CanStartPlayback)
+            {
+                _commandLanes.TrackPlayback(ObserveCommandAsync(
+                    _interaction.PlaySourceInNewWindowAsync(newWindowChannel.Source)));
+            }
             else if (command == GenesisChannelContextMenuCommand.ManualSourceUrl)
             {
                 var owner = GetAncestor(_container, GetAncestorRoot);

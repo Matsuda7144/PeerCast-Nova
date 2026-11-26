@@ -627,7 +627,13 @@ public sealed partial class GenesisMainViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(StatusText));
     }
 
-    public async ValueTask PlayAsync(CancellationToken cancellationToken = default)
+    public ValueTask PlayAsync(CancellationToken cancellationToken = default) =>
+        PlayCoreAsync(keepExistingSessions: false, cancellationToken);
+
+    public ValueTask PlayInNewWindowAsync(CancellationToken cancellationToken = default) =>
+        PlayCoreAsync(keepExistingSessions: true, cancellationToken);
+
+    private async ValueTask PlayCoreAsync(bool keepExistingSessions, CancellationToken cancellationToken)
     {
         if (!CanPlay)
         {
@@ -648,43 +654,68 @@ public sealed partial class GenesisMainViewModel : INotifyPropertyChanged
                 ? new PlaybackSessionRequest(
                     source,
                     selectedChannel.Name,
-                      selectedChannel.ChannelId)
+                    selectedChannel.ChannelId)
                 { CatalogChannel = selectedChannel }
                 : new PlaybackSessionRequest(source);
+        request = request with { KeepExistingSessions = keepExistingSessions };
 
+        var preservePlaying = keepExistingSessions && PlaybackState == PlaybackSessionState.Playing;
         SetPlayCommandInFlight(true);
-        SetSnapshot(new PlaybackSessionSnapshot(
-            PlaybackSessionState.Starting,
-            source,
-            null)
+        if (!preservePlaying)
         {
-            ChannelName = request.ChannelName ?? source,
-            ChannelId = request.ChannelId,
-        });
+            SetSnapshot(new PlaybackSessionSnapshot(
+                PlaybackSessionState.Starting,
+                source,
+                null)
+            {
+                ChannelName = request.ChannelName ?? source,
+                ChannelId = request.ChannelId,
+            });
+        }
         try
         {
             var outcome = await _controller.PlayAsync(request, cancellationToken)
                 .ConfigureAwait(false);
-            var currentSnapshot = _controller.Snapshot;
-            if (currentSnapshot != outcome.Snapshot)
+            if (preservePlaying)
             {
-                SetSnapshot(currentSnapshot);
-                SetError(currentSnapshot.ErrorMessage, clearsOnSourceChange: true);
+                if (outcome.Result == PlaybackSessionCommandResult.Faulted)
+                {
+                    SetError(outcome.Snapshot.ErrorMessage, clearsOnSourceChange: true);
+                }
             }
             else
             {
-                ApplyOutcome(outcome, errorClearsOnSourceChange: true);
+                var currentSnapshot = _controller.Snapshot;
+                if (currentSnapshot != outcome.Snapshot)
+                {
+                    SetSnapshot(currentSnapshot);
+                    SetError(currentSnapshot.ErrorMessage, clearsOnSourceChange: true);
+                }
+                else
+                {
+                    ApplyOutcome(outcome, errorClearsOnSourceChange: true);
+                }
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            SetSnapshot(_controller.Snapshot);
-            SetError(null);
+            if (!preservePlaying)
+            {
+                SetSnapshot(_controller.Snapshot);
+                SetError(null);
+            }
         }
         catch
         {
-            SetSnapshot(new(PlaybackSessionState.Faulted, source, "Playback failed."));
-            SetError("Playback failed.", clearsOnSourceChange: true);
+            if (preservePlaying)
+            {
+                SetError("Playback failed.", clearsOnSourceChange: true);
+            }
+            else
+            {
+                SetSnapshot(new(PlaybackSessionState.Faulted, source, "Playback failed."));
+                SetError("Playback failed.", clearsOnSourceChange: true);
+            }
         }
         finally
         {

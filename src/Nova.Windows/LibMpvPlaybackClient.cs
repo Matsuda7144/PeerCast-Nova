@@ -37,7 +37,15 @@ internal sealed class LibMpvPlaybackClient : ILibMpvPlaybackClient
     internal const double MinSpeed = 0.5;
     internal const double MaxSpeed = 4.0;
     internal const double MaxRelativeSeekSeconds = 300.0;
+    internal const long MaxUserConfigBytes = 64 * 1024;
+    internal const int MaxUserConfigEntries = 256;
     internal static readonly double[] SpeedPresets = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
+    private static readonly HashSet<string> ReservedHostOptions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "wid", "demuxer", "demuxer-lavf-format", "config", "config-dir",
+        "load-scripts", "script", "scripts", "script-opts",
+        "input-conf", "input-default-bindings", "include", "idle", "keep-open",
+    };
     private const uint ClientApiMajor = 2;
     private const ulong LoadFileReply = 1;
     private const ulong ReloadFileReply = 2;
@@ -138,6 +146,7 @@ internal sealed class LibMpvPlaybackClient : ILibMpvPlaybackClient
             _currentStreamUrl = streamUrl;
             _pendingReloadEndFiles = 0;
             SetStartupOptions(SetOption, container, windowId, normalized, lowLatency);
+            _ = ApplyUserConfigIfPresent(TrySetUserOption);
             Check(_initialize(_client), "initialize playback");
             _initialized = true;
 
@@ -577,6 +586,190 @@ internal sealed class LibMpvPlaybackClient : ILibMpvPlaybackClient
 
     private void SetOption(string name, string value) =>
         Check(_setOption(_client, name, value), $"set the {name} option");
+
+    private void TrySetUserOption(string name, string value) =>
+        _ = _setOption(_client, name, value);
+
+    internal static string ResolveUserConfigPath(string? localAppData = null)
+    {
+        var baseDir = localAppData;
+        if (string.IsNullOrWhiteSpace(baseDir))
+        {
+            baseDir = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        }
+
+        if (string.IsNullOrWhiteSpace(baseDir))
+        {
+            baseDir = AppContext.BaseDirectory;
+        }
+
+        return Path.Combine(baseDir, "PeerCast Nova", "mpv.conf");
+    }
+
+    internal static IReadOnlyList<(string Name, string Value)> ParseUserConfig(string content)
+    {
+        if (string.IsNullOrEmpty(content))
+        {
+            return [];
+        }
+
+        var entries = new List<(string Name, string Value)>();
+        using var reader = new StringReader(content);
+        string? rawLine;
+        while ((rawLine = reader.ReadLine()) is not null)
+        {
+            if (entries.Count >= MaxUserConfigEntries)
+            {
+                break;
+            }
+
+            var line = StripCommentsAndTrim(rawLine);
+            if (line.Length == 0 || (line[0] == '[' && line[^1] == ']'))
+            {
+                continue;
+            }
+
+            if (line.StartsWith("--", StringComparison.Ordinal))
+            {
+                line = line[2..].TrimStart();
+            }
+
+            if (line.Length == 0)
+            {
+                continue;
+            }
+
+            string key;
+            string value;
+            var equalsIndex = line.IndexOf('=');
+            if (equalsIndex >= 0)
+            {
+                key = line[..equalsIndex].Trim();
+                value = Unquote(line[(equalsIndex + 1)..].Trim());
+            }
+            else if (line.StartsWith("no-", StringComparison.OrdinalIgnoreCase) && line.Length > 3)
+            {
+                key = line[3..].Trim();
+                value = "no";
+            }
+            else
+            {
+                key = line;
+                value = "yes";
+            }
+
+            if (key.Length == 0 ||
+                ContainsControlCharacter(key) ||
+                ContainsControlCharacter(value) ||
+                ReservedHostOptions.Contains(key))
+            {
+                continue;
+            }
+
+            entries.Add((key, value));
+        }
+
+        return entries;
+    }
+
+    internal static int ApplyUserConfigIfPresent(Action<string, string> trySetOption, string? configPath = null)
+    {
+        ArgumentNullException.ThrowIfNull(trySetOption);
+        var path = configPath ?? ResolveUserConfigPath();
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+        {
+            return 0;
+        }
+
+        string content;
+        try
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            var buffer = new byte[MaxUserConfigBytes];
+            var totalRead = 0;
+            while (totalRead < buffer.Length)
+            {
+                var read = stream.Read(buffer, totalRead, buffer.Length - totalRead);
+                if (read == 0)
+                {
+                    break;
+                }
+
+                totalRead += read;
+            }
+
+            content = System.Text.Encoding.UTF8.GetString(buffer, 0, totalRead);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return 0;
+        }
+
+        var entries = ParseUserConfig(content);
+        foreach (var (name, value) in entries)
+        {
+            trySetOption(name, value);
+        }
+
+        return entries.Count;
+    }
+
+    private static string StripCommentsAndTrim(string line)
+    {
+        var trimmed = line.TrimStart('\uFEFF').TrimStart();
+        if (trimmed.Length == 0 || trimmed[0] == '#')
+        {
+            return string.Empty;
+        }
+
+        char quote = '\0';
+        for (var i = 0; i < trimmed.Length; i++)
+        {
+            var c = trimmed[i];
+            if (quote == '\0')
+            {
+                if (c is '"' or '\'')
+                {
+                    quote = c;
+                }
+                else if (c == '#' && (i == 0 || char.IsWhiteSpace(trimmed[i - 1])))
+                {
+                    return trimmed[..i].Trim();
+                }
+            }
+            else if (c == quote)
+            {
+                quote = '\0';
+            }
+        }
+
+        return trimmed.Trim();
+    }
+
+    private static string Unquote(string value)
+    {
+        if (value.Length >= 2 &&
+            ((value[0] == '"' && value[^1] == '"') ||
+             (value[0] == '\'' && value[^1] == '\'')))
+        {
+            return value[1..^1];
+        }
+
+        return value;
+    }
+
+    private static bool ContainsControlCharacter(string value)
+    {
+        foreach (var c in value)
+        {
+            if (char.IsControl(c))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     private static void Check(int result, string action)
     {
