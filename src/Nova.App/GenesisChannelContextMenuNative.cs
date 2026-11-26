@@ -18,6 +18,7 @@ internal enum GenesisChannelContextMenuCommand
     Recording = 8,
     OpenRecordingDirectory = 9,
     CopyDetails = 10,
+    PlayInNewWindow = 11,
 }
 
 internal static class GenesisChannelContextMenuNative
@@ -451,11 +452,16 @@ internal static class GenesisChannelContextMenuNative
         try
         {
             if ((canPlay &&
-                    !AppendMenuW(
+                    (!AppendMenuW(
                         menu,
                         MenuFlagString,
                         (nuint)GenesisChannelContextMenuCommand.Play,
-                        "再生\tEnter")) ||
+                        "再生\tEnter") ||
+                     !AppendMenuW(
+                        menu,
+                        MenuFlagString,
+                        (nuint)GenesisChannelContextMenuCommand.PlayInNewWindow,
+                        "新しいウィンドウで再生"))) ||
                 !AppendMenuW(menu, actions?.CanRecord == true ? MenuFlagString : MenuFlagGrayed,
                     (nuint)GenesisChannelContextMenuCommand.Recording, actions?.RecordingLabel ?? "録画開始") ||
                 !AppendMenuW(menu, MenuFlagSeparator, 0, string.Empty) ||

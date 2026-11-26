@@ -608,6 +608,54 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
         Assert.Contains(client.OsdMessages, message => message.Text == "シーク: +300秒");
     }
 
+    [Fact]
+    public void LibMpvPlaybackClient_UserConfigParserAndLoader_AppliesSafeOptionsAndSkipsReservedOptions()
+    {
+        const string config = """
+            # 先頭コメント
+            [high-quality]
+            hwdec=d3d11va
+            --scale=ewa_lanczossharp # 行末コメント
+            profile="gpu-hq"
+            deband
+            no-audio-display
+            wid=12345
+            demuxer=lavf
+            load-scripts=yes
+            include=C:\evil\extra.conf
+            keep-open=always
+            """;
+
+        var parsed = LibMpvPlaybackClient.ParseUserConfig(config);
+        Assert.Equal(
+        [
+            ("hwdec", "d3d11va"),
+            ("scale", "ewa_lanczossharp"),
+            ("profile", "gpu-hq"),
+            ("deband", "yes"),
+            ("audio-display", "no"),
+        ], parsed);
+
+        var tempDir = Directory.CreateTempSubdirectory("nova-mpv-conf-");
+        try
+        {
+            var missingPath = Path.Combine(tempDir.FullName, "missing.conf");
+            var applied = new List<(string Name, string Value)>();
+            Assert.Equal(0, LibMpvPlaybackClient.ApplyUserConfigIfPresent((k, v) => applied.Add((k, v)), missingPath));
+            Assert.Empty(applied);
+
+            var confPath = Path.Combine(tempDir.FullName, "mpv.conf");
+            File.WriteAllText(confPath, config);
+            Assert.Equal(5, LibMpvPlaybackClient.ApplyUserConfigIfPresent((k, v) => applied.Add((k, v)), confPath));
+            Assert.Equal(parsed, applied);
+            Assert.EndsWith(Path.Combine("PeerCast Nova", "mpv.conf"), LibMpvPlaybackClient.ResolveUserConfigPath(tempDir.FullName), StringComparison.Ordinal);
+        }
+        finally
+        {
+            tempDir.Delete(recursive: true);
+        }
+    }
+
     private sealed class ControlledClient(
         Action<PlaybackMediaContainer, uint, LibMpvPlaybackAudioState, bool>? setStartupOptions = null) : ILibMpvPlaybackClient
     {

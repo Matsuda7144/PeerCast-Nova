@@ -72,6 +72,19 @@ internal sealed class GenesisMainWindowInteraction
         await _viewModel.PlayAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public async ValueTask PlaySourceInNewWindowAsync(
+        string? source,
+        CancellationToken cancellationToken = default)
+    {
+        if (IsRecordingHistoryView || IsPublishingView || !_viewModel.CanPlay)
+        {
+            return;
+        }
+
+        _viewModel.SourceText = source?.Trim() ?? string.Empty;
+        await _viewModel.PlayInNewWindowAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     public ValueTask StopAsync(CancellationToken cancellationToken = default) =>
         (IsRecordingHistoryView || IsPublishingView) ? ValueTask.CompletedTask : _viewModel.StopAsync(cancellationToken);
 

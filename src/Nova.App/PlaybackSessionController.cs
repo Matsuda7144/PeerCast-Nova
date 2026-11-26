@@ -40,6 +40,8 @@ public sealed record PlaybackSessionRequest(
     string? ChannelId = null)
 {
     public GenesisChannelItem? CatalogChannel { get; init; }
+
+    public bool KeepExistingSessions { get; init; }
 }
 
 internal interface IPlaybackSessionSnapshotNotifications
