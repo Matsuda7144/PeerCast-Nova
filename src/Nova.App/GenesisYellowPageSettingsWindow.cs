@@ -150,18 +150,19 @@ internal sealed class GenesisYellowPageSettingsWindow : IAsyncDisposable
             return null;
         }
 
+        var dpi = GenesisMainWindowResizeGuard.GetDpi(owner);
         var window = CreateWindowExW(
             0,
             className,
-            "Yellow Pages",
+            "YP 設定",
             WindowStyleCaption |
                 WindowStyleSysMenu |
                 WindowStyleMinimizeBox |
                 WindowStyleClipChildren,
             UseDefaultPosition,
             UseDefaultPosition,
-            WindowWidth,
-            WindowHeight,
+            GenesisMainWindowLayout.Scale(WindowWidth, dpi),
+            GenesisMainWindowLayout.Scale(WindowHeight, dpi),
             owner,
             0,
             instance,
@@ -172,7 +173,7 @@ internal sealed class GenesisYellowPageSettingsWindow : IAsyncDisposable
             return null;
         }
 
-        var controls = TryCreateControls(window, instance);
+        var controls = TryCreateControls(window, instance, dpi);
         if (controls is null || !TryAttachKeyboardNavigation(window))
         {
             _ = DestroyWindow(window);
@@ -358,8 +359,9 @@ internal sealed class GenesisYellowPageSettingsWindow : IAsyncDisposable
     private static bool IsActionButton(int controlId) =>
         controlId is NewControlId or SaveControlId or DeleteControlId or CloseControlId;
 
-    private static WindowControls? TryCreateControls(nint window, nint instance)
+    private static WindowControls? TryCreateControls(nint window, nint instance, uint dpi)
     {
+        int S(int px) => GenesisMainWindowLayout.Scale(px, dpi);
         var list = CreateControl(
             ExtendedStyleClientEdge,
             "LISTBOX",
@@ -371,10 +373,10 @@ internal sealed class GenesisYellowPageSettingsWindow : IAsyncDisposable
                 WindowStyleBorder |
                 ListBoxStyleNotify |
                 ListBoxStyleNoIntegralHeight,
-            12,
-            12,
-            250,
-            310,
+            S(12),
+            S(12),
+            S(250),
+            S(310),
             window,
             ListControlId,
             instance);
@@ -383,51 +385,51 @@ internal sealed class GenesisYellowPageSettingsWindow : IAsyncDisposable
             return null;
         }
 
-        if (CreateLabel(window, instance, "ID", 282, 15, 105, 22) == 0)
+        if (CreateLabel(window, instance, "ID", S(282), S(15), S(105), S(22)) == 0)
         {
             return null;
         }
 
-        var id = CreateEdit(window, instance, IdControlId, 400, 12, 330, 24);
+        var id = CreateEdit(window, instance, IdControlId, S(400), S(12), S(330), S(24));
         if (id == 0)
         {
             return null;
         }
 
-        if (CreateLabel(window, instance, "Name", 282, 51, 105, 22) == 0)
+        if (CreateLabel(window, instance, "YP 名", S(282), S(51), S(105), S(22)) == 0)
         {
             return null;
         }
 
-        var name = CreateEdit(window, instance, NameControlId, 400, 48, 330, 24);
+        var name = CreateEdit(window, instance, NameControlId, S(400), S(48), S(330), S(24));
         if (name == 0)
         {
             return null;
         }
 
-        if (CreateLabel(window, instance, "Index URL", 282, 87, 105, 22) == 0)
+        if (CreateLabel(window, instance, "Index URL", S(282), S(87), S(105), S(22)) == 0)
         {
             return null;
         }
 
-        var index = CreateEdit(window, instance, IndexControlId, 400, 84, 330, 24);
+        var index = CreateEdit(window, instance, IndexControlId, S(400), S(84), S(330), S(24));
         if (index == 0)
         {
             return null;
         }
 
-        if (CreateLabel(window, instance, "Fallback tracker", 282, 123, 112, 22) == 0)
+        if (CreateLabel(window, instance, "Tracker URL", S(282), S(123), S(112), S(22)) == 0)
         {
             return null;
         }
 
-        var tracker = CreateEdit(window, instance, TrackerControlId, 400, 120, 330, 24);
+        var tracker = CreateEdit(window, instance, TrackerControlId, S(400), S(120), S(330), S(24));
         if (tracker == 0)
         {
             return null;
         }
 
-        if (CreateLabel(window, instance, "Namespace", 282, 159, 105, 22) == 0)
+        if (CreateLabel(window, instance, "Namespace", S(282), S(159), S(105), S(22)) == 0)
         {
             return null;
         }
@@ -436,10 +438,10 @@ internal sealed class GenesisYellowPageSettingsWindow : IAsyncDisposable
             window,
             instance,
             NamespaceControlId,
-            400,
-            156,
-            330,
-            24);
+            S(400),
+            S(156),
+            S(330),
+            S(24));
         if (yellowPageNamespace == 0)
         {
             return null;
@@ -448,15 +450,15 @@ internal sealed class GenesisYellowPageSettingsWindow : IAsyncDisposable
         var enabled = CreateControl(
             0,
             "BUTTON",
-            "Enabled",
+            "有効",
             WindowStyleChild |
                 WindowStyleVisible |
                 WindowStyleTabStop |
                 ButtonStyleAutoCheckBox,
-            400,
-            194,
-            120,
-            24,
+            S(400),
+            S(194),
+            S(120),
+            S(24),
             window,
             EnabledControlId,
             instance);
@@ -468,12 +470,12 @@ internal sealed class GenesisYellowPageSettingsWindow : IAsyncDisposable
         var status = CreateControl(
             0,
             "STATIC",
-            "Changes apply on the next catalog refresh.",
+            "変更は次回のチャンネル一覧更新時に反映されます。",
             WindowStyleChild | WindowStyleVisible,
-            282,
-            232,
-            448,
-            42,
+            S(282),
+            S(232),
+            S(448),
+            S(42),
             window,
             0,
             instance);
@@ -486,38 +488,38 @@ internal sealed class GenesisYellowPageSettingsWindow : IAsyncDisposable
             window,
             instance,
             NewControlId,
-            "New",
-            282,
-            292,
-            84,
-            28);
+            "新規",
+            S(282),
+            S(292),
+            S(84),
+            S(28));
         var saveButton = CreateButton(
             window,
             instance,
             SaveControlId,
-            "Save",
-            374,
-            292,
-            84,
-            28);
+            "保存",
+            S(374),
+            S(292),
+            S(84),
+            S(28));
         var deleteButton = CreateButton(
             window,
             instance,
             DeleteControlId,
-            "Delete",
-            466,
-            292,
-            84,
-            28);
+            "削除",
+            S(466),
+            S(292),
+            S(84),
+            S(28));
         var closeButton = CreateButton(
             window,
             instance,
             CloseControlId,
-            "Close",
-            646,
-            292,
-            84,
-            28);
+            "閉じる",
+            S(646),
+            S(292),
+            S(84),
+            S(28));
         if (newButton == 0 ||
             saveButton == 0 ||
             deleteButton == 0 ||
@@ -639,14 +641,7 @@ internal sealed class GenesisYellowPageSettingsWindow : IAsyncDisposable
         return control;
     }
 
-    private static void ApplyDefaultFont(nint control)
-    {
-        var font = GetStockObject(DefaultGuiFont);
-        if (font != 0)
-        {
-            _ = SendMessageW(control, WindowMessageSetFont, (nuint)font, 1);
-        }
-    }
+    private static void ApplyDefaultFont(nint control) => _ = GenesisWindowUiFont.Apply(control);
 
     private static nint ProcessWindowMessage(
         nint window,
@@ -858,7 +853,7 @@ internal sealed class GenesisYellowPageSettingsWindow : IAsyncDisposable
             var answer = MessageBoxW(
                 _window,
                 $"Delete Yellow Page '{label}'?",
-                "Yellow Pages",
+                "YP 設定",
                 MessageBoxYesNo | MessageBoxIconQuestion);
             if (answer != MessageBoxResultYes)
             {
@@ -886,7 +881,7 @@ internal sealed class GenesisYellowPageSettingsWindow : IAsyncDisposable
             _ = MessageBoxW(
                 _window,
                 message ?? "The Yellow Page settings could not be applied.",
-                "Yellow Pages",
+                "YP 設定",
                 MessageBoxOk | MessageBoxIconWarning);
         }
     }

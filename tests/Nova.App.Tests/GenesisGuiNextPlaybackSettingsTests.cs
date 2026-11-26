@@ -662,7 +662,7 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
             await using var window = GenesisGuiNextPlaybackSettingsWindow.TryCreate(owner, settings);
             Assert.NotNull(window);
 
-            var settingsWindow = FindOwnedWindow(owner, "Playback / External Player");
+            var settingsWindow = FindOwnedWindow(owner, "再生 / 外部プレイヤー");
             Assert.NotEqual(0, settingsWindow);
             var controls = FindSettingsControls(settingsWindow);
             Assert.NotEqual(0, controls.Path);
@@ -692,7 +692,7 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
             await window.DisposeAsync();
             await using var reopened = GenesisGuiNextPlaybackSettingsWindow.TryCreate(owner, settings);
             Assert.NotNull(reopened);
-            var reopenedWindow = FindOwnedWindow(owner, "Playback / External Player");
+            var reopenedWindow = FindOwnedWindow(owner, "再生 / 外部プレイヤー");
             Assert.NotEqual(0, reopenedWindow);
             AssertNativeControlsShareWindowFont(FindSettingsControls(reopenedWindow).All);
         }

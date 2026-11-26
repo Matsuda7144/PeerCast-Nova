@@ -109,6 +109,17 @@ internal sealed class GenesisMainWindowResizeGuard : IAsyncDisposable
 
     internal static uint GetDpi(nint window) => GenesisMainWindowLayout.NormalizeDpi(GetDpiForWindow(window));
 
+    internal static int? TryGetSavedDetailsHeight(nint window) =>
+        PlacementStores.TryGetValue(window, out var store) ? store.Load()?.DetailsHeight : null;
+
+    internal static void SaveDetailsHeight(nint window, int detailsHeight)
+    {
+        if (PlacementStores.TryGetValue(window, out var store))
+        {
+            SaveCurrentPlacement(window, store, detailsHeight);
+        }
+    }
+
     private static void RestorePlacement(nint window, GenesisMainWindowPlacement saved)
     {
         var rect = new Rectangle
@@ -165,7 +176,7 @@ internal sealed class GenesisMainWindowResizeGuard : IAsyncDisposable
         }
     }
 
-    private static void SaveCurrentPlacement(nint window, GenesisMainWindowPlacementStore store)
+    private static void SaveCurrentPlacement(nint window, GenesisMainWindowPlacementStore store, int? explicitDetailsHeight = null)
     {
         var placement = new WindowPlacement
         {
@@ -183,12 +194,16 @@ internal sealed class GenesisMainWindowResizeGuard : IAsyncDisposable
             return;
         }
 
+        var detailsHeight = explicitDetailsHeight ??
+            GenesisGuiNextAppShellBridge.GetDetailsHeightForOwner(window) ??
+            store.Load()?.DetailsHeight;
         store.Save(new GenesisMainWindowPlacement(
             placement.NormalPosition.Left,
             placement.NormalPosition.Top,
             width,
             height,
-            Maximized: placement.ShowCmd == SwShowMaximized));
+            Maximized: placement.ShowCmd == SwShowMaximized,
+            DetailsHeight: detailsHeight));
     }
 
     private static nint ProcessMessage(nint window, uint message, nuint wParam, nint lParam, nuint id, nuint data)

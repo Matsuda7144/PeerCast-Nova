@@ -7,7 +7,8 @@ internal sealed record GenesisMainWindowPlacement(
     int Top,
     int Width,
     int Height,
-    bool Maximized)
+    bool Maximized,
+    int? DetailsHeight = null)
 {
     public GenesisMainWindowPlacement ClampToWorkArea(
         int workLeft,
@@ -27,7 +28,7 @@ internal sealed record GenesisMainWindowPlacement(
         var maxTop = Math.Max(workTop, workBottom - clampedHeight);
         var clampedLeft = Math.Clamp(Left, workLeft, maxLeft);
         var clampedTop = Math.Clamp(Top, workTop, maxTop);
-        return new(clampedLeft, clampedTop, clampedWidth, clampedHeight, Maximized);
+        return new(clampedLeft, clampedTop, clampedWidth, clampedHeight, Maximized, DetailsHeight);
     }
 }
 

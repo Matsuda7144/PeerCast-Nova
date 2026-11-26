@@ -672,6 +672,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             viewModel,
             interaction,
             backgroundBrush);
+        state.CreatePaneSplitter(instance);
         state.CreateIntegratedSettings(className, instance);
         if (!state.RuleButtonsAvailable || !StatesByContainer.TryAdd(sidebar, state) ||
             !StatesByContainer.TryAdd(statusBar, state) ||
@@ -683,6 +684,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 ListViewSubclassIdentifier,
                 0))
         {
+            state.DestroyPaneSplitter();
             state.DestroyIntegratedSettings();
             _ = StatesByContainer.TryRemove(sidebar, out _);
             _ = StatesByContainer.TryRemove(statusBar, out _);
@@ -1270,6 +1272,12 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
         {
             if (Interlocked.Exchange(ref _detached, 1) == 0)
             {
+                if (_detailsHeight is { } savedDetailsHeight)
+                {
+                    GenesisMainWindowResizeGuard.SaveDetailsHeight(_owner, savedDetailsHeight);
+                }
+
+                DestroyPaneSplitter();
                 _ = StatesByOwner.TryRemove(_owner, out _);
                 _publishingEditor?.Dispose();
                 if (IsWindow(_publishingEditPane)) _ = RemoveWindowSubclass(_publishingEditPane, PublishingEditorProcedure, PublishingEditorSubclassId);

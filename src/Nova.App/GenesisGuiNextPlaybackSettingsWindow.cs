@@ -106,18 +106,19 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
             return null;
         }
 
+        var dpi = GenesisMainWindowResizeGuard.GetDpi(owner);
         var window = CreateWindowExW(
             0,
             className,
-            appearance is not null ? "外観設定" : recordingSettings is null ? "Playback / External Player" : "録画保存先",
+            appearance is not null ? "外観設定" : recordingSettings is null ? "再生 / 外部プレイヤー" : "録画保存先",
             WindowStyleCaption |
                 WindowStyleSysMenu |
                 WindowStyleClipChildren |
                 WindowStyleVisible,
             UseDefaultPosition,
             UseDefaultPosition,
-            WindowWidth,
-            appearance is not null ? 280 : recordingSettings is null ? WindowHeight : 315,
+            GenesisMainWindowLayout.Scale(WindowWidth, dpi),
+            GenesisMainWindowLayout.Scale(appearance is not null ? 280 : recordingSettings is null ? WindowHeight : 315, dpi),
             owner,
             0,
             instance,
@@ -128,8 +129,8 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
             return null;
         }
 
-        var controls = appearance is not null ? CreateAppearanceControls(window, instance) :
-            CreateControls(window, instance, recordingSettings is not null);
+        var controls = appearance is not null ? CreateAppearanceControls(window, instance, dpi) :
+            CreateControls(window, instance, recordingSettings is not null, dpi);
         if (controls is null)
         {
             _ = DestroyWindow(window);
@@ -315,18 +316,18 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
         };
     }
 
-    private static Controls? CreateAppearanceControls(nint window, nint instance)
+    private static Controls? CreateAppearanceControls(nint window, nint instance, uint dpi)
     {
-        var label = CreateControl(window, instance, "STATIC", "表示モード", 16, 16, 610, 22, 0);
+        var label = CreateControl(window, instance, "STATIC", "表示モード", 16, 16, 610, 22, 0, dpi: dpi);
         var classic = CreateControl(window, instance, "BUTTON", "クラシック", 24, 46, 200, 28, PathControlId,
-            WindowStyleTabStop | 0x00020000 | 9); // WS_GROUP | BS_AUTORADIOBUTTON
+            WindowStyleTabStop | 0x00020000 | 9, dpi: dpi); // WS_GROUP | BS_AUTORADIOBUTTON
         var modern = CreateControl(window, instance, "BUTTON", "モダン", 240, 46, 200, 28, BrowseControlId,
-            WindowStyleTabStop | 9);
-        var help = CreateControl(window, instance, "STATIC", GenesisAppearanceSettings.NextStartNotice, 16, 90, 610, 40, 0);
+            WindowStyleTabStop | 9, dpi: dpi);
+        var help = CreateControl(window, instance, "STATIC", GenesisAppearanceSettings.NextStartNotice, 16, 90, 610, 40, 0, dpi: dpi);
         var save = CreateControl(window, instance, "BUTTON", "保存", 16, 142, 90, 30, SaveControlId,
-            WindowStyleTabStop | 0x00020000);
-        var close = CreateControl(window, instance, "BUTTON", "閉じる", 536, 142, 90, 30, CloseControlId, WindowStyleTabStop);
-        var status = CreateControl(window, instance, "STATIC", string.Empty, 16, 184, 610, 46, StatusControlId);
+            WindowStyleTabStop | 0x00020000, dpi: dpi);
+        var close = CreateControl(window, instance, "BUTTON", "閉じる", 536, 142, 90, 30, CloseControlId, WindowStyleTabStop, dpi: dpi);
+        var status = CreateControl(window, instance, "STATIC", string.Empty, 16, 184, 610, 46, StatusControlId, dpi: dpi);
         foreach (var control in new[] { label, classic, modern, help, save, close, status })
         {
             if (control == 0) return null;
@@ -335,9 +336,9 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
         return new(classic, modern, save, 0, close, status, 0);
     }
 
-    private static Controls? CreateControls(nint window, nint instance, bool recordingMode)
+    private static Controls? CreateControls(nint window, nint instance, bool recordingMode, uint dpi)
     {
-        var label = CreateControl(window, instance, "STATIC", recordingMode ? "録画保存先 (絶対パス)" : "外部プレイヤーの実行ファイルパス", 16, 16, 580, 20, 0);
+        var label = CreateControl(window, instance, "STATIC", recordingMode ? "録画保存先 (絶対パス)" : "外部プレイヤーの実行ファイルパス", 16, 16, 580, 20, 0, dpi: dpi);
         var path = CreateControl(
             window,
             instance,
@@ -349,11 +350,12 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
             26,
             PathControlId,
             WindowStyleTabStop | EditStyleAutoHorizontalScroll,
-            ExtendedStyleClientEdge);
+            ExtendedStyleClientEdge,
+            dpi);
         var browse = recordingMode ? 0 : CreateControl(window, instance, "BUTTON", "参照...", 530, 41, 96, 28, BrowseControlId,
-            WindowStyleTabStop);
+            WindowStyleTabStop, dpi: dpi);
         var info = recordingMode
-            ? CreateControl(window, instance, "STATIC", string.Empty, 16, 78, 610, 58, 0)
+            ? CreateControl(window, instance, "STATIC", string.Empty, 16, 78, 610, 58, 0, dpi: dpi)
             : 0;
         var help = CreateControl(
             window,
@@ -365,14 +367,15 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
             recordingMode ? 142 : 78,
             610,
             38,
-            0);
+            0,
+            dpi: dpi);
         var save = CreateControl(window, instance, "BUTTON", "保存", 16, recordingMode ? 182 : 130, 90, 30, SaveControlId,
-            WindowStyleTabStop);
+            WindowStyleTabStop, dpi: dpi);
         var clear = CreateControl(window, instance, "BUTTON", recordingMode ? "既定に戻す" : "未設定に戻す", 116, recordingMode ? 182 : 130, 125, 30, ClearControlId,
-            WindowStyleTabStop);
+            WindowStyleTabStop, dpi: dpi);
         var close = CreateControl(window, instance, "BUTTON", "閉じる", 536, recordingMode ? 182 : 130, 90, 30, CloseControlId,
-            WindowStyleTabStop);
-        var status = CreateControl(window, instance, "STATIC", string.Empty, 16, recordingMode ? 224 : 170, 610, recordingMode ? 42 : 20, StatusControlId);
+            WindowStyleTabStop, dpi: dpi);
+        var status = CreateControl(window, instance, "STATIC", string.Empty, 16, recordingMode ? 224 : 170, 610, recordingMode ? 42 : 20, StatusControlId, dpi: dpi);
         if (label == 0 || path == 0 || (!recordingMode && browse == 0) || (recordingMode && info == 0) || help == 0 || save == 0 || clear == 0 || close == 0 || status == 0)
         {
             return null;
@@ -397,16 +400,17 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
         int height,
         int controlId,
         uint additionalStyle = 0,
-        uint extendedStyle = 0) =>
+        uint extendedStyle = 0,
+        uint dpi = 96) =>
         CreateWindowExW(
             extendedStyle,
             className,
             text,
             WindowStyleChild | WindowStyleVisible | additionalStyle,
-            x,
-            y,
-            width,
-            height,
+            GenesisMainWindowLayout.Scale(x, dpi),
+            GenesisMainWindowLayout.Scale(y, dpi),
+            GenesisMainWindowLayout.Scale(width, dpi),
+            GenesisMainWindowLayout.Scale(height, dpi),
             parent,
             (nint)controlId,
             instance,

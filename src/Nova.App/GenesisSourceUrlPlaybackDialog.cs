@@ -94,13 +94,16 @@ internal static class GenesisSourceUrlPlaybackDialog
             return false;
         }
 
+        var dpi = GenesisMainWindowResizeGuard.GetDpi(owner);
+        var scaledWidth = GenesisMainWindowLayout.Scale(DialogWidth, dpi);
+        var scaledHeight = GenesisMainWindowLayout.Scale(DialogHeight, dpi);
         var rectangle = new WindowRectangle();
         var x = UseDefaultPosition;
         var y = UseDefaultPosition;
         if (GetWindowRect(owner, out rectangle))
         {
-            x = rectangle.Left + Math.Max(0, (rectangle.Right - rectangle.Left - DialogWidth) / 2);
-            y = rectangle.Top + Math.Max(0, (rectangle.Bottom - rectangle.Top - DialogHeight) / 2);
+            x = rectangle.Left + Math.Max(0, (rectangle.Right - rectangle.Left - scaledWidth) / 2);
+            y = rectangle.Top + Math.Max(0, (rectangle.Bottom - rectangle.Top - scaledHeight) / 2);
         }
 
         var window = CreateWindowExW(
@@ -110,8 +113,8 @@ internal static class GenesisSourceUrlPlaybackDialog
             WindowStylePopup | WindowStyleCaption | WindowStyleSysMenu | WindowStyleClipChildren,
             x,
             y,
-            DialogWidth,
-            DialogHeight,
+            scaledWidth,
+            scaledHeight,
             owner,
             0,
             _instance,
@@ -121,7 +124,7 @@ internal static class GenesisSourceUrlPlaybackDialog
             return false;
         }
 
-        var controls = CreateControls(window, _instance);
+        var controls = CreateControls(window, _instance, dpi);
         if (controls is null)
         {
             _ = DestroyWindow(window);
@@ -209,16 +212,17 @@ internal static class GenesisSourceUrlPlaybackDialog
         }
     }
 
-    private static ControlHandles? CreateControls(nint window, nint instance)
+    private static ControlHandles? CreateControls(nint window, nint instance, uint dpi)
     {
+        int S(int px) => GenesisMainWindowLayout.Scale(px, dpi);
         var label = CreateControl(
             "STATIC",
-            "Source URL",
+            "再生 URL（pcp:// 等）",
             WindowStyleChild | WindowStyleVisible,
-            22,
-            14,
-            448,
-            22,
+            S(22),
+            S(14),
+            S(448),
+            S(22),
             window,
             LabelControlId,
             instance);
@@ -227,10 +231,10 @@ internal static class GenesisSourceUrlPlaybackDialog
             string.Empty,
             WindowStyleChild | WindowStyleVisible | WindowStyleTabStop |
                 EditStyleAutoHorizontalScroll,
-            22,
-            40,
-            448,
-            28,
+            S(22),
+            S(40),
+            S(448),
+            S(28),
             window,
             SourceControlId,
             instance,
@@ -239,10 +243,10 @@ internal static class GenesisSourceUrlPlaybackDialog
             "STATIC",
             string.Empty,
             WindowStyleChild | WindowStyleVisible,
-            22,
-            74,
-            448,
-            28,
+            S(22),
+            S(74),
+            S(448),
+            S(28),
             window,
             ErrorControlId,
             instance);
@@ -251,10 +255,10 @@ internal static class GenesisSourceUrlPlaybackDialog
             "再生",
             WindowStyleChild | WindowStyleVisible | WindowStyleTabStop |
                 ButtonStyleOwnerDraw,
-            314,
-            118,
-            76,
-            30,
+            S(314),
+            S(118),
+            S(76),
+            S(30),
             window,
             PlayControlId,
             instance);
@@ -263,10 +267,10 @@ internal static class GenesisSourceUrlPlaybackDialog
             "キャンセル",
             WindowStyleChild | WindowStyleVisible | WindowStyleTabStop |
                 ButtonStyleOwnerDraw,
-            398,
-            118,
-            96,
-            30,
+            S(398),
+            S(118),
+            S(96),
+            S(30),
             window,
             CancelControlId,
             instance);
@@ -276,13 +280,9 @@ internal static class GenesisSourceUrlPlaybackDialog
             return null;
         }
 
-        var font = GetStockObject(DefaultGuiFont);
-        if (font != 0)
+        foreach (var control in new[] { label, sourceEdit, error, playButton, cancelButton })
         {
-            foreach (var control in new[] { label, sourceEdit, error, playButton, cancelButton })
-            {
-                _ = SendMessageW(control, WindowMessageSetFont, (nuint)font, 1);
-            }
+            _ = GenesisWindowUiFont.Apply(control);
         }
 
         _ = SendMessageW(
