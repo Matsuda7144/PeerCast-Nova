@@ -20,6 +20,7 @@ internal interface ILibMpvPlaybackClient : IDisposable
     void SetPaused(bool paused);
     void SetSpeed(double speed);
     void Reload() { }
+    void SeekRelative(double seconds) { }
     void ShowOsdText(string text, int durationMs);
     bool SaveScreenshot(string filePath);
     void SetVideoAdjustment(LibMpvVideoAdjustment adjustment);
@@ -35,6 +36,7 @@ internal sealed class LibMpvPlaybackClient : ILibMpvPlaybackClient
 {
     internal const double MinSpeed = 0.5;
     internal const double MaxSpeed = 4.0;
+    internal const double MaxRelativeSeekSeconds = 300.0;
     internal static readonly double[] SpeedPresets = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
     private const uint ClientApiMajor = 2;
     private const ulong LoadFileReply = 1;
@@ -339,6 +341,50 @@ internal sealed class LibMpvPlaybackClient : ILibMpvPlaybackClient
 
         pendingReloadEndFiles--;
         return true;
+    }
+
+    internal static double ClampSeekDelta(double seconds) =>
+        double.IsFinite(seconds) ? Math.Clamp(seconds, -MaxRelativeSeekSeconds, MaxRelativeSeekSeconds) : 0.0;
+
+    internal static string FormatSeekOsd(double seconds)
+    {
+        var clamped = ClampSeekDelta(seconds);
+        return clamped >= 0
+            ? string.Create(CultureInfo.InvariantCulture, $"+{clamped:0.##}秒")
+            : string.Create(CultureInfo.InvariantCulture, $"{clamped:0.##}秒");
+    }
+
+    /// <summary>再生位置を現在の位置から指定秒数だけ相対シークする。</summary>
+    public void SeekRelative(double seconds)
+    {
+        var clamped = ClampSeekDelta(seconds);
+        if (Math.Abs(clamped) < 0.01)
+        {
+            return;
+        }
+
+        lock (_clientGate)
+        {
+            if (_disposed || !_initialized)
+            {
+                return;
+            }
+
+            var arguments = new nint[4];
+            try
+            {
+                arguments[0] = Marshal.StringToCoTaskMemUTF8("seek");
+                arguments[1] = Marshal.StringToCoTaskMemUTF8(clamped.ToString("0.##", CultureInfo.InvariantCulture));
+                arguments[2] = Marshal.StringToCoTaskMemUTF8("relative");
+                _ = _command(_client, 0, arguments);
+            }
+            finally
+            {
+                Marshal.FreeCoTaskMem(arguments[2]);
+                Marshal.FreeCoTaskMem(arguments[1]);
+                Marshal.FreeCoTaskMem(arguments[0]);
+            }
+        }
     }
 
     public void ShowOsdText(string text, int durationMs)

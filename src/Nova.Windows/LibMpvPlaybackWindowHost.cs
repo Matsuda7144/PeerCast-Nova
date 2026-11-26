@@ -159,6 +159,13 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
     private const uint MenuCmdScaleBase = 2140;
     private const uint MenuCmdToggleAutoResize100 = 2150;
     private const uint MenuCmdSpeedBase = 2160;
+    private const uint MenuCmdSeekBack30 = 2170;
+    private const uint MenuCmdSeekBack5 = 2171;
+    private const uint MenuCmdSeekForward5 = 2172;
+    private const uint MenuCmdSeekForward30 = 2173;
+    private const uint MenuCmdVolumeUp = 2180;
+    private const uint MenuCmdVolumeDown = 2181;
+    private const uint MenuCmdVolumePresetBase = 2182;
     private const uint MenuCmdThreadBase = 3000;
 
     private const nuint VirtualKeyBack = 0x08;
@@ -166,7 +173,9 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
     private const int VirtualKeyShift = 0x10;
     private const nuint VirtualKeyEscape = 0x1B;
     private const nuint VirtualKeySpace = 0x20;
+    private const nuint VirtualKeyLeft = 0x25;
     private const nuint VirtualKeyUp = 0x26;
+    private const nuint VirtualKeyRight = 0x27;
     private const nuint VirtualKeyDown = 0x28;
     private const nuint VirtualKeyB = 0x42;
     private const nuint VirtualKeyF = 0x46;
@@ -176,6 +185,7 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
     private const nuint VirtualKeyT = 0x54;
     private const nuint VirtualKeyOemOpenBrackets = 0xDB;
     private const nuint VirtualKeyOemCloseBrackets = 0xDD;
+    private static readonly int[] VolumePresets = [100, 80, 60, 40, 20];
 
     private readonly object _sync = new();
     private readonly LibMpvPlaybackWindowOptions _options;
@@ -258,6 +268,8 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
     public event Action<double>? SpeedChanged;
 
     public event Action? ReloadRequested;
+
+    public event Action<double>? SeekRequested;
 
     public event Action<LibMpvVideoAdjustment, string>? VideoAdjustmentChanged;
 
@@ -872,6 +884,13 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
         if (virtualKey == VirtualKeyR)
         {
             RequestReload();
+            return true;
+        }
+
+        if (virtualKey is VirtualKeyLeft or VirtualKeyRight)
+        {
+            var step = (GetKeyState(VirtualKeyShift) & 0x8000) != 0 ? 30.0 : 5.0;
+            SeekRequested?.Invoke(virtualKey == VirtualKeyLeft ? -step : step);
             return true;
         }
 
@@ -2090,6 +2109,16 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
 
             _ = AppendMenuW(menu, MenuFlagString, MenuCmdReload, "再読込 (R)");
 
+            var seekMenu = CreatePopupMenu();
+            if (seekMenu != 0)
+            {
+                _ = AppendMenuW(seekMenu, MenuFlagString, MenuCmdSeekBack30, "30秒戻す (Shift+←)");
+                _ = AppendMenuW(seekMenu, MenuFlagString, MenuCmdSeekBack5, "5秒戻す (←)");
+                _ = AppendMenuW(seekMenu, MenuFlagString, MenuCmdSeekForward5, "5秒進める (→)");
+                _ = AppendMenuW(seekMenu, MenuFlagString, MenuCmdSeekForward30, "30秒進める (Shift+→)");
+                _ = AppendMenuW(menu, MenuFlagPopup, (nuint)seekMenu, "シーク");
+            }
+
             _ = AppendMenuW(menu, MenuFlagSeparator, 0, string.Empty);
 
             var scaleMenu = CreatePopupMenu();
@@ -2170,7 +2199,25 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
             }
 
             _ = AppendMenuW(menu, MenuFlagSeparator, 0, string.Empty);
-            _ = AppendMenuW(menu, MenuFlagString | (_audio.Current.Muted ? MenuFlagChecked : 0), MenuCmdToggleMute, "ミュート (M)");
+
+            var volumeMenu = CreatePopupMenu();
+            if (volumeMenu != 0)
+            {
+                var currentAudio = _audio.Current;
+                _ = AppendMenuW(volumeMenu, MenuFlagString, MenuCmdVolumeUp, "音量を上げる +5% (↑)");
+                _ = AppendMenuW(volumeMenu, MenuFlagString, MenuCmdVolumeDown, "音量を下げる -5% (↓)");
+                _ = AppendMenuW(volumeMenu, MenuFlagSeparator, 0, string.Empty);
+                for (var i = 0; i < VolumePresets.Length; i++)
+                {
+                    var preset = VolumePresets[i];
+                    var flags = MenuFlagString | (!currentAudio.Muted && currentAudio.Volume == preset ? MenuFlagChecked : 0);
+                    _ = AppendMenuW(volumeMenu, flags, MenuCmdVolumePresetBase + (uint)i, $"{preset}%");
+                }
+
+                _ = AppendMenuW(volumeMenu, MenuFlagSeparator, 0, string.Empty);
+                _ = AppendMenuW(volumeMenu, MenuFlagString | (currentAudio.Muted ? MenuFlagChecked : 0), MenuCmdToggleMute, "ミュート (M)");
+                _ = AppendMenuW(menu, MenuFlagPopup, (nuint)volumeMenu, $"音量 ({currentAudio.FormatVolumeLabel()})");
+            }
 
             var contactUrl = _options.BbsSession?.Snapshot.Target.ThreadUrl
                 ?? _options.BbsSession?.Snapshot.Target.BoardUrl
@@ -2203,6 +2250,17 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
                 return;
             }
 
+            if (selected >= MenuCmdVolumePresetBase &&
+                selected < MenuCmdVolumePresetBase + (uint)VolumePresets.Length)
+            {
+                var presetVolume = VolumePresets[(int)(selected - MenuCmdVolumePresetBase)];
+                if (_audio.SetVolume(presetVolume))
+                {
+                    SyncControls();
+                }
+                return;
+            }
+
             switch (selected)
             {
                 case MenuCmdTogglePause:
@@ -2210,6 +2268,30 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
                     break;
                 case MenuCmdReload:
                     RequestReload();
+                    break;
+                case MenuCmdSeekBack30:
+                    SeekRequested?.Invoke(-30.0);
+                    break;
+                case MenuCmdSeekBack5:
+                    SeekRequested?.Invoke(-5.0);
+                    break;
+                case MenuCmdSeekForward5:
+                    SeekRequested?.Invoke(5.0);
+                    break;
+                case MenuCmdSeekForward30:
+                    SeekRequested?.Invoke(30.0);
+                    break;
+                case MenuCmdVolumeUp:
+                    if (_audio.AdjustVolume(LibMpvPlaybackAudioState.VolumeStep))
+                    {
+                        SyncControls();
+                    }
+                    break;
+                case MenuCmdVolumeDown:
+                    if (_audio.AdjustVolume(-LibMpvPlaybackAudioState.VolumeStep))
+                    {
+                        SyncControls();
+                    }
                     break;
                 case MenuCmdToggleAutoResize100:
                     _autoResizeTo100PercentOnStart = !_autoResizeTo100PercentOnStart;
