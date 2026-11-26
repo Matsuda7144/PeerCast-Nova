@@ -171,6 +171,14 @@ internal sealed class GenesisChannelSearchBoxBridge : IAsyncDisposable
         var state = new SearchState(statusBar, edit, yellowPageFilter, tabs);
         state.Attach();
         state.SynchronizeYellowPageFilter();
+        _ = PeerCast.Nova.Windows.Win32AccessibilityAnnotation.SetNameAndDescription(
+            edit,
+            "チャンネル検索",
+            help: "キーワードや -除外ワード でチャンネルを絞り込みます");
+        _ = PeerCast.Nova.Windows.Win32AccessibilityAnnotation.SetNameAndDescription(
+            yellowPageFilter,
+            "Yellow Page 絞り込み",
+            help: "表示する Yellow Page を選択します");
         return new(label, edit, yellowPageFilter, state, modernAppearance);
     }
 
@@ -179,6 +187,8 @@ internal sealed class GenesisChannelSearchBoxBridge : IAsyncDisposable
         if (Interlocked.Exchange(ref _disposed, 1) == 0)
         {
             _state.Detach();
+            _ = PeerCast.Nova.Windows.Win32AccessibilityAnnotation.Clear(_yellowPageFilter);
+            _ = PeerCast.Nova.Windows.Win32AccessibilityAnnotation.Clear(_edit);
             DestroyWindowIfPresent(_yellowPageFilter);
             DestroyWindowIfPresent(_edit);
             DestroyWindowIfPresent(_label);

@@ -41,9 +41,14 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             _relayTreeSummary = Create("STATIC", "", StaticStyleNoPrefix, 0);
             _relayTreeDetails = Create("STATIC", "", StaticStyleNoPrefix, 0);
             _relayTreeChannels = Create("COMBOBOX", "", WindowStyleTabStop | 0x00200000 | 0x0213, RelayTreeChannelsControlId);
+            _ = PeerCast.Nova.Windows.Win32AccessibilityAnnotation.SetName(_relayTreeChannels, "リレーツリー対象チャンネル");
             _relayTreeRefresh = Create("BUTTON", "更新", WindowStyleTabStop | ButtonStyleOwnerDraw, RelayTreeRefreshControlId);
             _relayTreeMask = Create("BUTTON", "IP: 非表示", WindowStyleTabStop | ButtonStyleOwnerDraw, RelayTreeMaskControlId);
             _relayTreeBody = Create("SysTreeView32", "", WindowStyleTabStop | 1 | 2 | 4 | 0x20 | 0x200, RelayTreeBodyControlId);
+            _ = PeerCast.Nova.Windows.Win32AccessibilityAnnotation.SetNameAndDescription(
+                _relayTreeBody,
+                "リレーツリー",
+                help: "矢印キーでノードを選択し、メニューキーまたは右クリックで操作します");
             foreach (var control in RelayTreeVisualControls) ApplyDefaultFont(control);
             _ = SendMessageW(_relayTreeChannels, 0x0153, nuint.MaxValue, Scale(22));
             _ = SendMessageW(_relayTreeChannels, 0x0153, 0, Scale(22));

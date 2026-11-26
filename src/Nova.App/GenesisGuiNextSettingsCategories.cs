@@ -53,6 +53,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             _externalPlayerArgsLabel = CreateWindowExW(0, "STATIC", "起動引数", WindowStyleChild | WindowStyleVisible, 0, 0, 1, 1, _settingsPane, 0, instance, 0);
             _externalPlayerArgs = CreateWindowExW(0, "EDIT", string.Empty, WindowStyleChild | WindowStyleVisible | WindowStyleTabStop | 0x0080,
                 0, 0, 1, 1, _settingsPane, (nint)ExternalPlayerArgsId, instance, 0);
+            _ = Win32AccessibilityAnnotation.SetName(_externalPlayerArgs, "外部プレイヤー起動引数");
+            _ = Win32AccessibilityAnnotation.SetName(_settingsPath, "プレイヤーまたは libmpv のパス");
             _ = SendMessageW(_externalPlayerArgs, 0x00C5, 1024, 0); // EM_SETLIMITTEXT
             _ = SendCueBannerMessage(_externalPlayerArgs, 0x1501, 1, "{url} {title} {contact}（空欄で既定）");
             _settingsReset = Button("未設定に戻す", SettingsResetId);
@@ -245,6 +247,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 page.Refresh();
                 if (PlaybackCategory)
                 {
+                    _ = Win32AccessibilityAnnotation.SetName(_settingsPath, "プレイヤーまたは libmpv のパス");
                     var internalSelected = page.PlayerMode == GenesisPlaybackPlayerMode.Internal;
                     var libMpvStatus = internalSelected
                         ? LibMpvRuntimeProvisioner.DescribeAvailability(page.Draft, page.Saved)
@@ -271,6 +274,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 }
                 else
                 {
+                    _ = Win32AccessibilityAnnotation.SetName(_settingsPath, "録画保存先フォルダーのパス");
                     _ = SetWindowTextW(_generalTitle, "録画・保存先設定");
                     _ = SetWindowTextW(_generalNotice, GenesisRecordingOutputDirectorySettings.NextStartNotice +
                         "\r\n「既定値に戻す」は即時保存します。フォルダーや録画ファイルは作成・移動しません。");
