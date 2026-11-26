@@ -5,24 +5,36 @@ namespace PeerCast.Nova.App;
 internal sealed class PcrPlayerExternalPlayerLauncher : IDailyPlaybackPlayerLauncher
 {
     internal const string ExecutablePathEnvironmentVariable = "NOVA_PCRPLAYER_EXE";
+    internal const string ArgumentsEnvironmentVariable = "NOVA_PCRPLAYER_ARGS";
     internal const string ExecutableFileName = "PCRPlayer64.exe";
 
     private readonly Func<string?> _explicitPathProvider;
+    private readonly Func<string?> _customArgumentsProvider;
 
     public PcrPlayerExternalPlayerLauncher(string? explicitPath)
-        : this(() => explicitPath)
+        : this(() => explicitPath, static () => null)
     {
     }
 
-    private PcrPlayerExternalPlayerLauncher(Func<string?> explicitPathProvider)
+    internal PcrPlayerExternalPlayerLauncher(string? explicitPath, Func<string?> customArgumentsProvider)
+        : this(() => explicitPath, customArgumentsProvider)
+    {
+    }
+
+    private PcrPlayerExternalPlayerLauncher(
+        Func<string?> explicitPathProvider,
+        Func<string?> customArgumentsProvider)
     {
         ArgumentNullException.ThrowIfNull(explicitPathProvider);
+        ArgumentNullException.ThrowIfNull(customArgumentsProvider);
         _explicitPathProvider = explicitPathProvider;
+        _customArgumentsProvider = customArgumentsProvider;
     }
 
     internal static PcrPlayerExternalPlayerLauncher CreateWithPathProvider(
-        Func<string?> explicitPathProvider) =>
-        new(explicitPathProvider);
+        Func<string?> explicitPathProvider,
+        Func<string?>? customArgumentsProvider = null) =>
+        new(explicitPathProvider, customArgumentsProvider ?? (static () => null));
 
     internal static string ResolveExecutablePath(
         string? explicitPath,
@@ -50,7 +62,8 @@ internal sealed class PcrPlayerExternalPlayerLauncher : IDailyPlaybackPlayerLaun
         string executablePath,
         string streamUrl,
         string? channelName = null,
-        string? contactUrl = null)
+        string? contactUrl = null,
+        string? customArguments = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(executablePath);
         ArgumentException.ThrowIfNullOrWhiteSpace(streamUrl);
@@ -70,15 +83,140 @@ internal sealed class PcrPlayerExternalPlayerLauncher : IDailyPlaybackPlayerLaun
             FileName = executablePath,
             UseShellExecute = false,
         };
+        var sanitizedChannelName = new string((channelName ?? string.Empty).Take(512).Where(c => !char.IsControl(c)).ToArray());
+        var normalizedContactUrl = GenesisContactUrl.Normalize(contactUrl) ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(customArguments))
+        {
+            var tokens = TokenizeArguments(customArguments);
+            var urlIncluded = false;
+            foreach (var token in tokens)
+            {
+                var expanded = ExpandArgumentToken(token, streamUrl, sanitizedChannelName, normalizedContactUrl, out var tokenIncludedUrl);
+                urlIncluded |= tokenIncludedUrl;
+                startInfo.ArgumentList.Add(expanded);
+            }
+
+            if (!urlIncluded)
+            {
+                startInfo.ArgumentList.Add(streamUrl);
+            }
+
+            return startInfo;
+        }
+
         startInfo.ArgumentList.Add(streamUrl);
         if (string.Equals(Path.GetFileName(executablePath), ExecutableFileName, StringComparison.OrdinalIgnoreCase) &&
             (channelName is not null || contactUrl is not null))
         {
-            startInfo.ArgumentList.Add(new string((channelName ?? string.Empty).Take(512).Where(c => !char.IsControl(c)).ToArray()));
-            startInfo.ArgumentList.Add(GenesisContactUrl.Normalize(contactUrl) ?? string.Empty);
+            startInfo.ArgumentList.Add(sanitizedChannelName);
+            startInfo.ArgumentList.Add(normalizedContactUrl);
         }
         return startInfo;
     }
+
+    private static List<string> TokenizeArguments(string template)
+    {
+        var tokens = new List<string>();
+        var current = new System.Text.StringBuilder();
+        var inQuotes = false;
+        var hasToken = false;
+        for (var i = 0; i < template.Length; i++)
+        {
+            var ch = template[i];
+            if (char.IsControl(ch))
+            {
+                continue;
+            }
+
+            if (ch == '\\' && i + 1 < template.Length && template[i + 1] == '"')
+            {
+                current.Append('"');
+                hasToken = true;
+                i++;
+                continue;
+            }
+
+            if (ch == '"')
+            {
+                inQuotes = !inQuotes;
+                hasToken = true;
+                continue;
+            }
+
+            if (!inQuotes && char.IsWhiteSpace(ch))
+            {
+                if (hasToken)
+                {
+                    tokens.Add(current.ToString());
+                    current.Clear();
+                    hasToken = false;
+                }
+                continue;
+            }
+
+            current.Append(ch);
+            hasToken = true;
+        }
+
+        if (hasToken)
+        {
+            tokens.Add(current.ToString());
+        }
+
+        return tokens;
+    }
+
+    private static string ExpandArgumentToken(
+        string token,
+        string streamUrl,
+        string channelName,
+        string contactUrl,
+        out bool urlIncluded)
+    {
+        urlIncluded = false;
+        if (!token.Contains('{', StringComparison.Ordinal))
+        {
+            return token;
+        }
+
+        var builder = new System.Text.StringBuilder(token.Length + 32);
+        var index = 0;
+        while (index < token.Length)
+        {
+            if (MatchPlaceholder(token, index, "{url}"))
+            {
+                builder.Append(streamUrl);
+                urlIncluded = true;
+                index += 5;
+            }
+            else if (MatchPlaceholder(token, index, "{title}"))
+            {
+                builder.Append(channelName);
+                index += 7;
+            }
+            else if (MatchPlaceholder(token, index, "{channel}"))
+            {
+                builder.Append(channelName);
+                index += 9;
+            }
+            else if (MatchPlaceholder(token, index, "{contact}"))
+            {
+                builder.Append(contactUrl);
+                index += 9;
+            }
+            else
+            {
+                builder.Append(token[index]);
+                index++;
+            }
+        }
+
+        return builder.ToString();
+    }
+
+    private static bool MatchPlaceholder(string source, int index, string placeholder) =>
+        index + placeholder.Length <= source.Length &&
+        string.Compare(source, index, placeholder, 0, placeholder.Length, StringComparison.OrdinalIgnoreCase) == 0;
 
     private static bool IsPlayerPath(string path)
     {
@@ -97,10 +235,16 @@ internal sealed class PcrPlayerExternalPlayerLauncher : IDailyPlaybackPlayerLaun
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        var customArguments = _customArgumentsProvider();
+        if (string.IsNullOrWhiteSpace(customArguments))
+        {
+            customArguments = Environment.GetEnvironmentVariable(ArgumentsEnvironmentVariable);
+        }
+
         var process = new Process
         {
             StartInfo = CreateStartInfo(
-                ResolveCurrentExecutablePath(), source.PlaylistUrl, source.ChannelName, source.ContactUrl),
+                ResolveCurrentExecutablePath(), source.PlaylistUrl, source.ChannelName, source.ContactUrl, customArguments),
         };
         try
         {

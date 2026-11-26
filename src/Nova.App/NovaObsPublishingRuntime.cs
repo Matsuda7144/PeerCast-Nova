@@ -1,6 +1,7 @@
 using PeerCast.Nova.Core.Channels;
 using PeerCast.Nova.Network.Pcp;
 using PeerCast.Nova.Network.Policies;
+using PeerCast.Nova.Network.PortMapping;
 using PeerCast.Nova.Network.Publishing;
 
 namespace PeerCast.Nova.App;
@@ -65,9 +66,11 @@ internal sealed class SystemNovaObsPublishingRuntimeFactory : INovaObsPublishing
     private readonly GenesisGuiNextApplicationState? _state;
     private readonly IObsPublishLanInterfaces _interfaces;
     private readonly bool _allowLan;
+    private readonly Func<NatPortMappingManager?>? _portMappingProvider;
     internal SystemNovaObsPublishingRuntimeFactory(GenesisGuiNextApplicationState? state = null,
-        IObsPublishLanInterfaces? interfaces = null, bool allowLan = true)
-    { _state = state; _interfaces = interfaces ?? SystemObsPublishLanInterfaces.Instance; _allowLan = allowLan; }
+        IObsPublishLanInterfaces? interfaces = null, bool allowLan = true,
+        Func<NatPortMappingManager?>? portMappingProvider = null)
+    { _state = state; _interfaces = interfaces ?? SystemObsPublishLanInterfaces.Instance; _allowLan = allowLan; _portMappingProvider = portMappingProvider; }
 
     internal GenesisDownstreamRelayOwnerRegistry.Owner Register(ChannelId channel, ChannelSessionId session, PcpRelayFanout fanout) =>
         Register(channel, session, fanout, null, publicRelay: true);
@@ -92,7 +95,7 @@ internal sealed class SystemNovaObsPublishingRuntimeFactory : INovaObsPublishing
         NovaObsPublishingRuntime.ForOwner(new ObsPublishChannelHost(options, interfaces: _interfaces,
             registerRelay: (channel, session, fanout) => Register(channel, session, fanout, options.BitrateKbps,
                 options.Lan.Enabled || options.Wan.Enabled), announceOwner: _state?.AnnounceOwner,
-            useLoopbackAdmission: _state is not null));
+            useLoopbackAdmission: _state is not null, portMapping: _portMappingProvider?.Invoke()));
 
     public INovaObsPublishingRuntime Create() => Create(new ObsPublishChannelOptions());
     public INovaObsPublishingRuntime Create(PublishingSettingsSnapshot settings) => Create(settings.Values.ToOptions());

@@ -1,7 +1,9 @@
 using System.Net;
+using System.Net.Sockets;
 using PeerCast.Nova.Core.Channels;
 using PeerCast.Nova.Core.Recording;
 using PeerCast.Nova.Network.Pcp;
+using PeerCast.Nova.Network.PortMapping;
 using PeerCast.Nova.Network.Rtmp;
 
 using PeerCast.Nova.Network.Transport;
@@ -44,6 +46,8 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
     private readonly IObsPublishInterfaceChanges _interfaceChanges;
     private ObsPublishWanNetworkLifetime? _wanNetwork;
     private Task<bool>? _wanNetworkCleanup;
+    private readonly NatPortMappingManager? _portMapping;
+    private IDisposable? _wanPortMappingLease;
     private ObsPublishLanFailure _lanFailure;
     private readonly PcpRelayFanoutRecordingStreamSourceLeaseFactory _recording;
     private readonly RecordingStreamSourceLeaseRegistry _registry;
@@ -77,9 +81,10 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
         IObsPublishLanInterfaces? interfaces = null,
         Func<ChannelId, ChannelSessionId, PcpRelayFanout, IPcpDownstreamRelayRegistration>? registerRelay = null,
         IObsPublishInterfaceChanges? interfaceChanges = null, PublishingAnnounceOwner? announceOwner = null,
-        bool useLoopbackAdmission = false)
+        bool useLoopbackAdmission = false,
+        NatPortMappingManager? portMapping = null)
         : this(options, channelId, httpHost, recordingRegistry, null, null, interfaces, registerRelay, interfaceChanges,
-            announceOwner: announceOwner, useLoopbackAdmission: useLoopbackAdmission)
+            announceOwner: announceOwner, useLoopbackAdmission: useLoopbackAdmission, portMapping: portMapping)
     {
     }
 
@@ -93,7 +98,8 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
         IObsPublishInterfaceChanges? interfaceChanges = null,
         Func<IPEndPoint, IPEndPoint>? bindForTests = null,
         PcpWanIngressOptions? wanIngressForTests = null, PublishingAnnounceOwner? announceOwner = null, TimeProvider? announceTime = null,
-        bool useLoopbackAdmission = false)
+        bool useLoopbackAdmission = false,
+        NatPortMappingManager? portMapping = null)
     {
         _announceTime = announceTime ?? TimeProvider.System;
         _announceOwner = announceOwner;
@@ -102,6 +108,7 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
         _registerRelay = registerRelay;
         _useLoopbackAdmission = useLoopbackAdmission;
         var supplied = options ?? new();
+        _portMapping = supplied.Wan.Enabled ? portMapping : null;
         ArgumentNullException.ThrowIfNull(supplied.Ingest);
         ArgumentNullException.ThrowIfNull(supplied.Http);
         ArgumentNullException.ThrowIfNull(supplied.Fanout);
@@ -300,6 +307,23 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
             relayTask = _relay.RunAsync(lifetime.Token);
             _relayRunTask = relayTask;
             if (_wanBinding is not null) _wanNetwork = new(_wanBinding, _interfaces, _interfaceChanges);
+            if (_portMapping is not null)
+            {
+                try
+                {
+                    var boundEndPoint = RelayEndPoint;
+                    if (boundEndPoint.AddressFamily == AddressFamily.InterNetwork &&
+                        !IPAddress.IsLoopback(boundEndPoint.Address) &&
+                        boundEndPoint.Port > 0)
+                    {
+                        _wanPortMappingLease = _portMapping.AcquirePublicTcpListener(boundEndPoint);
+                    }
+                }
+                catch
+                {
+                    /* 自動ポート開放の失敗で配信自体は停止しない */
+                }
+            }
             _ingest.Start(lifetime.Token);
             started = true;
             if (_options.Announce.Enabled && _announceOwner is not null && _options.Wan.Enabled && ReadWanStatus(true)?.ListenerReady == true &&
@@ -383,6 +407,8 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
                 clean &= await _announce.StopAsync(reason == ObsPublishChannelEndReason.PublisherStopped ? PcpAnnounceStopReason.ObsNormalEos : PcpAnnounceStopReason.Finish).ConfigureAwait(false);
             try { _relayRegistration?.Dispose(); } // Retire without freeing live reservations.
             catch { clean = false; }
+            try { Interlocked.Exchange(ref _wanPortMappingLease, null)?.Dispose(); }
+            catch { /* best-effort release */ }
             await ObserveTerminationAsync(ObsPublishTerminationPoint.RecordingAdmissionClosed).ConfigureAwait(false);
             if (local is not null)
             {

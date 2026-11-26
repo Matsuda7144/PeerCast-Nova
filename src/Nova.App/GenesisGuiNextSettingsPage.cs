@@ -18,8 +18,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private GenesisGeneralSettingsPage? _generalSettings;
         private bool SettingsPageOpen => _settingsCategory is not null;
         private nint[] SettingsButtons => _settingsPane == 0 ? [] : [_generalCategory, _legacySettings, _classicChoice, _modernChoice, _generalSave, _generalCancel, _generalBack, .. AdditionalSettingsButtons];
-        private nint[] SettingsTexts => _settingsPane == 0 ? [] : [_settingsTitle, _generalTitle, _generalRuntime, _generalConfigured, _generalNotice, _generalStatus];
-        private nint[] SettingsVisualControls => _settingsPane == 0 ? [] : [.. SettingsButtons, .. SettingsTexts, _settingsPath, .. SettingsChecks, .. NetworkSettingsInputs, .. NetworkSettingsTexts, _ypList];
+        private nint[] SettingsTexts => _settingsPane == 0 ? [] : [_settingsTitle, _generalTitle, _generalRuntime, _generalConfigured, _generalNotice, _generalStatus, _externalPlayerArgsLabel];
+        private nint[] SettingsVisualControls => _settingsPane == 0 ? [] : [.. SettingsButtons, .. SettingsTexts, _settingsPath, _externalPlayerArgs, .. SettingsChecks, .. NetworkSettingsInputs, .. NetworkSettingsTexts, _ypList];
 
         internal void CreateIntegratedSettings(string className, nint instance)
         {
@@ -134,7 +134,13 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             {
                 if (id == GeneralSaveId && control == _generalSave)
                 {
-                    if (ReadSettingsPath(out var path)) { if (path != _pathSettings!.Draft) _pathSettings.Edit(path); _ = _pathSettings.Save(); }
+                    if (ReadSettingsPath(out var path))
+                    {
+                        if (path != _pathSettings!.Draft) _pathSettings.Edit(path);
+                        if (PlaybackCategory && _pathSettings.CanEditExternalPlayerArguments && ReadExternalPlayerArguments(out var args))
+                            _pathSettings.EditExternalPlayerArguments(args);
+                        _ = _pathSettings.Save();
+                    }
                 }
                 else if (id == GeneralCancelId && control == _generalCancel) _pathSettings!.Cancel();
                 else return false;
@@ -200,9 +206,16 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             PaintNetworkSettingsFrames(dc);
             if (PathCategory)
             {
-                var input = new GenesisGuiNextSettingsLayout(LogicalWidth(client.Right), LogicalWidth(client.Bottom)).PathInput(PlaybackCategory);
+                var layout = new GenesisGuiNextSettingsLayout(LogicalWidth(client.Right), LogicalWidth(client.Bottom));
+                var input = layout.PathInput(PlaybackCategory);
                 using var focus = new VisualPen(dc, Scale(1), GetFocus() == _settingsPath ? GenesisGuiNextDesign.Accent : GenesisGuiNextDesign.Border);
                 _ = GdiRectangle(dc, Scale(input.Left) - 1, Scale(input.Top) - 1, Scale(input.Right) + 1, Scale(input.Bottom) + 1);
+                if (PlaybackCategory && _pathSettings?.PlayerMode == GenesisPlaybackPlayerMode.External)
+                {
+                    var argsInput = layout.ExternalPlayerArgsInput;
+                    using var argsFocus = new VisualPen(dc, Scale(1), GetFocus() == _externalPlayerArgs ? GenesisGuiNextDesign.Accent : GenesisGuiNextDesign.Border);
+                    _ = GdiRectangle(dc, Scale(argsInput.Left) - 1, Scale(argsInput.Top) - 1, Scale(argsInput.Right) + 1, Scale(argsInput.Bottom) + 1);
+                }
             }
             return true;
         }

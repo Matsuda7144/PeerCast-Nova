@@ -301,6 +301,22 @@ public sealed class GenesisPublishingBasicEditorTests
         Assert.Equal(PublishingSettingsSnapshot.Default, settings.Saved);
     }
 
+    [Fact]
+    public async Task MultilineDescriptionAndCommentAreNormalizedToSpacesAndSaved()
+    {
+        var store = new Store();
+        await using var settings = new PublishingSettingsController(store);
+        await settings.LoadAsync();
+        using var page = new GenesisPublishingBasicEditor(settings);
+        Assert.True(page.Begin());
+        page.Edit("テストチャンネル", "雑談", "概要1行目\r\n概要2行目", "コメント1行目\nコメント2行目\u2028末尾", "", "1500");
+        await page.SaveAsync();
+
+        Assert.True(page.Result.Saved);
+        Assert.Equal("概要1行目 概要2行目", settings.Saved.Values.Description);
+        Assert.Equal("コメント1行目 コメント2行目 末尾", settings.Saved.Values.Comment);
+    }
+
     [Theory]
     [InlineData(96u)]
     [InlineData(144u)]

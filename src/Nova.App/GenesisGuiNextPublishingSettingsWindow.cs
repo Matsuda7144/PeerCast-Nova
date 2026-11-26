@@ -282,7 +282,13 @@ internal sealed class GenesisGuiNextPublishingSettingsWindow : IGenesisPublishin
                 var input = _editor.Input;
                 var selected = (int)SendMessageW(GetDlgItem(window, 1007), 0x0147, 0, 0);
                 var nic = selected >= 0 && selected < _lanChoices.Count ? _lanChoices[selected] : null;
-                _editor.Edit(new(GetText(1000), GetText(1001), GetText(1002), GetText(1003), GetText(1004), GetText(1005))
+                _editor.Edit(new(
+                    GetText(1000),
+                    GetText(1001),
+                    GenesisPublishingBasicEditor.NormalizeSingleLineMetadataText(GetText(1002)),
+                    GenesisPublishingBasicEditor.NormalizeSingleLineMetadataText(GetText(1003)),
+                    GetText(1004),
+                    GetText(1005))
                 {
                     AnnounceEnabled = SendMessageW(GetDlgItem(window, 1011), 0x0147, 0, 0) == 1,
                     AnnounceName = GetText(1012),
