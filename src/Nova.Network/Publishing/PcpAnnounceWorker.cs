@@ -19,6 +19,7 @@ internal sealed class PcpAnnounceWorker : IAsyncDisposable
     private readonly IPcpAnnounceConnector _connector;
     private readonly PcpAnnounceOptions _options;
     private readonly TimeProvider _time;
+    private readonly Action<PcpPushRelayRequest>? _onPushRelayRequest;
     private readonly CancellationTokenSource _ioStop = new();
     private readonly TaskCompletionSource _stop = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly Channel<bool> _updates = Channel.CreateBounded<bool>(new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropOldest });
@@ -33,19 +34,27 @@ internal sealed class PcpAnnounceWorker : IAsyncDisposable
     private bool _ioDisposed;
     private PcpAnnounceFailure _failure;
     private CancellationTokenRegistration _externalStop;
+    private long _pushRequestsAccepted;
+    private long _pushWindowTimestamp;
+    private int _pushWindowCount;
+    private TimeSpan _updateInterval = PcpAnnounceOptions.UpdateInterval;
 
     internal PcpAnnounceWorker(PcpAnnounceIdentity identity, PcpAnnounceEndpoint endpoint,
         PcpAnnounceDocument document, PcpAnnounceAccess access, IPcpAnnounceConnector connector,
-        PcpAnnounceOptions? options = null, TimeProvider? timeProvider = null, PublishingAnnounceCapability? capability = null, Func<PublishingAnnounceRuntimeSnapshot>? runtime = null)
+        PcpAnnounceOptions? options = null, TimeProvider? timeProvider = null, PublishingAnnounceCapability? capability = null, Func<PublishingAnnounceRuntimeSnapshot>? runtime = null,
+        Action<PcpPushRelayRequest>? onPushRelayRequest = null)
     {
         _runtime = runtime;
         _capability = capability;
+        _onPushRelayRequest = onPushRelayRequest;
         if (capability is not null && capability.Identity != identity) throw new ArgumentException("Capability identity mismatch.", nameof(capability));
         _identity = identity; _endpoint = endpoint; _initial = document; _latest = document; _access = access; _connector = connector;
         _options = options ?? new(); _options.Validate(); _time = timeProvider ?? TimeProvider.System;
     }
     internal bool Announced => Volatile.Read(ref _announced);
     internal bool StopNoticeSent => Volatile.Read(ref _stopNotice);
+    internal long PushRequestsAccepted => Volatile.Read(ref _pushRequestsAccepted);
+    internal TimeSpan CurrentUpdateInterval { get { lock (_gate) return _updateInterval; } }
     internal PcpAnnounceIdentity Identity => _identity;
     internal PcpAnnounceState State { get { lock (_gate) return _state; } }
     internal PcpOlehInfo? TrackerObservation { get; private set; }
@@ -204,6 +213,7 @@ internal sealed class PcpAnnounceWorker : IAsyncDisposable
         var changed = Track(_updates.Reader.ReadAsync(_ioStop.Token).AsTask());
         var received = Track(ReadControlAsync());
         var receiveWindow = _time.GetTimestamp();
+        _pushWindowTimestamp = receiveWindow;
         var count = 0;
         while (!_stop.Task.IsCompleted)
         {
@@ -213,15 +223,56 @@ internal sealed class PcpAnnounceWorker : IAsyncDisposable
             {
                 var atom = await received.ConfigureAwait(false);
                 ThrowIfQuit(atom);
+                if (_time.GetElapsedTime(receiveWindow) >= TimeSpan.FromSeconds(1)) { receiveWindow = _time.GetTimestamp(); count = 0; }
+                if (++count > 32) throw new InvalidDataException("Tracker control rate exceeded.");
                 if (_capability is not null && atom.Name == PcpKnownAtomNames.Oleh)
                 {
                     var current = PcpAnnounceCodec.ParseOleh(atom);
                     if (TrackerObservation?.SessionId != current.SessionId || !_capability.Evaluate(current, _time.GetUtcNow()).CanAnnounce(_capability))
                         throw new InvalidDataException("Tracker observation changed.");
                 }
-                if (_time.GetElapsedTime(receiveWindow) >= TimeSpan.FromSeconds(1)) { receiveWindow = _time.GetTimestamp(); count = 0; }
-                if (++count > 32) throw new InvalidDataException("Tracker control rate exceeded.");
-                // Bounded root/control atoms are not commands to connect elsewhere or change public capability.
+                else if (atom.Name == PcpKnownAtomNames.Root &&
+                    PcpAnnounceCodec.TryParseRootControl(atom, out var rootInfo) &&
+                    rootInfo is not null)
+                {
+                    if (rootInfo.UpdateInterval is { } interval)
+                    {
+                        lock (_gate) _updateInterval = interval;
+                        timer.Period = interval;
+                    }
+
+                    if (rootInfo.RequestImmediateUpdate && !_stop.Task.IsCompleted)
+                    {
+                        await PublishRuntimeAsync(periodic: true).ConfigureAwait(false);
+                    }
+                }
+                else if ((atom.Name == PcpKnownAtomNames.Push || atom.Name == PcpKnownAtomNames.Cout) &&
+                    PcpAnnounceCodec.TryParsePushRequest(atom, out var pushRequest) &&
+                    pushRequest is not null)
+                {
+                    if (pushRequest.ChannelId == _identity.ChannelId &&
+                        _access.AllowsPushTarget(pushRequest.Address))
+                    {
+                        if (_time.GetElapsedTime(_pushWindowTimestamp) >= TimeSpan.FromSeconds(10))
+                        {
+                            _pushWindowTimestamp = _time.GetTimestamp();
+                            _pushWindowCount = 0;
+                        }
+
+                        if (++_pushWindowCount <= 8)
+                        {
+                            Interlocked.Increment(ref _pushRequestsAccepted);
+                            try
+                            {
+                                _onPushRelayRequest?.Invoke(pushRequest);
+                            }
+                            catch
+                            {
+                                // Push 処理側の例外で Tracker との Announce 接続自体は切断しない。
+                            }
+                        }
+                    }
+                }
                 received = Track(ReadControlAsync());
                 await Task.Yield();
             }

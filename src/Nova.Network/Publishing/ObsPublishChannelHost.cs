@@ -5,8 +5,8 @@ using PeerCast.Nova.Core.Recording;
 using PeerCast.Nova.Network.Pcp;
 using PeerCast.Nova.Network.PortMapping;
 using PeerCast.Nova.Network.Rtmp;
-
 using PeerCast.Nova.Network.Transport;
+using PeerCast.Nova.Protocol.Pcp;
 
 namespace PeerCast.Nova.Network.Publishing;
 
@@ -22,6 +22,7 @@ namespace PeerCast.Nova.Network.Publishing;
 public sealed partial class ObsPublishChannelHost : IAsyncDisposable
 {
     private readonly PublishingAnnounceOwner? _announceOwner;
+    private readonly Func<IPEndPoint, CancellationToken, Task<TcpTransportConnection>>? _pushConnectForTests;
     private readonly TimeProvider _announceTime;
     private long? _announceStart, _announceStopped;
     private CancellationToken _announceCallerCancellation;
@@ -99,8 +100,10 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
         Func<IPEndPoint, IPEndPoint>? bindForTests = null,
         PcpWanIngressOptions? wanIngressForTests = null, PublishingAnnounceOwner? announceOwner = null, TimeProvider? announceTime = null,
         bool useLoopbackAdmission = false,
-        NatPortMappingManager? portMapping = null)
+        NatPortMappingManager? portMapping = null,
+        Func<IPEndPoint, CancellationToken, Task<TcpTransportConnection>>? pushConnectForTests = null)
     {
+        _pushConnectForTests = pushConnectForTests;
         _announceTime = announceTime ?? TimeProvider.System;
         _announceOwner = announceOwner;
         _interfaceChanges = interfaceChanges ?? SystemObsPublishInterfaceChanges.Instance;
@@ -334,7 +337,8 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
                     _announce = _announceOwner.Start(_options.Announce, ChannelId, SessionId, InitialMetadata, RelayEndPoint,
                     new IPEndPoint(IPAddress.Parse(_options.Wan.AdvertisedAddress), _options.Wan.AdvertisedPort),
                     () => !lifetime.IsCancellationRequested && CanAcceptWan && ReadWanStatus(true)?.ListenerReady == true &&
-                        (_relayRegistration as IPcpDownstreamRelayCapacity)?.IsCurrent == true, ReadAnnounceRuntime);
+                        (_relayRegistration as IPcpDownstreamRelayCapacity)?.IsCurrent == true, ReadAnnounceRuntime,
+                    onPushRelayRequest: request => HandlePushRelayRequest(request, lifetime.Token));
                 }
                 catch { _announceFailed = true; /* Announce failure does not stop ingest or relay. */ }
             }
@@ -637,6 +641,19 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
     }
     private bool CanAcceptWan => !Volatile.Read(ref _ending) && Volatile.Read(ref _disposeTask) is null &&
         !_localFinishRequested.Task.IsCompleted && !_stop.IsCancellationRequested && _wanNetwork?.Invalidated.IsCompleted != true;
+
+    private void HandlePushRelayRequest(PcpPushRelayRequest request, CancellationToken cancellationToken)
+    {
+        if (!CanAcceptWan || cancellationToken.IsCancellationRequested || request.ChannelId != ChannelId.Value)
+        {
+            return;
+        }
+
+        _ = _relay.TryStartPushRelaySessionAsync(
+            new IPEndPoint(request.Address, request.Port),
+            _pushConnectForTests,
+            cancellationToken);
+    }
 
     private Task<bool> StopWanNetworkAsync()
     {

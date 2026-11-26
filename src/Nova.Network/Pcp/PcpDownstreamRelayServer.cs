@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using PeerCast.Nova.Core.Channels;
 using PeerCast.Nova.Network.PortMapping;
 using PeerCast.Nova.Network.Transport;
+using PeerCast.Nova.Protocol.Pcp;
 
 namespace PeerCast.Nova.Network.Pcp;
 
@@ -42,6 +43,13 @@ public sealed partial class PcpDownstreamRelayServer : IAsyncDisposable
     private long _admissionCleanupFailedCount;
     private long _admissionCloseFailedCount;
     private readonly HashSet<SessionEntry> _sessions = [];
+    private const int MaxConcurrentPushSessions = 4;
+    private readonly HashSet<IPEndPoint> _activePushTargets = [];
+    private readonly HashSet<Task> _pendingPushAttempts = [];
+    private CancellationToken _operationToken;
+    private long _pushRelayRequestedCount;
+    private long _pushRelayAcceptedCount;
+    private long _pushRelayFailedCount;
 
     private Task<PcpDownstreamRelayServerResult>? _runTask;
     private IPEndPoint? _boundEndPoint;
@@ -511,6 +519,7 @@ public sealed partial class PcpDownstreamRelayServer : IAsyncDisposable
                 cancellationToken,
                 _stopSource.Token);
         var operationToken = operationSource.Token;
+        _operationToken = operationToken;
         using var accepts = CancellationTokenSource.CreateLinkedTokenSource(operationToken, _acceptStop.Token);
         var endReason = PcpDownstreamRelayServerEndReason.Stopped;
 
@@ -599,6 +608,132 @@ public sealed partial class PcpDownstreamRelayServer : IAsyncDisposable
         return new PcpDownstreamRelayServerResult(endReason, snapshot);
     }
 
+    internal Task<bool> TryStartPushRelaySessionAsync(
+        IPEndPoint targetEndPoint,
+        Func<IPEndPoint, CancellationToken, Task<TcpTransportConnection>>? connectAsync = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(targetEndPoint);
+
+        lock (_gate)
+        {
+            if (_state != PcpDownstreamRelayServerState.Running ||
+                _childAdmission.IsClosed ||
+                _stopSource.IsCancellationRequested ||
+                _callerCancellation.IsCancellationRequested ||
+                cancellationToken.IsCancellationRequested ||
+                _activePushTargets.Count >= MaxConcurrentPushSessions ||
+                _activeConnectionCount + _pendingPushAttempts.Count >= _listener.MaxConcurrentConnections ||
+                !_activePushTargets.Add(targetEndPoint))
+            {
+                return Task.FromResult(false);
+            }
+
+            _pushRelayRequestedCount = checked(_pushRelayRequestedCount + 1);
+            var attempt = ExecutePushAttemptAsync(targetEndPoint, connectAsync, cancellationToken);
+            _pendingPushAttempts.Add(attempt);
+            _ = attempt.ContinueWith(completed =>
+            {
+                lock (_gate)
+                {
+                    _pendingPushAttempts.Remove(completed);
+                }
+            }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+            return attempt;
+        }
+    }
+
+    private async Task<bool> ExecutePushAttemptAsync(
+        IPEndPoint targetEndPoint,
+        Func<IPEndPoint, CancellationToken, Task<TcpTransportConnection>>? connectAsync,
+        CancellationToken cancellationToken)
+    {
+        await Task.Yield();
+        TcpTransportConnection? connection = null;
+        var sessionStarted = false;
+        try
+        {
+            using var timeoutSource = new CancellationTokenSource(_childOptions.HandshakeTimeout);
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(
+                _operationToken,
+                _stopSource.Token,
+                _callerCancellation,
+                cancellationToken,
+                timeoutSource.Token);
+
+            connection = connectAsync is not null
+                ? await connectAsync(targetEndPoint, linked.Token).ConfigureAwait(false)
+                : await new TcpTransportConnector().ConnectAsync(targetEndPoint, linked.Token).ConfigureAwait(false);
+
+            var giv = PcpAnnounceCodec.EncodeGivRequest(_channelId.Value);
+            await connection.WriteAsync(giv, linked.Token).ConfigureAwait(false);
+
+            if (!StartPushSession(connection, targetEndPoint, _operationToken))
+            {
+                return false;
+            }
+
+            sessionStarted = true;
+            lock (_gate)
+            {
+                _pushRelayAcceptedCount = checked(_pushRelayAcceptedCount + 1);
+            }
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+        finally
+        {
+            if (!sessionStarted)
+            {
+                if (connection is not null)
+                {
+                    try
+                    {
+                        await connection.DisposeAsync().ConfigureAwait(false);
+                    }
+                    catch
+                    {
+                        // 接続破棄失敗はシャットダウン時の全体クリーンアップに任せる。
+                    }
+                }
+
+                lock (_gate)
+                {
+                    _activePushTargets.Remove(targetEndPoint);
+                    _pushRelayFailedCount = checked(_pushRelayFailedCount + 1);
+                }
+            }
+        }
+    }
+
+    private bool StartPushSession(
+        TcpTransportConnection connection,
+        IPEndPoint pushTarget,
+        CancellationToken cancellationToken)
+    {
+        var entry = new SessionEntry(connection) { PushTarget = pushTarget };
+        lock (_gate)
+        {
+            if (_state != PcpDownstreamRelayServerState.Running ||
+                _childAdmission.IsClosed ||
+                _stopSource.IsCancellationRequested ||
+                cancellationToken.IsCancellationRequested ||
+                _activeConnectionCount >= _listener.MaxConcurrentConnections)
+            {
+                return false;
+            }
+
+            _sessions.Add(entry);
+            _acceptedConnectionCount = checked(_acceptedConnectionCount + 1);
+            _activeConnectionCount = checked(_activeConnectionCount + 1);
+            entry.Task = Task.Run(() => RunSessionAsync(entry, cancellationToken), CancellationToken.None);
+            return true;
+        }
+    }
+
     private bool StartSession(
         TcpTransportConnection connection,
         CancellationToken cancellationToken)
@@ -655,7 +790,8 @@ public sealed partial class PcpDownstreamRelayServer : IAsyncDisposable
                 initialMetadata: ResolveInitialMetadata(),
                 wanIngress: entry.WanLease,
                 peers: Peers,
-                traffic: TrafficScope);
+                traffic: TrafficScope,
+                isPushSession: entry.PushTarget is not null);
             lock (_gate) entry.Session = session;
             result = await session.RunAsync(
                 cancellationToken).ConfigureAwait(false);
@@ -695,6 +831,7 @@ public sealed partial class PcpDownstreamRelayServer : IAsyncDisposable
         {
             tasks = _sessions
                 .Select(entry => entry.Task ?? Task.CompletedTask)
+                .Concat(_pendingPushAttempts)
                 .ToArray();
         }
 
@@ -818,6 +955,9 @@ public sealed partial class PcpDownstreamRelayServer : IAsyncDisposable
             WanIngress = _wanIngress?.Snapshot,
             Traffic = TrafficScope.Snapshot,
             PacingLimitedCount = _pacingLimitedCount,
+            PushRelayRequestedCount = _pushRelayRequestedCount,
+            PushRelayAcceptedCount = _pushRelayAcceptedCount,
+            PushRelayFailedCount = _pushRelayFailedCount,
         };
     }
 
@@ -849,6 +989,7 @@ public sealed partial class PcpDownstreamRelayServer : IAsyncDisposable
         public PcpDownstreamChildSession? Session;
         public Task? Task { get; set; }
         public PcpWanIngressPolicy.Lease? WanLease { get; init; }
+        public IPEndPoint? PushTarget { get; init; }
         public bool Shared { get; init; }
     }
 }

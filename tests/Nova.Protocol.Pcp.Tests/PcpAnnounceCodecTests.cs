@@ -86,6 +86,88 @@ public sealed class PcpAnnounceCodecTests
         Assert.Equal(new byte[] { 0xe8, 0x03, 0, 0 }, PcpAnnounceCodec.CreateQuit().Content.ToArray());
     }
 
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    public void PushAndCoutRequestsRoundTripAndRejectMalformedFields(bool useCoutName, bool isRelay)
+    {
+        var ip = IPAddress.Parse("198.41.0.10");
+        var atom = PcpAnnounceCodec.CreatePushRequest(ip, 17144, Cid, isRelay: isRelay, useCoutName: useCoutName);
+        Assert.Equal(useCoutName ? PcpKnownAtomNames.Cout : PcpKnownAtomNames.Push, atom.Name);
+
+        Assert.True(PcpAnnounceCodec.TryParsePushRequest(atom, out var parsed));
+        Assert.NotNull(parsed);
+        Assert.Equal(ip, parsed.Address);
+        Assert.Equal((ushort)17144, parsed.Port);
+        Assert.Equal(Cid, parsed.ChannelId);
+        Assert.Equal(isRelay, parsed.IsRelay);
+
+        // cid フォールバックおよび rly 省略時の既定値 (true) を確認
+        var cidOnlyCout = PcpAtom.Parent(
+            PcpKnownAtomNames.Cout,
+            PcpAtom.Leaf(PcpKnownAtomNames.PushIp, PcpWireValueCodec.EncodeLegacyIpv4(ip)),
+            PcpAtom.Leaf(PcpKnownAtomNames.PushPort, PcpWireValueCodec.EncodeUInt16(7144)),
+            PcpAtom.Leaf(PcpKnownAtomNames.BroadcastChannelId, PcpWireValueCodec.EncodeGuid(Cid)));
+        Assert.True(PcpAnnounceCodec.TryParsePushRequest(cidOnlyCout, out var fallbackParsed));
+        Assert.Equal(new PcpPushRelayRequest(ip, 7144, Cid, true), fallbackParsed);
+
+        // 不正入力（チャンネル不一致・ポート0・不正IP・不明アトム名）は拒否される
+        var mismatchedCid = PcpAtom.Parent(
+            PcpKnownAtomNames.Cout,
+            PcpAtom.Leaf(PcpKnownAtomNames.PushIp, PcpWireValueCodec.EncodeLegacyIpv4(ip)),
+            PcpAtom.Leaf(PcpKnownAtomNames.PushPort, PcpWireValueCodec.EncodeUInt16(7144)),
+            PcpAtom.Leaf(PcpKnownAtomNames.PushChannel, PcpWireValueCodec.EncodeGuid(Cid)),
+            PcpAtom.Leaf(PcpKnownAtomNames.BroadcastChannelId, PcpWireValueCodec.EncodeGuid(Sid)));
+        Assert.False(PcpAnnounceCodec.TryParsePushRequest(mismatchedCid, out _));
+        Assert.False(PcpAnnounceCodec.TryParsePushRequest(PcpAtom.Parent(PcpKnownAtomNames.Helo), out _));
+        Assert.Throws<ArgumentOutOfRangeException>(() => PcpAnnounceCodec.CreatePushRequest(ip, 0, Cid));
+        Assert.Throws<ArgumentException>(() => PcpAnnounceCodec.CreatePushRequest(IPAddress.Any, 7144, Cid));
+        Assert.Throws<ArgumentException>(() => PcpAnnounceCodec.CreatePushRequest(ip, 7144, Guid.Empty));
+    }
+
+    [Fact]
+    public void EncodeGivRequestFormatsStandardPeerCastHeader()
+    {
+        var bytes = PcpAnnounceCodec.EncodeGivRequest(Cid);
+        var text = System.Text.Encoding.ASCII.GetString(bytes);
+        Assert.Equal($"GIV /{Cid:N}\r\n\r\n", text);
+        Assert.Throws<ArgumentException>(() => PcpAnnounceCodec.EncodeGivRequest(Guid.Empty));
+    }
+
+    [Fact]
+    public void RootControlParsesUpdateIntervalImmediateUpdateAndNextRetry()
+    {
+        var root = PcpAtom.Parent(
+            PcpKnownAtomNames.Root,
+            PcpAtom.Leaf(PcpKnownAtomNames.RootUpdateInterval, PcpWireValueCodec.EncodeUInt32(60)),
+            PcpAtom.Leaf(PcpKnownAtomNames.RootUpdate, []),
+            PcpAtom.Leaf(PcpKnownAtomNames.RootNext, PcpWireValueCodec.EncodeUInt32(120)),
+            PcpAtom.Leaf(PcpAtomName.FromAscii("mesg"), PcpWireValueCodec.EncodeNullTerminatedUtf8("ok")));
+
+        Assert.True(PcpAnnounceCodec.TryParseRootControl(root, out var info));
+        Assert.NotNull(info);
+        Assert.Equal(TimeSpan.FromSeconds(60), info.UpdateInterval);
+        Assert.True(info.RequestImmediateUpdate);
+        Assert.Equal(TimeSpan.FromSeconds(120), info.NextRetryInterval);
+
+        // クランプ範囲確認（uint: 最小10秒・最大600秒、next: 最小5秒・最大3600秒）
+        var clamped = PcpAtom.Parent(
+            PcpKnownAtomNames.Root,
+            PcpAtom.Leaf(PcpKnownAtomNames.RootUpdateInterval, PcpWireValueCodec.EncodeUInt32(1)),
+            PcpAtom.Leaf(PcpKnownAtomNames.RootNext, PcpWireValueCodec.EncodeUInt32(99999)));
+        Assert.True(PcpAnnounceCodec.TryParseRootControl(clamped, out var clampedInfo));
+        Assert.Equal(TimeSpan.FromSeconds(10), clampedInfo!.UpdateInterval);
+        Assert.False(clampedInfo.RequestImmediateUpdate);
+        Assert.Equal(TimeSpan.FromSeconds(3600), clampedInfo.NextRetryInterval);
+
+        // 不正長さ uint は拒否
+        var invalid = PcpAtom.Parent(
+            PcpKnownAtomNames.Root,
+            PcpAtom.Leaf(PcpKnownAtomNames.RootUpdateInterval, new byte[] { 1, 2 }));
+        Assert.False(PcpAnnounceCodec.TryParseRootControl(invalid, out _));
+    }
+
     private static PcpAtom Field(PcpAtom atom, string name) => Assert.Single(atom.Children, a => a.Name == PcpAtomName.FromAscii(name));
     private static IEnumerable<PcpAtom> Flatten(PcpAtom atom) => new[] { atom }.Concat(atom.Children.SelectMany(Flatten));
 }

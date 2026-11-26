@@ -48,6 +48,7 @@ public sealed partial class PcpDownstreamChildSession :
     private readonly PcpRelayQuiescenceObserver? _quiescenceObserver;
     private readonly PcpWanIngressPolicy.Lease? _wanIngress;
     private readonly PcpPeerDirectory? _peers;
+    private readonly bool _isPushSession;
     private PcpRelayPeerIdentity? _remotePeer;
     private IDisposable? _peerLease;
     private int _packetWriteIncomplete;
@@ -102,7 +103,8 @@ public sealed partial class PcpDownstreamChildSession :
         ReadOnlyMemory<byte> initialMetadata = default,
         PcpWanIngressPolicy.Lease? wanIngress = null,
         PcpPeerDirectory? peers = null,
-        PcpDownstreamTrafficMeter? traffic = null)
+        PcpDownstreamTrafficMeter? traffic = null,
+        bool isPushSession = false)
         : this(
             connection,
             fanout,
@@ -113,7 +115,9 @@ public sealed partial class PcpDownstreamChildSession :
             borrowedPipeReader: null,
             preRoutedRequest: null,
             ownsTransport: true,
-            admission, traffic: traffic)
+            admission,
+            traffic: traffic,
+            isPushSession: isPushSession)
     {
         _childAdmission = childAdmission;
         _quiescenceObserver = quiescenceObserver;
@@ -137,7 +141,8 @@ public sealed partial class PcpDownstreamChildSession :
         PcpPeerDirectory? peers = null,
         PcpWanIngressPolicy.Lease? wanIngress = null,
         ReadOnlyMemory<byte> initialMetadata = default,
-        PcpDownstreamTrafficMeter? traffic = null)
+        PcpDownstreamTrafficMeter? traffic = null,
+        bool isPushSession = false)
     {
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentNullException.ThrowIfNull(fanout);
@@ -194,6 +199,7 @@ public sealed partial class PcpDownstreamChildSession :
         _peers = peers;
         _wanIngress = wanIngress;
         _initialMetadata = initialMetadata;
+        _isPushSession = isPushSession;
     }
 
     internal static PcpDownstreamChildSession CreateRouted(
@@ -209,7 +215,8 @@ public sealed partial class PcpDownstreamChildSession :
         PcpPeerDirectory? peers = null,
         PcpWanIngressPolicy.Lease? wanIngress = null,
         ReadOnlyMemory<byte> initialMetadata = default,
-        PcpDownstreamTrafficMeter? traffic = null)
+        PcpDownstreamTrafficMeter? traffic = null,
+        bool isPushSession = false)
     {
         ArgumentNullException.ThrowIfNull(reader);
         ArgumentNullException.ThrowIfNull(request);
@@ -409,7 +416,7 @@ public sealed partial class PcpDownstreamChildSession :
         {
             endReason = PcpDownstreamChildEndReason.ConnectionEnded;
         }
-        catch (InvalidDataException) when (_wanIngress is not null)
+        catch (InvalidDataException) when (_wanIngress is not null || _isPushSession)
         {
             endReason = PcpDownstreamChildEndReason.ProtocolRejected;
         }
@@ -517,9 +524,19 @@ public sealed partial class PcpDownstreamChildSession :
                     WritePingAsync, operationSource.Token).ConfigureAwait(false);
         }
 
+        var isDirectPcp = false;
         PcpDownstreamRelayRequest relayRequest;
 
-        if (_preRoutedRequest is null)
+        if (_isPushSession)
+        {
+            isDirectPcp = await PcpWanProtocolIngress.IsDirectPcpAsync(pipeReader, handshakeToken).ConfigureAwait(false);
+        }
+
+        if (isDirectPcp)
+        {
+            relayRequest = new PcpDownstreamRelayRequest(_channelId.Value, 0);
+        }
+        else if (_preRoutedRequest is null)
         {
             PcpDownstreamRelayRequestValidation validation;
 
@@ -575,7 +592,16 @@ public sealed partial class PcpDownstreamChildSession :
         // address is still a PCP relay role, not an internal media consumer.
         Volatile.Write(ref _identifiedRelay, 1);
         if (_childAdmission?.IsClosed == true)
+        {
+            if (isDirectPcp)
+            {
+                _httpStatusCode = 503;
+                await TryWriteControlAsync(EncodeQuitOnly(), operationSource.Token).ConfigureAwait(false);
+                return PcpDownstreamChildEndReason.AdmissionClosed;
+            }
+
             return await RejectClosedAdmissionAsync(handshakeToken).ConfigureAwait(false);
+        }
         if (_quiescenceObserver is not null)
             await _quiescenceObserver.ObserveAsync(PcpRelayQuiescencePoint.BeforeReserve).ConfigureAwait(false);
         var policyAccepted = _admission is null ||
@@ -589,15 +615,27 @@ public sealed partial class PcpDownstreamChildSession :
         if (!registered)
         {
             if (_childAdmission?.IsClosed == true)
+            {
+                if (isDirectPcp)
+                {
+                    _httpStatusCode = 503;
+                    await TryWriteControlAsync(EncodeQuitOnly(), operationSource.Token).ConfigureAwait(false);
+                    return PcpDownstreamChildEndReason.AdmissionClosed;
+                }
+
                 return await RejectClosedAdmissionAsync(handshakeToken).ConfigureAwait(false);
+            }
             _httpStatusCode = 503;
-            await WriteControlAsync(
-                PcpDownstreamHttpResponse.CreatePcp(
-                    503,
-                    _options.UserAgent,
-                    _options.PcpVersion,
-                    relayRequest.StreamPosition),
-                handshakeToken).ConfigureAwait(false);
+            if (!isDirectPcp)
+            {
+                await WriteControlAsync(
+                    PcpDownstreamHttpResponse.CreatePcp(
+                        503,
+                        _options.UserAgent,
+                        _options.PcpVersion,
+                        relayRequest.StreamPosition),
+                    handshakeToken).ConfigureAwait(false);
+            }
 
             var heloResult = await ReadAndValidateHeloAsync(
                 atomReader,
@@ -616,13 +654,16 @@ public sealed partial class PcpDownstreamChildSession :
         _registration = registration ?? throw new InvalidOperationException("Missing admitted relay child.");
         _httpStatusCode = 200;
 
-        await WriteControlAsync(
-            PcpDownstreamHttpResponse.CreatePcp(
-                200,
-                _options.UserAgent,
-                _options.PcpVersion,
-                relayRequest.StreamPosition),
-            handshakeToken).ConfigureAwait(false);
+        if (!isDirectPcp)
+        {
+            await WriteControlAsync(
+                PcpDownstreamHttpResponse.CreatePcp(
+                    200,
+                    _options.UserAgent,
+                    _options.PcpVersion,
+                    relayRequest.StreamPosition),
+                handshakeToken).ConfigureAwait(false);
+        }
 
         var heloEndReason = await ReadAndValidateHeloAsync(
             atomReader,

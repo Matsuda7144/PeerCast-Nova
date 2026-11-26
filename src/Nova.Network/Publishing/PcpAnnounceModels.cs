@@ -53,6 +53,21 @@ internal sealed class PcpAnnounceAccess
         _loopback is not null && endpoint.Port == _loopback.Port &&
         IPAddress.TryParse(endpoint.Uri.Host, out var address) && address.Equals(_loopback.Address)
             ? new IPEndPoint(_loopback.Address, _loopback.Port) : null;
+
+    internal bool AllowsPushTarget(IPAddress address)
+    {
+        if (!Enabled || _loopback is null || address is null || address.AddressFamily != AddressFamily.InterNetwork)
+        {
+            return false;
+        }
+
+        if (IPAddress.IsLoopback(_loopback.Address))
+        {
+            return IPAddress.IsLoopback(address);
+        }
+
+        return PublishingIpv4.IsPublicAddress(address.ToString());
+    }
 }
 
 internal enum PcpAnnounceState

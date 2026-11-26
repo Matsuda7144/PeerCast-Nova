@@ -73,6 +73,10 @@ public sealed partial class PcpDownstreamRelayServer
         {
             entry.CleanupConfirmed = !failed && result?.CleanupCompleted == true;
             _sessions.Remove(entry);
+            if (entry.PushTarget is { } pushTarget)
+            {
+                _activePushTargets.Remove(pushTarget);
+            }
             _activeConnectionCount--;
             _completedConnectionCount = checked(_completedConnectionCount + 1);
             if (failed) _internalFailureCount = checked(_internalFailureCount + 1);

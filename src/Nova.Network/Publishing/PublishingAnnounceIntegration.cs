@@ -20,6 +20,7 @@ public sealed record PublishingAnnounceStatus(string State, bool TrackerReported
     public bool IndependentReachabilityVerified { get; }
     public bool ListingConfirmed { get; }
     public bool ListingRemovalConfirmed { get; }
+    public long PushRequestsReceived { get; init; }
 }
 
 /// <summary>Application-lifetime BCID; one cleanup-proven generation at a time. Construction performs no I/O.</summary>
@@ -53,7 +54,8 @@ public sealed class PublishingAnnounceOwner : IAsyncDisposable
         await _owner.DisposeAsync().ConfigureAwait(false);
     }
     internal PublishingAnnounceSession Start(PublishingAnnounceOptions options, ChannelId channel, ChannelSessionId session,
-        ChannelMetadataSnapshot metadata, IPEndPoint bind, IPEndPoint advertised, Func<bool> ready, Func<PublishingAnnounceRuntimeSnapshot> runtime)
+        ChannelMetadataSnapshot metadata, IPEndPoint bind, IPEndPoint advertised, Func<bool> ready, Func<PublishingAnnounceRuntimeSnapshot> runtime,
+        Action<PeerCast.Nova.Protocol.Pcp.PcpPushRelayRequest>? onPushRelayRequest = null)
     {
         lock (_gate)
         {
@@ -61,7 +63,7 @@ public sealed class PublishingAnnounceOwner : IAsyncDisposable
             if (_current is not null && !_current.CleanupProven)
                 throw new InvalidOperationException("Previous announce cleanup is unproven.");
             _current = new(_owner, () => Interlocked.Increment(ref _generation), options, channel, session, metadata,
-                bind, advertised, ready, runtime, _resolve, _reconnectBaseDelay);
+                bind, advertised, ready, runtime, _resolve, _reconnectBaseDelay, onPushRelayRequest);
             return _current;
         }
     }
@@ -85,7 +87,10 @@ internal sealed class PublishingAnnounceSession : IAsyncDisposable
         _worker?.State.ToString() ?? (_closing ? "Stopping" : "Connecting"),
         _worker?.TrackerReport is { } report && _capability is { } capability && report.CanAnnounce(capability),
         _worker?.Announced == true,
-        _worker?.StopNoticeSent == true, CleanupProven);
+        _worker?.StopNoticeSent == true, CleanupProven)
+    {
+        PushRequestsReceived = _worker?.PushRequestsAccepted ?? 0,
+    };
 
     internal static bool ShouldReconnect(PcpAnnounceResult result) =>
         result.CleanupProven &&
@@ -103,7 +108,8 @@ internal sealed class PublishingAnnounceSession : IAsyncDisposable
     internal PublishingAnnounceSession(PcpAnnounceOwner owner, Func<long> nextGeneration, PublishingAnnounceOptions options,
         ChannelId channel, ChannelSessionId session, ChannelMetadataSnapshot metadata, IPEndPoint bind,
         IPEndPoint advertised, Func<bool> ready, Func<PublishingAnnounceRuntimeSnapshot> runtime,
-        Func<string, CancellationToken, Task<IPAddress[]>> resolver, TimeSpan reconnectBaseDelay)
+        Func<string, CancellationToken, Task<IPAddress[]>> resolver, TimeSpan reconnectBaseDelay,
+        Action<PeerCast.Nova.Protocol.Pcp.PcpPushRelayRequest>? onPushRelayRequest = null)
     {
         _latestMetadata = metadata;
         _run = Task.Run(async () =>
@@ -129,7 +135,8 @@ internal sealed class PublishingAnnounceSession : IAsyncDisposable
                         _capability = new(identity, Guid.NewGuid(), bind, advertised, endpoint, () => !_closing && ready());
                         worker = owner.Start(workerGeneration, channel.Value, session.Value, session.Value,
                             PcpAnnounceEndpoint.Parse($"pcp://{endpoint.Address}:{endpoint.Port}"), new(_latestMetadata, advertised),
-                            PcpAnnounceAccess.ForProduction(endpoint), capability: _capability, runtime: runtime);
+                            PcpAnnounceAccess.ForProduction(endpoint), capability: _capability, runtime: runtime,
+                            onPushRelayRequest: onPushRelayRequest);
                         _worker = worker;
                         Volatile.Write(ref _reconnecting, false);
                         worker.NotifyRuntimeChanged();
