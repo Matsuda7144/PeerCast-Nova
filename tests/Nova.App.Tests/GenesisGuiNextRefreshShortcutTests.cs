@@ -164,21 +164,8 @@ public sealed class GenesisGuiNextRefreshShortcutTests
             modifiersPressed: false,
             requestRefresh);
 
-    private static string ReadSource(string name)
-    {
-        for (var directory = new DirectoryInfo(AppContext.BaseDirectory);
-             directory is not null;
-             directory = directory.Parent)
-        {
-            var path = Path.Combine(directory.FullName, "src", "Nova.App", name);
-            if (File.Exists(path))
-            {
-                return File.ReadAllText(path);
-            }
-        }
-
-        throw new FileNotFoundException(name);
-    }
+    private static string ReadSource(string name) =>
+        RepositorySourceTestHelper.ReadAppSource(name);
 
     private sealed class BlockingCatalog : IGenesisChannelCatalog
     {

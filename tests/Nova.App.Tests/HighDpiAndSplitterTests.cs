@@ -117,18 +117,8 @@ public sealed class HighDpiAndSplitterTests
         }
     }
 
-    private static string FindRepositoryFile(params string[] segments)
-    {
-        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
-        {
-            if (File.Exists(Path.Combine(directory.FullName, "PeerCast-Nova.sln")))
-            {
-                return Path.Combine([directory.FullName, .. segments]);
-            }
-        }
-
-        throw new FileNotFoundException("Repository root not found.", Path.Combine(segments));
-    }
+    private static string FindRepositoryFile(params string[] segments) =>
+        RepositorySourceTestHelper.FindRepositoryFile(segments);
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct ActCtxW

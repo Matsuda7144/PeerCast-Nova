@@ -650,17 +650,8 @@ public sealed class GenesisGuiNextRecordingHistoryTests
         Assert.Equal(root, composition.RecordingDirectory);
     }
 
-    private static string Source(string filename)
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            var path = Path.Combine(directory.FullName, "src", "Nova.App", filename);
-            if (File.Exists(path)) return File.ReadAllText(path);
-            directory = directory.Parent;
-        }
-        throw new FileNotFoundException(filename);
-    }
+    private static string Source(string filename) =>
+        RepositorySourceTestHelper.ReadAppSource(filename);
 
     private sealed class PoisonLibraryFileSystem : IGenesisRecordingLibraryFileSystem
     {

@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using static PeerCast.Nova.Windows.Win32WindowNativeMethods;
 
 namespace PeerCast.Nova.Windows;
 
@@ -484,41 +485,6 @@ internal sealed class LibMpvPlaybackCaptionOverlay : IDisposable
         return ((uint)a << 24) | (pr << 16) | (pg << 8) | pb;
     }
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct WindowClassEx
-    {
-        public uint Size;
-        public uint Style;
-        public nint WindowProcedure;
-        public int ClassExtraBytes;
-        public int WindowExtraBytes;
-        public nint Instance;
-        public nint Icon;
-        public nint Cursor;
-        public nint BackgroundBrush;
-        [MarshalAs(UnmanagedType.LPWStr)]
-        public string? MenuName;
-        [MarshalAs(UnmanagedType.LPWStr)]
-        public string? ClassName;
-        public nint SmallIcon;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct WindowRectangle
-    {
-        public int Left;
-        public int Top;
-        public int Right;
-        public int Bottom;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct WindowPoint
-    {
-        public int X;
-        public int Y;
-    }
-
     [StructLayout(LayoutKind.Sequential)]
     private struct WindowSize
     {
@@ -567,56 +533,6 @@ internal sealed class LibMpvPlaybackCaptionOverlay : IDisposable
         public uint HoverTime;
     }
 
-    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
-    private delegate nint WindowProcedure(nint window, uint message, nuint wParam, nint lParam);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern ushort RegisterClassExW(ref WindowClassEx windowClass);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool UnregisterClassW(string className, nint instance);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern nint CreateWindowExW(
-        uint extendedStyle,
-        string className,
-        string windowName,
-        uint style,
-        int x,
-        int y,
-        int width,
-        int height,
-        nint parent,
-        nint menu,
-        nint instance,
-        nint parameter);
-
-    [DllImport("user32.dll")]
-    private static extern int ShowWindow(nint window, int command);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetWindowRect(nint window, out WindowRectangle rect);
-
-    [DllImport("user32.dll")]
-    private static extern nint DefWindowProcW(nint window, uint message, nuint wParam, nint lParam);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool PostMessageW(nint window, uint message, nuint wParam, nint lParam);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool DestroyWindow(nint window);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool IsWindow(nint window);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern nint LoadCursorW(nint instance, nint cursorName);
-
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool TrackMouseEvent(ref TrackMouseEventData data);
@@ -650,11 +566,4 @@ internal sealed class LibMpvPlaybackCaptionOverlay : IDisposable
     [DllImport("gdi32.dll")]
     private static extern nint CreateDIBSection(
         nint hdc, ref BitmapInfo bmi, uint usage, out nint bits, nint section, uint offset);
-
-    [DllImport("gdi32.dll")]
-    private static extern nint SelectObject(nint hdc, nint obj);
-
-    [DllImport("gdi32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool DeleteObject(nint obj);
 }

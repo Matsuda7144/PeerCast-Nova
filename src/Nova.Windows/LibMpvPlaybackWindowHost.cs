@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using PeerCast.Nova.Playback.Bbs;
+using static PeerCast.Nova.Windows.Win32WindowNativeMethods;
 
 namespace PeerCast.Nova.Windows;
 
@@ -2627,49 +2628,6 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
         public nint DefaultScheme;
     }
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct WindowClassEx
-    {
-        public uint Size;
-        public uint Style;
-        public nint WindowProcedure;
-        public int ClassExtraBytes;
-        public int WindowExtraBytes;
-        public nint Instance;
-        public nint Icon;
-        public nint Cursor;
-        public nint BackgroundBrush;
-        [MarshalAs(UnmanagedType.LPWStr)]
-        public string? MenuName;
-        [MarshalAs(UnmanagedType.LPWStr)]
-        public string? ClassName;
-        public nint SmallIcon;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct WindowRectangle
-    {
-        public int Left;
-        public int Top;
-        public int Right;
-        public int Bottom;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct PaintStruct
-    {
-        public nint DeviceContext;
-        [MarshalAs(UnmanagedType.Bool)]
-        public bool Erase;
-        public WindowRectangle PaintRect;
-        [MarshalAs(UnmanagedType.Bool)]
-        public bool Restore;
-        [MarshalAs(UnmanagedType.Bool)]
-        public bool IncUpdate;
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 32)]
-        public byte[]? Reserved;
-    }
-
     [StructLayout(LayoutKind.Sequential)]
     private struct DrawItemStruct
     {
@@ -2682,25 +2640,6 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
         public nint DeviceContext;
         public WindowRectangle ItemRect;
         public nuint ItemData;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct WindowMessage
-    {
-        public nint Window;
-        public uint Message;
-        public nuint WParam;
-        public nint LParam;
-        public uint Time;
-        public WindowPoint Point;
-        public uint Private;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct WindowPoint
-    {
-        public int X;
-        public int Y;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -2726,163 +2665,16 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SystemParametersInfoW(uint action, uint parameter, ref HighContrast state, uint flags);
 
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern nint GetModuleHandleW(string? moduleName);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern ushort RegisterClassExW(ref WindowClassEx windowClass);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool UnregisterClassW(string className, nint instance);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern nint CreateWindowExW(
-        uint extendedStyle,
-        string className,
-        string windowName,
-        uint style,
-        int x,
-        int y,
-        int width,
-        int height,
-        nint parent,
-        nint menu,
-        nint instance,
-        nint parameter);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool AdjustWindowRectEx(
-        ref WindowRectangle rectangle,
-        uint style,
-        [MarshalAs(UnmanagedType.Bool)] bool hasMenu,
-        uint extendedStyle);
-
-    [DllImport("user32.dll")]
-    private static extern int ShowWindow(nint window, int command);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool UpdateWindow(nint window);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool InvalidateRect(nint window, nint rect, [MarshalAs(UnmanagedType.Bool)] bool erase);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetClientRect(nint window, out WindowRectangle rect);
-
-    [DllImport("user32.dll")]
-    private static extern nint BeginPaint(nint window, out PaintStruct paint);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool EndPaint(nint window, ref PaintStruct paint);
-
-    [DllImport("user32.dll")]
-    private static extern int FillRect(nint hdc, ref WindowRectangle rect, nint brush);
-
-    [DllImport("user32.dll")]
-    private static extern int FrameRect(nint hdc, ref WindowRectangle rect, nint brush);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern int DrawTextW(nint hdc, string text, int count, ref WindowRectangle rect, uint format);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool MoveWindow(
-        nint window,
-        int x,
-        int y,
-        int width,
-        int height,
-        [MarshalAs(UnmanagedType.Bool)] bool repaint);
-
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetWindowTextW(nint window, string text);
 
     [DllImport("user32.dll")]
-    private static extern nint SendMessageW(nint window, uint message, nuint wParam, nint lParam);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern int GetMessageW(
-        out WindowMessage message,
-        nint window,
-        uint minimumMessage,
-        uint maximumMessage);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool TranslateMessage(ref WindowMessage message);
-
-    [DllImport("user32.dll")]
-    private static extern nint DispatchMessageW(ref WindowMessage message);
-
-    [DllImport("user32.dll")]
-    private static extern nint DefWindowProcW(
-        nint window,
-        uint message,
-        nuint wParam,
-        nint lParam);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool PostMessageW(
-        nint window,
-        uint message,
-        nuint wParam,
-        nint lParam);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool DestroyWindow(nint window);
-
-    [DllImport("user32.dll")]
-    private static extern void PostQuitMessage(int exitCode);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool IsWindow(nint window);
-
-    [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool IsIconic(nint window);
 
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern nint LoadCursorW(nint instance, nint cursorName);
-
-    [DllImport("gdi32.dll")]
-    private static extern nint GetStockObject(int objectIndex);
-
-    [DllImport("gdi32.dll")]
-    private static extern nint CreateSolidBrush(int color);
-
-    [DllImport("gdi32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool DeleteObject(nint obj);
-
-    [DllImport("gdi32.dll")]
-    private static extern nint SelectObject(nint hdc, nint obj);
-
-    [DllImport("gdi32.dll")]
-    private static extern int SetBkMode(nint hdc, int mode);
-
     [DllImport("gdi32.dll")]
     private static extern int SetBkColor(nint hdc, int color);
-
-    [DllImport("gdi32.dll")]
-    private static extern int SetTextColor(nint hdc, int color);
-
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
-    private static extern uint ExtractIconExW(
-        string fileName, int iconIndex, out nint largeIcon, out nint smallIcon, uint iconCount);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool DestroyIcon(nint icon);
 
     [DllImport("user32.dll")]
     private static extern short GetKeyState(int virtualKey);
@@ -2891,19 +2683,11 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetCursorPos(out WindowPoint point);
 
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetWindowRect(nint window, out WindowRectangle rect);
-
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern int GetWindowTextLengthW(nint window);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern int GetWindowTextW(nint window, [Out] char[] buffer, int maxCount);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool EnableWindow(nint window, [MarshalAs(UnmanagedType.Bool)] bool enable);
 
     [DllImport("user32.dll")]
     private static extern nuint SetTimer(nint window, nuint eventId, uint elapseMs, nint timerFunc);

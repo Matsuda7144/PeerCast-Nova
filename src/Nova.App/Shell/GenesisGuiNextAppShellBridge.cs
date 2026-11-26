@@ -647,6 +647,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             owner,
             sidebar,
             statusBar,
+            statusLabel,
             detailsPane,
             detailsTextWidth,
             searchBox,
@@ -1106,6 +1107,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
         private readonly nint _owner;
         private readonly nint _sidebar;
         private readonly nint _statusBar;
+        private readonly nint _statusLabel;
         private readonly nint _detailsPane;
         private int _detailsTextWidth;
         private readonly GenesisChannelSearchBoxBridge _searchBox;
@@ -1161,6 +1163,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             nint owner,
             nint sidebar,
             nint statusBar,
+            nint statusLabel,
             nint detailsPane,
             int detailsTextWidth,
             GenesisChannelSearchBoxBridge searchBox,
@@ -1191,6 +1194,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             _modernAppearance = viewModel.UsesModernAppearance;
             _sidebar = sidebar;
             _statusBar = statusBar;
+            _statusLabel = statusLabel;
             _detailsPane = detailsPane;
             _detailsTextWidth = detailsTextWidth;
             _favoriteButton = favoriteButton;

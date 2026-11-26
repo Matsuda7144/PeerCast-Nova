@@ -793,17 +793,8 @@ public sealed class GenesisGuiNextRecordingLibraryTests
     private static GenesisGuiNextNativeTabRow Native(GenesisRecordingLibraryEntry entry) =>
         new(new(string.Empty, string.Empty), null, RecordingLibrary: GenesisGuiNextRecordingLibraryProjection.CreateRow(entry));
     private static TaskCompletionSource Gate() => new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private static string Source(string filename)
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            var path = Path.Combine(directory.FullName, "src", "Nova.App", filename);
-            if (File.Exists(path)) return File.ReadAllText(path);
-            directory = directory.Parent;
-        }
-        throw new FileNotFoundException(filename);
-    }
+    private static string Source(string filename) =>
+        RepositorySourceTestHelper.ReadAppSource(filename);
     private sealed class FakeLibrary(GenesisRecordingLibrarySnapshot? snapshot = null) : IGenesisRecordingLibraryController
     {
         public GenesisRecordingLibrarySnapshot Current { get; } = snapshot ?? Initial();

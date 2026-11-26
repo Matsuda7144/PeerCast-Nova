@@ -151,22 +151,24 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
         }
 
         var parent = (nint)windowToken;
-        var sourceLabel = FindWindowExW(parent, 0, "STATIC", "Source");
-        var sourceEdit = FindWindowExW(parent, 0, "EDIT", null);
-        var playButton = FindWindowExW(parent, 0, "BUTTON", "Play");
-        var stopButton = FindWindowExW(parent, 0, "BUTTON", "Stop");
-        var channelList = FindWindowExW(parent, 0, "SysListView32", null);
-        var status = FindWindowExW(parent, sourceLabel, "STATIC", null);
-        if (sourceLabel == 0 ||
-            sourceEdit == 0 ||
-            playButton == 0 ||
-            stopButton == 0 ||
-            channelList == 0 ||
-            status == 0 ||
+        if (!GenesisMainWindowControlRegistry.TryResolve(parent, out var handles) ||
+            handles.SourceLabel == 0 ||
+            handles.SourceEdit == 0 ||
+            handles.PlayButton == 0 ||
+            handles.StopButton == 0 ||
+            handles.ChannelList == 0 ||
+            handles.StatusText == 0 ||
             !GetClientRect(parent, out var clientRectangle))
         {
             return null;
         }
+
+        var sourceLabel = handles.SourceLabel;
+        var sourceEdit = handles.SourceEdit;
+        var playButton = handles.PlayButton;
+        var stopButton = handles.StopButton;
+        var channelList = handles.ChannelList;
+        var status = handles.StatusText;
 
         var instance = GetModuleHandleW(null);
         if (instance == 0)

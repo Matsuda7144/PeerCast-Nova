@@ -34,7 +34,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             _ = InvalidateRect(TopStatusWindow, 0, true);
         }
 
-        private nint TopStatusWindow => FindWindowExW(_statusBar, 0, "STATIC", null);
+        private nint TopStatusWindow => _statusLabel;
         private nint[] TopVisualControls => [TopStatusWindow, _searchBox.LabelWindow, _searchBox.EditWindow, _searchBox.FilterWindow];
         internal bool IsTopFilter(nint window) => window == _searchBox.FilterWindow;
         internal bool IsTopInput(nint window) => IsModern && Volatile.Read(ref _detached) == 0 &&

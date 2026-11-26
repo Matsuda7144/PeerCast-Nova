@@ -242,7 +242,7 @@ internal sealed class GenesisChannelNotificationSettingsButtonPlacement
         }
 
         var owner = (nint)windowToken;
-        var sourceEdit = FindWindowExW(owner, 0, "EDIT", null);
+        var sourceEdit = GenesisMainWindowControlRegistry.ResolveSourceEdit(owner);
         var placement = sourceEdit == 0
             ? null
             : new GenesisChannelNotificationSettingsButtonPlacement(owner, sourceEdit, appearance);

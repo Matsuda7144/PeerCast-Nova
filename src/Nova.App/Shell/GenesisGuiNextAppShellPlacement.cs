@@ -43,23 +43,21 @@ internal sealed class GenesisGuiNextAppShellPlacement
             return null;
         }
 
-        var listView = FindWindowExW(
-            (nint)windowToken,
-            0,
-            "SysListView32",
-            null);
         var owner = (nint)windowToken;
-        var sourceLabel = FindWindowExW(owner, 0, "STATIC", "Source");
-        var sourceEdit = FindWindowExW(owner, 0, "EDIT", null);
-        var playButton = FindWindowExW(owner, 0, "BUTTON", "Play");
-        var stopButton = FindWindowExW(owner, 0, "BUTTON", "Stop");
-        return listView == 0 ||
-            sourceLabel == 0 ||
-            sourceEdit == 0 ||
-            playButton == 0 ||
-            stopButton == 0
+        return !GenesisMainWindowControlRegistry.TryResolve(owner, out var handles) ||
+            handles.ChannelList == 0 ||
+            handles.SourceLabel == 0 ||
+            handles.SourceEdit == 0 ||
+            handles.PlayButton == 0 ||
+            handles.StopButton == 0
                 ? null
-                : new(owner, listView, sourceLabel, sourceEdit, playButton, stopButton);
+                : new(
+                    owner,
+                    handles.ChannelList,
+                    handles.SourceLabel,
+                    handles.SourceEdit,
+                    handles.PlayButton,
+                    handles.StopButton);
     }
 
     public IAsyncDisposable? Open(

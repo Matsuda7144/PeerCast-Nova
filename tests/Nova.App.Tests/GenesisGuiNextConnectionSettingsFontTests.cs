@@ -46,17 +46,14 @@ public sealed class GenesisGuiNextConnectionSettingsFontTests
     [Fact]
     public void NativeWiringUsesSharedFontAndBackgroundSaveWithoutRuntimeApply()
     {
-        var root = new DirectoryInfo(AppContext.BaseDirectory);
-        while (root is not null && !File.Exists(Path.Combine(root.FullName, "PeerCast-Nova.sln"))) root = root.Parent;
-        Assert.NotNull(root);
-        var source = File.ReadAllText(Path.Combine(root.FullName, "src", "Nova.App", "GenesisGuiNextConnectionSettingsWindow.cs"));
+        var source = RepositorySourceTestHelper.ReadAppSource("GenesisGuiNextConnectionSettingsWindow.cs");
         Assert.Contains("GenesisWindowUiFont.Apply(control)", source, StringComparison.Ordinal);
         Assert.DoesNotContain("GetStockObject", source, StringComparison.Ordinal);
         Assert.DoesNotContain("DEFAULT_GUI_FONT", source, StringComparison.Ordinal);
         Assert.Contains("Task.Run", source, StringComparison.Ordinal);
         Assert.Contains("PostMessageW(window, SaveCompleted", source, StringComparison.Ordinal);
         Assert.DoesNotContain("ApplyAsync", source, StringComparison.Ordinal);
-        var stateSource = File.ReadAllText(Path.Combine(root.FullName, "src", "Nova.App", "GenesisGuiNextApplicationState.cs"));
+        var stateSource = RepositorySourceTestHelper.ReadAppSource("GenesisGuiNextApplicationState.cs");
         Assert.Contains("new JsonGenesisGuiNextConnectionPreferencesStore(", stateSource, StringComparison.Ordinal);
         Assert.Contains("connection-preferences.json", stateSource, StringComparison.Ordinal);
         Assert.Contains("Path.Combine(applicationDirectory, ConnectionPreferencesFileName)", stateSource, StringComparison.Ordinal);

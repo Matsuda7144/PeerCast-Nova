@@ -553,15 +553,8 @@ public sealed class GuiNextNetworkSettingsTests
         new ChannelId(Guid.Parse("C0700662C84565C65125E0F927A501D0")), null,
         new NovaPublicRelayEndpoint("0.0.0.0", 8123), NovaPublicRelayFailure.None);
 
-    private static string Source(string filename)
-    {
-        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
-        {
-            var path = Path.Combine(directory.FullName, "src", "Nova.App", filename);
-            if (File.Exists(path)) return File.ReadAllText(path);
-        }
-        throw new FileNotFoundException(filename);
-    }
+    private static string Source(string filename) =>
+        RepositorySourceTestHelper.ReadAppSource(filename);
 
     private sealed class Network : INatNetworkSource
     {
