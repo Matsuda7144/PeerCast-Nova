@@ -1,12 +1,12 @@
 version: 2.1
 
 # GitHub Actions is the normal automatic CI for this repository.
-# CircleCI is temporarily enabled by default until GitHub Actions usage-limit
-# recovers (revert `default` back to `false` once GitHub Actions is available).
+# CircleCI is kept as an opt-in fallback workflow; trigger it manually with
+# `run_fallback=true` only when GitHub Actions is unavailable.
 parameters:
   run_fallback:
     type: boolean
-    default: true
+    default: false
 
 jobs:
   build-and-test:
