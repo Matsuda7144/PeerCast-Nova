@@ -39,7 +39,7 @@ internal sealed class PcpAnnounceOwner : IAsyncDisposable
         return PcpWireValueCodec.DecodeGuid(bytes);
     }
     internal PcpAnnounceWorker Start(long generation, Guid channelId, Guid publishingSessionId, Guid relaySessionId,
-        PcpAnnounceEndpoint tracker, PcpAnnounceDocument document, PcpAnnounceAccess? access = null, PublishingAnnounceCapability? capability = null, Func<PublishingAnnounceRuntimeSnapshot>? runtime = null, CancellationToken cancellationToken = default)
+        PcpAnnounceEndpoint tracker, PcpAnnounceDocument document, PcpAnnounceAccess? access = null, PublishingAnnounceCapability? capability = null, Func<PublishingAnnounceRuntimeSnapshot>? runtime = null, Action<PcpPushRelayRequest>? onPushRelayRequest = null, CancellationToken cancellationToken = default)
     {
         lock (_gate)
         {
@@ -49,7 +49,7 @@ internal sealed class PcpAnnounceOwner : IAsyncDisposable
             if (_current is { } previous && (generation <= previous.Identity.Generation || !previous.CleanupProven))
                 throw new InvalidOperationException("The previous announcement generation has not proved cleanup.");
             var identity = new PcpAnnounceIdentity(generation, channelId, publishingSessionId, relaySessionId, BroadcastId);
-            _current = new(identity, tracker, document, access ?? PcpAnnounceAccess.Disabled, _connector, _options, _time, capability, runtime);
+            _current = new(identity, tracker, document, access ?? PcpAnnounceAccess.Disabled, _connector, _options, _time, capability, runtime, onPushRelayRequest);
             _current.Start(cancellationToken);
             return _current;
         }

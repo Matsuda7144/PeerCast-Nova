@@ -39,4 +39,17 @@ public static class PcpKnownAtomNames
     public static readonly PcpAtomName HeloPing = PcpAtomName.FromAscii("ping");
     public static readonly PcpAtomName HeloRemoteIp = PcpAtomName.FromAscii("rip");
     public static readonly PcpAtomName HeloVersion = PcpAtomName.FromAscii("ver");
+
+    public static readonly PcpAtomName Root = PcpAtomName.FromAscii("root");
+    public static readonly PcpAtomName RootUpdateInterval = PcpAtomName.FromAscii("uint");
+    public static readonly PcpAtomName RootCheckVersion = PcpAtomName.FromAscii("chkv");
+    public static readonly PcpAtomName RootUpdate = PcpAtomName.FromAscii("upd");
+    public static readonly PcpAtomName RootNext = PcpAtomName.FromAscii("next");
+
+    public static readonly PcpAtomName Push = PcpAtomName.FromAscii("push");
+    public static readonly PcpAtomName Cout = PcpAtomName.FromAscii("cout");
+    public static readonly PcpAtomName PushIp = PcpAtomName.FromAscii("ip");
+    public static readonly PcpAtomName PushPort = PcpAtomName.FromAscii("port");
+    public static readonly PcpAtomName PushChannel = PcpAtomName.FromAscii("chan");
+    public static readonly PcpAtomName PushRelay = PcpAtomName.FromAscii("rly");
 }
