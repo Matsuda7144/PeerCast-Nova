@@ -55,6 +55,9 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                     WindowStyleChild | WindowStyleVisible, 0, 0, 1, 1, _publishingEditPane, 0, instance, 0);
                 _publishingInputs[i] = CreateWindowExW(0, "EDIT", "", WindowStyleChild | WindowStyleVisible | WindowStyleTabStop | 0x80,
                     0, 0, 1, 1, _publishingEditPane, (nint)(PublishingInputId + i), instance, 0);
+                _ = PeerCast.Nova.Windows.Win32AccessibilityAnnotation.SetName(
+                    _publishingInputs[i],
+                    GenesisGuiNextPublishingSettingsWindow.FieldLabels[i]);
                 _ = SendMessageW(_publishingInputs[i], 0x00C5, 8192, 0); // same draft bound as the existing settings window
             }
             _publishingEditNote = CreateWindowExW(0, "STATIC", "申告するkbpsです。OBS送信速度は制御しません。空欄は未指定。",

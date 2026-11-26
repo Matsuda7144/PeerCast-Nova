@@ -11,7 +11,9 @@ internal sealed class GenesisGuiNextMainWindowKeyboardNavigation : IDisposable
     private const uint WindowMessageNull = 0x0000;
     private const uint WindowMessageKeyDown = 0x0100;
     private const nuint VirtualKeyTab = 0x09;
+    private const nuint VirtualKeyF = 0x46;
     private const nuint VirtualKeyF5 = 0x74;
+    private const nuint VirtualKeyF6 = 0x75;
     private const int VirtualKeyShift = 0x10;
     private const int VirtualKeyControl = 0x11;
     private const int VirtualKeyAlt = 0x12;
@@ -96,6 +98,107 @@ internal sealed class GenesisGuiNextMainWindowKeyboardNavigation : IDisposable
         return true;
     }
 
+    internal static bool TryHandlePaneJumpKeyDown(
+        int hookCode,
+        nuint removalAction,
+        uint message,
+        nuint virtualKey,
+        nint keyData,
+        bool isActiveOwnerTarget,
+        bool ctrlOrAltPressed,
+        bool shiftPressed,
+        Func<bool, bool>? jumpPane)
+    {
+        if (hookCode < 0 ||
+            removalAction != PeekMessageRemove ||
+            message != WindowMessageKeyDown ||
+            virtualKey != VirtualKeyF6 ||
+            !isActiveOwnerTarget ||
+            ctrlOrAltPressed ||
+            jumpPane is null)
+        {
+            return false;
+        }
+
+        if ((keyData.ToInt64() & (1L << 30)) != 0)
+        {
+            return true;
+        }
+
+        return jumpPane(shiftPressed);
+    }
+
+    internal static bool TryHandleSearchShortcutKeyDown(
+        int hookCode,
+        nuint removalAction,
+        uint message,
+        nuint virtualKey,
+        nint keyData,
+        bool isActiveOwnerTarget,
+        bool ctrlPressed,
+        bool shiftOrAltPressed,
+        Func<bool>? focusSearch)
+    {
+        if (hookCode < 0 ||
+            removalAction != PeekMessageRemove ||
+            message != WindowMessageKeyDown ||
+            virtualKey != VirtualKeyF ||
+            !isActiveOwnerTarget ||
+            !ctrlPressed ||
+            shiftOrAltPressed ||
+            focusSearch is null)
+        {
+            return false;
+        }
+
+        if ((keyData.ToInt64() & (1L << 30)) != 0)
+        {
+            return true;
+        }
+
+        return focusSearch();
+    }
+
+    internal static int ResolvePaneJumpIndex(
+        IReadOnlyList<int> regions,
+        int currentIndex,
+        bool reverse)
+    {
+        ArgumentNullException.ThrowIfNull(regions);
+        if (regions.Count < 2)
+        {
+            return -1;
+        }
+
+        var regionStarts = new List<int>();
+        var distinctRegions = new List<int>();
+        for (var i = 0; i < regions.Count; i++)
+        {
+            if (distinctRegions.Count == 0 || distinctRegions[^1] != regions[i])
+            {
+                if (!distinctRegions.Contains(regions[i]))
+                {
+                    distinctRegions.Add(regions[i]);
+                    regionStarts.Add(i);
+                }
+            }
+        }
+
+        if (regionStarts.Count < 2)
+        {
+            return -1;
+        }
+
+        var currentRegionSlot = -1;
+        if (currentIndex >= 0 && currentIndex < regions.Count)
+        {
+            currentRegionSlot = distinctRegions.IndexOf(regions[currentIndex]);
+        }
+
+        var nextSlot = ResolveNextIndex(regionStarts.Count, currentRegionSlot, reverse);
+        return nextSlot >= 0 ? regionStarts[nextSlot] : -1;
+    }
+
     internal static int ResolveNextIndex(
         int count,
         int currentIndex,
@@ -159,10 +262,41 @@ internal sealed class GenesisGuiNextMainWindowKeyboardNavigation : IDisposable
                         GenesisChannelRefreshButtonBridge.FindRefreshRequestForOwner(_owner));
                 }
 
+                var isActiveTarget = message.Message == WindowMessageKeyDown &&
+                    IsMessageForOwner(message.Window) &&
+                    IsWindowEnabled(_owner) &&
+                    GetForegroundWindow() == _owner;
+
+                var searchShortcutHandled = message.Message == WindowMessageKeyDown &&
+                    message.WParam == VirtualKeyF &&
+                    TryHandleSearchShortcutKeyDown(
+                        code,
+                        removalAction,
+                        message.Message,
+                        message.WParam,
+                        message.LParam,
+                        isActiveTarget,
+                        IsKeyPressed(VirtualKeyControl),
+                        IsKeyPressed(VirtualKeyShift) || IsKeyPressed(VirtualKeyAlt),
+                        () => GenesisGuiNextAppShellBridge.TryFocusSearchForOwner(_owner));
+
+                var paneJumpHandled = message.Message == WindowMessageKeyDown &&
+                    message.WParam == VirtualKeyF6 &&
+                    TryHandlePaneJumpKeyDown(
+                        code,
+                        removalAction,
+                        message.Message,
+                        message.WParam,
+                        message.LParam,
+                        isActiveTarget,
+                        IsKeyPressed(VirtualKeyControl) || IsKeyPressed(VirtualKeyAlt),
+                        IsKeyPressed(VirtualKeyShift),
+                        TryJumpPane);
+
                 var inlineTabHandled = IsRemovedTabKeyDown(code, removalAction, message.Message, message.WParam) &&
                     IsMessageForOwner(message.Window) && GenesisGuiNextAppShellBridge.TryMovePublishingInlineTab(
                         _owner, GetFocus(), IsKeyPressed(VirtualKeyShift));
-                if (refreshHandled || inlineTabHandled || (IsRemovedTabKeyDown(
+                if (refreshHandled || searchShortcutHandled || paneJumpHandled || inlineTabHandled || (IsRemovedTabKeyDown(
                         code,
                         removalAction,
                         message.Message,
@@ -216,6 +350,70 @@ internal sealed class GenesisGuiNextMainWindowKeyboardNavigation : IDisposable
 
         var reverse = (GetKeyState(VirtualKeyShift) & 0x8000) != 0;
         var nextIndex = ResolveNextIndex(tabStops.Count, currentIndex, reverse);
+        if (nextIndex < 0)
+        {
+            return false;
+        }
+
+        var target = tabStops[nextIndex].Window;
+        var previous = SetFocus(target);
+        return previous != 0 || GetFocus() == target;
+    }
+
+    private bool TryJumpPane(bool reverse)
+    {
+        var tabStops = CaptureTabStops();
+        if (tabStops.Count < 2)
+        {
+            return false;
+        }
+
+        var focusedWindow = GetFocus();
+        var currentIndex = -1;
+        for (var index = 0; index < tabStops.Count; index++)
+        {
+            var candidate = tabStops[index].Window;
+            if (candidate == focusedWindow ||
+                (focusedWindow != 0 && IsChild(candidate, focusedWindow)))
+            {
+                currentIndex = index;
+                break;
+            }
+        }
+
+        var origin = default(NativePoint);
+        _ = ClientToScreen(_owner, ref origin);
+        _ = GetClientRect(_owner, out var ownerClient);
+        var dpi = GenesisMainWindowResizeGuard.GetDpi(_owner);
+        var sidebarSplitPixels = GenesisMainWindowLayout.Scale(
+            GenesisMainWindowLayout.ContentLeft - 4,
+            dpi);
+        var topBarBottom = origin.Y + GenesisMainWindowLayout.Scale(GenesisGuiNextTopBarLayout.Height + 12, dpi);
+        var detailsThreshold = origin.Y + ((ownerClient.Bottom - ownerClient.Top) * 2 / 3);
+
+        var regions = new int[tabStops.Count];
+        for (var i = 0; i < tabStops.Count; i++)
+        {
+            var stop = tabStops[i].Rectangle;
+            if (stop.Right <= origin.X + sidebarSplitPixels)
+            {
+                regions[i] = 0; // 左サイドバー
+            }
+            else if (stop.Bottom <= topBarBottom)
+            {
+                regions[i] = 1; // 上部バー
+            }
+            else if (stop.Top >= detailsThreshold)
+            {
+                regions[i] = 3; // 下部詳細ペイン
+            }
+            else
+            {
+                regions[i] = 2; // 中央メイン領域
+            }
+        }
+
+        var nextIndex = ResolvePaneJumpIndex(regions, currentIndex, reverse);
         if (nextIndex < 0)
         {
             return false;

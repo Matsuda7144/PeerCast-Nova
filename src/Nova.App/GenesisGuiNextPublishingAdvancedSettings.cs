@@ -76,6 +76,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 _publishingAdvancedFields[i] = CreateWindowExW(0, combo ? "COMBOBOX" : "EDIT", "", WindowStyleChild |
                     (i == 2 ? 0x0800u : WindowStyleTabStop) | (combo ? 0x200003u : 0x80u),
                     0, 0, 1, 1, _publishingAdvancedPane, (nint)(AdvancedInputId + i), instance, 0);
+                _ = PeerCast.Nova.Windows.Win32AccessibilityAnnotation.SetName(_publishingAdvancedFields[i], AdvancedLabels[i]);
                 if (!combo) _ = SendMessageW(_publishingAdvancedFields[i], 0x00C5, 8192, 0);
             }
             _publishingAdvancedHint = CreateWindowExW(0, "STATIC",

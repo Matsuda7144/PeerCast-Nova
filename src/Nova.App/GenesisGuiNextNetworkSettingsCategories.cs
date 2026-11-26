@@ -57,6 +57,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             _ypEnabled = Check("有効（保存時に反映）", YpEnabledId);
             _ypNew = Button("新規", YpNewId); _ypRemove = Button("削除…", YpRemoveId); _ypToggle = Button("有効 / 無効", YpToggleId);
             _ypList = Control("LISTBOX", "登録YP", YpListId, WindowStyleTabStop | 0x00200000 | 0x0010 | 0x0040 | 1); // native fixed owner draw, no sorting
+            _ = PeerCast.Nova.Windows.Win32AccessibilityAnnotation.SetName(_ypList, "登録済み Yellow Page 一覧");
             _ = SendMessageW(_ypList, 0x01A0, 0, Scale(24)); // LB_SETITEMHEIGHT
             var connectionLabels = new[] { "待受ポート", "IPv4上り (kbps)", "IPv6上り (kbps・未対応)", "合計リレー数", "配信毎リレー数", "視聴毎リレー数" };
             var ypLabels = new[] { "ID", "YP名", "Index URL", "Tracker URL", "Namespace" };
@@ -64,6 +65,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             {
                 _connectionLabels[i] = Control("STATIC", connectionLabels[i], 0, 0);
                 _connectionInputs[i] = Control("EDIT", "", ConnectionInputId + i, WindowStyleTabStop | 0x80);
+                _ = PeerCast.Nova.Windows.Win32AccessibilityAnnotation.SetName(_connectionInputs[i], connectionLabels[i]);
                 _ = SetConnectionParent(_connectionLabels[i], _connectionBody);
                 _ = SetConnectionParent(_connectionInputs[i], _connectionBody);
                 _ = SendMessageW(_connectionInputs[i], 0x00C5, 32, 0);
@@ -72,6 +74,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             {
                 _ypLabels[i] = Control("STATIC", ypLabels[i], 0, 0);
                 _ypInputs[i] = Control("EDIT", "", YpInputId + i, WindowStyleTabStop | 0x80);
+                _ = PeerCast.Nova.Windows.Win32AccessibilityAnnotation.SetName(_ypInputs[i], ypLabels[i]);
                 _ = SendMessageW(_ypInputs[i], 0x00C5, 32767, 0);
             }
             if (_viewModel.ConnectionSettings is { } connection) _connectionPage = new(connection);

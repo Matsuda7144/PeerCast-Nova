@@ -74,6 +74,10 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             if (_paneSplitter != 0)
             {
                 _ = SetWindowSubclass(_paneSplitter, PaneSplitterProcedure, PaneSplitterSubclassId, (nuint)_owner);
+                _ = PeerCast.Nova.Windows.Win32AccessibilityAnnotation.SetNameAndDescription(
+                    _paneSplitter,
+                    "一覧と詳細の境界スプリッター",
+                    help: "上下にドラッグして一覧と詳細ペインの高さを調整します");
             }
         }
 
@@ -81,6 +85,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         {
             if (_paneSplitter != 0)
             {
+                _ = PeerCast.Nova.Windows.Win32AccessibilityAnnotation.Clear(_paneSplitter);
                 if (IsWindow(_paneSplitter))
                 {
                     _ = RemoveWindowSubclass(_paneSplitter, PaneSplitterProcedure, PaneSplitterSubclassId);

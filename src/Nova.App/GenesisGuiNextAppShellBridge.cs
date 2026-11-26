@@ -845,6 +845,22 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             ? commandMessage
             : null;
 
+    internal static bool TryFocusSearchForOwner(nint owner) =>
+        StatesByOwner.TryGetValue(owner, out var state) && state.FocusSearch();
+
+    private static string AccessibleListTitle(GenesisGuiNextTab tab) =>
+        tab switch
+        {
+            GenesisGuiNextTab.New => "新着チャンネル一覧",
+            GenesisGuiNextTab.Favorites => "お気に入りチャンネル一覧",
+            GenesisGuiNextTab.Playing => "再生中チャンネル一覧",
+            GenesisGuiNextTab.Recording => "録画一覧",
+            GenesisGuiNextTab.Publishing => "配信設定",
+            GenesisGuiNextTab.Logs => "ログ一覧",
+            GenesisGuiNextTab.RelayTree => "リレーツリー",
+            _ => "チャンネル一覧",
+        };
+
     internal static bool RequiresFavoriteButtonSynchronization(uint message) =>
         message == WindowMessageLeftButtonDown ||
         message == WindowMessageLeftButtonUp ||
@@ -1197,6 +1213,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 WindowStyleChild | WindowStyleTabStop | RecordingHistoryDetailsStyle,
                 12, HistoryDetailsLayout.Top, Math.Max(1, detailsTextWidth), HistoryDetailsLayout.Height,
                 detailsPane, (nint)RecordingHistoryDetailsControlId, GetModuleHandleW(null), 0);
+            _ = PeerCast.Nova.Windows.Win32AccessibilityAnnotation.SetName(_recordingHistoryDetails, "録画履歴の詳細");
             ApplyDefaultFont(_recordingHistoryDetails);
             ApplyDefaultFont(_recordingHistoryModeButton);
             ApplyDefaultFont(_recordingHistoryRefreshButton);
@@ -1245,6 +1262,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             _ = EnableWindow(_publishingInterruptButton, false);
             CreatePublishingGuide(GetModuleHandleW(null));
             _listView = listView;
+            _ = PeerCast.Nova.Windows.Win32AccessibilityAnnotation.SetName(_listView, "チャンネル一覧");
             _tabs = tabs;
             _viewModel = viewModel;
             _interaction = interaction;
@@ -1282,6 +1300,10 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                     GenesisMainWindowResizeGuard.SaveDetailsHeight(_owner, savedDetailsHeight);
                 }
 
+                _ = PeerCast.Nova.Windows.Win32AccessibilityAnnotation.Clear(_listView);
+                _ = PeerCast.Nova.Windows.Win32AccessibilityAnnotation.Clear(_recordingHistoryDetails);
+                _ = PeerCast.Nova.Windows.Win32AccessibilityAnnotation.Clear(_relayTreeChannels);
+                _ = PeerCast.Nova.Windows.Win32AccessibilityAnnotation.Clear(_relayTreeBody);
                 DestroyPaneSplitter();
                 _ = StatesByOwner.TryRemove(_owner, out _);
                 _publishingEditor?.Dispose();
@@ -2098,6 +2120,22 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             SynchronizeChannelListStyle();
             SynchronizeFavoriteButtonPresentation();
             SynchronizePlaybackButtonPresentation();
+            _ = PeerCast.Nova.Windows.Win32AccessibilityAnnotation.SetName(
+                _listView,
+                AccessibleListTitle(_tabs.SelectedTab));
+        }
+
+        internal bool FocusSearch()
+        {
+            if (Volatile.Read(ref _detached) != 0)
+            {
+                return false;
+            }
+
+            CloseIntegratedSettings();
+            var focused = _utilityNavigationSelection.ActivateSearch(_tabs, _searchBox.Focus);
+            _ = InvalidateRect(_sidebar, 0, true);
+            return focused;
         }
 
         public void SynchronizeFavoriteButtonPresentation()

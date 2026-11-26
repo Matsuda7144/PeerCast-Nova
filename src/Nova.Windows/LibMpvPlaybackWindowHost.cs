@@ -609,6 +609,23 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
             }
 
             SyncControls();
+            _ = Win32AccessibilityAnnotation.SetName(_videoWindow, "再生映像");
+            _ = Win32AccessibilityAnnotation.SetNameAndDescription(
+                _volumeButton,
+                "音量とミュート",
+                help: "クリックでミュート切替、ホイールまたは上下キーで音量調整");
+            if (HasBbs)
+            {
+                _ = Win32AccessibilityAnnotation.SetNameAndDescription(
+                    _bbsThreadBar,
+                    "BBS スレッド",
+                    help: "クリックでスレッド一覧を開きます");
+                _ = Win32AccessibilityAnnotation.SetNameAndDescription(
+                    _bbsInputEdit,
+                    "BBS 書き込み欄",
+                    help: "Enter で送信、Shift+Enter で改行");
+                _ = Win32AccessibilityAnnotation.SetName(_bbsSendButton, "BBS へ送信");
+            }
             LayoutControls(clientWidth, clientHeight);
             _ = SetTimer(window, ClockTimerId, 1000, 0);
 
@@ -1117,6 +1134,14 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
 
             case WindowMessageClose:
                 CaptureNormalWindowBounds(window);
+                _ = Win32AccessibilityAnnotation.Clear(_videoWindow);
+                _ = Win32AccessibilityAnnotation.Clear(_volumeButton);
+                if (HasBbs)
+                {
+                    _ = Win32AccessibilityAnnotation.Clear(_bbsThreadBar);
+                    _ = Win32AccessibilityAnnotation.Clear(_bbsInputEdit);
+                    _ = Win32AccessibilityAnnotation.Clear(_bbsSendButton);
+                }
                 _ = DestroyWindow(window);
                 return 0;
 
