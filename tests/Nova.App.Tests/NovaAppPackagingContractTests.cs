@@ -189,6 +189,27 @@ public sealed class NovaAppPackagingContractTests
             property => Assert.DoesNotContain(property, declaredProperties));
     }
 
+    [Fact]
+    public void InstallerDefinitionAndReleaseWorkflowMaintainSelfContainedPackagingContract()
+    {
+        var issText = File.ReadAllText(FindRepositoryFile("packaging", "PeerCast-Nova.iss"));
+        Assert.Contains("AppId={{A7C9E4B2-4F81-4E3A-9C2E-6D84F1E2A701}}", issText, StringComparison.Ordinal);
+        Assert.Contains("PrivilegesRequired=lowest", issText, StringComparison.Ordinal);
+        Assert.Contains("OutputBaseFilename=PeerCast-Nova-{#AppVersion}-win-x64-setup", issText, StringComparison.Ordinal);
+        Assert.Contains(@"Source: ""{#PublishDir}\*""", issText, StringComparison.Ordinal);
+
+        var scriptText = File.ReadAllText(FindRepositoryFile("scripts", "publish-win-x64.ps1"));
+        Assert.Contains("WindowsPortable", scriptText, StringComparison.Ordinal);
+        Assert.Contains("WindowsSelfContained", scriptText, StringComparison.Ordinal);
+        Assert.Contains("PeerCast-Nova.iss", scriptText, StringComparison.Ordinal);
+        Assert.Contains("SHA256SUMS.txt", scriptText, StringComparison.Ordinal);
+
+        var workflowText = File.ReadAllText(FindRepositoryFile(".github", "workflows", "release.yml"));
+        Assert.Contains("packaging/PeerCast-Nova.iss", workflowText, StringComparison.Ordinal);
+        Assert.Contains("ISCC.exe", workflowText, StringComparison.Ordinal);
+        Assert.Contains("SHA256SUMS.txt", workflowText, StringComparison.Ordinal);
+    }
+
     private static string Property(XDocument document, string name) =>
         Assert.Single(document.Descendants(name)).Value;
 

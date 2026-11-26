@@ -16,6 +16,10 @@ internal readonly record struct GenesisGuiNextSettingsLayout(int Width, int Heig
     internal static GenesisGuiNextAppShellPlacement.WindowRectangle Classic => Box(32, 224, 156, 32);
     internal static GenesisGuiNextAppShellPlacement.WindowRectangle Modern => Box(200, 224, 156, 32);
     internal GenesisGuiNextAppShellPlacement.WindowRectangle Status => Box(32, 270, Width - 64, 40);
+    internal GenesisGuiNextAppShellPlacement.WindowRectangle UpdateTitle => Box(32, 322, Width - 64, 22);
+    internal GenesisGuiNextAppShellPlacement.WindowRectangle UpdateStatus => Box(32, 348, Width - 64, 36);
+    internal static GenesisGuiNextAppShellPlacement.WindowRectangle CheckUpdates => Box(32, 390, 156, 30);
+    internal static GenesisGuiNextAppShellPlacement.WindowRectangle OpenReleasePage => Box(200, 390, 196, 30);
     internal GenesisGuiNextAppShellPlacement.WindowRectangle Back => Box(16, Height - 44, 108, 30);
     internal GenesisGuiNextAppShellPlacement.WindowRectangle Cancel => Box(Width - 240, Height - 44, 108, 30);
     internal GenesisGuiNextAppShellPlacement.WindowRectangle Save => Box(Width - 124, Height - 44, 108, 30);

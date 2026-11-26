@@ -51,6 +51,7 @@ internal static class GenesisAboutSummary
         return string.Join(
             Environment.NewLine,
             model.ProductName,
+            $"Version: {NovaReleaseUpdateChecker.GetCurrentVersion().ToTagString()}",
             string.Empty,
             $"Project license: {model.ProjectLicense}",
             $"External runtime: {model.ExternalRuntimeName}",
