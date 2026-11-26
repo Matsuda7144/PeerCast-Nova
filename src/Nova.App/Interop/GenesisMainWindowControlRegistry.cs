@@ -65,6 +65,12 @@ internal static class GenesisMainWindowControlRegistry
             _ = HandlesByOwner.TryRemove(owner, out _);
         }
 
+        if (!OperatingSystem.IsWindows())
+        {
+            handles = default;
+            return false;
+        }
+
         var sourceLabel = GetDlgItem(owner, GenesisMainWindowControlIds.SourceLabel);
         var sourceEdit = GetDlgItem(owner, GenesisMainWindowControlIds.SourceEdit);
         var playButton = GetDlgItem(owner, GenesisMainWindowControlIds.PlayButton);
@@ -116,7 +122,7 @@ internal static class GenesisMainWindowControlRegistry
             return handles.ChannelList;
         }
 
-        return FindWindowExW(owner, 0, "SysListView32", null);
+        return OperatingSystem.IsWindows() ? FindWindowExW(owner, 0, "SysListView32", null) : 0;
     }
 
     internal static nint ResolveSourceEdit(nint owner)
@@ -131,7 +137,7 @@ internal static class GenesisMainWindowControlRegistry
             return handles.SourceEdit;
         }
 
-        return FindWindowExW(owner, 0, "EDIT", null);
+        return OperatingSystem.IsWindows() ? FindWindowExW(owner, 0, "EDIT", null) : 0;
     }
 
     internal static nint ResolveStatusText(nint owner)
@@ -144,6 +150,11 @@ internal static class GenesisMainWindowControlRegistry
         if (TryResolve(owner, out var handles) && handles.StatusText != 0)
         {
             return handles.StatusText;
+        }
+
+        if (!OperatingSystem.IsWindows())
+        {
+            return 0;
         }
 
         var sourceLabel = FindWindowExW(owner, 0, "STATIC", "Source");
