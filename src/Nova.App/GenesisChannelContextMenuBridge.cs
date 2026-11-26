@@ -427,6 +427,18 @@ internal sealed class GenesisChannelContextMenuBridge : IAsyncDisposable
 
             var row = GenesisChannelContextMenuNative.GetRowAtCursor(_listView);
             var renderedRow = GenesisChannelListRenderedChannels.FindRow(_listView, row);
+            if (GenesisRecordingFileContextActions.TryCapture(
+                    renderedRow,
+                    out var recordingTarget))
+            {
+                _ = GenesisChannelListNativeSelection.SelectRowWithoutEnsureVisible(
+                    _listView,
+                    row,
+                    _ => SynchronizeManagedSelection(renderedRow!));
+                OpenRecordingFileMenu(recordingTarget!, listViewRow: -1);
+                return;
+            }
+
             if (_interaction.IsRecordingHistoryView || renderedRow is null || renderedRow.RecordingRule is not null || renderedRow.RecordingLibrary is not null || renderedRow.RecordingHistory is not null || renderedRow.Log is not null || renderedRow.Publishing is not null)
             {
                 return;
@@ -506,6 +518,14 @@ internal sealed class GenesisChannelContextMenuBridge : IAsyncDisposable
 
             var resolvedTarget = target.Value;
             var renderedRow = resolvedTarget.RenderedRow;
+            if (GenesisRecordingFileContextActions.TryCapture(
+                    renderedRow,
+                    out var recordingTarget))
+            {
+                OpenRecordingFileMenu(recordingTarget!, resolvedTarget.Row);
+                return;
+            }
+
             if (_interaction.IsRecordingHistoryView || renderedRow.RecordingRule is not null || renderedRow.RecordingLibrary is not null || renderedRow.RecordingHistory is not null || renderedRow.Log is not null || renderedRow.Publishing is not null)
             {
                 return;
@@ -595,6 +615,55 @@ internal sealed class GenesisChannelContextMenuBridge : IAsyncDisposable
             {
                 _commandLanes.TrackRefresh(ObserveCommandAsync(
                     _interaction.RefreshCurrentViewAsync()));
+            }
+        }
+
+        private void OpenRecordingFileMenu(
+            GenesisRecordingFileContextTarget target,
+            int listViewRow)
+        {
+            var owner = GetAncestor(_container, GetAncestorRoot);
+            var menuOwner = owner == 0 ? _container : owner;
+            _ = SetForegroundWindow(menuOwner);
+            var fileExists = File.Exists(target.FilePath);
+            var command = listViewRow >= 0
+                ? GenesisChannelContextMenuNative.ShowRecordingFileForRow(
+                    menuOwner,
+                    _listView,
+                    listViewRow,
+                    fileExists)
+                : GenesisChannelContextMenuNative.ShowRecordingFile(
+                    menuOwner,
+                    fileExists);
+            if (command == GenesisRecordingFileContextCommand.None)
+            {
+                return;
+            }
+
+            _ = ObserveCommandAsync(new ValueTask(
+                GenesisRecordingFileContextActions.ExecuteAsync(
+                    target,
+                    command,
+                    new SystemGenesisRecordingFileContextEffects(menuOwner),
+                    RefreshRecordingViewsAfterDeleteAsync)));
+        }
+
+        private async Task RefreshRecordingViewsAfterDeleteAsync()
+        {
+            if (_guiNextTabs is null)
+            {
+                return;
+            }
+
+            if (_guiNextTabs.CanRefreshRecordingLibrary)
+            {
+                await _guiNextTabs.RefreshRecordingLibraryAsync().ConfigureAwait(false);
+            }
+
+            if (_guiNextTabs.SelectedTab == GenesisGuiNextTab.Recording &&
+                _guiNextTabs.RecordingPageMode == GenesisGuiNextRecordingPageMode.History)
+            {
+                await _guiNextTabs.RefreshRecordingHistoryAsync().ConfigureAwait(false);
             }
         }
 

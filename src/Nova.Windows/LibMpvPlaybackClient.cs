@@ -17,6 +17,8 @@ internal interface ILibMpvPlaybackClient : IDisposable
     void LoadFile(string streamUrl, PlaybackMediaContainer container, uint windowId, LibMpvPlaybackAudioState initialAudio, bool lowLatency);
     void SetVolume(int volume);
     void SetMuted(bool muted);
+    void SetPaused(bool paused);
+    void SetSpeed(double speed);
     void ShowOsdText(string text, int durationMs);
     bool SaveScreenshot(string filePath);
     void SetVideoAdjustment(LibMpvVideoAdjustment adjustment);
@@ -30,6 +32,9 @@ internal sealed class LibMpvPlaybackException(string message, Exception? innerEx
 
 internal sealed class LibMpvPlaybackClient : ILibMpvPlaybackClient
 {
+    internal const double MinSpeed = 0.5;
+    internal const double MaxSpeed = 4.0;
+    internal static readonly double[] SpeedPresets = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
     private const uint ClientApiMajor = 2;
     private const ulong LoadFileReply = 1;
     private const int EndFileError = 4;
@@ -216,6 +221,73 @@ internal sealed class LibMpvPlaybackClient : ILibMpvPlaybackClient
 
             int value = muted ? 1 : 0;
             _ = _setPropertyFlagAsync(_client, 0, "mute", FormatFlag, ref value);
+        }
+    }
+
+    internal static double ClampSpeed(double speed) =>
+        double.IsFinite(speed) ? Math.Clamp(speed, MinSpeed, MaxSpeed) : 1.0;
+
+    internal static double StepSpeed(double currentSpeed, int direction)
+    {
+        var current = ClampSpeed(currentSpeed);
+        if (direction > 0)
+        {
+            foreach (var preset in SpeedPresets)
+            {
+                if (preset > current + 0.001)
+                {
+                    return preset;
+                }
+            }
+
+            return SpeedPresets[^1];
+        }
+
+        if (direction < 0)
+        {
+            for (var i = SpeedPresets.Length - 1; i >= 0; i--)
+            {
+                if (SpeedPresets[i] < current - 0.001)
+                {
+                    return SpeedPresets[i];
+                }
+            }
+
+            return SpeedPresets[0];
+        }
+
+        return current;
+    }
+
+    internal static string FormatSpeedLabel(double speed) =>
+        string.Create(CultureInfo.InvariantCulture, $"{ClampSpeed(speed):0.##}x");
+
+    public void SetPaused(bool paused)
+    {
+        lock (_clientGate)
+        {
+            if (_disposed || !_initialized)
+            {
+                return;
+            }
+
+            int value = paused ? 1 : 0;
+            _ = _setPropertyFlagAsync(_client, 0, "pause", FormatFlag, ref value);
+        }
+    }
+
+    public void SetSpeed(double speed)
+    {
+        var clamped = ClampSpeed(speed);
+        lock (_clientGate)
+        {
+            if (_disposed || !_initialized)
+            {
+                return;
+            }
+
+            double value = clamped;
+            _ = _setPropertyDoubleAsync(_client, 0, "speed", FormatDouble, ref value);
         }
     }
 

@@ -12,6 +12,8 @@ internal interface ILibMpvPlaybackWindow : IAsyncDisposable
     PlaybackBbsSession? BbsSession => null;
     event Action<LibMpvPlaybackAudioState>? AudioStateChanged;
     event Action? ScreenshotRequested { add { } remove { } }
+    event Action<bool>? PauseChanged { add { } remove { } }
+    event Action<double>? SpeedChanged { add { } remove { } }
     event Action<LibMpvVideoAdjustment, string>? VideoAdjustmentChanged { add { } remove { } }
     void UpdateStatusStats(string? statsText) { }
     void UpdateVideoStats(LibMpvPlaybackStats stats) { }
@@ -246,6 +248,8 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
             WindowId = windowId;
             _host.AudioStateChanged += OnAudioStateChanged;
             _host.ScreenshotRequested += OnScreenshotRequested;
+            _host.PauseChanged += OnPauseChanged;
+            _host.SpeedChanged += OnSpeedChanged;
             _host.VideoAdjustmentChanged += OnVideoAdjustmentChanged;
         }
 
@@ -254,6 +258,8 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
         public PlaybackBbsSession? BbsSession => _bbsSession;
         public event Action<LibMpvPlaybackAudioState>? AudioStateChanged;
         public event Action? ScreenshotRequested;
+        public event Action<bool>? PauseChanged;
+        public event Action<double>? SpeedChanged;
         public event Action<LibMpvVideoAdjustment, string>? VideoAdjustmentChanged;
         public Task Closed => _host.Closed;
 
@@ -265,6 +271,8 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
         {
             _host.AudioStateChanged -= OnAudioStateChanged;
             _host.ScreenshotRequested -= OnScreenshotRequested;
+            _host.PauseChanged -= OnPauseChanged;
+            _host.SpeedChanged -= OnSpeedChanged;
             _host.VideoAdjustmentChanged -= OnVideoAdjustmentChanged;
             if (_windowStateStore is not null)
             {
@@ -284,6 +292,12 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
 
         private void OnScreenshotRequested() =>
             ScreenshotRequested?.Invoke();
+
+        private void OnPauseChanged(bool paused) =>
+            PauseChanged?.Invoke(paused);
+
+        private void OnSpeedChanged(double speed) =>
+            SpeedChanged?.Invoke(speed);
 
         private void OnVideoAdjustmentChanged(LibMpvVideoAdjustment adjustment, string summary) =>
             VideoAdjustmentChanged?.Invoke(adjustment, summary);
@@ -431,8 +445,23 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
                 client.ShowOsdText(summary, 2500);
             }
 
+            void OnPauseChanged(bool paused)
+            {
+                client.SetPaused(paused);
+                client.ShowOsdText(paused ? "一時停止" : "再生再開", 1500);
+            }
+
+            void OnSpeedChanged(double speed)
+            {
+                var clamped = LibMpvPlaybackClient.ClampSpeed(speed);
+                client.SetSpeed(clamped);
+                client.ShowOsdText($"再生速度: {LibMpvPlaybackClient.FormatSpeedLabel(clamped)}", 1500);
+            }
+
             window.AudioStateChanged += OnAudioStateChanged;
             window.ScreenshotRequested += OnScreenshotRequested;
+            window.PauseChanged += OnPauseChanged;
+            window.SpeedChanged += OnSpeedChanged;
             window.VideoAdjustmentChanged += OnVideoAdjustmentChanged;
             if (window.BbsSession is { } bbsSession)
             {
@@ -485,6 +514,8 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
                 }
 
                 window.VideoAdjustmentChanged -= OnVideoAdjustmentChanged;
+                window.SpeedChanged -= OnSpeedChanged;
+                window.PauseChanged -= OnPauseChanged;
                 window.ScreenshotRequested -= OnScreenshotRequested;
                 window.AudioStateChanged -= OnAudioStateChanged;
             }

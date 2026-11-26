@@ -141,6 +141,7 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
     private const uint MenuCmdToggleMute = 2104;
     private const uint MenuCmdScreenshot = 2105;
     private const uint MenuCmdOpenScreenshotFolder = 2106;
+    private const uint MenuCmdTogglePause = 2107;
     private const uint MenuCmdResizeSmall = 2110;
     private const uint MenuCmdResizeMedium = 2111;
     private const uint MenuCmdResizeHd = 2112;
@@ -156,11 +157,14 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
     private const uint MenuCmdVideoAdjustReset = 2128;
     private const uint MenuCmdScaleBase = 2140;
     private const uint MenuCmdToggleAutoResize100 = 2150;
+    private const uint MenuCmdSpeedBase = 2160;
     private const uint MenuCmdThreadBase = 3000;
 
+    private const nuint VirtualKeyBack = 0x08;
     private const nuint VirtualKeyReturn = 0x0D;
     private const int VirtualKeyShift = 0x10;
     private const nuint VirtualKeyEscape = 0x1B;
+    private const nuint VirtualKeySpace = 0x20;
     private const nuint VirtualKeyUp = 0x26;
     private const nuint VirtualKeyDown = 0x28;
     private const nuint VirtualKeyB = 0x42;
@@ -168,6 +172,8 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
     private const nuint VirtualKeyM = 0x4D;
     private const nuint VirtualKeyS = 0x53;
     private const nuint VirtualKeyT = 0x54;
+    private const nuint VirtualKeyOemOpenBrackets = 0xDB;
+    private const nuint VirtualKeyOemCloseBrackets = 0xDD;
 
     private readonly object _sync = new();
     private readonly LibMpvPlaybackWindowOptions _options;
@@ -201,6 +207,8 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
     private bool _borderless;
     private bool _borderlessMaximized;
     private bool _fullscreen;
+    private bool _paused;
+    private double _playbackSpeed = 1.0;
     private bool _captionOverlayTimerActive;
     private WindowRectangle _preMaximizeRect;
     private WindowRectangle _preFullscreenRect;
@@ -242,6 +250,10 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
     public event Action<LibMpvPlaybackWindowState>? WindowStateChanged;
 
     public event Action? ScreenshotRequested;
+
+    public event Action<bool>? PauseChanged;
+
+    public event Action<double>? SpeedChanged;
 
     public event Action<LibMpvVideoAdjustment, string>? VideoAdjustmentChanged;
 
@@ -844,6 +856,30 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
         if (virtualKey == VirtualKeyS)
         {
             ScreenshotRequested?.Invoke();
+            return true;
+        }
+
+        if (virtualKey == VirtualKeySpace)
+        {
+            TogglePause();
+            return true;
+        }
+
+        if (virtualKey == VirtualKeyOemOpenBrackets)
+        {
+            ApplyPlaybackSpeed(LibMpvPlaybackClient.StepSpeed(_playbackSpeed, -1));
+            return true;
+        }
+
+        if (virtualKey == VirtualKeyOemCloseBrackets)
+        {
+            ApplyPlaybackSpeed(LibMpvPlaybackClient.StepSpeed(_playbackSpeed, +1));
+            return true;
+        }
+
+        if (virtualKey == VirtualKeyBack)
+        {
+            ApplyPlaybackSpeed(1.0, forceNotify: true);
             return true;
         }
 
@@ -1627,6 +1663,24 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
         screenX >= rect.Left && screenX <= rect.Right &&
         screenY >= rect.Top && screenY <= rect.Bottom;
 
+    private void TogglePause()
+    {
+        _paused = !_paused;
+        PauseChanged?.Invoke(_paused);
+    }
+
+    private void ApplyPlaybackSpeed(double speed, bool forceNotify = false)
+    {
+        var clamped = LibMpvPlaybackClient.ClampSpeed(speed);
+        if (!forceNotify && Math.Abs(_playbackSpeed - clamped) < 0.0001)
+        {
+            return;
+        }
+
+        _playbackSpeed = clamped;
+        SpeedChanged?.Invoke(clamped);
+    }
+
     private void ToggleAlwaysOnTop(nint window)
     {
         if (window == 0)
@@ -1991,6 +2045,34 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
 
         try
         {
+            _ = AppendMenuW(
+                menu,
+                MenuFlagString | (_paused ? MenuFlagChecked : 0),
+                MenuCmdTogglePause,
+                _paused ? "再生を再開 (Space)" : "一時停止 (Space)");
+
+            var speedMenu = CreatePopupMenu();
+            if (speedMenu != 0)
+            {
+                var speedPresets = LibMpvPlaybackClient.SpeedPresets;
+                for (var i = 0; i < speedPresets.Length; i++)
+                {
+                    var preset = speedPresets[i];
+                    var label = preset switch
+                    {
+                        1.0 => "1.0x (標準)",
+                        1.25 => "1.25x (追いつき)",
+                        _ => LibMpvPlaybackClient.FormatSpeedLabel(preset),
+                    };
+                    var flags = MenuFlagString | (Math.Abs(_playbackSpeed - preset) < 0.001 ? MenuFlagChecked : 0);
+                    _ = AppendMenuW(speedMenu, flags, MenuCmdSpeedBase + (uint)i, label);
+                }
+
+                _ = AppendMenuW(menu, MenuFlagPopup, (nuint)speedMenu, "再生速度");
+            }
+
+            _ = AppendMenuW(menu, MenuFlagSeparator, 0, string.Empty);
+
             var scaleMenu = CreatePopupMenu();
             if (scaleMenu != 0)
             {
@@ -2086,6 +2168,14 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
             }
 
             var selected = TrackPopupMenuEx(menu, TrackPopupReturnCmd, cursor.X, cursor.Y, window, 0);
+            if (selected >= MenuCmdSpeedBase &&
+                selected < MenuCmdSpeedBase + (uint)LibMpvPlaybackClient.SpeedPresets.Length)
+            {
+                var speed = LibMpvPlaybackClient.SpeedPresets[(int)(selected - MenuCmdSpeedBase)];
+                ApplyPlaybackSpeed(speed, forceNotify: true);
+                return;
+            }
+
             if (selected >= MenuCmdScaleBase &&
                 selected < MenuCmdScaleBase + (uint)LibMpvPlaybackWindowState.ScalePresets.Length)
             {
@@ -2096,6 +2186,9 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
 
             switch (selected)
             {
+                case MenuCmdTogglePause:
+                    TogglePause();
+                    break;
                 case MenuCmdToggleAutoResize100:
                     _autoResizeTo100PercentOnStart = !_autoResizeTo100PercentOnStart;
                     UpdateSavedWindowState(s => s with { AutoResizeTo100PercentOnStart = _autoResizeTo100PercentOnStart });

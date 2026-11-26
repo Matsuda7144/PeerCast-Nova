@@ -118,6 +118,34 @@ internal static class GenesisChannelContextMenuNative
         return ShowAt(owner, cursor, canPlay, favoriteText, actions);
     }
 
+    internal static GenesisRecordingFileContextCommand ShowRecordingFile(
+        nint owner,
+        bool fileExists)
+    {
+        if (owner == 0 || !GetCursorPos(out var cursor))
+        {
+            return GenesisRecordingFileContextCommand.None;
+        }
+
+        return ShowRecordingFileAt(owner, cursor, fileExists);
+    }
+
+    internal static GenesisRecordingFileContextCommand ShowRecordingFileForRow(
+        nint owner,
+        nint listView,
+        int row,
+        bool fileExists)
+    {
+        if (owner == 0 || listView == 0 || row < 0)
+        {
+            return GenesisRecordingFileContextCommand.None;
+        }
+
+        return TryGetRowAnchor(listView, row, out var anchor)
+            ? ShowRecordingFileAt(owner, anchor, fileExists)
+            : GenesisRecordingFileContextCommand.None;
+    }
+
     internal static GenesisChannelContextMenuCommand ShowEmptyList(
         nint owner,
         bool canRefresh)
@@ -210,6 +238,17 @@ internal static class GenesisChannelContextMenuNative
             return GenesisChannelContextMenuCommand.None;
         }
 
+        if (!TryGetRowAnchor(listView, row, out var anchor))
+        {
+            return FailMenuOpen(owner);
+        }
+
+        return ShowAt(owner, anchor, canPlay, favoriteText, actions);
+    }
+
+    private static bool TryGetRowAnchor(nint listView, int row, out WindowPoint anchor)
+    {
+        anchor = default;
         var rectangle = new WindowRectangle();
         var buffer = Marshal.AllocHGlobal(Marshal.SizeOf<WindowRectangle>());
         try
@@ -221,7 +260,7 @@ internal static class GenesisChannelContextMenuNative
                     (nuint)row,
                     buffer) == 0)
             {
-                return FailMenuOpen(owner);
+                return false;
             }
 
             rectangle = Marshal.PtrToStructure<WindowRectangle>(buffer);
@@ -231,17 +270,12 @@ internal static class GenesisChannelContextMenuNative
             Marshal.FreeHGlobal(buffer);
         }
 
-        var anchor = new WindowPoint
+        anchor = new WindowPoint
         {
             X = rectangle.Left,
             Y = rectangle.Bottom,
         };
-        if (!ClientToScreen(listView, ref anchor))
-        {
-            return FailMenuOpen(owner);
-        }
-
-        return ShowAt(owner, anchor, canPlay, favoriteText, actions);
+        return ClientToScreen(listView, ref anchor);
     }
 
     internal static int ResolveKeyboardMenuRow(
@@ -341,6 +375,62 @@ internal static class GenesisChannelContextMenuNative
             ListViewMessageGetNextItem,
             nuint.MaxValue,
             (nint)ListViewNextItemSelected).ToInt32();
+
+    private static GenesisRecordingFileContextCommand ShowRecordingFileAt(
+        nint owner,
+        WindowPoint anchor,
+        bool fileExists)
+    {
+        var menu = CreatePopupMenu();
+        if (menu == 0)
+        {
+            return GenesisRecordingFileContextCommand.None;
+        }
+
+        try
+        {
+            var availableFlag = fileExists ? MenuFlagString : MenuFlagGrayed;
+            if (!AppendMenuW(
+                    menu,
+                    availableFlag,
+                    (nuint)GenesisRecordingFileContextCommand.PlayFile,
+                    "既定のプレイヤーで再生") ||
+                !AppendMenuW(
+                    menu,
+                    availableFlag,
+                    (nuint)GenesisRecordingFileContextCommand.RevealInExplorer,
+                    "エクスプローラーで表示") ||
+                !AppendMenuW(
+                    menu,
+                    MenuFlagString,
+                    (nuint)GenesisRecordingFileContextCommand.CopyPath,
+                    "ファイルパスをコピー") ||
+                !AppendMenuW(menu, MenuFlagSeparator, 0, string.Empty) ||
+                !AppendMenuW(
+                    menu,
+                    availableFlag,
+                    (nuint)GenesisRecordingFileContextCommand.DeleteFile,
+                    "ファイルを削除…"))
+            {
+                return GenesisRecordingFileContextCommand.None;
+            }
+
+            var selected = TrackPopupMenuEx(
+                menu,
+                TrackPopupMenuReturnCommand | TrackPopupMenuRightButton,
+                anchor.X,
+                anchor.Y,
+                owner,
+                0);
+            return Enum.IsDefined(typeof(GenesisRecordingFileContextCommand), (int)selected)
+                ? (GenesisRecordingFileContextCommand)selected
+                : GenesisRecordingFileContextCommand.None;
+        }
+        finally
+        {
+            _ = DestroyMenu(menu);
+        }
+    }
 
     private static GenesisChannelContextMenuCommand ShowAt(
         nint owner,

@@ -492,6 +492,52 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
         }
     }
 
+    [Fact]
+    public async Task PauseAndSpeedChangesPropagateToClientAndDisplayOsd()
+    {
+        using var dll = new TestLibrary();
+        using var timeout = new CancellationTokenSource(TestTimeout);
+        var client = new ControlledClient();
+        var window = new ControlledWindow(static () => { });
+        var launcher = new LibMpvPlaybackPlayerLauncher(dll.Path, _ => client, _ => new(window));
+
+        var launching = launcher.LaunchAsync(Source, timeout.Token).AsTask();
+        await client.Loaded.Task.WaitAsync(timeout.Token);
+        client.Signal(LibMpvPlaybackEvent.FileLoaded);
+        await using var player = await launching.WaitAsync(timeout.Token);
+
+        window.RaisePauseChanged(true);
+        window.RaisePauseChanged(false);
+        window.RaiseSpeedChanged(1.25);
+        window.RaiseSpeedChanged(5.0);
+        window.RaiseSpeedChanged(1.0);
+
+        Assert.Equal([true, false], client.Pauses);
+        Assert.Equal([1.25, 4.0, 1.0], client.Speeds);
+        Assert.Contains(client.OsdMessages, message => message.Text == "一時停止");
+        Assert.Contains(client.OsdMessages, message => message.Text == "再生再開");
+        Assert.Contains(client.OsdMessages, message => message.Text == "再生速度: 1.25x");
+        Assert.Contains(client.OsdMessages, message => message.Text == "再生速度: 4x");
+        Assert.Contains(client.OsdMessages, message => message.Text == "再生速度: 1x");
+    }
+
+    [Fact]
+    public void SpeedClampingAndPresetSteppingStayWithinBounds()
+    {
+        Assert.Equal(1.0, LibMpvPlaybackClient.ClampSpeed(double.NaN));
+        Assert.Equal(1.0, LibMpvPlaybackClient.ClampSpeed(double.PositiveInfinity));
+        Assert.Equal(LibMpvPlaybackClient.MinSpeed, LibMpvPlaybackClient.ClampSpeed(0.1));
+        Assert.Equal(LibMpvPlaybackClient.MaxSpeed, LibMpvPlaybackClient.ClampSpeed(8.0));
+
+        Assert.Equal(1.25, LibMpvPlaybackClient.StepSpeed(1.0, +1));
+        Assert.Equal(1.5, LibMpvPlaybackClient.StepSpeed(1.25, +1));
+        Assert.Equal(2.0, LibMpvPlaybackClient.StepSpeed(2.0, +1));
+        Assert.Equal(0.75, LibMpvPlaybackClient.StepSpeed(1.0, -1));
+        Assert.Equal(0.5, LibMpvPlaybackClient.StepSpeed(0.5, -1));
+        Assert.Equal("1.25x", LibMpvPlaybackClient.FormatSpeedLabel(1.25));
+        Assert.Equal("1x", LibMpvPlaybackClient.FormatSpeedLabel(1.0));
+    }
+
     private sealed class ControlledClient(
         Action<PlaybackMediaContainer, uint, LibMpvPlaybackAudioState, bool>? setStartupOptions = null) : ILibMpvPlaybackClient
     {
@@ -501,6 +547,8 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
         public LibMpvPlaybackAudioState InitialAudio { get; private set; }
         public List<int> Volumes { get; } = [];
         public List<bool> Mutes { get; } = [];
+        public List<bool> Pauses { get; } = [];
+        public List<double> Speeds { get; } = [];
         public List<(string Text, int DurationMs)> OsdMessages { get; } = [];
         public int DisposeCount { get; private set; }
 
@@ -514,6 +562,8 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
 
         public void SetVolume(int volume) => Volumes.Add(volume);
         public void SetMuted(bool muted) => Mutes.Add(muted);
+        public void SetPaused(bool paused) => Pauses.Add(paused);
+        public void SetSpeed(double speed) => Speeds.Add(speed);
         public void ShowOsdText(string text, int durationMs) => OsdMessages.Add((text, durationMs));
         public bool SaveScreenshot(string filePath) => true;
         public void SetVideoAdjustment(LibMpvVideoAdjustment adjustment) { }
@@ -534,6 +584,8 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
         public uint WindowId => 0x8001_0223;
         public LibMpvPlaybackAudioState AudioState => _audioState;
         public event Action<LibMpvPlaybackAudioState>? AudioStateChanged;
+        public event Action<bool>? PauseChanged;
+        public event Action<double>? SpeedChanged;
         public Task Closed => _closed.Task;
         public int DisposeCount { get; private set; }
 
@@ -542,6 +594,10 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
             _audioState = state.Normalized();
             AudioStateChanged?.Invoke(_audioState);
         }
+
+        public void RaisePauseChanged(bool paused) => PauseChanged?.Invoke(paused);
+
+        public void RaiseSpeedChanged(double speed) => SpeedChanged?.Invoke(speed);
 
         public void Close() => _closed.TrySetResult();
 
