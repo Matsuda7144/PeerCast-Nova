@@ -180,6 +180,41 @@ public sealed class NovaWindowsStartupCompositionTests
     }
 
     [Fact]
+    public void AutoFallbackLibMpvPath_UsesInstalledLibMpvOnlyWhenExternalPlayerIsUnconfigured()
+    {
+        var libPath = Path.Combine(Path.GetTempPath(), "libmpv-2.dll");
+        Assert.Equal(libPath, NovaWindowsStartupComposition.TryResolveAutoFallbackLibMpvPath(
+            GenesisGuiNextPlaybackPreferences.Default,
+            environmentPlayerPath: null,
+            searchPath: null,
+            findAvailableLibMpv: () => libPath));
+
+        Assert.Null(NovaWindowsStartupComposition.TryResolveAutoFallbackLibMpvPath(
+            GenesisGuiNextPlaybackPreferences.Default with { PcrPlayerExecutablePath = @"C:\tools\PCRPlayer64.exe" },
+            environmentPlayerPath: null,
+            searchPath: null,
+            findAvailableLibMpv: () => libPath));
+
+        Assert.Null(NovaWindowsStartupComposition.TryResolveAutoFallbackLibMpvPath(
+            GenesisGuiNextPlaybackPreferences.Default,
+            environmentPlayerPath: @"C:\tools\PCRPlayer64.exe",
+            searchPath: null,
+            findAvailableLibMpv: () => libPath));
+
+        Assert.Null(NovaWindowsStartupComposition.TryResolveAutoFallbackLibMpvPath(
+            GenesisGuiNextPlaybackPreferences.Default with { PlayerMode = GenesisPlaybackPlayerMode.Internal },
+            environmentPlayerPath: null,
+            searchPath: null,
+            findAvailableLibMpv: () => libPath));
+
+        Assert.Null(NovaWindowsStartupComposition.TryResolveAutoFallbackLibMpvPath(
+            GenesisGuiNextPlaybackPreferences.Default,
+            environmentPlayerPath: null,
+            searchPath: null,
+            findAvailableLibMpv: () => null));
+    }
+
+    [Fact]
     public async Task GenesisStartupOwnsAndDisposesItsPlaybackController()
     {
         var events = new List<string>();

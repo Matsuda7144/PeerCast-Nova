@@ -318,17 +318,53 @@ public sealed class NovaWindowsStartupComposition
                 return new PcrPlayerExternalPlayerLauncher(explicitPlayerPath);
             }
 
-            return preferences.PlayerMode == GenesisPlaybackPlayerMode.Internal
-                ? new LibMpvPlaybackPlayerLauncher(
+            if (preferences.PlayerMode == GenesisPlaybackPlayerMode.Internal)
+            {
+                return new LibMpvPlaybackPlayerLauncher(
                     preferences.LibMpvLibraryPath ?? LibMpvRuntimeProvisioner.TryFindAvailableLibraryPath() ?? string.Empty,
                     audioStore,
                     lowLatency: preferences.LowLatencyInternalPlayback,
-                    windowStateStore)
-                : new PcrPlayerExternalPlayerLauncher(preferences.PcrPlayerExecutablePath);
+                    windowStateStore);
+            }
+
+            if (TryResolveAutoFallbackLibMpvPath(
+                    preferences,
+                    Environment.GetEnvironmentVariable(PcrPlayerExternalPlayerLauncher.ExecutablePathEnvironmentVariable),
+                    Environment.GetEnvironmentVariable("PATH"),
+                    () => LibMpvRuntimeProvisioner.TryFindAvailableLibraryPath()) is { } fallbackLibraryPath)
+            {
+                return new LibMpvPlaybackPlayerLauncher(
+                    fallbackLibraryPath,
+                    audioStore,
+                    lowLatency: preferences.LowLatencyInternalPlayback,
+                    windowStateStore);
+            }
+
+            return new PcrPlayerExternalPlayerLauncher(preferences.PcrPlayerExecutablePath);
         }
 
         return GuiNextDailyPlaybackSessionController.CreateSystemWithPlayerLauncherFactory(
             CreateLauncher, recordingSettings, historyStore, publicChannels);
+    }
+
+    internal static string? TryResolveAutoFallbackLibMpvPath(
+        GenesisGuiNextPlaybackPreferences preferences,
+        string? environmentPlayerPath,
+        string? searchPath,
+        Func<string?> findAvailableLibMpv)
+    {
+        ArgumentNullException.ThrowIfNull(preferences);
+        ArgumentNullException.ThrowIfNull(findAvailableLibMpv);
+        if (preferences.PlayerMode != GenesisPlaybackPlayerMode.External ||
+            preferences.PcrPlayerExecutablePath is not null ||
+            !string.IsNullOrWhiteSpace(environmentPlayerPath) ||
+            PcrPlayerExternalPlayerLauncher.HasExecutableOnPath(searchPath))
+        {
+            return null;
+        }
+
+        var available = findAvailableLibMpv();
+        return string.IsNullOrWhiteSpace(available) ? null : available;
     }
 
     internal async ValueTask<NovaWindowsStartupResult> RunGenesisAsync(

@@ -656,6 +656,67 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
         }
     }
 
+    [Fact]
+    public void LibMpvPlaybackClient_AudioDeviceListParser_ParsesDeduplicatesAndHandlesInvalidJson()
+    {
+        const string json = """
+            [
+              {"name": "auto", "description": "Autoselect device"},
+              {"name": "wasapi/{1111}", "description": "Speakers (Realtek)"},
+              {"name": "wasapi/{1111}", "description": "Duplicate"},
+              {"name": "wasapi/{2222}", "description": ""}
+            ]
+            """;
+
+        var devices = LibMpvPlaybackClient.ParseAudioDeviceList(json);
+        Assert.Equal(
+        [
+            new LibMpvAudioDevice("auto", "Autoselect device"),
+            new LibMpvAudioDevice("wasapi/{1111}", "Speakers (Realtek)"),
+            new LibMpvAudioDevice("wasapi/{2222}", "wasapi/{2222}"),
+        ], devices);
+
+        Assert.Empty(LibMpvPlaybackClient.ParseAudioDeviceList(null));
+        Assert.Empty(LibMpvPlaybackClient.ParseAudioDeviceList("not json"));
+        Assert.Empty(LibMpvPlaybackClient.ParseAudioDeviceList("{}"));
+    }
+
+    [Fact]
+    public async Task WindowAudioDeviceSelection_PropagatesToClientAndShowsOsd()
+    {
+        using var dll = new TestLibrary();
+        using var timeout = new CancellationTokenSource(TestTimeout);
+        var client = new ControlledClient
+        {
+            AudioDevices =
+            [
+                new LibMpvAudioDevice("auto", "Autoselect device"),
+                new LibMpvAudioDevice("wasapi/{1111}", "ヘッドホン (USB DAC)"),
+            ],
+            CurrentAudioDevice = "auto",
+        };
+        var window = new ControlledWindow(static () => { });
+        var launcher = new LibMpvPlaybackPlayerLauncher(dll.Path, _ => client, _ => new(window));
+
+        var launching = launcher.LaunchAsync(Source, timeout.Token).AsTask();
+        await client.Loaded.Task.WaitAsync(timeout.Token);
+        client.Signal(LibMpvPlaybackEvent.FileLoaded);
+        await using var player = await launching.WaitAsync(timeout.Token);
+
+        Assert.NotNull(window.AudioDevicesProvider);
+        var offered = window.AudioDevicesProvider!();
+        Assert.Equal(2, offered.Devices.Count);
+        Assert.Equal("auto", offered.CurrentDevice);
+
+        window.RaiseAudioDeviceSelected("wasapi/{1111}");
+        window.RaiseAudioDeviceSelected("auto");
+
+        Assert.Equal(["wasapi/{1111}", "auto"], client.SelectedAudioDevices);
+        Assert.Equal("auto", client.CurrentAudioDevice);
+        Assert.Contains(client.OsdMessages, message => message.Text == "音声出力: ヘッドホン (USB DAC)");
+        Assert.Contains(client.OsdMessages, message => message.Text == "音声出力: 自動選択");
+    }
+
     private sealed class ControlledClient(
         Action<PlaybackMediaContainer, uint, LibMpvPlaybackAudioState, bool>? setStartupOptions = null) : ILibMpvPlaybackClient
     {
@@ -669,6 +730,9 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
         public List<double> Speeds { get; } = [];
         public List<(string Text, int DurationMs)> OsdMessages { get; } = [];
         public List<double> Seeks { get; } = [];
+        public List<string> SelectedAudioDevices { get; } = [];
+        public IReadOnlyList<LibMpvAudioDevice> AudioDevices { get; init; } = [];
+        public string? CurrentAudioDevice { get; set; }
         public int ReloadCount { get; private set; }
         public int DisposeCount { get; private set; }
 
@@ -686,6 +750,13 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
         public void SetSpeed(double speed) => Speeds.Add(speed);
         public void Reload() => ReloadCount++;
         public void SeekRelative(double seconds) => Seeks.Add(seconds);
+        public IReadOnlyList<LibMpvAudioDevice> GetAudioDevices() => AudioDevices;
+        public string? GetCurrentAudioDevice() => CurrentAudioDevice;
+        public void SetAudioDevice(string deviceName)
+        {
+            CurrentAudioDevice = deviceName;
+            SelectedAudioDevices.Add(deviceName);
+        }
         public void ShowOsdText(string text, int durationMs) => OsdMessages.Add((text, durationMs));
         public bool SaveScreenshot(string filePath) => true;
         public void SetVideoAdjustment(LibMpvVideoAdjustment adjustment) { }
@@ -710,6 +781,8 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
         public event Action<double>? SpeedChanged;
         public event Action? ReloadRequested;
         public event Action<double>? SeekRequested;
+        public Func<(IReadOnlyList<LibMpvAudioDevice> Devices, string? CurrentDevice)>? AudioDevicesProvider { get; set; }
+        public event Action<string>? AudioDeviceSelected;
         public Task Closed => _closed.Task;
         public int DisposeCount { get; private set; }
 
@@ -726,6 +799,8 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
         public void RaiseReloadRequested() => ReloadRequested?.Invoke();
 
         public void RaiseSeekRequested(double seconds) => SeekRequested?.Invoke(seconds);
+
+        public void RaiseAudioDeviceSelected(string deviceName) => AudioDeviceSelected?.Invoke(deviceName);
 
         public void Close() => _closed.TrySetResult();
 

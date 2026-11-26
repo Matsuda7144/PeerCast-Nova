@@ -190,6 +190,19 @@ public sealed class PublishingAnnounceIntegrationTests
         Assert.Equal(TimeSpan.FromSeconds(30), PublishingAnnounceSession.ComputeReconnectDelay(10, baseDelay));
     }
 
+    [Fact]
+    public async Task PersistentBroadcastIdIsNormalizedAndPreservedAcrossOwners()
+    {
+        var raw = Guid.Parse("FF112233-4455-6677-8899-AABBCCDDEEFF");
+        await using var first = new PublishingAnnounceOwner(raw);
+        var encoded = PcpWireValueCodec.EncodeGuid(first.BroadcastId);
+        Assert.Equal((byte)0, encoded[0]);
+        Assert.NotEqual(Guid.Empty, first.BroadcastId);
+
+        await using var second = new PublishingAnnounceOwner(first.BroadcastId);
+        Assert.Equal(first.BroadcastId, second.BroadcastId);
+    }
+
     private sealed class SequentialConnector(Func<IPcpAnnounceConnection> nextConnection) : IPcpAnnounceConnector
     {
         public Task<IPcpAnnounceConnection> ConnectAsync(IPEndPoint endpoint, CancellationToken cancellationToken) =>

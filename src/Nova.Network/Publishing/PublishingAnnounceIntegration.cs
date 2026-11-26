@@ -32,12 +32,15 @@ public sealed class PublishingAnnounceOwner : IAsyncDisposable
     private bool _disposed;
     private readonly object _gate = new();
     private PublishingAnnounceSession? _current;
-    public PublishingAnnounceOwner() : this(new PcpAnnounceProductionConnector(),
-        (host, token) => Dns.GetHostAddressesAsync(host, token))
+    public Guid BroadcastId => _owner.BroadcastId;
+    public PublishingAnnounceOwner() : this(broadcastId: null)
     { }
-    internal PublishingAnnounceOwner(IPcpAnnounceConnector connector, Func<string, CancellationToken, Task<IPAddress[]>> resolver, TimeProvider? timeProvider = null, TimeSpan? reconnectBaseDelay = null)
+    public PublishingAnnounceOwner(Guid? broadcastId) : this(new PcpAnnounceProductionConnector(),
+        (host, token) => Dns.GetHostAddressesAsync(host, token), broadcastId: broadcastId)
+    { }
+    internal PublishingAnnounceOwner(IPcpAnnounceConnector connector, Func<string, CancellationToken, Task<IPAddress[]>> resolver, TimeProvider? timeProvider = null, TimeSpan? reconnectBaseDelay = null, Guid? broadcastId = null)
     {
-        _owner = new(connector, new PcpAnnounceOptions { HandshakeTimeout = TimeSpan.FromSeconds(20) }, timeProvider);
+        _owner = new(connector, new PcpAnnounceOptions { HandshakeTimeout = TimeSpan.FromSeconds(20) }, timeProvider, broadcastId);
         _resolve = resolver;
         _reconnectBaseDelay = reconnectBaseDelay ?? TimeSpan.FromSeconds(5);
     }
