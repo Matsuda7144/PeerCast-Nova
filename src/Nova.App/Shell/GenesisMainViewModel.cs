@@ -174,6 +174,10 @@ public sealed partial class GenesisMainViewModel : INotifyPropertyChanged
         !_stopCommandInFlight &&
         PlaybackState is PlaybackSessionState.Stopped or PlaybackSessionState.Faulted;
 
+    public bool CanPlayInNewWindow => !_playCommandInFlight &&
+        !_stopCommandInFlight &&
+        PlaybackState is PlaybackSessionState.Stopped or PlaybackSessionState.Faulted or PlaybackSessionState.Playing;
+
     public bool CanStop => !_stopCommandInFlight &&
         PlaybackState is PlaybackSessionState.Starting or PlaybackSessionState.Playing;
 
@@ -635,7 +639,7 @@ public sealed partial class GenesisMainViewModel : INotifyPropertyChanged
 
     private async ValueTask PlayCoreAsync(bool keepExistingSessions, CancellationToken cancellationToken)
     {
-        if (!CanPlay)
+        if (!(keepExistingSessions ? CanPlayInNewWindow : CanPlay))
         {
             return;
         }
@@ -897,6 +901,7 @@ public sealed partial class GenesisMainViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(CurrentSource));
         OnPropertyChanged(nameof(StatusText));
         OnPropertyChanged(nameof(CanPlay));
+        OnPropertyChanged(nameof(CanPlayInNewWindow));
         OnPropertyChanged(nameof(CanStop));
         SetPlaybackWindow(PlaybackWindowForSnapshot(snapshot));
     }
@@ -956,6 +961,7 @@ public sealed partial class GenesisMainViewModel : INotifyPropertyChanged
 
         _playCommandInFlight = value;
         OnPropertyChanged(nameof(CanPlay));
+        OnPropertyChanged(nameof(CanPlayInNewWindow));
         OnPropertyChanged(nameof(CanStop));
     }
 
@@ -968,6 +974,7 @@ public sealed partial class GenesisMainViewModel : INotifyPropertyChanged
 
         _stopCommandInFlight = value;
         OnPropertyChanged(nameof(CanPlay));
+        OnPropertyChanged(nameof(CanPlayInNewWindow));
         OnPropertyChanged(nameof(CanStop));
     }
 
