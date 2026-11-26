@@ -689,6 +689,7 @@ public sealed partial class PcpRelayFanoutRecordingStreamSourceLeaseFactory :
             if (failures.Count == 0) completionSource.TrySetResult();
             else completionSource.TrySetException(failures.Count == 1 ? failures[0] :
                 new AggregateException("The recording source failed to clean up.", failures));
+            _owner.Remove(this);
         }
     }
 }
