@@ -240,6 +240,7 @@ internal sealed class PublishingSettingsController(IPublishingPreferencesStore s
     private int _saving;
     private Task _pending = Task.CompletedTask;
     internal event Action? Changed;
+    internal event Action<PublishingSettingsSnapshot>? SavedUpdated;
     internal PublishingSettingsSnapshot Saved { get { lock (_gate) return _saved; } }
     internal PublishingSettingsSnapshot? Applied { get { lock (_gate) return _applied; } }
     internal bool LoadFailed { get { lock (_gate) return !_trusted; } }
@@ -310,6 +311,7 @@ internal sealed class PublishingSettingsController(IPublishingPreferencesStore s
                     lock (_gate) snapshot = new(checked(_saved.SettingsRevision + 1), next, _saved.Extensions);
                     await store.SaveAsync(snapshot, cancellationToken).ConfigureAwait(false);
                     lock (_gate) { _saved = snapshot; _trusted = true; }
+                    try { SavedUpdated?.Invoke(snapshot); } catch { }
                     return new PublishingSettingsSaveResult(true, "保存しました。次の配信開始から適用されます。");
                 }
                 catch (OperationCanceledException) { return new(false, "保存を中止しました。保存値は変更されていません。"); }

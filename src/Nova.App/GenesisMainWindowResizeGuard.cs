@@ -27,16 +27,19 @@ internal sealed class GenesisMainWindowResizeGuard : IAsyncDisposable
     private readonly nint _window;
     private readonly int _originalStyle;
     private readonly bool _styleChanged;
+    private readonly GenesisSystemTrayBridge? _trayBridge;
     private int _disposed;
 
     private GenesisMainWindowResizeGuard(
         nint window,
         int originalStyle,
-        bool styleChanged)
+        bool styleChanged,
+        GenesisSystemTrayBridge? trayBridge)
     {
         _window = window;
         _originalStyle = originalStyle;
         _styleChanged = styleChanged;
+        _trayBridge = trayBridge;
     }
 
     public static IAsyncDisposable? Create(long windowToken)
@@ -86,6 +89,7 @@ internal sealed class GenesisMainWindowResizeGuard : IAsyncDisposable
             return null;
         }
 
+        GenesisSystemTrayBridge? trayBridge = null;
         if (placementStore is not null)
         {
             PlacementStores[window] = placementStore;
@@ -93,9 +97,11 @@ internal sealed class GenesisMainWindowResizeGuard : IAsyncDisposable
             {
                 RestorePlacement(window, savedPlacement);
             }
+
+            trayBridge = GenesisSystemTrayBridge.TryCreate(window);
         }
 
-        return new(window, originalStyle, styleChanged: resizableStyle != originalStyle);
+        return new(window, originalStyle, styleChanged: resizableStyle != originalStyle, trayBridge);
     }
 
     internal static int ResolveResizableStyle(int style) =>
@@ -234,28 +240,34 @@ internal sealed class GenesisMainWindowResizeGuard : IAsyncDisposable
         return result;
     }
 
-    public ValueTask DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
-        if (Interlocked.Exchange(ref _disposed, 1) == 0 && _window != 0 && IsWindow(_window))
+        if (Interlocked.Exchange(ref _disposed, 1) == 0)
         {
-            if (PlacementStores.TryRemove(_window, out var store))
+            if (_trayBridge is not null)
             {
-                SaveCurrentPlacement(_window, store);
+                await _trayBridge.DisposeAsync().ConfigureAwait(false);
             }
 
-            _ = RemoveWindowSubclass(_window, Procedure, SubclassId);
-            if (_styleChanged)
+            if (_window != 0 && IsWindow(_window))
             {
-                _ = SetWindowLongW(_window, WindowStyleIndex, _originalStyle);
-                _ = RefreshFrame(_window);
+                if (PlacementStores.TryRemove(_window, out var store))
+                {
+                    SaveCurrentPlacement(_window, store);
+                }
+
+                _ = RemoveWindowSubclass(_window, Procedure, SubclassId);
+                if (_styleChanged)
+                {
+                    _ = SetWindowLongW(_window, WindowStyleIndex, _originalStyle);
+                    _ = RefreshFrame(_window);
+                }
+            }
+            else if (_window != 0)
+            {
+                _ = PlacementStores.TryRemove(_window, out _);
             }
         }
-        else if (_window != 0)
-        {
-            _ = PlacementStores.TryRemove(_window, out _);
-        }
-
-        return ValueTask.CompletedTask;
     }
 
     private static bool RefreshFrame(nint window) =>

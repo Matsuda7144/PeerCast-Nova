@@ -1,3 +1,4 @@
+using PeerCast.Nova.Core.Channels;
 using PeerCast.Nova.Network.Pcp;
 using PeerCast.Nova.Network.Publishing;
 using PeerCast.Nova.Network.Rtmp;
@@ -98,6 +99,27 @@ internal sealed partial class NovaObsPublishingLifecycleController : INovaObsPub
             lock (_gate) return _started && !_closing && !_terminal.Task.IsCompleted && _disposal is null &&
             _failure == NovaObsPublishingLifecycleFailure.None && _owner is INovaObsPublishingFinishRuntime;
         }
+    }
+
+    internal bool TryUpdateLiveMetadata(ChannelMetadataSnapshot metadata)
+    {
+        ArgumentNullException.ThrowIfNull(metadata);
+        INovaObsPublishingRuntime? owner;
+        lock (_gate)
+        {
+            if (_closing ||
+                _stopRequested ||
+                _disposal is not null ||
+                _terminal.Task.IsCompleted ||
+                _state is not (NovaObsPublishingLifecycleState.Starting or NovaObsPublishingLifecycleState.Running))
+            {
+                return false;
+            }
+
+            owner = _owner;
+        }
+
+        return owner is not null && owner.TryUpdateLiveMetadata(metadata);
     }
 
     public Task<NovaObsPublishingLifecycleResult> Completion => _terminal.Task;

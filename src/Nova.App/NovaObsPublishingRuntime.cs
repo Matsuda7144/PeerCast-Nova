@@ -13,6 +13,7 @@ internal interface INovaObsPublishingStatusSource
 internal interface INovaObsPublishingRuntime : INovaObsPublishingStatusSource, IAsyncDisposable
 {
     void Start(CancellationToken cancellationToken);
+    bool TryUpdateLiveMetadata(ChannelMetadataSnapshot metadata) => false;
 }
 
 internal interface INovaObsPublishingLifecycleRuntime : INovaObsPublishingRuntime
@@ -117,6 +118,9 @@ internal sealed class NovaObsPublishingRuntime : INovaObsPublishingGenerationRun
     public ObsPublishStatusSnapshot Snapshot => _host.PublishingStatus;
 
     public void Start(CancellationToken cancellationToken) => _host.Start(cancellationToken);
+
+    public bool TryUpdateLiveMetadata(ChannelMetadataSnapshot metadata) =>
+        _host.TryUpdateLiveMetadata(metadata);
 
     public Task<ObsPublishChannelResult> Completion => _host.Completion;
 
