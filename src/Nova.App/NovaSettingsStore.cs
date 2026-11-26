@@ -4,21 +4,29 @@ using PeerCast.Nova.Foundation.Configuration;
 namespace PeerCast.Nova.App;
 
 internal sealed class NovaSettingsStore(string path, Action? checkAccess = null,
-    Action<NovaOptions>? validate = null)
+    Action<NovaOptions>? validate = null, string? legacyFallbackPath = null)
 {
     private static readonly SemaphoreSlim Writes = new(1, 1);
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
-    public static NovaSettingsStore CreateDefault() => new(Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "PeerCast", "Nova", "settings.json"));
+
+    internal string FilePath => path;
+
+    public static NovaSettingsStore CreateDefault() => new(
+        NovaAppDataPaths.GetDefaultSettingsFilePath(),
+        legacyFallbackPath: NovaAppDataPaths.GetLegacySettingsFilePath());
 
     public NovaOptions Load()
     {
         checkAccess?.Invoke();
-        var value = File.Exists(path)
-        ? JsonSerializer.Deserialize<NovaOptions>(File.ReadAllText(path))
-            ?? throw new InvalidDataException("Nova settings contain no document.")
-        : new NovaOptions();
+        var sourcePath = File.Exists(path)
+            ? path
+            : !string.IsNullOrWhiteSpace(legacyFallbackPath) && File.Exists(legacyFallbackPath)
+                ? legacyFallbackPath
+                : null;
+        var value = sourcePath is not null
+            ? JsonSerializer.Deserialize<NovaOptions>(File.ReadAllText(sourcePath))
+                ?? throw new InvalidDataException("Nova settings contain no document.")
+            : new NovaOptions();
         validate?.Invoke(value);
         return value;
     }

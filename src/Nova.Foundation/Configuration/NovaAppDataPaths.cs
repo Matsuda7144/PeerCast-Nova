@@ -21,6 +21,15 @@ public static class NovaAppDataPaths
     public static string GetLegacySettingsDirectory() =>
         Path.Combine(GetLocalApplicationDataRoot(), "PeerCast", "Nova");
 
+    public static string GetPrimaryFilePath(string fileName) =>
+        Path.Combine(GetPrimaryDataDirectory(), fileName);
+
+    public static string GetDefaultSettingsFilePath() =>
+        GetPrimaryFilePath("settings.json");
+
+    public static string GetLegacySettingsFilePath() =>
+        Path.Combine(GetLegacySettingsDirectory(), "settings.json");
+
     public static string GetLogsDirectory() =>
         Path.Combine(GetPrimaryDataDirectory(), "logs");
 

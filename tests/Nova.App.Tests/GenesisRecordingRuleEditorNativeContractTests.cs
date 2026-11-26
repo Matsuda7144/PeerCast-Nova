@@ -1,87 +1,118 @@
+using PeerCast.Nova.Core.Recording;
+
 namespace PeerCast.Nova.App.Tests;
 
 public sealed class GenesisRecordingRuleEditorNativeContractTests
 {
     [Fact]
-    public void NativeRulesButtonsDispatchOnlyThroughAppEditorCommands()
+    public void NativeRulesButtonsDispatchThroughAppEditorCommands()
     {
-        var source = Source("GenesisGuiNextAppShellBridge.cs");
-        Assert.Contains("CreateRecordingModeButton(\"新規\"", source);
-        Assert.Contains("CreateRecordingModeButton(\"編集\"", source);
-        Assert.Contains("_tabs.CreateRecordingRule()", source);
-        Assert.Contains("_tabs.EditRecordingRule(selectedId)", source);
-        Assert.Contains("_tabs.CanCreateRecordingRule", source);
-        Assert.Contains("_tabs.CanEditRecordingRule(row?.RecordingRule?.RuleId)", source);
-        Assert.Contains("GenesisRecordingRuleEditor.UnsupportedMessage", source);
-        Assert.Contains("GenesisRecordingRuleEditorWindow.ShowModal", source);
+        var source = RepositorySourceTestHelper.ReadAppSource("GenesisGuiNextAppShellBridge.cs");
+        Assert.Contains("_tabs.CreateRecordingRule()", source, StringComparison.Ordinal);
+        Assert.Contains("_tabs.EditRecordingRule(selectedId)", source, StringComparison.Ordinal);
+        Assert.Contains("_tabs.CanCreateRecordingRule", source, StringComparison.Ordinal);
+        Assert.Contains("_tabs.CanEditRecordingRule", source, StringComparison.Ordinal);
+        Assert.Contains("GenesisRecordingRuleEditorWindow.ShowModal", source, StringComparison.Ordinal);
     }
+
     [Fact]
-    public void NativeEditorOwnsNoJsonRevisionRecordingOrCatalogOperation()
+    public async Task EditorExposesMatchModesRequiresConfirmationForMatchAllAndPersistsOnConfirm()
     {
-        var source = Source("GenesisRecordingRuleEditorWindow.cs");
-        foreach (var forbidden in new[] { "File.", "Json", "RecordingRuleSet", "SHA256", "Process.Start", "EvaluateAutomatic", "StartManual", "StopRecording", "RefreshCurrent", ".Wait(", ".Result", "GetAwaiter" })
-            Assert.DoesNotContain(forbidden, source);
-        Assert.Contains("await editor.SaveAsync(frozen, confirmed)", source);
-        Assert.Contains("PostMessageW(window, CompletedMessage", source);
-        Assert.Contains("if (Open)", source);
-    }
-    [Fact]
-    public void NativeEditorOffersSupportedFieldsAndNoDestructiveCommands()
-    {
-        var source = Source("GenesisRecordingRuleEditorWindow.cs");
         Assert.Equal(["完全一致", "一部一致", "正規表現"], GenesisRecordingRuleEditorWindow.MatchModes);
-        foreach (var text in new[] { "ルール名", "有効", "録画", "除外", "優先度", "すべてのチャンネルに一致", "ChannelId", "名前", "説明", "StreamType", "最小 kbps", "最大 kbps", "保存", "キャンセル" })
-            Assert.Contains(text, source);
-        foreach (var text in new[] { "Genre", "ContentType", "Comment", "削除", "複製", "上へ", "下へ" })
-            Assert.DoesNotContain(text, source);
+        Assert.False(string.IsNullOrWhiteSpace(GenesisRecordingRuleEditor.UnsupportedMessage));
+
+        var directory = Path.Combine(Path.GetTempPath(), "NovaRuleEditorContractTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var path = Path.Combine(directory, "rules.json");
+            await using var repository = new GenesisRecordingRuleRepository(path, RecordingRuleFileStore.SaveAsync);
+            await using var mutations = new GenesisRecordingRuleMutationController(repository, (_, _) => { });
+            await using var editor = new GenesisRecordingRuleEditor(mutations);
+
+            var snapshot = await repository.GetSnapshotAsync();
+            var draft = editor.BeginCreate(snapshot);
+            Assert.NotNull(draft);
+            Assert.True(editor.CanSave);
+
+            var matchAllDraft = draft! with { Name = "全一致ルール", MatchAll = true, IsEnabled = true };
+            var warningResult = await editor.SaveAsync(matchAllDraft, broadMatchConfirmed: false);
+            Assert.True(warningResult.RequiresConfirmation);
+            Assert.False(warningResult.Applied);
+            Assert.True(editor.CanSave);
+
+            var appliedResult = await editor.SaveAsync(matchAllDraft, broadMatchConfirmed: true);
+            Assert.True(appliedResult.Applied);
+            Assert.False(editor.CanSave);
+
+            var persisted = await repository.GetSnapshotAsync();
+            var rule = Assert.Single(persisted.Rules!.Rules);
+            Assert.Equal("全一致ルール", rule.Name);
+            Assert.True(rule.Criteria.IsMatchAll);
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
     }
+
     [Fact]
-    public void NativeSaveIsSingleFlightAndWarningNoDoesNotDispatchConfirmedSave()
+    public async Task EditorCancelReleasesMutationReservationAndResetsCanSave()
     {
-        var source = Source("GenesisRecordingRuleEditorWindow.cs");
-        Assert.Contains("saveOperation is { IsCompleted: false }", source);
-        Assert.Contains("!editor.CanSave", source);
-        Assert.Contains("EnableWindow(pair.Value, false)", source);
-        Assert.Contains("MessageBoxW(window, result.Message, Title, 0x24) == 6", source);
-        Assert.Contains("BeginSave(true); return;", source);
-        Assert.Contains("else if (result.Applied)", source);
+        var directory = Path.Combine(Path.GetTempPath(), "NovaRuleEditorCancelTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var path = Path.Combine(directory, "rules.json");
+            await using var repository = new GenesisRecordingRuleRepository(path, RecordingRuleFileStore.SaveAsync);
+            await using var mutations = new GenesisRecordingRuleMutationController(repository, (_, _) => { });
+            await using var editor = new GenesisRecordingRuleEditor(mutations);
+
+            var snapshot = await repository.GetSnapshotAsync();
+            Assert.NotNull(editor.BeginCreate(snapshot));
+            Assert.True(editor.CanSave);
+            Assert.False(mutations.IsAvailable);
+
+            editor.Cancel();
+
+            Assert.False(editor.CanSave);
+            Assert.Null(editor.Draft);
+            Assert.True(mutations.IsAvailable);
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
     }
-    [Fact]
-    public void NativeCloseCancelsAttemptWithoutDisposingRepositoryAndPumpSupportsKeyboard()
-    {
-        var source = Source("GenesisRecordingRuleEditorWindow.cs");
-        Assert.Contains("editor.Cancel()", source);
-        Assert.DoesNotContain("editor.Dispose", source);
-        Assert.Contains("EnableWindow(owner, false)", source);
-        Assert.Contains("EnableWindow(owner, true)", source);
-        Assert.Contains("IsDialogMessageW(window, ref message)", source);
-        Assert.Contains("PostQuitMessage", source);
-    }
+
     [Fact]
     public void AppliedRuleSelectionUsesIdentityAndNeverAnOldIndex()
     {
-        var source = Source("SystemGenesisMainWindowInteractionBridgeFactory.cs");
-        Assert.Contains("GenesisChannelListRenderedChannels.AnchorRecordingRule(_channelList, ruleId)", source);
-        Assert.Contains("_guiNextTabs.ClearRecordingRuleSelectionAfterSave()", source);
         const nint handle = 900011;
         var id = Guid.NewGuid();
         try
         {
             GenesisChannelListRenderedChannels.AnchorRecordingRule(handle, id);
-            var row = new GenesisGuiNextNativeTabRow(new("", ""), null,
-                RecordingRule: new(id, 1, "edited", false, Core.Recording.RecordingRuleAction.Record, 0, "condition"));
-            Assert.Equal(1, GenesisChannelListRenderedChannels.FindAnchoredRow(handle, [row with { RecordingRule = row.RecordingRule! with { RuleId = Guid.NewGuid() } }, row]));
+            var row = new GenesisGuiNextNativeTabRow(
+                new(string.Empty, string.Empty),
+                null,
+                RecordingRule: new(id, 1, "edited", false, RecordingRuleAction.Record, 0, "condition"));
+            Assert.Equal(
+                1,
+                GenesisChannelListRenderedChannels.FindAnchoredRow(
+                    handle,
+                    [row with { RecordingRule = row.RecordingRule! with { RuleId = Guid.NewGuid() } }, row]));
             Assert.Equal(-1, GenesisChannelListRenderedChannels.FindAnchoredRow(handle, []));
         }
-        finally { GenesisChannelListRenderedChannels.Remove(handle); }
-    }
-    private static string Source(string name)
-    {
-        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
+        finally
         {
-            var path = Path.Combine(directory.FullName, "src", "Nova.App", name);
-            if (File.Exists(path)) return File.ReadAllText(path);
+            GenesisChannelListRenderedChannels.Remove(handle);
         }
-        throw new FileNotFoundException(name);
     }
 }

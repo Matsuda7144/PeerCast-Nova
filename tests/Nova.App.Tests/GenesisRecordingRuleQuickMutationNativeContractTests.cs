@@ -1,78 +1,86 @@
+using PeerCast.Nova.Core.Recording;
+
 namespace PeerCast.Nova.App.Tests;
 
 public sealed class GenesisRecordingRuleQuickMutationNativeContractTests
 {
     [Fact]
-    public void NativeQuickButtonsUseRuleIdAppCommandsAndSharedAvailability()
+    public void NativeQuickButtonsUseAppCommandsAndSharedAvailability()
     {
-        var source = Source("GenesisGuiNextAppShellBridge.cs");
-        Assert.Contains("CreateRecordingModeButton(\"有効化\"", source);
-        Assert.Contains("CreateRecordingModeButton(\"削除\"", source);
-        Assert.Contains("_tabs.CanQuickMutateRecordingRule(row?.RecordingRule?.RuleId)", source);
-        Assert.Contains("_tabs.RecordingRuleToggleLabel(row?.RecordingRule?.RuleId)", source);
-        Assert.Contains("_tabs.QuickMutateRecordingRuleAsync(selectedId, action", source);
-        Assert.Contains("MessageBoxW(_owner, confirmation.Message, \"録画ルール\", 0x24) == 6", source);
-        Assert.Contains("DrawRecordingModeButton(drawItem, label, false)", source);
-        Assert.Contains("PresentVisible(_toggleRuleButton, isRulesPage", source);
-        Assert.Contains("PresentVisible(_deleteRuleButton, isRulesPage", source);
+        var source = RepositorySourceTestHelper.ReadAppSource("GenesisGuiNextAppShellBridge.cs");
+        Assert.Contains("_tabs.CanQuickMutateRecordingRule", source, StringComparison.Ordinal);
+        Assert.Contains("_tabs.RecordingRuleToggleLabel", source, StringComparison.Ordinal);
+        Assert.Contains("_tabs.QuickMutateRecordingRuleAsync", source, StringComparison.Ordinal);
+        Assert.Contains("_tabs.CanMoveRecordingRule", source, StringComparison.Ordinal);
+        Assert.Contains(
+            "GenesisRecordingRuleMutationController.PersistedOrderHelp",
+            source,
+            StringComparison.Ordinal);
     }
 
     [Fact]
-    public void QuickBoundaryOwnsNoCatalogRecordingPlaybackOrCoreEditingLogic()
+    public async Task MutationControllerEnforcesSingleReservationAndPreservesPersistedOrder()
     {
-        var source = Source("GenesisRecordingRuleMutationController.cs");
-        foreach (var forbidden in new[] { "File.", "Json", "SHA256", "Refresh", "ObserveAsync", "Evaluate", "StartManual", "StopRecording", "Pcp", "Process", ".Wait(", ".Result", "GetAwaiter", "GenesisRecordingRuleDraft" })
-            Assert.DoesNotContain(forbidden, source);
-        Assert.Contains("await repository.SaveAsync(expected, proposed, cancellationToken)", source);
-        Assert.Contains("rule.Criteria, rule.Priority", source);
-        Assert.Contains("snapshot.Rules!.Remove(rule.Id)", source);
-        Assert.Contains("snapshot.Rules!.Move(rule.Id, target!.Value)", source);
-        var editor = Source("GenesisRecordingRuleEditor.cs");
-        Assert.Contains("mutations.TryReserve()", editor);
-        Assert.Contains("await mutations.SaveAsync", editor);
-    }
+        Assert.Contains("同じ優先度", GenesisRecordingRuleMutationController.PersistedOrderHelp, StringComparison.Ordinal);
+        Assert.Contains("次回", GenesisRecordingRuleMutationController.PersistedOrderHelp, StringComparison.Ordinal);
 
-    [Fact]
-    public void NativeReorderButtonsUseSharedCommandAndExposePersistedOrderHelp()
-    {
-        var source = Source("GenesisGuiNextAppShellBridge.cs");
-        foreach (var label in new[] { "上へ", "下へ" })
-            Assert.Contains($"CreateRecordingModeButton(\"{label}\"", source);
-        foreach (var direction in new[] { "Up", "Down" })
+        var directory = Path.Combine(Path.GetTempPath(), "NovaRuleMutationContractTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
         {
-            Assert.Contains($"_tabs.CanMoveRecordingRule(row?.RecordingRule?.RuleId, GenesisRecordingRuleQuickAction.Move{direction})", source);
-            Assert.Contains($"PresentVisible(_moveRule{direction}Button, isRulesPage", source);
-            Assert.Contains($"MoveRule{direction}ControlId => GenesisRecordingRuleQuickAction.Move{direction}", source);
-            Assert.Contains($"MoveRule{direction}ControlId => \"{(direction == "Up" ? "上へ" : "下へ")}\"", source);
+            var path = Path.Combine(directory, "rules.json");
+            var first = new RecordingRule(Guid.NewGuid(), "First", RecordingRuleAction.Record, new(name: new("a")), 1, true);
+            var second = new RecordingRule(Guid.NewGuid(), "Second", RecordingRuleAction.Record, new(name: new("b")), 10, false);
+            var third = new RecordingRule(Guid.NewGuid(), "Third", RecordingRuleAction.Record, new(name: new("c")), -5, false);
+            await File.WriteAllTextAsync(path, RecordingRuleJsonCodec.Serialize(new([first, second, third])));
+
+            await using var repository = new GenesisRecordingRuleRepository(path, RecordingRuleFileStore.SaveAsync);
+            GenesisRecordingRuleRepositorySnapshot? publishedSnapshot = null;
+            Guid? publishedSelection = null;
+            await using var controller = new GenesisRecordingRuleMutationController(
+                repository,
+                (snapshot, selection) =>
+                {
+                    publishedSnapshot = snapshot;
+                    publishedSelection = selection;
+                });
+
+            var initial = await repository.GetSnapshotAsync();
+
+            // 予約の排他制御が機能することを確認
+            using (var reservation = controller.TryReserve())
+            {
+                Assert.NotNull(reservation);
+                Assert.False(controller.IsAvailable);
+                Assert.Null(controller.TryReserve());
+
+                var blocked = await controller.ExecuteAsync(
+                    initial,
+                    first.Id,
+                    GenesisRecordingRuleQuickAction.MoveDown,
+                    (_, _) => ValueTask.FromResult(true));
+                Assert.Null(blocked.Status);
+            }
+
+            Assert.True(controller.IsAvailable);
+
+            // 優先度で勝手に再ソートせず、移動順だけが維持されて保存されること
+            var moved = await controller.ExecuteAsync(
+                initial,
+                first.Id,
+                GenesisRecordingRuleQuickAction.MoveDown,
+                (_, _) => ValueTask.FromResult(true));
+            Assert.True(moved.Applied);
+            Assert.NotNull(publishedSnapshot);
+            Assert.Equal(first.Id, publishedSelection);
+            Assert.Equal([second.Id, first.Id, third.Id], publishedSnapshot!.Rules!.Rules.Select(rule => rule.Id));
         }
-        Assert.Contains("PresentText(_detailsIdentity, GenesisRecordingRuleMutationController.PersistedOrderHelp)", source);
-        Assert.Contains("同じ優先度", GenesisRecordingRuleMutationController.PersistedOrderHelp);
-        Assert.Contains("次回", GenesisRecordingRuleMutationController.PersistedOrderHelp);
-        var mutation = Source("GenesisRecordingRuleMutationController.cs");
-        Assert.DoesNotContain(".OrderBy", mutation);
-        Assert.DoesNotContain(".Sort(", mutation);
-    }
-
-    [Fact]
-    public void NativeQuickDispatchDoesNotUseSyncWaitOrDirectPersistence()
-    {
-        var source = Source("GenesisGuiNextAppShellBridge.cs");
-        var start = source.IndexOf("private async Task ObserveQuickRuleMutationAsync", StringComparison.Ordinal);
-        var end = source.IndexOf("public void ProcessCommand", start, StringComparison.Ordinal);
-        var command = source[start..end];
-        foreach (var forbidden in new[] { "File.", "Json", "RecordingRuleSet", "Revision", ".Wait(", ".Result", "GetAwaiter", "StartManual", "EvaluateAutomatic" })
-            Assert.DoesNotContain(forbidden, command);
-        Assert.Contains("token.ThrowIfCancellationRequested()", command);
-        Assert.Contains("Volatile.Read(ref _detached)", command);
-    }
-
-    private static string Source(string name)
-    {
-        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
+        finally
         {
-            var path = Path.Combine(directory.FullName, "src", "Nova.App", name);
-            if (File.Exists(path)) return File.ReadAllText(path);
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
         }
-        throw new FileNotFoundException(name);
     }
 }

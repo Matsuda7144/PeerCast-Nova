@@ -61,6 +61,34 @@ public sealed class NovaAppPackagingContractTests
     }
 
     [Fact]
+    public void WindowsSelfContainedPublishProfileProducesSelfContainedWinX64WithPortableSymbols()
+    {
+        var profile = XDocument.Load(FindRepositoryFile(
+            "src",
+            "Nova.App",
+            "Properties",
+            "PublishProfiles",
+            "WindowsSelfContained.pubxml"));
+
+        Assert.Equal("Release", Property(profile, "Configuration"));
+        Assert.Equal("win-x64", Property(profile, "RuntimeIdentifier"));
+        Assert.Equal("true", Property(profile, "SelfContained"));
+        Assert.Equal("true", Property(profile, "UseAppHost"));
+        Assert.Equal("false", Property(profile, "PublishSingleFile"));
+        Assert.Equal("false", Property(profile, "PublishTrimmed"));
+        Assert.Equal("false", Property(profile, "PublishReadyToRun"));
+        Assert.Equal("portable", Property(profile, "DebugType"));
+        Assert.Equal("true", Property(profile, "DebugSymbols"));
+
+        var declaredProperties = profile.Descendants()
+            .Select(element => element.Name.LocalName)
+            .ToHashSet(StringComparer.Ordinal);
+        Assert.All(
+            InstallerSigningAndUpdateProperties,
+            property => Assert.DoesNotContain(property, declaredProperties));
+    }
+
+    [Fact]
     public void AppPackageCopiesExactLegalAllowlist()
     {
         var project = XDocument.Load(FindRepositoryFile(
