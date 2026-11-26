@@ -142,6 +142,7 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
     private const uint MenuCmdScreenshot = 2105;
     private const uint MenuCmdOpenScreenshotFolder = 2106;
     private const uint MenuCmdTogglePause = 2107;
+    private const uint MenuCmdReload = 2108;
     private const uint MenuCmdResizeSmall = 2110;
     private const uint MenuCmdResizeMedium = 2111;
     private const uint MenuCmdResizeHd = 2112;
@@ -170,6 +171,7 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
     private const nuint VirtualKeyB = 0x42;
     private const nuint VirtualKeyF = 0x46;
     private const nuint VirtualKeyM = 0x4D;
+    private const nuint VirtualKeyR = 0x52;
     private const nuint VirtualKeyS = 0x53;
     private const nuint VirtualKeyT = 0x54;
     private const nuint VirtualKeyOemOpenBrackets = 0xDB;
@@ -254,6 +256,8 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
     public event Action<bool>? PauseChanged;
 
     public event Action<double>? SpeedChanged;
+
+    public event Action? ReloadRequested;
 
     public event Action<LibMpvVideoAdjustment, string>? VideoAdjustmentChanged;
 
@@ -862,6 +866,12 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
         if (virtualKey == VirtualKeySpace)
         {
             TogglePause();
+            return true;
+        }
+
+        if (virtualKey == VirtualKeyR)
+        {
+            RequestReload();
             return true;
         }
 
@@ -1681,6 +1691,13 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
         SpeedChanged?.Invoke(clamped);
     }
 
+    private void RequestReload()
+    {
+        _paused = false;
+        _playbackSpeed = 1.0;
+        ReloadRequested?.Invoke();
+    }
+
     private void ToggleAlwaysOnTop(nint window)
     {
         if (window == 0)
@@ -2071,6 +2088,8 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
                 _ = AppendMenuW(menu, MenuFlagPopup, (nuint)speedMenu, "再生速度");
             }
 
+            _ = AppendMenuW(menu, MenuFlagString, MenuCmdReload, "再読込 (R)");
+
             _ = AppendMenuW(menu, MenuFlagSeparator, 0, string.Empty);
 
             var scaleMenu = CreatePopupMenu();
@@ -2188,6 +2207,9 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
             {
                 case MenuCmdTogglePause:
                     TogglePause();
+                    break;
+                case MenuCmdReload:
+                    RequestReload();
                     break;
                 case MenuCmdToggleAutoResize100:
                     _autoResizeTo100PercentOnStart = !_autoResizeTo100PercentOnStart;

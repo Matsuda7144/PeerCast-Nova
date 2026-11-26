@@ -304,6 +304,13 @@ public sealed class GenesisGuiNextConnectionSettingsTests
         Assert.Empty(Directory.GetFiles(directory.Path, "*.tmp"));
     }
 
+    [Fact]
+    public void NextStartNoticeDoesNotContainObsoleteIpv4BandwidthPublishBlockNotice()
+    {
+        Assert.DoesNotContain("LAN/WAN配信開始不可", GenesisGuiNextConnectionSettings.NextStartNotice, StringComparison.Ordinal);
+        Assert.Contains("WAN Relay", GenesisGuiNextConnectionSettings.NextStartNotice, StringComparison.Ordinal);
+    }
+
     private static GenesisGuiNextConnectionInput SetLimit(GenesisGuiNextConnectionInput input, int field, string value) => field switch
     {
         0 => input with { TotalUpstreamIpv4Kbps = value },

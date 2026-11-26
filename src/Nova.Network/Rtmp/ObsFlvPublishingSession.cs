@@ -106,6 +106,11 @@ internal sealed class ObsFlvPublishingSession(
             if (bytes[1] == 0)
             {
                 ValidateAac(bytes.AsSpan(2));
+                if (_bootstrapPublished && _audio is null)
+                {
+                    throw ObsRtmpRejection.Create(ObsRtmpRejectionStage.FlvBootstrap,
+                        ObsRtmpRejectionReason.CodecReplacement, "Midstream audio configuration after video-only bootstrap is unsupported.");
+                }
                 RetainConfiguration(ref _audio, CreateTag(8, message.Timestamp, bytes));
             }
             else
@@ -116,7 +121,13 @@ internal sealed class ObsFlvPublishingSession(
                         ObsRtmpRejectionReason.MissingAudioConfiguration, "AAC configuration is required before media.");
                 }
 
-                if (_mediaStarted)
+                if (!_bootstrapPublished && _video is null && encodedConsumer is null)
+                {
+                    await PublishFlvBootstrapAsync(cancellationToken).ConfigureAwait(false);
+                    _mediaStarted = true;
+                    tag = PublishMedia(message);
+                }
+                else if (_mediaStarted)
                 {
                     tag = PublishMedia(message);
                 }
@@ -142,6 +153,11 @@ internal sealed class ObsFlvPublishingSession(
                 }
 
                 _nalLengthBytes = ValidateAvc(bytes.AsSpan(5));
+                if (_bootstrapPublished && _video is null)
+                {
+                    throw ObsRtmpRejection.Create(ObsRtmpRejectionStage.FlvBootstrap,
+                        ObsRtmpRejectionReason.CodecReplacement, "Midstream video configuration after audio-only bootstrap is unsupported.");
+                }
                 RetainConfiguration(ref _video, CreateTag(9, message.Timestamp, bytes));
             }
             else
@@ -171,7 +187,16 @@ internal sealed class ObsFlvPublishingSession(
                 else
                 {
                     var idr = ValidateNalus(bytes.AsSpan(5));
-                    if (_bootstrapPublished && (_mediaStarted || (bytes[0] >> 4 == 1 && idr)))
+                    if (!_bootstrapPublished && _audio is null && encodedConsumer is null)
+                    {
+                        if (bytes[0] >> 4 == 1 && idr)
+                        {
+                            await PublishFlvBootstrapAsync(cancellationToken).ConfigureAwait(false);
+                            _mediaStarted = true;
+                            tag = PublishMedia(message, idr);
+                        }
+                    }
+                    else if (_bootstrapPublished && (_mediaStarted || (bytes[0] >> 4 == 1 && idr)))
                     {
                         _mediaStarted = true;
                         tag = PublishMedia(message, idr);
@@ -192,35 +217,42 @@ internal sealed class ObsFlvPublishingSession(
                 {
                     throw new ObsRtmpConsumerException(exception);
                 }
+
+                _bootstrapPublished = true;
             }
             else
             {
-                var head = new byte[13 + (_metadata?.Length ?? 0) + _audio.Length + _video.Length];
-                byte[] header = [0x46, 0x4C, 0x56, 1, 5, 0, 0, 0, 9, 0, 0, 0, 0];
-                header.CopyTo(head, 0);
-                var offset = 13;
-                // The existing managed FLV parser creates its session at the AAC
-                // sequence header, after observing AVC. Canonicalize this order
-                // regardless of the order OBS sent the configurations.
-                foreach (var bootstrap in new[] { _metadata, _video, _audio })
-                {
-                    if (bootstrap is not null)
-                    {
-                        bootstrap.CopyTo(head, offset);
-                        offset += bootstrap.Length;
-                    }
-                }
-
-                await PublishAsync(head, 0x64616568, cancellationToken).ConfigureAwait(false);
+                await PublishFlvBootstrapAsync(cancellationToken).ConfigureAwait(false);
             }
-
-            _bootstrapPublished = true;
         }
 
         if (tag is not null)
         {
             await PublishAsync(tag, 0x61746164, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    private async ValueTask PublishFlvBootstrapAsync(CancellationToken cancellationToken)
+    {
+        var flags = (byte)((_audio is not null ? 0x04 : 0) | (_video is not null ? 0x01 : 0));
+        var head = new byte[13 + (_metadata?.Length ?? 0) + (_audio?.Length ?? 0) + (_video?.Length ?? 0)];
+        byte[] header = [0x46, 0x4C, 0x56, 1, flags, 0, 0, 0, 9, 0, 0, 0, 0];
+        header.CopyTo(head, 0);
+        var offset = 13;
+        // The existing managed FLV parser creates its session at the AAC
+        // sequence header, after observing AVC. Canonicalize this order
+        // regardless of the order OBS sent the configurations.
+        foreach (var bootstrap in new[] { _metadata, _video, _audio })
+        {
+            if (bootstrap is not null)
+            {
+                bootstrap.CopyTo(head, offset);
+                offset += bootstrap.Length;
+            }
+        }
+
+        await PublishAsync(head, 0x64616568, cancellationToken).ConfigureAwait(false);
+        _bootstrapPublished = true;
     }
 
     private static ReadOnlySpan<byte> CodecConfiguration(byte[] tag, int codecHeaderBytes) =>

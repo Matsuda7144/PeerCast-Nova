@@ -14,6 +14,7 @@ internal interface ILibMpvPlaybackWindow : IAsyncDisposable
     event Action? ScreenshotRequested { add { } remove { } }
     event Action<bool>? PauseChanged { add { } remove { } }
     event Action<double>? SpeedChanged { add { } remove { } }
+    event Action? ReloadRequested { add { } remove { } }
     event Action<LibMpvVideoAdjustment, string>? VideoAdjustmentChanged { add { } remove { } }
     void UpdateStatusStats(string? statsText) { }
     void UpdateVideoStats(LibMpvPlaybackStats stats) { }
@@ -250,6 +251,7 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
             _host.ScreenshotRequested += OnScreenshotRequested;
             _host.PauseChanged += OnPauseChanged;
             _host.SpeedChanged += OnSpeedChanged;
+            _host.ReloadRequested += OnReloadRequested;
             _host.VideoAdjustmentChanged += OnVideoAdjustmentChanged;
         }
 
@@ -260,6 +262,7 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
         public event Action? ScreenshotRequested;
         public event Action<bool>? PauseChanged;
         public event Action<double>? SpeedChanged;
+        public event Action? ReloadRequested;
         public event Action<LibMpvVideoAdjustment, string>? VideoAdjustmentChanged;
         public Task Closed => _host.Closed;
 
@@ -273,6 +276,7 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
             _host.ScreenshotRequested -= OnScreenshotRequested;
             _host.PauseChanged -= OnPauseChanged;
             _host.SpeedChanged -= OnSpeedChanged;
+            _host.ReloadRequested -= OnReloadRequested;
             _host.VideoAdjustmentChanged -= OnVideoAdjustmentChanged;
             if (_windowStateStore is not null)
             {
@@ -298,6 +302,9 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
 
         private void OnSpeedChanged(double speed) =>
             SpeedChanged?.Invoke(speed);
+
+        private void OnReloadRequested() =>
+            ReloadRequested?.Invoke();
 
         private void OnVideoAdjustmentChanged(LibMpvVideoAdjustment adjustment, string summary) =>
             VideoAdjustmentChanged?.Invoke(adjustment, summary);
@@ -458,10 +465,19 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
                 client.ShowOsdText($"再生速度: {LibMpvPlaybackClient.FormatSpeedLabel(clamped)}", 1500);
             }
 
+            void OnReloadRequested()
+            {
+                client.SetPaused(false);
+                client.SetSpeed(1.0);
+                client.Reload();
+                client.ShowOsdText("ストリームを再読込しました", 1500);
+            }
+
             window.AudioStateChanged += OnAudioStateChanged;
             window.ScreenshotRequested += OnScreenshotRequested;
             window.PauseChanged += OnPauseChanged;
             window.SpeedChanged += OnSpeedChanged;
+            window.ReloadRequested += OnReloadRequested;
             window.VideoAdjustmentChanged += OnVideoAdjustmentChanged;
             if (window.BbsSession is { } bbsSession)
             {
@@ -514,6 +530,7 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
                 }
 
                 window.VideoAdjustmentChanged -= OnVideoAdjustmentChanged;
+                window.ReloadRequested -= OnReloadRequested;
                 window.SpeedChanged -= OnSpeedChanged;
                 window.PauseChanged -= OnPauseChanged;
                 window.ScreenshotRequested -= OnScreenshotRequested;

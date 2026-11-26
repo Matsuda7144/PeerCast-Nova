@@ -352,6 +352,77 @@ public sealed class ObsFlvPublishingSessionTests
         }
     }
 
+    [Fact]
+    public async Task Audio_only_stream_publishes_audio_only_flv_head_and_data_packets()
+    {
+        var consumer = new ObsRtmpTestConsumer();
+        var publisher = Create(consumer);
+        var metadata = ObsRtmpTestClient.Command("@setDataFrame", "onMetaData",
+            new Dictionary<string, object?> { ["audiodatarate"] = 128.0 });
+        await publisher.AcceptAsync(Message(18, metadata), CancellationToken.None);
+        await publisher.AcceptAsync(Message(8, AudioConfiguration), CancellationToken.None);
+        Assert.Empty(consumer.Packets);
+
+        await publisher.AcceptAsync(Message(8, Audio, 40), CancellationToken.None);
+        await publisher.AcceptAsync(Message(8, Audio, 60), CancellationToken.None);
+
+        var packets = consumer.Packets.ToArray();
+        Assert.Equal(3, packets.Length);
+        Assert.Equal(0x64616568U, packets[0].Type);
+        Assert.Equal(0x04, packets[0].Payload[4]);
+        var retained = new PcpFlvBootstrapRetention();
+        retained.Observe(packets[0].Payload);
+        Assert.True(retained.StatusSnapshot.HeaderRetained);
+        Assert.True(retained.StatusSnapshot.AudioConfigurationRetained);
+        Assert.False(retained.StatusSnapshot.VideoConfigurationRetained);
+        Assert.Equal(AudioConfiguration, retained.Snapshot().AudioConfiguration.Span[11..^4].ToArray());
+        Assert.Equal(0x61746164U, packets[1].Type);
+        Assert.Equal(0x61746164U, packets[2].Type);
+    }
+
+    [Fact]
+    public async Task Video_only_stream_waits_for_real_idr_then_publishes_video_only_flv_head_and_data_packets()
+    {
+        var consumer = new ObsRtmpTestConsumer();
+        var publisher = Create(consumer);
+        await publisher.AcceptAsync(Message(9, VideoConfiguration), CancellationToken.None);
+        Assert.Empty(consumer.Packets);
+
+        byte[] interframe = [0x27, 1, 0, 0, 0, 0, 0, 0, 1, 0x41];
+        await publisher.AcceptAsync(Message(9, interframe, 10), CancellationToken.None);
+        Assert.Empty(consumer.Packets);
+
+        await publisher.AcceptAsync(Message(9, Idr, 33), CancellationToken.None);
+
+        var packets = consumer.Packets.ToArray();
+        Assert.Equal(2, packets.Length);
+        Assert.Equal(0x64616568U, packets[0].Type);
+        Assert.Equal(0x01, packets[0].Payload[4]);
+        var retained = new PcpFlvBootstrapRetention();
+        retained.Observe(packets[0].Payload);
+        Assert.True(retained.StatusSnapshot.HeaderRetained);
+        Assert.True(retained.StatusSnapshot.VideoConfigurationRetained);
+        Assert.False(retained.StatusSnapshot.AudioConfigurationRetained);
+        Assert.Equal(VideoConfiguration, retained.Snapshot().VideoConfiguration.Span[11..^4].ToArray());
+        Assert.Equal(0x61746164U, packets[1].Type);
+    }
+
+    [Fact]
+    public async Task Single_track_bootstrap_rejects_late_addition_of_missing_codec_configuration()
+    {
+        var audioOnly = Create(new());
+        await audioOnly.AcceptAsync(Message(8, AudioConfiguration), CancellationToken.None);
+        await audioOnly.AcceptAsync(Message(8, Audio, 20), CancellationToken.None);
+        await Assert.ThrowsAsync<InvalidDataException>(async () =>
+            await audioOnly.AcceptAsync(Message(9, VideoConfiguration, 30), CancellationToken.None));
+
+        var videoOnly = Create(new());
+        await videoOnly.AcceptAsync(Message(9, VideoConfiguration), CancellationToken.None);
+        await videoOnly.AcceptAsync(Message(9, Idr, 33), CancellationToken.None);
+        await Assert.ThrowsAsync<InvalidDataException>(async () =>
+            await videoOnly.AcceptAsync(Message(8, AudioConfiguration, 40), CancellationToken.None));
+    }
+
     internal static RtmpMessage Message(byte type, byte[] bytes, uint timestamp = 0) => new(type, 1, timestamp, bytes);
 
     internal static async Task ConfigureAsync(ObsFlvPublishingSession publisher)
