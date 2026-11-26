@@ -8,11 +8,26 @@ namespace PeerCast.Nova.App;
 
 internal sealed class GenesisSystemTrayPolicy
 {
-    public bool CloseToTrayEnabled { get; set; } = true;
+    private const uint WindowMessageSize = 0x0005;
+    private const uint WindowMessageSystemCommand = 0x0112;
+    private const nuint SystemCommandMask = 0xFFF0;
+    private const nuint SystemCommandMinimize = 0xF020;
+    private const nuint SizeMinimized = 1;
+
+    public bool CloseToTrayEnabled { get; set; }
+    public bool MinimizeToTrayEnabled { get; set; } = true;
     public bool IsExitRequested { get; private set; }
     public bool HasShownFirstHideNotice { get; private set; }
 
     public bool ShouldHideOnClose() => CloseToTrayEnabled && !IsExitRequested;
+
+    public bool ShouldHideOnMinimize() => MinimizeToTrayEnabled && !IsExitRequested;
+
+    public static bool IsMinimizeCommand(uint message, nuint wParam) =>
+        message == WindowMessageSystemCommand && (wParam & SystemCommandMask) == SystemCommandMinimize;
+
+    public static bool IsMinimizedSize(uint message, nuint wParam) =>
+        message == WindowMessageSize && wParam == SizeMinimized;
 
     public bool TryConsumeFirstHideNotice()
     {
@@ -170,9 +185,18 @@ internal sealed class GenesisSystemTrayBridge : IAsyncDisposable
         var data = CreateBaseData();
         data.Flags = NotifyIconFlagInfo;
         data.InfoTitle = "PeerCast Nova";
-        data.Info = "タスクトレイで動作を続けています。終了するにはトレイアイコンを右クリックしてください。";
+        data.Info = "タスクトレイに格納しました。トレイアイコンをクリックすると再表示されます。";
         data.InfoFlags = NotifyIconInfo | NotifyIconNoSound | NotifyIconRespectQuietTime;
         _ = Shell_NotifyIconW(NotifyIconModify, ref data);
+    }
+
+    private void HideToTray()
+    {
+        _ = ShowWindow(_window, ShowWindowHide);
+        if (_policy.TryConsumeFirstHideNotice())
+        {
+            ShowFirstHideBalloon();
+        }
     }
 
     private NotifyIconData CreateBaseData() => new()
@@ -219,13 +243,19 @@ internal sealed class GenesisSystemTrayBridge : IAsyncDisposable
 
         if (message == WindowMessageClose && bridge._policy.ShouldHideOnClose())
         {
-            _ = ShowWindow(window, ShowWindowHide);
-            if (bridge._policy.TryConsumeFirstHideNotice())
-            {
-                bridge.ShowFirstHideBalloon();
-            }
-
+            bridge.HideToTray();
             return 0;
+        }
+
+        if ((GenesisSystemTrayPolicy.IsMinimizeCommand(message, wParam) ||
+             GenesisSystemTrayPolicy.IsMinimizedSize(message, wParam)) &&
+            bridge._policy.ShouldHideOnMinimize())
+        {
+            bridge.HideToTray();
+            if (GenesisSystemTrayPolicy.IsMinimizeCommand(message, wParam))
+            {
+                return 0;
+            }
         }
 
         if (message == WindowMessageTrayCallback && (uint)wParam == TrayIconId)
@@ -296,7 +326,7 @@ internal sealed class GenesisSystemTrayBridge : IAsyncDisposable
                 case MenuCmdToggleVisibility:
                     if (visible)
                     {
-                        _ = ShowWindow(_window, ShowWindowHide);
+                        HideToTray();
                     }
                     else
                     {
