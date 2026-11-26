@@ -74,7 +74,8 @@ public sealed record NatBackendResult(
     uint? RouterEpochSeconds = null,
     string? DetailCode = null,
     string Backend = "NAT-PMP",
-    NatLeaseKind LeaseKind = NatLeaseKind.Finite);
+    NatLeaseKind LeaseKind = NatLeaseKind.Finite,
+    string? ExternalAddress = null);
 
 public enum NatLeaseKind
 {
@@ -112,6 +113,8 @@ public enum NatMappingStatus
 public enum NatExternalReachability
 {
     Unknown,
+    Reachable,
+    Unreachable,
 }
 
 public sealed record NatLeaseEvidence(
@@ -132,7 +135,8 @@ public sealed record NatMappingSnapshot(
     bool RouterMayContainMapping,
     NatMappingOperation? PendingOperation = null,
     string Backend = "NAT-PMP",
-    string? DetailCode = null);
+    string? DetailCode = null,
+    string? ExternalAddress = null);
 
 /// <summary>A coherent, read-only capture; reading never runs the reconciler.</summary>
 public sealed record NatPortMappingReadState(

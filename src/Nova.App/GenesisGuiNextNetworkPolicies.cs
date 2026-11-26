@@ -24,7 +24,7 @@ internal sealed class GenesisGuiNextNetworkPolicies : IDisposable
         Func<string, string?>? readEnvironment = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
-        return new(settings.Startup, (readEnvironment ?? Environment.GetEnvironmentVariable)("NOVA_SMART_RELAY_PACING") == "1");
+        return new(settings.Startup, (readEnvironment ?? Environment.GetEnvironmentVariable)("NOVA_SMART_RELAY_PACING") != "0");
     }
 
     internal void ApplyLive(GenesisGuiNextConnectionPreferences preferences)

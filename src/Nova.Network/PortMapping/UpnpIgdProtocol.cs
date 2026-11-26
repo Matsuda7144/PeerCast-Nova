@@ -21,6 +21,9 @@ internal interface IUpnpIgdTransport
 {
     Task<UpnpSoapReply> InvokeAsync(string action, IReadOnlyList<KeyValuePair<string, string>> arguments,
         CancellationToken cancellationToken);
+
+    Task<string?> TryGetExternalIpAddressAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<string?>(null);
 }
 
 /// <summary>Only the selected gateway's numeric HTTP endpoints are admitted.</summary>
@@ -265,6 +268,27 @@ internal sealed class UpnpIgdTransport(NatNetworkIdentity network, UpnpIgdServic
             new MediaTypeHeaderValue("text/xml"));
         var bytes = await UpnpIgdProtocol.SendAsync(network, request, cancellationToken, allowSoapFault: true).ConfigureAwait(false);
         return ParseReply(bytes, service.ServiceType, action);
+    }
+
+    public async Task<string?> TryGetExternalIpAddressAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var reply = await InvokeAsync("GetExternalIPAddress", [], cancellationToken).ConfigureAwait(false);
+            if (reply.ErrorCode is not null || reply.Response is null)
+            {
+                return null;
+            }
+
+            var value = reply.Response.Elements()
+                .FirstOrDefault(item => item.Name.LocalName == "NewExternalIPAddress")
+                ?.Value.Trim();
+            return PeerCast.Nova.Network.Publishing.PublishingIpv4.IsPublicAddress(value) ? value : null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     internal static UpnpSoapReply ParseReply(byte[] bytes, string serviceType, string action)

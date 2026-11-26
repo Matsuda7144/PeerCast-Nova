@@ -966,6 +966,11 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             state.CompleteLivePublicSettingsApply(wParam);
             return 0;
         }
+        if (message == PublishingExternalProbeCompleted)
+        {
+            state.CompletePublishingExternalProbe(wParam);
+            return 0;
+        }
         if (message == WindowMessageCommand)
         {
             state.ProcessCommand(wParam, lParam);

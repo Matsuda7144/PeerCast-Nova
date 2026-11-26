@@ -11,7 +11,17 @@ namespace PeerCast.Nova.Network.PortMapping;
 /// </summary>
 public sealed class NatPmpMappingBackend : INatMappingBackend
 {
-    internal static async Task<bool> DiscoverAsync(NatNetworkIdentity network, CancellationToken cancellationToken)
+    private string? cachedExternalAddress;
+
+    public NatPmpMappingBackend() { }
+
+    internal NatPmpMappingBackend(string? externalAddress) => cachedExternalAddress = externalAddress;
+
+    internal static async Task<bool> DiscoverAsync(NatNetworkIdentity network, CancellationToken cancellationToken) =>
+        (await DiscoverExternalAddressAsync(network, cancellationToken).ConfigureAwait(false)).Supported;
+
+    internal static async Task<(bool Supported, string? ExternalAddress)> DiscoverExternalAddressAsync(
+        NatNetworkIdentity network, CancellationToken cancellationToken)
     {
         network.Validate();
         using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
@@ -27,13 +37,16 @@ public sealed class NatPmpMappingBackend : INatMappingBackend
             {
                 var length = await socket.ReceiveAsync(buffer, SocketFlags.None, budget.Token).ConfigureAwait(false);
                 if (length == 12 && buffer[0] == 0 && buffer[1] == 128 && buffer[2] == 0 && buffer[3] == 0)
-                    return true;
+                {
+                    var externalIp = new IPAddress(buffer.AsSpan(8, 4)).ToString();
+                    return (true, PeerCast.Nova.Network.Publishing.PublishingIpv4.IsPublicAddress(externalIp) ? externalIp : null);
+                }
             }
         }
         catch (Exception exception) when (exception is SocketException or OperationCanceledException)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            return false;
+            return (false, null);
         }
     }
 
@@ -70,7 +83,20 @@ public sealed class NatPmpMappingBackend : INatMappingBackend
                         var result = DecodeResponse(request, buffer.AsSpan(0, length));
                         if (result is not null)
                         {
-                            return result;
+                            if (request.Operation != NatMappingOperation.Unmap &&
+                                result.Outcome == NatBackendOutcome.Success &&
+                                cachedExternalAddress is null)
+                            {
+                                var probed = await TryQueryExternalAddressSafeAsync(socket, cancellationToken).ConfigureAwait(false);
+                                if (probed is not null)
+                                {
+                                    cachedExternalAddress = probed;
+                                }
+                            }
+
+                            return request.Operation != NatMappingOperation.Unmap && result.Outcome == NatBackendOutcome.Success
+                                ? result with { ExternalAddress = cachedExternalAddress }
+                                : result;
                         }
                     }
                 }
@@ -87,6 +113,29 @@ public sealed class NatPmpMappingBackend : INatMappingBackend
             return new NatBackendResult(sent ? NatBackendOutcome.ResultUnknown : NatBackendOutcome.NotSent,
                 DetailCode: exception.GetType().Name);
         }
+    }
+
+    private static async Task<string?> TryQueryExternalAddressSafeAsync(Socket socket, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var budget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            budget.CancelAfter(TimeSpan.FromMilliseconds(300));
+            await socket.SendAsync(new byte[] { 0, 0 }, SocketFlags.None, budget.Token).ConfigureAwait(false);
+            var buffer = new byte[64];
+            var length = await socket.ReceiveAsync(buffer, SocketFlags.None, budget.Token).ConfigureAwait(false);
+            if (length == 12 && buffer[0] == 0 && buffer[1] == 128 && buffer[2] == 0 && buffer[3] == 0)
+            {
+                var externalIp = new IPAddress(buffer.AsSpan(8, 4)).ToString();
+                return PeerCast.Nova.Network.Publishing.PublishingIpv4.IsPublicAddress(externalIp) ? externalIp : null;
+            }
+        }
+        catch
+        {
+            // External address query is best-effort only.
+        }
+
+        return null;
     }
 
     internal static byte[] EncodeRequest(NatMappingRequest request)

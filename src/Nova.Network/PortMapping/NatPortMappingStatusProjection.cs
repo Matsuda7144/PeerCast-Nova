@@ -171,9 +171,15 @@ public static class NatPortMappingStatusProjection
         var lastObservation = source.Diagnostics.LastOrDefault(item => item.Event == "OperationObserved")?.Timestamp;
         var exposeResult = current is { RouterMayContainMapping: true };
         var lease = exposeResult ? current?.Lease : null;
+        var displayReachability = current?.ExternalReachability switch
+        {
+            NatExternalReachability.Reachable => NatDisplayReachability.Reachable,
+            NatExternalReachability.Unreachable => NatDisplayReachability.Unreachable,
+            _ => NatDisplayReachability.NotChecked,
+        };
         return new NatPortMappingDisplay(source.Enabled, source.Generation, current?.Backend ?? "UPnP / NAT-PMP", source.Network,
-            NatMappingProtocol.Tcp, source.RegisteredInternalPorts, state, NatDisplayReachability.NotChecked,
-            null, exposeResult ? current?.ReturnedExternalPort : null,
+            NatMappingProtocol.Tcp, source.RegisteredInternalPorts, state, displayReachability,
+            exposeResult ? current?.ExternalAddress : null, exposeResult ? current?.ReturnedExternalPort : null,
             source.RequestedLifetimeSeconds, lease,
             lease is null ? NatLeaseEvidenceKind.None
                 : lease.Kind == NatLeaseKind.Permanent ? NatLeaseEvidenceKind.RouterConfirmedPermanent

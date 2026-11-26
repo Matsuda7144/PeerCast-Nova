@@ -474,6 +474,37 @@ public sealed class ObsPublishChannelHostTests
         }));
     }
 
+    [Fact]
+    public async Task EffectiveBitrateKbps_ComputesMeasuredBitrateWithoutDeclaredBitrate()
+    {
+        var clock = new ManualNatTimeProvider();
+        clock.Advance(TimeSpan.FromSeconds(1));
+        await using var host = new ObsPublishChannelHost(
+            new ObsPublishChannelOptions { Ingest = new() { Port = 0 } },
+            channelId: null,
+            httpHost: null,
+            recordingRegistry: null,
+            acquireRecordingOwner: null,
+            recordingCleanupObserver: null,
+            announceTime: clock);
+        host.Start();
+
+        Assert.Null(host.CurrentMetadata.BitrateKbps);
+        Assert.Null(host.MeasuredBitrateKbps);
+        Assert.Null(host.EffectiveBitrateKbps);
+
+        using var publisher = await PublishAsync(host);
+        await ConfigureAsync(publisher);
+        Assert.True(await host.HeadAvailable.WaitAsync(TimeSpan.FromSeconds(10)));
+
+        clock.Advance(TimeSpan.FromSeconds(3));
+        await publisher.SendAsync(9, 1, 37, ObsFlvPublishingSessionTests.Idr);
+
+        await WaitAsync(() => host.MeasuredBitrateKbps is not null);
+        Assert.True(host.MeasuredBitrateKbps > 0);
+        Assert.Equal(host.MeasuredBitrateKbps, host.EffectiveBitrateKbps);
+    }
+
     internal static ObsPublishChannelHost Create(
         PcpHttpFlvPlaybackHost? http = null, RecordingStreamSourceLeaseRegistry? registry = null,
         ChannelId? id = null, PcpRelayFanoutOptions? fanout = null) =>

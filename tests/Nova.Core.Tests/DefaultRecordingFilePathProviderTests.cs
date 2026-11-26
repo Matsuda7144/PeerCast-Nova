@@ -221,6 +221,22 @@ public sealed class DefaultRecordingFilePathProviderTests
         Assert.NotEqual(firstPath, secondPath);
     }
 
+    [Fact]
+    public void GetPath_PreservesLocalOffsetTimestampWithoutConvertingToUtc()
+    {
+        var jstTime = new DateTimeOffset(2026, 11, 26, 22, 30, 45, TimeSpan.FromHours(9));
+        var provider = CreateProvider(jstTime);
+
+        var path = provider.GetPath(
+            CreateRequest("LocalTimeCh", "flv"),
+            TestSessionId);
+
+        Assert.StartsWith(
+            "20261126_223045_",
+            Path.GetFileName(path),
+            StringComparison.Ordinal);
+    }
+
     private static DefaultRecordingFilePathProvider CreateProvider(
         DateTimeOffset now)
     {

@@ -16,8 +16,19 @@ internal enum GenesisSharedPublicRelayState { Off, Starting, Listening, Stopping
 internal sealed record GenesisSharedPublicRelaySnapshot(GenesisSharedPublicRelayState State, int Port,
     int Channels, NatPortMappingReadState? Nat, bool CleanupFailed, string? Error)
 {
-    // Bind and router mapping never prove Internet reachability.
-    internal string Reachability { get; } = "外部到達性未確認";
+    internal string Reachability
+    {
+        get
+        {
+            var mapping = Nat?.Mappings.LastOrDefault(m => m.Identity.InternalPort == Port && m.Identity.Network == Nat.Network);
+            return mapping?.ExternalReachability switch
+            {
+                NatExternalReachability.Reachable => "外部到達確認済み",
+                NatExternalReachability.Unreachable => "外部到達不可",
+                _ => "外部到達性未確認",
+            };
+        }
+    }
     internal string ListenerText => State switch
     {
         GenesisSharedPublicRelayState.Starting => "TCP待受準備中",
@@ -82,6 +93,11 @@ internal sealed class GenesisSharedPublicRelay : IAsyncDisposable
     {
         get
         {
+            if ((_listener?.WanIngress?.PingResponses ?? 0) > 0)
+            {
+                _ = _mapping.ReportExternalReachability(_settings.ListenPort, NatExternalReachability.Reachable);
+            }
+
             var ended = _state == GenesisSharedPublicRelayState.Listening && _run?.IsCompleted == true;
             return new(ended ? GenesisSharedPublicRelayState.Failed : _state, _settings.ListenPort, _listener?.RouteCount ?? 0,
                 _mapping.ReadState(), _cleanupFailed, ended ? "TCP待受が終了しました。" : _error);

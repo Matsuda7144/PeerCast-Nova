@@ -117,6 +117,27 @@ public sealed class UpnpIgdMappingBackendTests
         Assert.NotNull(router.Entry);
     }
 
+    [Fact]
+    public async Task MapAndRenew_AttachPublicExternalIpv4AndIgnorePrivateAddresses()
+    {
+        var router = new FakeUpnpGateway { ExternalIpAddress = "198.41.0.4" };
+        var backend = new UpnpIgdMappingBackend(NatPortMappingTestHarness.Home, router);
+
+        var mapped = await backend.ExecuteAsync(Request(), default);
+        Assert.Equal(NatBackendOutcome.Success, mapped.Outcome);
+        Assert.Equal("198.41.0.4", mapped.ExternalAddress);
+
+        router.ExternalIpAddress = "192.168.100.1";
+        var renewed = await backend.ExecuteAsync(Request() with { Operation = NatMappingOperation.Renew }, default);
+        Assert.Equal(NatBackendOutcome.Success, renewed.Outcome);
+        Assert.Null(renewed.ExternalAddress);
+
+        router.ExternalIpAddress = "invalid-ip";
+        var retry = await backend.ExecuteAsync(Request() with { Operation = NatMappingOperation.Renew }, default);
+        Assert.Equal(NatBackendOutcome.Success, retry.Outcome);
+        Assert.Null(retry.ExternalAddress);
+    }
+
     internal static NatMappingRequest Request() => new(Guid.NewGuid(), 1,
         new(NatPortMappingTestHarness.Home, NatMappingProtocol.Tcp, 7144), NatMappingOperation.Map, 7144, 120, 1);
     internal static NatMappingRequest Delete(NatMappingRequest request) => request with
@@ -140,6 +161,10 @@ internal sealed class FakeUpnpGateway : IUpnpIgdTransport
     public List<uint> RequestedLifetimes { get; } = [];
     public int Adds { get; private set; }
     public int Deletes { get; private set; }
+    public string? ExternalIpAddress { get; set; }
+
+    public Task<string?> TryGetExternalIpAddressAsync(CancellationToken cancellationToken) =>
+        Task.FromResult(ExternalIpAddress);
 
     public async Task<UpnpSoapReply> InvokeAsync(string action, IReadOnlyList<KeyValuePair<string, string>> arguments, CancellationToken cancellationToken)
     {

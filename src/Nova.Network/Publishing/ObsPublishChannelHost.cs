@@ -66,6 +66,9 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
     private long _acceptedBytes;
     private long _heads;
     private long _data;
+    private long _bitrateWindowStartTimestamp;
+    private long _bitrateWindowStartBytes;
+    private int _measuredBitrateKbps;
     private bool _registered;
     private ObsPublishChannelResult? _result;
     private ChannelMetadataSnapshot _currentMetadata = new();
@@ -157,6 +160,8 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
     public ChannelSessionId SessionId { get; }
     public ChannelMetadataSnapshot InitialMetadata { get; }
     public ChannelMetadataSnapshot CurrentMetadata => Volatile.Read(ref _currentMetadata);
+    public int? MeasuredBitrateKbps => Volatile.Read(ref _measuredBitrateKbps) is > 0 and var value ? value : null;
+    public int? EffectiveBitrateKbps => MeasuredBitrateKbps ?? CurrentMetadata.BitrateKbps;
     public ChannelStatusSnapshot Snapshot => _tracker.Snapshot;
     public Task<bool> HeadAvailable => _headAvailable.Task;
     public IPEndPoint IngestEndPoint => _ingest.LocalEndPoint;
@@ -186,6 +191,18 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
                 var head = state == ChannelSessionState.Receiving &&
                     _headAvailable.Task.IsCompletedSuccessfully && _headAvailable.Task.Result;
                 var port = ingest.Port ?? (_options.Ingest.Port > 0 ? _options.Ingest.Port : (int?)null);
+                if (_portMapping is not null && (_relay.Snapshot.WanIngress?.PingResponses > 0 || AnnounceStatus.TrackerReportedOpen))
+                {
+                    var reportedPort = _options.Wan.Port > 0 ? _options.Wan.Port : RelayEndPoint.Port;
+                    if (reportedPort is >= 1 and <= 65535)
+                    {
+                        _ = _portMapping.ReportExternalReachability(
+                            reportedPort,
+                            NatExternalReachability.Reachable,
+                            _options.Wan.AdvertisedAddress);
+                    }
+                }
+
                 var current = new ObsPublishStatusSnapshot(ChannelId, SessionId, _publishingRevision, state,
                     active && ingest.Listening, active && ingest.PublisherConnected, head,
                     port is null ? null : $"rtmp://127.0.0.1:{port}/{_options.Ingest.Application}",
@@ -548,6 +565,7 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
         await accepted.WaitAsync(cancellationToken).ConfigureAwait(false);
         _acceptedPackets++;
         _acceptedBytes += packet.Payload.Length;
+        UpdateMeasuredBitrate(_acceptedBytes);
         if (packet.Type == 0x64616568U)
         {
             _heads++;
@@ -558,6 +576,34 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
         }
         else _data++;
         _tracker.AdvanceStreamPosition(_acceptedBytes);
+    }
+
+    private void UpdateMeasuredBitrate(long totalBytes)
+    {
+        var now = _announceTime.GetTimestamp();
+        var start = _bitrateWindowStartTimestamp;
+        if (start == 0)
+        {
+            _bitrateWindowStartTimestamp = now;
+            _bitrateWindowStartBytes = totalBytes;
+            return;
+        }
+
+        var elapsed = _announceTime.GetElapsedTime(start, now).TotalSeconds;
+        if (elapsed < 2.0)
+        {
+            return;
+        }
+
+        var deltaBytes = totalBytes - _bitrateWindowStartBytes;
+        if (deltaBytes > 0)
+        {
+            var kbps = (int)Math.Clamp(Math.Round((deltaBytes * 8.0) / (elapsed * 1000.0)), 1, int.MaxValue);
+            Volatile.Write(ref _measuredBitrateKbps, kbps);
+        }
+
+        _bitrateWindowStartTimestamp = now;
+        _bitrateWindowStartBytes = totalBytes;
     }
 
     public ValueTask DisposeAsync()

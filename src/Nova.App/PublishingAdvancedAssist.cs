@@ -67,26 +67,72 @@ internal static class PublishingAdvancedAssist
         return true;
     }
 
+    internal static IReadOnlyList<PublishingAnnouncePreset> TryBuildAllAnnouncePresets(
+        IEnumerable<GenesisYellowPageDefinition> definitions)
+    {
+        ArgumentNullException.ThrowIfNull(definitions);
+        var results = new List<PublishingAnnouncePreset>();
+        var seenEndpoints = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var definition in definitions)
+        {
+            if (definition is null || !definition.IsEnabled)
+            {
+                continue;
+            }
+
+            if (TryBuildAnnouncePreset(definition, out var preset) &&
+                preset is not null &&
+                seenEndpoints.Add(preset.Endpoint))
+            {
+                results.Add(preset);
+                if (results.Count >= PublishingAnnounceOptions.MaximumTargets)
+                {
+                    break;
+                }
+            }
+        }
+
+        return results;
+    }
+
     internal static PublishingNatSuggestionResult TryApplyNatSuggestion(
         PublishingSettingsInput input,
         NovaApplicationNetworkSnapshot? network,
         IReadOnlyList<ObsPublishLanInterface> interfaces,
-        int fallbackListenPort)
+        int fallbackListenPort) =>
+        TryApplyExternalAddressSuggestion(
+            input,
+            network?.Nat?.ExternalAddress,
+            network,
+            interfaces,
+            fallbackListenPort,
+            sourceLabel: "NAT情報",
+            failureMessage: "NATから公開IPv4を取得できていません。登録YPまたは手動で入力してください。");
+
+    internal static PublishingNatSuggestionResult TryApplyExternalAddressSuggestion(
+        PublishingSettingsInput input,
+        string? externalAddressCandidate,
+        NovaApplicationNetworkSnapshot? network,
+        IReadOnlyList<ObsPublishLanInterface> interfaces,
+        int fallbackListenPort,
+        string sourceLabel = "NAT情報",
+        string? failureMessage = null)
     {
         ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(interfaces);
 
-        var externalAddress = network?.Nat?.ExternalAddress?.Trim() ?? string.Empty;
+        var externalAddress = externalAddressCandidate?.Trim() ?? string.Empty;
         if (!PublishingIpv4.IsPublicAddress(externalAddress))
         {
             return new(
                 false,
                 input,
-                "NATから公開IPv4を取得できていません。通信設定で自動ポート開放をONにするか、手動で入力してください。");
+                failureMessage ?? "有効な公開IPv4アドレスを取得できませんでした。手動で入力してください。");
         }
 
-        var internalPort = network!.Nat!.RegisteredInternalPorts.FirstOrDefault(static port => port is > 0 and <= 65535);
-        var externalPort = network.Nat.ExternalPort is > 0 and <= 65535 ? network.Nat.ExternalPort.Value : 0;
+        var internalPort = network?.Nat?.RegisteredInternalPorts.FirstOrDefault(static port => port is > 0 and <= 65535) ?? 0;
+        var externalPort = network?.Nat?.ExternalPort is > 0 and <= 65535 ? network.Nat.ExternalPort.Value : 0;
         if (internalPort == 0 && int.TryParse(input.WanPort, NumberStyles.None, CultureInfo.InvariantCulture, out var parsedWanPort) &&
             parsedWanPort is > 0 and <= 65535)
         {
@@ -113,7 +159,7 @@ internal static class PublishingAdvancedAssist
         var bindCandidates = interfaces
             .Where(static nic => nic.IsUp && PublishingIpv4.IsBindAddress(nic.Address))
             .ToArray();
-        var internalAddress = network.Nat.Network?.InternalAddress?.Trim();
+        var internalAddress = network?.Nat?.Network?.InternalAddress?.Trim();
         var matchedByNat = !string.IsNullOrWhiteSpace(internalAddress)
             ? bindCandidates.FirstOrDefault(nic => string.Equals(nic.Address, internalAddress, StringComparison.Ordinal))
             : null;
@@ -143,6 +189,6 @@ internal static class PublishingAdvancedAssist
         return new(
             true,
             updated,
-            $"NAT情報からWAN設定を自動入力しました（公開 {externalAddress}:{externalPort} / 内部ポート {internalPort}）。保存して反映してください。");
+            $"{sourceLabel}からWAN設定を自動入力しました（公開 {externalAddress}:{externalPort} / 内部ポート {internalPort}）。保存して反映してください。");
     }
 }

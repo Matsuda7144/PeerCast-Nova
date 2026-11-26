@@ -50,10 +50,13 @@ public sealed class AutomaticNatMappingBackend : INatMappingBackend
         return result;
     }
 
-    private static Task<INatMappingBackend?> DiscoverAsync(NatNetworkIdentity network, CancellationToken cancellationToken) =>
-        DiscoverAsync(network, NatPmpMappingBackend.DiscoverAsync,
-            async (identity, token) => await UpnpIgdMappingBackend.DiscoverAsync(identity, token).ConfigureAwait(false),
-            cancellationToken);
+    private static async Task<INatMappingBackend?> DiscoverAsync(NatNetworkIdentity network, CancellationToken cancellationToken)
+    {
+        var natPmp = await NatPmpMappingBackend.DiscoverExternalAddressAsync(network, cancellationToken).ConfigureAwait(false);
+        if (natPmp.Supported)
+            return new NatPmpMappingBackend(natPmp.ExternalAddress);
+        return await UpnpIgdMappingBackend.DiscoverAsync(network, cancellationToken).ConfigureAwait(false);
+    }
 
     internal static async Task<INatMappingBackend?> DiscoverAsync(NatNetworkIdentity network,
         Func<NatNetworkIdentity, CancellationToken, Task<bool>> probeNatPmp,

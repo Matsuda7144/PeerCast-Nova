@@ -30,7 +30,7 @@ internal sealed class PublicChannelTestFixture : IAsyncDisposable
     {
         var store = new MemoryConnectionStore(preferences ?? GenesisGuiNextConnectionPreferences.Default);
         return new(store, await GenesisGuiNextApplicationState.LoadAsync(
-            name => pacing && name == "NOVA_SMART_RELAY_PACING" ? "1" : null,
+            name => name == "NOVA_SMART_RELAY_PACING" ? (pacing ? "1" : "0") : null,
             new FavoriteStore(), new NotificationStore(),
             DefaultGenesisYellowPageConfigurationStore.Instance, DefaultGenesisGuiNextPlaybackPreferencesStore.Instance,
             store, new SilentSound()));

@@ -97,18 +97,14 @@ public sealed class PublishingWanTests
     [Theory]
     [InlineData(0)]
     [InlineData(1000)]
-    public async Task NumericBandwidthRejectsWanBeforeAnyBind(int budget)
+    public async Task NumericBandwidthAllowsWanRegistrationEvenWithoutDeclaredBitrate(int budget)
     {
         await using var fixture = await PublicChannelTestFixture.CreateAsync(new() { TotalUpstreamIpv4Kbps = budget });
+        await using var fanout = new PeerCast.Nova.Network.Pcp.PcpRelayFanout();
         var factory = new SystemNovaObsPublishingRuntimeFactory(fixture.State);
-        await using var host = new ObsPublishChannelHost(new() { Wan = Wan }, interfaces: new Interfaces(), registerRelay: factory.Register);
-        host.Start();
-        var result = await host.Completion.WaitAsync(TimeSpan.FromSeconds(5));
-        Assert.True(result.ShutdownCompleted);
-        Assert.Equal(ObsPublishWanFailure.BandwidthUnsupported, host.PublishingStatus.WanRelay!.Failure);
-        Assert.Throws<InvalidOperationException>(() => host.IngestEndPoint);
+        using var owner = factory.Register(new(Guid.NewGuid()), new(Guid.NewGuid()), fanout, bitrateKbps: null);
+        Assert.NotNull(owner);
         Assert.Equal(0, fixture.State.DownstreamRelays.ActiveRelayCount);
-        Assert.Equal(0, fixture.State.PublicChannels.OwnerCount);
     }
 
     [Fact]
