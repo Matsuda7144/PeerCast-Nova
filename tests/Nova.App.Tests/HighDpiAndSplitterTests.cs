@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Xml.Linq;
 
 namespace PeerCast.Nova.App.Tests;
@@ -16,9 +17,51 @@ public sealed class HighDpiAndSplitterTests
         Assert.Contains("8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a", manifestText, StringComparison.OrdinalIgnoreCase);
         Assert.NotNull(manifest.Root);
 
+        XNamespace smi2005 = "http://schemas.microsoft.com/SMI/2005/WindowsSettings";
+        XNamespace smi2016 = "http://schemas.microsoft.com/SMI/2016/WindowsSettings";
+
+        var dpiAware = Assert.Single(manifest.Descendants(smi2005 + "dpiAware"));
+        Assert.Equal("true/pm", dpiAware.Value);
+
+        var dpiAwareness = Assert.Single(manifest.Descendants(smi2016 + "dpiAwareness"));
+        Assert.Contains("PerMonitorV2", dpiAwareness.Value, StringComparison.Ordinal);
+
+        var longPathAware = Assert.Single(manifest.Descendants(smi2016 + "longPathAware"));
+        Assert.Equal("true", longPathAware.Value);
+
         var project = XDocument.Load(FindRepositoryFile("src", "Nova.App", "Nova.App.csproj"));
         var appManifestProperty = Assert.Single(project.Descendants("ApplicationManifest"));
         Assert.Equal("app.manifest", appManifestProperty.Value);
+    }
+
+    [Fact]
+    public void AppManifestGeneratesValidWindowsActivationContext()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var manifestPath = FindRepositoryFile("src", "Nova.App", "app.manifest");
+        var actCtx = new ActCtxW
+        {
+            Size = (uint)Marshal.SizeOf<ActCtxW>(),
+            Source = manifestPath,
+        };
+
+        var handle = CreateActCtxW(ref actCtx);
+        var lastError = Marshal.GetLastWin32Error();
+        try
+        {
+            Assert.True(handle != 0 && handle != -1, $"CreateActCtxW failed with Win32 error {lastError}.");
+        }
+        finally
+        {
+            if (handle != 0 && handle != -1)
+            {
+                ReleaseActCtx(handle);
+            }
+        }
     }
 
     [Fact]
@@ -86,4 +129,24 @@ public sealed class HighDpiAndSplitterTests
 
         throw new FileNotFoundException("Repository root not found.", Path.Combine(segments));
     }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct ActCtxW
+    {
+        public uint Size;
+        public uint Flags;
+        public string? Source;
+        public ushort ProcessorArchitecture;
+        public ushort LangId;
+        public string? AssemblyDirectory;
+        public string? ResourceName;
+        public string? ApplicationName;
+        public nint ModuleHandle;
+    }
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern nint CreateActCtxW(ref ActCtxW actCtx);
+
+    [DllImport("kernel32.dll")]
+    private static extern void ReleaseActCtx(nint actCtx);
 }
