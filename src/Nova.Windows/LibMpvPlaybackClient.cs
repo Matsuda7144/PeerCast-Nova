@@ -19,6 +19,7 @@ internal interface ILibMpvPlaybackClient : IDisposable
     void SetMuted(bool muted);
     void SetPaused(bool paused);
     void SetSpeed(double speed);
+    void Reload() { }
     void ShowOsdText(string text, int durationMs);
     bool SaveScreenshot(string filePath);
     void SetVideoAdjustment(LibMpvVideoAdjustment adjustment);
@@ -37,7 +38,10 @@ internal sealed class LibMpvPlaybackClient : ILibMpvPlaybackClient
     internal static readonly double[] SpeedPresets = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
     private const uint ClientApiMajor = 2;
     private const ulong LoadFileReply = 1;
-    private const int EndFileError = 4;
+    private const ulong ReloadFileReply = 2;
+    internal const int EndFileStop = 2;
+    internal const int EndFileQuit = 3;
+    internal const int EndFileError = 4;
     private const int FormatFlag = 3;
     private const int FormatInt64 = 4;
     private const int FormatDouble = 5;
@@ -57,6 +61,8 @@ internal sealed class LibMpvPlaybackClient : ILibMpvPlaybackClient
     private bool _initialized;
     private bool _disposed;
     private LibMpvPlaybackAudioState _desiredAudio = LibMpvPlaybackAudioState.Default;
+    private string? _currentStreamUrl;
+    private int _pendingReloadEndFiles;
 
     private LibMpvPlaybackClient(nint library)
     {
@@ -127,6 +133,8 @@ internal sealed class LibMpvPlaybackClient : ILibMpvPlaybackClient
             }
 
             _desiredAudio = normalized;
+            _currentStreamUrl = streamUrl;
+            _pendingReloadEndFiles = 0;
             SetStartupOptions(SetOption, container, windowId, normalized, lowLatency);
             Check(_initialize(_client), "initialize playback");
             _initialized = true;
@@ -291,6 +299,48 @@ internal sealed class LibMpvPlaybackClient : ILibMpvPlaybackClient
         }
     }
 
+    /// <summary>現在視聴中のストリームを再度読み込み直し、再生位置を最新付近へ復帰させる。</summary>
+    public void Reload()
+    {
+        lock (_clientGate)
+        {
+            if (_disposed || !_initialized || string.IsNullOrEmpty(_currentStreamUrl))
+            {
+                return;
+            }
+
+            var arguments = new nint[4];
+            try
+            {
+                arguments[0] = Marshal.StringToCoTaskMemUTF8("loadfile");
+                arguments[1] = Marshal.StringToCoTaskMemUTF8(_currentStreamUrl);
+                arguments[2] = Marshal.StringToCoTaskMemUTF8("replace");
+                _pendingReloadEndFiles++;
+                if (_command(_client, ReloadFileReply, arguments) < 0)
+                {
+                    _pendingReloadEndFiles--;
+                }
+            }
+            finally
+            {
+                Marshal.FreeCoTaskMem(arguments[2]);
+                Marshal.FreeCoTaskMem(arguments[1]);
+                Marshal.FreeCoTaskMem(arguments[0]);
+            }
+        }
+    }
+
+    internal static bool ShouldSuppressEndFileForReload(int reason, ref int pendingReloadEndFiles)
+    {
+        if (pendingReloadEndFiles <= 0 || reason is EndFileError or EndFileQuit)
+        {
+            return false;
+        }
+
+        pendingReloadEndFiles--;
+        return true;
+    }
+
     public void ShowOsdText(string text, int durationMs)
     {
         if (string.IsNullOrEmpty(text))
@@ -418,15 +468,40 @@ internal sealed class LibMpvPlaybackClient : ILibMpvPlaybackClient
         switch (notification.Id)
         {
             case EventId.FileLoaded:
+                lock (_clientGate)
+                {
+                    _pendingReloadEndFiles = 0;
+                }
                 return LibMpvPlaybackEvent.FileLoaded;
             case EventId.CommandReply when notification.ReplyUserdata == LoadFileReply:
                 Check(notification.Error, "open the loopback HTTP stream");
                 break;
+            case EventId.CommandReply when notification.ReplyUserdata == ReloadFileReply:
+                if (notification.Error < 0)
+                {
+                    lock (_clientGate)
+                    {
+                        if (_pendingReloadEndFiles > 0)
+                        {
+                            _pendingReloadEndFiles--;
+                        }
+                    }
+                }
+                break;
             case EventId.EndFile:
-                if (notification.Data != 0 && Marshal.ReadInt32(notification.Data) == EndFileError)
+                var reason = notification.Data != 0 ? Marshal.ReadInt32(notification.Data) : 0;
+                if (reason == EndFileError)
                 {
                     throw new LibMpvPlaybackException(
                         $"libmpv ended loopback playback with error {Marshal.ReadInt32(notification.Data, sizeof(int))}.");
+                }
+
+                lock (_clientGate)
+                {
+                    if (ShouldSuppressEndFileForReload(reason, ref _pendingReloadEndFiles))
+                    {
+                        return LibMpvPlaybackEvent.Other;
+                    }
                 }
                 return LibMpvPlaybackEvent.Ended;
             case EventId.Shutdown:

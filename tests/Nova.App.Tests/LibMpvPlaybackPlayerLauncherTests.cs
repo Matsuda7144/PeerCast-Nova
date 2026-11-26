@@ -538,6 +538,50 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
         Assert.Equal("1x", LibMpvPlaybackClient.FormatSpeedLabel(1.0));
     }
 
+    [Fact]
+    public async Task WindowReloadRequest_ResetsPauseAndSpeedReloadsClientAndShowsOsd()
+    {
+        using var dll = new TestLibrary();
+        using var timeout = new CancellationTokenSource(TestTimeout);
+        var client = new ControlledClient();
+        var window = new ControlledWindow(static () => { });
+        var launcher = new LibMpvPlaybackPlayerLauncher(dll.Path, _ => client, _ => new(window));
+
+        var launching = launcher.LaunchAsync(Source, timeout.Token).AsTask();
+        await client.Loaded.Task.WaitAsync(timeout.Token);
+        client.Signal(LibMpvPlaybackEvent.FileLoaded);
+        await using var player = await launching.WaitAsync(timeout.Token);
+
+        window.RaisePauseChanged(true);
+        window.RaiseSpeedChanged(1.5);
+        window.RaiseReloadRequested();
+
+        Assert.Equal([true, false], client.Pauses);
+        Assert.Equal([1.5, 1.0], client.Speeds);
+        Assert.Equal(1, client.ReloadCount);
+        Assert.Contains(client.OsdMessages, message => message.Text == "ストリームを再読込しました");
+    }
+
+    [Fact]
+    public void LibMpvPlaybackClient_ReloadEndFileSuppression_HandlesStopEofQuitAndError()
+    {
+        var pending = 1;
+        Assert.True(LibMpvPlaybackClient.ShouldSuppressEndFileForReload(LibMpvPlaybackClient.EndFileStop, ref pending));
+        Assert.Equal(0, pending);
+        Assert.False(LibMpvPlaybackClient.ShouldSuppressEndFileForReload(LibMpvPlaybackClient.EndFileStop, ref pending));
+
+        pending = 1;
+        Assert.True(LibMpvPlaybackClient.ShouldSuppressEndFileForReload(0, ref pending));
+        Assert.Equal(0, pending);
+
+        pending = 1;
+        Assert.False(LibMpvPlaybackClient.ShouldSuppressEndFileForReload(LibMpvPlaybackClient.EndFileQuit, ref pending));
+        Assert.Equal(1, pending);
+
+        Assert.False(LibMpvPlaybackClient.ShouldSuppressEndFileForReload(LibMpvPlaybackClient.EndFileError, ref pending));
+        Assert.Equal(1, pending);
+    }
+
     private sealed class ControlledClient(
         Action<PlaybackMediaContainer, uint, LibMpvPlaybackAudioState, bool>? setStartupOptions = null) : ILibMpvPlaybackClient
     {
@@ -550,6 +594,7 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
         public List<bool> Pauses { get; } = [];
         public List<double> Speeds { get; } = [];
         public List<(string Text, int DurationMs)> OsdMessages { get; } = [];
+        public int ReloadCount { get; private set; }
         public int DisposeCount { get; private set; }
 
         public void LoadFile(
@@ -564,6 +609,7 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
         public void SetMuted(bool muted) => Mutes.Add(muted);
         public void SetPaused(bool paused) => Pauses.Add(paused);
         public void SetSpeed(double speed) => Speeds.Add(speed);
+        public void Reload() => ReloadCount++;
         public void ShowOsdText(string text, int durationMs) => OsdMessages.Add((text, durationMs));
         public bool SaveScreenshot(string filePath) => true;
         public void SetVideoAdjustment(LibMpvVideoAdjustment adjustment) { }
@@ -586,6 +632,7 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
         public event Action<LibMpvPlaybackAudioState>? AudioStateChanged;
         public event Action<bool>? PauseChanged;
         public event Action<double>? SpeedChanged;
+        public event Action? ReloadRequested;
         public Task Closed => _closed.Task;
         public int DisposeCount { get; private set; }
 
@@ -598,6 +645,8 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
         public void RaisePauseChanged(bool paused) => PauseChanged?.Invoke(paused);
 
         public void RaiseSpeedChanged(double speed) => SpeedChanged?.Invoke(speed);
+
+        public void RaiseReloadRequested() => ReloadRequested?.Invoke();
 
         public void Close() => _closed.TrySetResult();
 
