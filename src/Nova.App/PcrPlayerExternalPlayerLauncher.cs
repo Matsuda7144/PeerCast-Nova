@@ -89,6 +89,9 @@ internal sealed class PcrPlayerExternalPlayerLauncher : IDailyPlaybackPlayerLaun
 
     public void ValidateConfiguration() => _ = ResolveCurrentExecutablePath();
 
+    internal static bool HasExecutableOnPath(string? searchPath) =>
+        FindOnPath(ExecutableFileName, searchPath) is not null;
+
     public ValueTask<IDailyPlaybackPlayerLifetime> LaunchAsync(
         DailyPlaybackPlayerSource source,
         CancellationToken cancellationToken)

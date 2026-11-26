@@ -15,12 +15,28 @@ internal sealed class PcpAnnounceOwner : IAsyncDisposable
     private PcpAnnounceWorker? _current;
     private bool _disposed;
     internal Guid BroadcastId { get; }
-    internal PcpAnnounceOwner(IPcpAnnounceConnector? connector = null, PcpAnnounceOptions? options = null, TimeProvider? timeProvider = null)
+    internal PcpAnnounceOwner(IPcpAnnounceConnector? connector = null, PcpAnnounceOptions? options = null, TimeProvider? timeProvider = null, Guid? broadcastId = null)
     {
+        BroadcastId = NormalizeOrCreateBroadcastId(broadcastId);
+        _connector = connector ?? new PcpAnnounceLoopbackConnector(); _options = options ?? new(); _options.Validate(); _time = timeProvider ?? TimeProvider.System;
+    }
+
+    internal static Guid NormalizeOrCreateBroadcastId(Guid? candidate)
+    {
+        if (candidate is { } value && value != Guid.Empty)
+        {
+            var normalizedBytes = PcpWireValueCodec.EncodeGuid(value);
+            normalizedBytes[0] = 0; // PeerCast broadcast identity convention; retained across generations.
+            var normalized = PcpWireValueCodec.DecodeGuid(normalizedBytes);
+            if (normalized != Guid.Empty)
+            {
+                return normalized;
+            }
+        }
+
         var bytes = PcpWireValueCodec.EncodeGuid(Guid.NewGuid());
         bytes[0] = 0; // PeerCast broadcast identity convention; retained for this owner's entire lifetime.
-        BroadcastId = PcpWireValueCodec.DecodeGuid(bytes);
-        _connector = connector ?? new PcpAnnounceLoopbackConnector(); _options = options ?? new(); _options.Validate(); _time = timeProvider ?? TimeProvider.System;
+        return PcpWireValueCodec.DecodeGuid(bytes);
     }
     internal PcpAnnounceWorker Start(long generation, Guid channelId, Guid publishingSessionId, Guid relaySessionId,
         PcpAnnounceEndpoint tracker, PcpAnnounceDocument document, PcpAnnounceAccess? access = null, PublishingAnnounceCapability? capability = null, Func<PublishingAnnounceRuntimeSnapshot>? runtime = null, CancellationToken cancellationToken = default)

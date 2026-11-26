@@ -236,8 +236,10 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
         IGenesisGuiNextPlaybackPreferencesStore playbackPreferencesStore,
         GenesisRecordingRuleRepository recordingRuleRepository,
         GenesisGuiNextApplicationStateLoadFailure loadFailures,
-        Func<string, string?>? readEnvironment = null)
+        Func<string, string?>? readEnvironment = null,
+        PeerCast.Nova.Network.Publishing.PublishingAnnounceOwner? announceOwner = null)
     {
+        AnnounceOwner = announceOwner ?? new();
         Favorites = favorites;
         Notifications = notifications;
         YellowPages = yellowPages;
@@ -275,7 +277,7 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
 
     public GenesisGuiNextNetworkPolicies NetworkPolicies { get; }
 
-    internal PeerCast.Nova.Network.Publishing.PublishingAnnounceOwner AnnounceOwner { get; } = new();
+    internal PeerCast.Nova.Network.Publishing.PublishingAnnounceOwner AnnounceOwner { get; }
     public GenesisDownstreamRelayOwnerRegistry DownstreamRelays { get; }
 
     public GenesisGuiNextPublicChannelComposition PublicChannels { get; }
@@ -393,6 +395,29 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
             connectionPreferencesStore,
             cancellationToken);
 
+    internal static ValueTask<GenesisGuiNextApplicationState> LoadWithRecordingRuleRepositoryAndAnnounceOwnerAsync(
+        IGenesisFavoriteChannelStore favoriteStore,
+        IGenesisChannelNotificationPreferenceStore notificationStore,
+        IGenesisYellowPageConfigurationStore yellowPageStore,
+        IGenesisGuiNextPlaybackPreferencesStore playbackPreferencesStore,
+        IGenesisSystemNotificationSoundPlayer soundPlayer,
+        GenesisGuiNextPlaybackPreferencesSource? pathSource,
+        Func<GenesisRecordingRuleRepository> recordingRuleRepositoryFactory,
+        IGenesisGuiNextConnectionPreferencesStore connectionPreferencesStore,
+        PeerCast.Nova.Network.Publishing.PublishingAnnounceOwner? announceOwner,
+        CancellationToken cancellationToken = default) =>
+        LoadCoreAsync(
+            favoriteStore,
+            notificationStore,
+            yellowPageStore,
+            playbackPreferencesStore,
+            soundPlayer,
+            pathSource,
+            (Func<GenesisRecordingRuleRepository>?)recordingRuleRepositoryFactory,
+            connectionPreferencesStore,
+            cancellationToken,
+            announceOwner: announceOwner);
+
     private static async ValueTask<GenesisGuiNextApplicationState> LoadCoreAsync(
         IGenesisFavoriteChannelStore favoriteStore,
         IGenesisChannelNotificationPreferenceStore notificationStore,
@@ -403,7 +428,8 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
         Func<GenesisRecordingRuleRepository>? recordingRuleRepositoryFactory,
         IGenesisGuiNextConnectionPreferencesStore connectionPreferencesStore,
         CancellationToken cancellationToken,
-        Func<string, string?>? readEnvironment = null)
+        Func<string, string?>? readEnvironment = null,
+        PeerCast.Nova.Network.Publishing.PublishingAnnounceOwner? announceOwner = null)
     {
         ArgumentNullException.ThrowIfNull(favoriteStore);
         ArgumentNullException.ThrowIfNull(notificationStore);
@@ -513,7 +539,7 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
                 yellowPageStore,
                 playbackPreferencesStore,
                 recordingRuleRepository,
-                loadFailures, readEnvironment);
+                loadFailures, readEnvironment, announceOwner);
         }
         catch
         {
@@ -702,6 +728,7 @@ internal static class SystemGenesisGuiNextApplicationState
     private const string YellowPageConfigurationFileName = "yellow-pages.json";
     private const string PlaybackPreferencesFileName = "playback-preferences.json";
     private const string ConnectionPreferencesFileName = "connection-preferences.json";
+    private const string PublishingBroadcastIdFileName = "publishing-bcid.txt";
 
     public static ValueTask<GenesisGuiNextApplicationState> LoadAsync(
         CancellationToken cancellationToken = default) =>
@@ -734,7 +761,9 @@ internal static class SystemGenesisGuiNextApplicationState
             var applicationDirectory = Path.Combine(
                 localApplicationData,
                 ApplicationDirectoryName);
-            state = await GenesisGuiNextApplicationState.LoadWithRecordingRuleRepositoryFactoryAsync(
+            var announceOwner = PublishingBroadcastIdStore.LoadOrCreateOwner(
+                Path.Combine(applicationDirectory, PublishingBroadcastIdFileName));
+            state = await GenesisGuiNextApplicationState.LoadWithRecordingRuleRepositoryAndAnnounceOwnerAsync(
                     new JsonGenesisFavoriteChannelStore(
                         Path.Combine(applicationDirectory, FavoriteFileName)),
                     new JsonGenesisChannelNotificationPreferenceStore(
@@ -748,6 +777,7 @@ internal static class SystemGenesisGuiNextApplicationState
                     GenesisRecordingRuleRepository.CreateSystem,
                     new JsonGenesisGuiNextConnectionPreferencesStore(
                         Path.Combine(applicationDirectory, ConnectionPreferencesFileName)),
+                    announceOwner,
                     cancellationToken)
                 .ConfigureAwait(false);
         }
@@ -755,6 +785,62 @@ internal static class SystemGenesisGuiNextApplicationState
         SystemGenesisGuiNextNotificationSettingsFeedback.Bind(state.Notifications);
         SystemGenesisGuiNextTestSoundFeedback.Bind(state.Notifications);
         return state;
+    }
+
+    internal static class PublishingBroadcastIdStore
+    {
+        internal static PeerCast.Nova.Network.Publishing.PublishingAnnounceOwner LoadOrCreateOwner(string filePath)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+            string? existingText = null;
+            Guid? parsed = null;
+            var existed = false;
+
+            try
+            {
+                if (File.Exists(filePath))
+                {
+                    existed = true;
+                    existingText = File.ReadAllText(filePath).Trim();
+                    if (Guid.TryParse(existingText, out var candidate) && candidate != Guid.Empty)
+                    {
+                        parsed = candidate;
+                    }
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or NotSupportedException)
+            {
+            }
+
+            var owner = new PeerCast.Nova.Network.Publishing.PublishingAnnounceOwner(parsed);
+            var expectedText = owner.BroadcastId.ToString("N").ToUpperInvariant();
+            if (!existed || !string.Equals(existingText, expectedText, StringComparison.Ordinal))
+            {
+                TryPersist(filePath, expectedText);
+            }
+
+            return owner;
+        }
+
+        private static void TryPersist(string filePath, string serializedBroadcastId)
+        {
+            try
+            {
+                var fullPath = Path.GetFullPath(filePath);
+                var directory = Path.GetDirectoryName(fullPath);
+                if (!string.IsNullOrWhiteSpace(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+
+                var temporaryPath = fullPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                File.WriteAllText(temporaryPath, serializedBroadcastId);
+                File.Move(temporaryPath, fullPath, overwrite: true);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or NotSupportedException)
+            {
+            }
+        }
     }
 
     private sealed class EmptyFavoriteStore : IGenesisFavoriteChannelStore

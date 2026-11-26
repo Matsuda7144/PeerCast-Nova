@@ -166,7 +166,9 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
     private const uint MenuCmdVolumeUp = 2180;
     private const uint MenuCmdVolumeDown = 2181;
     private const uint MenuCmdVolumePresetBase = 2182;
+    private const uint MenuCmdAudioDeviceBase = 2190;
     private const uint MenuCmdThreadBase = 3000;
+    private const int MaxAudioDeviceMenuItems = 32;
 
     private const nuint VirtualKeyBack = 0x08;
     private const nuint VirtualKeyReturn = 0x0D;
@@ -270,6 +272,10 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
     public event Action? ReloadRequested;
 
     public event Action<double>? SeekRequested;
+
+    public Func<(IReadOnlyList<LibMpvAudioDevice> Devices, string? CurrentDevice)>? AudioDevicesProvider { get; set; }
+
+    public event Action<string>? AudioDeviceSelected;
 
     public event Action<LibMpvVideoAdjustment, string>? VideoAdjustmentChanged;
 
@@ -2200,6 +2206,7 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
 
             _ = AppendMenuW(menu, MenuFlagSeparator, 0, string.Empty);
 
+            LibMpvAudioDevice[] audioDevices = [];
             var volumeMenu = CreatePopupMenu();
             if (volumeMenu != 0)
             {
@@ -2212,6 +2219,28 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
                     var preset = VolumePresets[i];
                     var flags = MenuFlagString | (!currentAudio.Muted && currentAudio.Volume == preset ? MenuFlagChecked : 0);
                     _ = AppendMenuW(volumeMenu, flags, MenuCmdVolumePresetBase + (uint)i, $"{preset}%");
+                }
+
+                if (AudioDevicesProvider?.Invoke() is { Devices.Count: > 0 } audioDeviceState)
+                {
+                    audioDevices = audioDeviceState.Devices.Take(MaxAudioDeviceMenuItems).ToArray();
+                    var deviceMenu = CreatePopupMenu();
+                    if (deviceMenu != 0)
+                    {
+                        for (var i = 0; i < audioDevices.Length; i++)
+                        {
+                            var device = audioDevices[i];
+                            var label = string.Equals(device.Name, "auto", StringComparison.Ordinal)
+                                ? "自動選択"
+                                : device.Description;
+                            var isCurrent = string.Equals(audioDeviceState.CurrentDevice, device.Name, StringComparison.Ordinal);
+                            var flags = MenuFlagString | (isCurrent ? MenuFlagChecked : 0);
+                            _ = AppendMenuW(deviceMenu, flags, MenuCmdAudioDeviceBase + (uint)i, label);
+                        }
+
+                        _ = AppendMenuW(volumeMenu, MenuFlagSeparator, 0, string.Empty);
+                        _ = AppendMenuW(volumeMenu, MenuFlagPopup, (nuint)deviceMenu, "音声出力先");
+                    }
                 }
 
                 _ = AppendMenuW(volumeMenu, MenuFlagSeparator, 0, string.Empty);
@@ -2258,6 +2287,13 @@ internal sealed class LibMpvPlaybackWindowHost : IAsyncDisposable
                 {
                     SyncControls();
                 }
+                return;
+            }
+
+            if (selected >= MenuCmdAudioDeviceBase &&
+                selected < MenuCmdAudioDeviceBase + (uint)audioDevices.Length)
+            {
+                AudioDeviceSelected?.Invoke(audioDevices[(int)(selected - MenuCmdAudioDeviceBase)].Name);
                 return;
             }
 

@@ -1,9 +1,12 @@
 using System.Globalization;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using PeerCast.Nova.Playback;
 using PeerCast.Nova.Playback.Bbs;
 
 namespace PeerCast.Nova.Windows;
+
+internal sealed record LibMpvAudioDevice(string Name, string Description);
 
 internal enum LibMpvPlaybackEvent
 {
@@ -21,6 +24,9 @@ internal interface ILibMpvPlaybackClient : IDisposable
     void SetSpeed(double speed);
     void Reload() { }
     void SeekRelative(double seconds) { }
+    IReadOnlyList<LibMpvAudioDevice> GetAudioDevices() => [];
+    string? GetCurrentAudioDevice() => null;
+    void SetAudioDevice(string deviceName) { }
     void ShowOsdText(string text, int durationMs);
     bool SaveScreenshot(string filePath);
     void SetVideoAdjustment(LibMpvVideoAdjustment adjustment);
@@ -39,6 +45,7 @@ internal sealed class LibMpvPlaybackClient : ILibMpvPlaybackClient
     internal const double MaxRelativeSeekSeconds = 300.0;
     internal const long MaxUserConfigBytes = 64 * 1024;
     internal const int MaxUserConfigEntries = 256;
+    internal const int MaxAudioDeviceEntries = 32;
     internal static readonly double[] SpeedPresets = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
     private static readonly HashSet<string> ReservedHostOptions = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -65,9 +72,12 @@ internal sealed class LibMpvPlaybackClient : ILibMpvPlaybackClient
     private readonly SetPropertyFlagAsync _setPropertyFlagAsync;
     private readonly GetPropertyDouble _getPropertyDouble;
     private readonly GetPropertyInt64 _getPropertyInt64;
+    private readonly GetPropertyString _getPropertyString;
+    private readonly SetPropertyString _setPropertyString;
     private readonly CommandAsync _command;
     private readonly ReadEvent _waitForEvent;
     private readonly ClientAction _wakeup;
+    private readonly FreeMemory _free;
     private bool _initialized;
     private bool _disposed;
     private LibMpvPlaybackAudioState _desiredAudio = LibMpvPlaybackAudioState.Default;
@@ -90,9 +100,12 @@ internal sealed class LibMpvPlaybackClient : ILibMpvPlaybackClient
         _setPropertyFlagAsync = Bind<SetPropertyFlagAsync>(library, "mpv_set_property_async");
         _getPropertyDouble = Bind<GetPropertyDouble>(library, "mpv_get_property");
         _getPropertyInt64 = Bind<GetPropertyInt64>(library, "mpv_get_property");
+        _getPropertyString = Bind<GetPropertyString>(library, "mpv_get_property_string");
+        _setPropertyString = Bind<SetPropertyString>(library, "mpv_set_property_string");
         _command = Bind<CommandAsync>(library, "mpv_command_async");
         _waitForEvent = Bind<ReadEvent>(library, "mpv_wait_event");
         _wakeup = Bind<ClientAction>(library, "mpv_wakeup");
+        _free = Bind<FreeMemory>(library, "mpv_free");
         _client = Bind<CreateClient>(library, "mpv_create")();
         if (_client == 0)
         {
@@ -507,6 +520,112 @@ internal sealed class LibMpvPlaybackClient : ILibMpvPlaybackClient
         }
     }
 
+    public IReadOnlyList<LibMpvAudioDevice> GetAudioDevices() =>
+        ParseAudioDeviceList(ReadPropertyString("audio-device-list"));
+
+    public string? GetCurrentAudioDevice()
+    {
+        var current = ReadPropertyString("audio-device");
+        return string.IsNullOrWhiteSpace(current) ? null : current.Trim();
+    }
+
+    /// <summary>音声出力デバイスを切り替える。</summary>
+    public void SetAudioDevice(string deviceName)
+    {
+        if (string.IsNullOrWhiteSpace(deviceName))
+        {
+            return;
+        }
+
+        lock (_clientGate)
+        {
+            if (_disposed || !_initialized)
+            {
+                return;
+            }
+
+            _ = _setPropertyString(_client, "audio-device", deviceName.Trim());
+        }
+    }
+
+    internal static IReadOnlyList<LibMpvAudioDevice> ParseAudioDeviceList(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return [];
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array)
+            {
+                return [];
+            }
+
+            var devices = new List<LibMpvAudioDevice>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var element in doc.RootElement.EnumerateArray())
+            {
+                if (devices.Count >= MaxAudioDeviceEntries)
+                {
+                    break;
+                }
+
+                if (element.ValueKind != JsonValueKind.Object ||
+                    !element.TryGetProperty("name", out var nameProp) ||
+                    nameProp.ValueKind != JsonValueKind.String)
+                {
+                    continue;
+                }
+
+                var name = nameProp.GetString()?.Trim();
+                if (string.IsNullOrEmpty(name) || !seen.Add(name))
+                {
+                    continue;
+                }
+
+                var description = element.TryGetProperty("description", out var descProp) &&
+                    descProp.ValueKind == JsonValueKind.String
+                    ? descProp.GetString()?.Trim()
+                    : null;
+                devices.Add(new(name, string.IsNullOrEmpty(description) ? name : description));
+            }
+
+            return devices;
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+
+    private string? ReadPropertyString(string name)
+    {
+        lock (_clientGate)
+        {
+            if (_disposed || !_initialized)
+            {
+                return null;
+            }
+
+            var ptr = _getPropertyString(_client, name);
+            if (ptr == 0)
+            {
+                return null;
+            }
+
+            try
+            {
+                return Marshal.PtrToStringUTF8(ptr);
+            }
+            finally
+            {
+                _free(ptr);
+            }
+        }
+    }
+
     internal static string FormatLatestPostOsdAss(BbsPost post)
     {
         var compact = post.FormatCompactSingleLine(maxBodyLength: 90);
@@ -832,6 +951,18 @@ internal sealed class LibMpvPlaybackClient : ILibMpvPlaybackClient
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate int GetPropertyInt64(nint client,
         [MarshalAs(UnmanagedType.LPUTF8Str)] string name, int format, out long data);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate nint GetPropertyString(nint client,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string name);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate int SetPropertyString(nint client,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string name,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string data);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate void FreeMemory(nint data);
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate int CommandAsync(nint client, ulong replyUserdata, [In] nint[] arguments);

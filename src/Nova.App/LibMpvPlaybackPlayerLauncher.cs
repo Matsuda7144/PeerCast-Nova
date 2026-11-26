@@ -16,6 +16,8 @@ internal interface ILibMpvPlaybackWindow : IAsyncDisposable
     event Action<double>? SpeedChanged { add { } remove { } }
     event Action? ReloadRequested { add { } remove { } }
     event Action<double>? SeekRequested { add { } remove { } }
+    Func<(IReadOnlyList<LibMpvAudioDevice> Devices, string? CurrentDevice)>? AudioDevicesProvider { get => null; set { } }
+    event Action<string>? AudioDeviceSelected { add { } remove { } }
     event Action<LibMpvVideoAdjustment, string>? VideoAdjustmentChanged { add { } remove { } }
     void UpdateStatusStats(string? statsText) { }
     void UpdateVideoStats(LibMpvPlaybackStats stats) { }
@@ -254,6 +256,7 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
             _host.SpeedChanged += OnSpeedChanged;
             _host.ReloadRequested += OnReloadRequested;
             _host.SeekRequested += OnSeekRequested;
+            _host.AudioDeviceSelected += OnAudioDeviceSelected;
             _host.VideoAdjustmentChanged += OnVideoAdjustmentChanged;
         }
 
@@ -266,6 +269,12 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
         public event Action<double>? SpeedChanged;
         public event Action? ReloadRequested;
         public event Action<double>? SeekRequested;
+        public event Action<string>? AudioDeviceSelected;
+        public Func<(IReadOnlyList<LibMpvAudioDevice> Devices, string? CurrentDevice)>? AudioDevicesProvider
+        {
+            get => _host.AudioDevicesProvider;
+            set => _host.AudioDevicesProvider = value;
+        }
         public event Action<LibMpvVideoAdjustment, string>? VideoAdjustmentChanged;
         public Task Closed => _host.Closed;
 
@@ -281,7 +290,9 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
             _host.SpeedChanged -= OnSpeedChanged;
             _host.ReloadRequested -= OnReloadRequested;
             _host.SeekRequested -= OnSeekRequested;
+            _host.AudioDeviceSelected -= OnAudioDeviceSelected;
             _host.VideoAdjustmentChanged -= OnVideoAdjustmentChanged;
+            _host.AudioDevicesProvider = null;
             if (_windowStateStore is not null)
             {
                 _host.WindowStateChanged -= _windowStateStore.Update;
@@ -312,6 +323,9 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
 
         private void OnSeekRequested(double seconds) =>
             SeekRequested?.Invoke(seconds);
+
+        private void OnAudioDeviceSelected(string deviceName) =>
+            AudioDeviceSelected?.Invoke(deviceName);
 
         private void OnVideoAdjustmentChanged(LibMpvVideoAdjustment adjustment, string summary) =>
             VideoAdjustmentChanged?.Invoke(adjustment, summary);
@@ -492,12 +506,29 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
                 client.ShowOsdText($"シーク: {LibMpvPlaybackClient.FormatSeekOsd(clamped)}", 1500);
             }
 
+            void OnAudioDeviceSelected(string deviceName)
+            {
+                if (string.IsNullOrWhiteSpace(deviceName))
+                {
+                    return;
+                }
+
+                var trimmed = deviceName.Trim();
+                client.SetAudioDevice(trimmed);
+                var label = string.Equals(trimmed, "auto", StringComparison.Ordinal)
+                    ? "自動選択"
+                    : client.GetAudioDevices().FirstOrDefault(d => string.Equals(d.Name, trimmed, StringComparison.Ordinal))?.Description ?? trimmed;
+                client.ShowOsdText($"音声出力: {label}", 2000);
+            }
+
+            window.AudioDevicesProvider = () => (client.GetAudioDevices(), client.GetCurrentAudioDevice());
             window.AudioStateChanged += OnAudioStateChanged;
             window.ScreenshotRequested += OnScreenshotRequested;
             window.PauseChanged += OnPauseChanged;
             window.SpeedChanged += OnSpeedChanged;
             window.ReloadRequested += OnReloadRequested;
             window.SeekRequested += OnSeekRequested;
+            window.AudioDeviceSelected += OnAudioDeviceSelected;
             window.VideoAdjustmentChanged += OnVideoAdjustmentChanged;
             if (window.BbsSession is { } bbsSession)
             {
@@ -550,6 +581,8 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
                 }
 
                 window.VideoAdjustmentChanged -= OnVideoAdjustmentChanged;
+                window.AudioDeviceSelected -= OnAudioDeviceSelected;
+                window.AudioDevicesProvider = null;
                 window.SeekRequested -= OnSeekRequested;
                 window.ReloadRequested -= OnReloadRequested;
                 window.SpeedChanged -= OnSpeedChanged;
