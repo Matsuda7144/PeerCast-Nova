@@ -52,17 +52,16 @@ public sealed partial class SmartRelayWanTests
     }
 
     [Fact]
-    public async Task StartupOffAndSavingNextStartOnRemainInert()
+    public async Task StartupOffRemainsInertUntilSavedOnWhichStartsListenerImmediately()
     {
         await using var test = await Fixture.Create(wan: false);
         Assert.True(await test.Base.Channels.StartPublicAsync());
         Assert.Null(test.Host);
         Assert.True((await test.Base.State.Connection.SaveAsync(
             GenesisGuiNextConnectionInput.From(test.Base.State.Connection.Saved) with { WanRelayEnabled = true })).Saved);
-        Assert.True(await test.Base.Channels.StartPublicAsync());
-        Assert.Null(test.Host);
-        Assert.Empty(test.Manager.ReadState().RegisteredInternalPorts);
-        Assert.Empty(test.Router.Calls);
+        Assert.NotNull(test.Host);
+        Assert.Equal(GenesisSharedPublicRelayState.Listening, test.Host.Snapshot.State);
+        Assert.Equal(new[] { test.Port }, test.Manager.ReadState().RegisteredInternalPorts);
     }
 
     [Fact]

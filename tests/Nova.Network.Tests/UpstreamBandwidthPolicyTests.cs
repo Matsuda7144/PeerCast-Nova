@@ -88,5 +88,28 @@ public sealed class UpstreamBandwidthPolicyTests
         Assert.Throws<ArgumentOutOfRangeException>(() => policy.Evaluate(remote, new(-1, 0), 1));
         Assert.Throws<ArgumentOutOfRangeException>(() => policy.Evaluate(remote, new(0, -1), 1));
         Assert.Throws<ArgumentOutOfRangeException>(() => policy.Evaluate(remote, new(0, 0), -1));
+        Assert.Throws<ArgumentNullException>(() => policy.UpdateLimits(null!));
+        Assert.Throws<ArgumentOutOfRangeException>(() => policy.UpdateLimits(new(-1)));
+        Assert.Throws<ArgumentOutOfRangeException>(() => policy.UpdateLimits(new(null, -1)));
+    }
+
+    [Fact]
+    public void UpdateLimits_ChangesAdmissionDecisionsImmediately()
+    {
+        var remote = IPAddress.Parse("192.0.2.1");
+        var policy = new UpstreamBandwidthPolicy(new(1000, 1000));
+        Assert.Equal(BandwidthAdmissionDecision.Allowed,
+            policy.Evaluate(remote, new(500, 0), 400));
+
+        policy.UpdateLimits(new(800, 0));
+        Assert.Equal(new UpstreamBandwidthLimits(800, 0), policy.Limits);
+        Assert.Equal(800 * 125L, policy.GetLimitBytesPerSecond(remote));
+        Assert.Equal(BandwidthAdmissionDecision.LimitReached,
+            policy.Evaluate(remote, new(500, 0), 400));
+
+        policy.UpdateLimits(new(null, null));
+        Assert.Null(policy.GetLimitBytesPerSecond(remote));
+        Assert.Equal(BandwidthAdmissionDecision.Allowed,
+            policy.Evaluate(remote, new(null, null), null));
     }
 }

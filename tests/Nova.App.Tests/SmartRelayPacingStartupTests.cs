@@ -29,11 +29,12 @@ public sealed class SmartRelayPacingStartupTests
             Assert.Equal(kbps == 0 ? 0 : 1, policy.ReservedCount);
             var input = GenesisGuiNextConnectionInput.From(test.State.Connection.Saved) with { TotalUpstreamIpv4Kbps = "9000" };
             Assert.True((await test.State.Connection.SaveAsync(input)).Saved);
-            Assert.Equal(kbps, pacing.MediaKbps);
+            Assert.Equal(9000, pacing.MediaKbps);
             using var off = GenesisGuiNextNetworkPolicies.Create(test.State.Connection, _ => null);
             Assert.Null(off.Relays.Pacing);
             Assert.Equal(kbps, off.Bandwidth.Limits.Ipv4Kbps);
-            Assert.Contains(kbps is null ? "ペーシング 制限なし" : "媒体ペーシング", test.State.DownstreamRelays.CapacityStatusText());
+            Assert.Equal(9000, test.State.NetworkPolicies.Bandwidth.Limits.Ipv4Kbps);
+            Assert.Contains("媒体ペーシング", test.State.DownstreamRelays.CapacityStatusText());
         }
     }
 }

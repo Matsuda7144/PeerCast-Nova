@@ -15,19 +15,23 @@ namespace PeerCast.Nova.App.Tests;
 public sealed partial class SmartRelayWanTests
 {
     [Fact]
-    public async Task OffAndSavingNeverBindOrAcquireMapping()
+    public async Task OffInitiallyRemainsInertAndLiveEnablesOnSave()
     {
         await using var test = await Fixture.Create(wan: false);
         Assert.Null(test.Host);
         await using var channel = await test.Base.ViewingAsync(test.Token);
         Assert.Null(test.Host);
+        Assert.Empty(test.Manager.ReadState().RegisteredInternalPorts);
+        Assert.Empty(test.Router.Calls);
+
         var next = GenesisGuiNextConnectionInput.From(test.Base.State.Connection.Saved) with { WanRelayEnabled = true };
         Assert.True((await test.Base.State.Connection.SaveAsync(next)).Saved);
         Assert.False(test.Base.State.Connection.Startup.WanRelayEnabled);
-        Assert.True(test.Base.State.Connection.HasPendingRestart);
-        Assert.Null(test.Host);
-        Assert.Empty(test.Manager.ReadState().RegisteredInternalPorts);
-        Assert.Empty(test.Router.Calls);
+        Assert.True(test.Base.State.Connection.Active.WanRelayEnabled);
+        Assert.False(test.Base.State.Connection.HasPendingRestart);
+        Assert.NotNull(test.Host);
+        Assert.Equal(GenesisSharedPublicRelayState.Listening, test.Host.Snapshot.State);
+        Assert.Equal(new[] { test.Port }, test.Manager.ReadState().RegisteredInternalPorts);
     }
 
     [Fact]
@@ -167,6 +171,35 @@ public sealed partial class SmartRelayWanTests
         Assert.Equal(GenesisSharedPublicRelayState.Failed, test.Host.Snapshot.State);
     }
 
+    [Fact]
+    public async Task ListenPortChangeWhileWanEnabledRebindsLiveAndDisableStopsListener()
+    {
+        await using var test = await Fixture.Create(wan: true);
+        Assert.True(await test.Base.Channels.StartPublicAsync());
+        var firstHost = test.Host!;
+        Assert.Equal(test.Port, firstHost.LocalEndPoint!.Port);
+        Assert.Equal(GenesisSharedPublicRelayState.Listening, firstHost.Snapshot.State);
+
+        using var free = new TcpListener(IPAddress.Loopback, 0);
+        free.Start();
+        var secondPort = ((IPEndPoint)free.LocalEndpoint).Port;
+        free.Stop();
+
+        var rebound = GenesisGuiNextConnectionInput.From(test.Base.State.Connection.Saved) with
+        { ListenPort = secondPort.ToString(System.Globalization.CultureInfo.InvariantCulture) };
+        Assert.True((await test.Base.State.Connection.SaveAsync(rebound)).Saved);
+        Assert.Equal(GenesisSharedPublicRelayState.Disposed, firstHost.Snapshot.State);
+        Assert.NotSame(firstHost, test.Host);
+        Assert.Equal(secondPort, test.Host!.LocalEndPoint!.Port);
+        Assert.Equal(GenesisSharedPublicRelayState.Listening, test.Host.Snapshot.State);
+        Assert.Equal(new[] { secondPort }, test.Manager.ReadState().RegisteredInternalPorts);
+
+        var disabled = rebound with { WanRelayEnabled = false };
+        Assert.True((await test.Base.State.Connection.SaveAsync(disabled)).Saved);
+        Assert.Equal(GenesisSharedPublicRelayState.Disposed, test.Host.Snapshot.State);
+        Assert.Empty(test.Manager.ReadState().RegisteredInternalPorts);
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(65536)]
@@ -226,8 +259,10 @@ public sealed partial class SmartRelayWanTests
             Func<ChannelId, PcpRelayFanout, PcpRelayCoordinator?> resolveOwner)
         {
             BeforeGet?.Invoke();
-            return Host ??= new(settings, Manager, resolveOwner,
-                new() { SourceAllowed = a => a is not null && IPAddress.IsLoopback(a) });
+            if (Host is null || Host.Snapshot.State == GenesisSharedPublicRelayState.Disposed)
+                Host = new(settings, Manager, resolveOwner,
+                    new() { SourceAllowed = a => a is not null && IPAddress.IsLoopback(a) });
+            return Host;
         }
         public async ValueTask DisposeAsync()
         {

@@ -271,9 +271,9 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 {
                     _ = SetWindowTextW(_generalTitle, "録画・保存先設定");
                     _ = SetWindowTextW(_generalNotice, GenesisRecordingOutputDirectorySettings.NextStartNotice +
-                        " 既存writerの保存先は変わりません。\r\n「既定値に戻す」は即時保存します。フォルダーや録画ファイルは作成・移動しません。");
-                    _ = SetWindowTextW(_generalRuntime, "現在起動中: " + page.RuntimeDirectory);
-                    _ = SetWindowTextW(_generalConfigured, "次回起動用: " + page.EffectiveDirectory + (page.Saved.Length == 0 ? "（既定）" : string.Empty));
+                        "\r\n「既定値に戻す」は即時保存します。フォルダーや録画ファイルは作成・移動しません。");
+                    _ = SetWindowTextW(_generalRuntime, "現在の保存先: " + page.RuntimeDirectory);
+                    _ = SetWindowTextW(_generalConfigured, "設定済み保存先: " + page.EffectiveDirectory + (page.Saved.Length == 0 ? "（既定）" : string.Empty));
                 }
                 _updatingSettingsPath = true;
                 try

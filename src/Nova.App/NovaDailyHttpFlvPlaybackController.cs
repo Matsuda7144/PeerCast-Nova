@@ -205,8 +205,9 @@ internal sealed class NovaDailyHttpFlvPlaybackController :
         var diagnostics = RecordingTransformDiagnosticFile.FromEnvironment();
         try
         {
-            return new(settings.CurrentRuntimeDirectory, historyStore ?? GenesisRecordingHistoryStore.CreateSystem(),
-                defaultRecordingDirectory: settings.DefaultDirectory, diagnostics: diagnostics);
+            return new(() => settings.CurrentRuntimeDirectory, historyStore ?? GenesisRecordingHistoryStore.CreateSystem(),
+                defaultRecordingDirectory: settings.DefaultDirectory, diagnostics: diagnostics,
+                outputDirectorySettings: settings);
         }
         catch
         {

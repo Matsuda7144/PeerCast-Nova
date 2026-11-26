@@ -9,34 +9,51 @@ public sealed class PcpDownstreamPacer
     public static TimeSpan PacketDeadline { get; } = TimeSpan.FromSeconds(30);
     private readonly object _gate = new();
     private readonly LinkedList<TaskCompletionSource> _waiting = new();
-    private readonly double _bytesPerSecond;
+    private int? _mediaKbps;
+    private int _burstBytes;
+    private double _bytesPerSecond;
     private double _mediaTokens, _controlTokens = ControlBurstBytes;
     private long _last;
 
     public PcpDownstreamPacer(int? mediaKbps, TimeProvider? clock = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(mediaKbps ?? 0);
-        MediaKbps = mediaKbps;
         Clock = clock ?? TimeProvider.System;
+        _mediaKbps = mediaKbps;
         _bytesPerSecond = (double)(mediaKbps ?? 0) * 125;
-        BurstBytes = (int)Math.Clamp(Math.Ceiling(_bytesPerSecond / 4), 1, 16384);
-        _mediaTokens = BurstBytes;
+        _burstBytes = (int)Math.Clamp(Math.Ceiling(_bytesPerSecond / 4), 1, 16384);
+        _mediaTokens = _burstBytes;
         _last = Clock.GetTimestamp();
     }
 
-    public int? MediaKbps { get; }
-    public int BurstBytes { get; }
+    public int? MediaKbps { get { lock (_gate) return _mediaKbps; } }
+    public int BurstBytes { get { lock (_gate) return _burstBytes; } }
     public int WaitingRequests { get { lock (_gate) return _waiting.Count; } }
     internal TimeProvider Clock { get; }
+
+    /// <summary>帯域上限（kbps、null で無制限）を安全に動的更新する。</summary>
+    public void UpdateLimit(int? mediaKbps)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(mediaKbps ?? 0);
+        lock (_gate)
+        {
+            Refill();
+            var wasUnlimited = _mediaKbps is null;
+            _mediaKbps = mediaKbps;
+            _bytesPerSecond = (double)(mediaKbps ?? 0) * 125;
+            _burstBytes = (int)Math.Clamp(Math.Ceiling(_bytesPerSecond / 4), 1, 16384);
+            _mediaTokens = wasUnlimited ? _burstBytes : Math.Min(_mediaTokens, _burstBytes);
+        }
+    }
 
     // Control has a separate finite allowance; it never queues behind media.
     // Exhaustion closes the connection instead of blocking a handshake or
     // claiming an unlimited control exemption. Failed writes never refund credit.
     internal void ConsumeControl(int bytes)
     {
-        if (MediaKbps is null) return;
         lock (_gate)
         {
+            if (_mediaKbps is null) return;
             Refill();
             if (bytes > _controlTokens) throw new PcpPacingLimitException();
             _controlTokens -= bytes;
@@ -48,11 +65,11 @@ public sealed class PcpDownstreamPacer
     internal async ValueTask AcquireMediaAsync(int bytes, PcpPacingWaitState? state, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
-        if (MediaKbps is null) return;
-        if (MediaKbps == 0 || bytes <= 0 || bytes > BurstBytes) throw new PcpPacingLimitException();
         LinkedListNode<TaskCompletionSource> node;
         lock (_gate)
         {
+            if (_mediaKbps is null) return;
+            if (_mediaKbps == 0 || bytes <= 0 || bytes > _burstBytes) throw new PcpPacingLimitException();
             if (_waiting.Count >= MaxWaitingRequests) throw new PcpPacingLimitException();
             node = _waiting.AddLast(new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously));
             state?.Set(true);
@@ -67,6 +84,12 @@ public sealed class PcpDownstreamPacer
                 lock (_gate)
                 {
                     token.ThrowIfCancellationRequested();
+                    if (_mediaKbps is null)
+                    {
+                        state?.Set(false);
+                        return;
+                    }
+                    if (_mediaKbps == 0 || bytes > _burstBytes) throw new PcpPacingLimitException();
                     Refill();
                     if (_mediaTokens >= bytes)
                     {
@@ -102,7 +125,7 @@ public sealed class PcpDownstreamPacer
         var elapsed = Clock.GetElapsedTime(_last, now).TotalSeconds;
         if (elapsed < 0) throw new PcpPacingLimitException();
         _last = now;
-        _mediaTokens = Math.Min(BurstBytes, _mediaTokens + elapsed * _bytesPerSecond);
+        _mediaTokens = Math.Min(_burstBytes, _mediaTokens + elapsed * _bytesPerSecond);
         _controlTokens = Math.Min(ControlBurstBytes, _controlTokens + elapsed * ControlBytesPerSecond);
     }
 }

@@ -294,27 +294,28 @@ public sealed class GenesisGuiNextPublicChannelCompositionTests
     }
 
     [Fact]
-    public async Task SavedChangesDoNotChangeActiveOwnerButNextApplicationReadsThemOnce()
+    public async Task SavedChangesLiveApplyToActiveOwnerWithoutBreakingExistingRelay()
     {
         using var timeout = TimeoutSource();
         await using var fixture = await CreateAsync(new() { MaxRelaysTotal = 1 });
         await using var channel = await fixture.BroadcastAsync(timeout.Token);
-        Assert.True((await fixture.State.Connection.SaveAsync(
-            GenesisGuiNextConnectionInput.From(new() { MaxRelaysTotal = 0 }))).Saved);
         await using var accepted = await Peer.ConnectAsync(channel.Owner, timeout.Token);
         Accepted(accepted);
-        Assert.Equal(1, fixture.Store.LoadCount);
+        Assert.True((await fixture.State.Connection.SaveAsync(
+            GenesisGuiNextConnectionInput.From(new() { MaxRelaysTotal = 0 }))).Saved);
+        // 既存の接続は維持されたまま、新しいリレー受け入れは即時に拒否される。
+        await using var denied = await Peer.ConnectAsync(channel.Owner, timeout.Token);
+        Full(denied);
+        Assert.Equal(1, fixture.State.NetworkPolicies.Relays.ReservedCount);
         await using var restarted = await LoadAsync(fixture.Store);
-        Assert.Equal(2, fixture.Store.LoadCount);
         await using var producer = new PcpRelayFanout();
         await using var next = await restarted.PublicChannels.PrepareBroadcastAsync(
             new(Guid.NewGuid()), new(Guid.NewGuid()), producer, new(IPAddress.Loopback, 0));
         var run = next.RunAsync(timeout.Token);
-        await using var denied = await Peer.ConnectAsync(next, timeout.Token);
-        Full(denied);
+        await using var deniedOnRestart = await Peer.ConnectAsync(next, timeout.Token);
+        Full(deniedOnRestart);
         await next.DisposeAsync();
         await run.WaitAsync(timeout.Token);
-        Assert.Equal(1, fixture.State.NetworkPolicies.Relays.ReservedCount);
     }
 
     [Fact]

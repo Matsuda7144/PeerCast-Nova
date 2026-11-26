@@ -263,6 +263,26 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
         Notifications.BindPersistence(TryPersistNotifications);
         YellowPages.BindPersistence(TryPersistYellowPages);
         Playback.BindPersistence(TryPersistPlaybackPreferences);
+        Connection.BindLiveApply(ApplyLiveConnectionSettingsAsync);
+    }
+
+    private async ValueTask ApplyLiveConnectionSettingsAsync(
+        GenesisGuiNextConnectionPreferences next,
+        CancellationToken cancellationToken)
+    {
+        NetworkPolicies.ApplyLive(next);
+        Connection.MarkActive(next);
+        try
+        {
+            await PublicChannels.ApplyLivePublicSettingsAsync(next).ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            PeerCast.Nova.Foundation.Logging.FileNovaLogger.Default.Log(
+                PeerCast.Nova.Foundation.Logging.LogLevel.Warning,
+                "Failed to apply live public relay settings.",
+                exception);
+        }
     }
 
     public GenesisFavoriteChannelCollection Favorites { get; }
@@ -554,6 +574,8 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
         {
             return;
         }
+
+        Connection.BindLiveApply(null);
 
         Exception? publicChannelFailure = null;
         try

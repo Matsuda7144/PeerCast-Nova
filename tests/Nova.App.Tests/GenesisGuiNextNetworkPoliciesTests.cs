@@ -26,7 +26,7 @@ public sealed class GenesisGuiNextNetworkPoliciesTests
     }
 
     [Fact]
-    public async Task SavedChangesDoNotHotApplyEvenWhenASecondFoundationIsCreated()
+    public async Task SavedChangesLiveApplyToCurrentPoliciesWithoutBreakingActiveReservations()
     {
         var initial = new GenesisGuiNextConnectionPreferences
         {
@@ -49,12 +49,10 @@ public sealed class GenesisGuiNextNetworkPoliciesTests
         };
         Assert.True((await state.Connection.SaveAsync(GenesisGuiNextConnectionInput.From(next))).Saved);
         Assert.Same(policies, state.NetworkPolicies);
-        Assert.Equal(1, policies.Relays.Limits.MaxRelaysTotal);
-        Assert.Equal(1000, policies.Bandwidth.Limits.Ipv4Kbps);
-        using var secondFoundation = GenesisGuiNextNetworkPolicies.Create(state.Connection);
-        Assert.Equal(policies.Relays.Limits, secondFoundation.Relays.Limits);
-        Assert.Equal(policies.Bandwidth.Limits, secondFoundation.Bandwidth.Limits);
+        Assert.Equal(0, policies.Relays.Limits.MaxRelaysTotal);
+        Assert.Equal(0, policies.Bandwidth.Limits.Ipv4Kbps);
         Assert.Equal(RelayAdmissionDecision.TotalLimitReached, owner.TryReserve(2).Decision);
+        Assert.Equal(1, policies.Relays.ReservedCount);
         await using var restarted = await CreateStateAsync(store);
         Assert.Equal(new RelayAdmissionLimits(0, 0, 0), restarted.NetworkPolicies.Relays.Limits);
         Assert.Equal(BandwidthAdmissionDecision.LimitReached,
@@ -115,7 +113,7 @@ public sealed class GenesisGuiNextNetworkPoliciesTests
     }
 
     [Fact]
-    public async Task RegistryUsesTheSameStartupPolicyAndSavedChangesOnlyAffectNextApplication()
+    public async Task RegistryUsesTheSamePolicyAndLiveUpdatesAffectSubsequentReservations()
     {
         var store = new MemoryStore(new() { MaxRelaysTotal = 1 });
         await using var first = await CreateStateAsync(store);
@@ -128,16 +126,16 @@ public sealed class GenesisGuiNextNetworkPoliciesTests
         Assert.True((await first.Connection.SaveAsync(
             GenesisGuiNextConnectionInput.From(new() { MaxRelaysTotal = 0 }))).Saved);
         directReservation!.Dispose();
-        Assert.True(owner.TryReserve(2, out var reservation));
+        // 保存直後に上限 0 が反映されているため、既存解放後も新規予約は拒否される。
+        Assert.False(owner.TryReserve(2, out _));
+        Assert.True((await first.Connection.SaveAsync(
+            GenesisGuiNextConnectionInput.From(new() { MaxRelaysTotal = 1 }))).Saved);
+        Assert.True(owner.TryReserve(3, out var reservation));
         using (reservation)
         {
             Assert.Equal(1, first.DownstreamRelays.ActiveRelayCount);
             Assert.Equal(1, first.NetworkPolicies.Relays.ReservedCount);
         }
-        await using var restarted = await CreateStateAsync(store);
-        using var newOwner = restarted.DownstreamRelays.Register(
-            new(Guid.NewGuid()), new(Guid.NewGuid()), RelayChannelKind.Viewing);
-        Assert.False(newOwner.TryReserve(3, out _));
     }
 
     private static ValueTask<GenesisGuiNextApplicationState> CreateStateAsync(IGenesisGuiNextConnectionPreferencesStore store) =>

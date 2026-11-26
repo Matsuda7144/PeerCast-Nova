@@ -191,6 +191,36 @@ public sealed class DefaultRecordingFilePathProviderTests
             Path.IsPathRooted(provider.BaseDirectory));
     }
 
+    [Fact]
+    public void DynamicBaseDirectoryProvider_UsesLatestDirectoryForSubsequentPaths()
+    {
+        var currentDirectory = Path.Combine(
+            Path.GetTempPath(),
+            "PeerCast-Nova-DynamicPathTests",
+            Guid.NewGuid().ToString("N"),
+            "initial");
+        var provider = new DefaultRecordingFilePathProvider(
+            () => currentDirectory,
+            static () => DateTimeOffset.UnixEpoch);
+
+        var firstPath = provider.GetPath(
+            CreateRequest("ChannelA", "flv"),
+            TestSessionId);
+        Assert.StartsWith(Path.GetFullPath(currentDirectory), firstPath, StringComparison.Ordinal);
+
+        var nextDirectory = Path.Combine(
+            Path.GetDirectoryName(currentDirectory)!,
+            "updated");
+        currentDirectory = nextDirectory;
+
+        Assert.Equal(Path.GetFullPath(nextDirectory), provider.BaseDirectory);
+        var secondPath = provider.GetPath(
+            CreateRequest("ChannelA", "flv"),
+            TestSessionId);
+        Assert.StartsWith(Path.GetFullPath(nextDirectory), secondPath, StringComparison.Ordinal);
+        Assert.NotEqual(firstPath, secondPath);
+    }
+
     private static DefaultRecordingFilePathProvider CreateProvider(
         DateTimeOffset now)
     {

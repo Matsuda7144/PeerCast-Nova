@@ -16,9 +16,11 @@ public sealed class PcpRecordingRuntimeComposition : IAsyncDisposable
 {
     private readonly object lifecycleGate = new();
     private readonly PcpRelayRuntimeComposition relayRuntime;
+    private readonly DefaultRecordingFilePathProvider filePathProvider;
     private readonly RecordingRuntime recordingRuntime;
     private readonly GenesisRecordingHistoryPersistenceCoordinator? historyPersistence;
     private readonly RecordingTransformDiagnosticFile? diagnostics;
+    private readonly GenesisRecordingOutputDirectorySettings? outputDirectorySettings;
     private readonly HashSet<Task> coordinatorReleaseTasks = [];
     private Task? disposeTask;
 
@@ -46,15 +48,43 @@ public sealed class PcpRecordingRuntimeComposition : IAsyncDisposable
         string? defaultRecordingDirectory = null,
         IGenesisRecordingLibraryFileSystem? libraryFileSystem = null,
         RecordingTransformDiagnosticFile? diagnostics = null)
+        : this(
+            ResolveStaticDirectoryProvider(recordingDirectory),
+            historyStore,
+            maximumRecordingSourceFactoryCount,
+            maximumActiveSessionCount,
+            maximumChannelCount,
+            observationTimeProvider,
+            defaultRecordingDirectory,
+            libraryFileSystem,
+            diagnostics,
+            outputDirectorySettings: null)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(recordingDirectory);
-        this.diagnostics = diagnostics;
+    }
 
+    internal PcpRecordingRuntimeComposition(
+        Func<string> recordingDirectoryProvider,
+        GenesisRecordingHistoryStore? historyStore,
+        int maximumRecordingSourceFactoryCount = RecordingStreamSourceLeaseRegistry.DefaultMaximumFactoryCount,
+        int maximumActiveSessionCount = RecordingFileSink.DefaultMaximumActiveSessionCount,
+        int maximumChannelCount = RecordingAutomationManager.DefaultMaximumChannelCount,
+        TimeProvider? observationTimeProvider = null,
+        string? defaultRecordingDirectory = null,
+        IGenesisRecordingLibraryFileSystem? libraryFileSystem = null,
+        RecordingTransformDiagnosticFile? diagnostics = null,
+        GenesisRecordingOutputDirectorySettings? outputDirectorySettings = null)
+    {
+        ArgumentNullException.ThrowIfNull(recordingDirectoryProvider);
+        this.diagnostics = diagnostics;
+        this.outputDirectorySettings = outputDirectorySettings;
+
+        filePathProvider = new DefaultRecordingFilePathProvider(recordingDirectoryProvider);
+        var startupDirectory = filePathProvider.BaseDirectory;
         relayRuntime = new PcpRelayRuntimeComposition(
             maximumRecordingSourceFactoryCount);
         recordingRuntime = new RecordingRuntime(
             relayRuntime.RecordingSourceProvider,
-            new DefaultRecordingFilePathProvider(RecordingDirectory = Path.GetFullPath(recordingDirectory)),
+            filePathProvider,
             maximumActiveSessionCount,
             maximumChannelCount,
             RecordingHistory,
@@ -64,15 +94,27 @@ public sealed class PcpRecordingRuntimeComposition : IAsyncDisposable
         // persistence only after runtime argument validation has succeeded.
         if (historyStore is not null)
             historyPersistence = new(RecordingHistory, historyStore, KnownRecordingRoots);
-        // Restore first, then seed trusted startup values. Never inspect the
-        // mutable saved-next-start presentation or access these directories.
         if (defaultRecordingDirectory is not null)
             DefaultRootRegistration = KnownRecordingRoots.Register(defaultRecordingDirectory, GenesisRecordingRootProvenance.Default);
-        StartupRootRegistration = KnownRecordingRoots.Register(RecordingDirectory, GenesisRecordingRootProvenance.StartupRecordingDirectory);
+        StartupRootRegistration = KnownRecordingRoots.Register(startupDirectory, GenesisRecordingRootProvenance.StartupRecordingDirectory);
+        if (this.outputDirectorySettings is not null)
+        {
+            this.outputDirectorySettings.EffectiveDirectoryChanged += OnEffectiveRecordingDirectoryChanged;
+        }
         RecordingLibrary = new(KnownRecordingRoots.GetSnapshot, RecordingHistory.GetSnapshot, libraryFileSystem);
     }
 
-    internal string RecordingDirectory { get; }
+    private static Func<string> ResolveStaticDirectoryProvider(string recordingDirectory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(recordingDirectory);
+        var full = Path.GetFullPath(recordingDirectory);
+        return () => full;
+    }
+
+    private void OnEffectiveRecordingDirectoryChanged(string updatedDirectory) =>
+        _ = KnownRecordingRoots.Register(updatedDirectory, GenesisRecordingRootProvenance.StartupRecordingDirectory);
+
+    internal string RecordingDirectory => filePathProvider.BaseDirectory;
 
     internal GenesisRecordingHistoryReadModel RecordingHistory { get; } = new();
 
@@ -160,6 +202,11 @@ public sealed class PcpRecordingRuntimeComposition : IAsyncDisposable
 
     private async Task DisposeCoreAsync()
     {
+        if (outputDirectorySettings is not null)
+        {
+            outputDirectorySettings.EffectiveDirectoryChanged -= OnEffectiveRecordingDirectoryChanged;
+        }
+
         List<Exception>? failures = null;
 
         try

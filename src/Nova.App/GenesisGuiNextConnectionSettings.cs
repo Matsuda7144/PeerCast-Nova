@@ -97,14 +97,14 @@ internal sealed record GenesisGuiNextConnectionInput(
 internal sealed record GenesisGuiNextConnectionSaveResult(bool Saved, string Message);
 
 /// <summary>
-/// One application-owned configuration snapshot captured at startup, plus a saved
-/// next-start snapshot. Saving never mutates startup state or invokes networking.
-/// No passive shutdown save can replace a file that failed to load.
+/// One application-owned configuration snapshot captured at startup, plus active
+/// runtime and saved snapshots. Saving persists and applies changes live when a
+/// live-apply handler is bound.
 /// </summary>
 internal sealed class GenesisGuiNextConnectionSettings : IAsyncDisposable
 {
     internal const string NextStartNotice =
-        "保存値は次回起動時に読み込みます。WAN Relayは起動時に指定ポートで待受を開始し、終了まで維持します。自動開放ONならルーターへ開放を要求します。IPv6は後続対応。";
+        "保存すると待受ポート・帯域・リレー数・WAN Relayが即時に反映されます（IPv6は未対応）。自動開放ONならルーターへ開放を要求します。";
     internal const string LoadFailureMessage =
         "設定を読み込めませんでした。今回は既定値で開始します。保存すると既存の設定を置き換えます。";
     private readonly IGenesisGuiNextConnectionPreferencesStore _store;
@@ -113,6 +113,8 @@ internal sealed class GenesisGuiNextConnectionSettings : IAsyncDisposable
     private bool _closing;
     private int _loadFailed;
     private GenesisGuiNextConnectionPreferences _saved;
+    private GenesisGuiNextConnectionPreferences _active;
+    private Func<GenesisGuiNextConnectionPreferences, CancellationToken, ValueTask>? _liveApply;
 
     internal GenesisGuiNextConnectionSettings(GenesisGuiNextConnectionPreferences startup,
         IGenesisGuiNextConnectionPreferencesStore store, bool loadFailed = false)
@@ -122,14 +124,25 @@ internal sealed class GenesisGuiNextConnectionSettings : IAsyncDisposable
         startup.Validate();
         Startup = startup;
         _saved = startup;
+        _active = startup;
         _store = store;
         _loadFailed = loadFailed ? 1 : 0;
     }
 
     public GenesisGuiNextConnectionPreferences Startup { get; }
+    public GenesisGuiNextConnectionPreferences Active => Volatile.Read(ref _active);
     public GenesisGuiNextConnectionPreferences Saved => Volatile.Read(ref _saved);
     public bool LoadFailed => Volatile.Read(ref _loadFailed) != 0;
-    public bool HasPendingRestart => Saved != Startup;
+    public bool HasPendingRestart => Saved != Active;
+
+    internal void BindLiveApply(Func<GenesisGuiNextConnectionPreferences, CancellationToken, ValueTask>? handler) =>
+        Volatile.Write(ref _liveApply, handler);
+
+    internal void MarkActive(GenesisGuiNextConnectionPreferences preferences)
+    {
+        ArgumentNullException.ThrowIfNull(preferences);
+        Volatile.Write(ref _active, preferences);
+    }
 
     internal ValueTask<GenesisGuiNextConnectionSaveResult> SaveAsync(
         GenesisGuiNextConnectionInput input, CancellationToken cancellationToken = default) =>
@@ -166,6 +179,12 @@ internal sealed class GenesisGuiNextConnectionSettings : IAsyncDisposable
             await _store.SaveAsync(next!, cancellationToken).ConfigureAwait(false);
             Volatile.Write(ref _saved, next!);
             Volatile.Write(ref _loadFailed, 0);
+            var liveApply = Volatile.Read(ref _liveApply);
+            if (liveApply is not null)
+            {
+                await liveApply(next!, cancellationToken).ConfigureAwait(false);
+                return new(true, "設定を保存し、即時に反映しました。");
+            }
             return new(true, "設定を保存しました。次回起動時に読み込みます。");
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

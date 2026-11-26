@@ -254,7 +254,31 @@ public sealed class RelayAdmissionPolicyTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new RelayAdmissionPolicy(new(-1)));
         Assert.Throws<ArgumentOutOfRangeException>(() => new RelayAdmissionPolicy(new(null, -1)));
         Assert.Throws<ArgumentOutOfRangeException>(() => new RelayAdmissionPolicy(new(null, null, -1)));
+        Assert.Throws<ArgumentNullException>(() => policy.UpdateLimits(null!));
+        Assert.Throws<ArgumentOutOfRangeException>(() => policy.UpdateLimits(new(-1)));
+        Assert.Throws<ArgumentOutOfRangeException>(() => policy.UpdateLimits(new(null, -1)));
+        Assert.Throws<ArgumentOutOfRangeException>(() => policy.UpdateLimits(new(null, null, -1)));
         Assert.Equal(0, policy.ReservedCount);
+    }
+
+    [Fact]
+    public void UpdateLimits_UpdatesRelayAndBandwidthLimitsWhileKeepingActiveReservations()
+    {
+        var bandwidth = new UpstreamBandwidthPolicy(new(1000));
+        using var policy = new RelayAdmissionPolicy(new(1, 1, 1), bandwidth);
+        using var channel = policy.OpenChannel(new(Guid.NewGuid()), new(Guid.NewGuid()), RelayChannelKind.Viewing, () => 400);
+        using var first = Reserve(channel, 1);
+        Assert.Equal(RelayAdmissionDecision.TotalLimitReached, channel.TryReserve(2).Decision);
+
+        policy.UpdateLimits(new(2, 2, 2), new(900));
+        Assert.Equal(1, policy.ReservedCount);
+        Assert.Equal(2, policy.Snapshot.RelayLimit);
+        Assert.Equal(900, policy.Snapshot.Ipv4BudgetKbps);
+        using var second = Reserve(channel, 2);
+
+        policy.UpdateLimits(new(5, 5, 5), new(700));
+        Assert.Equal(RelayAdmissionDecision.BandwidthLimitReached, channel.TryReserve(3).Decision);
+        Assert.Equal(2, policy.ReservedCount);
     }
 
     private static RelayAdmissionPolicy.Channel Open(RelayAdmissionPolicy policy, RelayChannelKind kind) =>

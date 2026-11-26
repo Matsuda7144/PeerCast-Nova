@@ -459,7 +459,7 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
         {
             var presentation = recordingSettings!.Presentation;
             SetText(controls.Path, presentation.ConfiguredDirectory ?? presentation.EffectiveDirectory);
-            SetText(controls.Info, $"今回の保存先: {presentation.CurrentRuntimeDirectory}\r\n次回の保存先 ({(presentation.UsesDefault ? "既定" : "カスタム")}): {presentation.EffectiveDirectory}");
+            SetText(controls.Info, $"現在の保存先 ({(presentation.UsesDefault ? "既定" : "カスタム")}): {presentation.CurrentRuntimeDirectory}\r\n既定の保存先: {recordingSettings.DefaultDirectory}");
         }
 
         public void ProcessCommand(nuint wParam, nint lParam)
@@ -507,7 +507,7 @@ internal sealed class GenesisGuiNextPlaybackSettingsWindow : IAsyncDisposable
             {
                 var mode = SendMessageW(controls.Browse, 0x00F0, 0, 0) == 1 ? NovaGuiMode.Modern : NovaGuiMode.Classic;
                 SetText(controls.Status, appearance.Save(mode)
-                    ? "設定を保存しました。変更は次回起動時から適用されます。"
+                    ? (appearance.HasLiveSwitchHandler ? "設定を保存しました。表示モードを切り替えます。" : "設定を保存しました。変更は次回起動時から適用されます。")
                     : appearance.Error ?? "設定を保存できませんでした。");
                 return;
             }

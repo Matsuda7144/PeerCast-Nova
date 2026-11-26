@@ -13,6 +13,7 @@ internal sealed class GenesisConnectionSettingsPage(GenesisGuiNextConnectionSett
     internal GenesisGuiNextConnectionInput Input { get; private set; } = GenesisGuiNextConnectionInput.From(settings.Saved);
     internal bool IsDirty => Input != GenesisGuiNextConnectionInput.From(_baseline);
     internal GenesisGuiNextConnectionPreferences Startup => settings.Startup;
+    internal GenesisGuiNextConnectionPreferences Active => settings.Active;
     internal GenesisGuiNextConnectionPreferences Saved => settings.Saved;
 
     internal void Open() { IsOpen = true; Reload(); }

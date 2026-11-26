@@ -169,14 +169,14 @@ public sealed class GenesisChannelContextActionsTests
             var target = GenesisChannelContextActions.Capture(viewModel, new(new("Offline", "pcp://tracker/offline"), null));
             var effects = new Effects();
             await GenesisChannelContextActions.ExecuteAsync(viewModel, target, GenesisChannelContextMenuCommand.OpenRecordingDirectory, effects);
-            Assert.Equal(current, effects.ProbedDirectory);
+            Assert.Equal(next, effects.ProbedDirectory);
             Assert.Equal(GenesisGuiNextChannelContextFailure.RecordingDirectoryMissing, effects.Failure);
             Assert.Null(effects.OpenedDirectory);
             Assert.False(Directory.Exists(current));
             Assert.False(Directory.Exists(next));
             effects.Exists = true;
             await GenesisChannelContextActions.ExecuteAsync(viewModel, target, GenesisChannelContextMenuCommand.OpenRecordingDirectory, effects);
-            Assert.Equal(current, effects.OpenedDirectory);
+            Assert.Equal(next, effects.OpenedDirectory);
         }
         finally { Directory.Delete(root, true); }
     }

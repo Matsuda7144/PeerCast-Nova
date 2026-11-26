@@ -169,8 +169,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 page.Refresh();
                 _ = SetWindowTextW(_generalTitle, "外観設定");
                 _ = SetWindowTextW(_generalNotice, GenesisAppearanceSettings.NextStartNotice + "\r\nUPnP/NATなどの詳細設定は「従来の設定を開く…」から変更できます。");
-                _ = SetWindowTextW(_generalRuntime, "現在の起動時表示: " + GenesisGeneralSettingsPage.Label(page.RuntimeMode));
-                _ = SetWindowTextW(_generalConfigured, "保存済み（次回起動）: " + GenesisGeneralSettingsPage.Label(page.ConfiguredMode));
+                _ = SetWindowTextW(_generalRuntime, "現在の表示: " + GenesisGeneralSettingsPage.Label(page.RuntimeMode));
+                _ = SetWindowTextW(_generalConfigured, "保存済み: " + GenesisGeneralSettingsPage.Label(page.ConfiguredMode));
                 _ = SetWindowTextW(_classicChoice, page.Draft == NovaGuiMode.Classic ? "Classic（選択中）" : "Classic");
                 _ = SetWindowTextW(_modernChoice, page.Draft == NovaGuiMode.Modern ? "Modern（選択中）" : "Modern");
                 _ = SetWindowTextW(_generalStatus, page.Message);

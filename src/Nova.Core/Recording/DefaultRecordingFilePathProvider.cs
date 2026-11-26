@@ -43,7 +43,7 @@ public sealed class DefaultRecordingFilePathProvider : IRecordingFilePathProvide
             "LPT9",
         };
 
-    private readonly string baseDirectory;
+    private readonly Func<string> baseDirectoryProvider;
     private readonly Func<DateTimeOffset> nowProvider;
 
     public DefaultRecordingFilePathProvider(
@@ -52,11 +52,23 @@ public sealed class DefaultRecordingFilePathProvider : IRecordingFilePathProvide
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(baseDirectory);
 
-        this.baseDirectory = Path.GetFullPath(baseDirectory);
+        var resolvedBaseDirectory = Path.GetFullPath(baseDirectory);
+        this.baseDirectoryProvider = () => resolvedBaseDirectory;
         this.nowProvider = nowProvider ?? GetUtcNow;
     }
 
-    public string BaseDirectory => baseDirectory;
+    public DefaultRecordingFilePathProvider(
+        Func<string> baseDirectoryProvider,
+        Func<DateTimeOffset>? nowProvider = null)
+    {
+        ArgumentNullException.ThrowIfNull(baseDirectoryProvider);
+
+        this.baseDirectoryProvider = baseDirectoryProvider;
+        _ = ResolveBaseDirectory();
+        this.nowProvider = nowProvider ?? GetUtcNow;
+    }
+
+    public string BaseDirectory => ResolveBaseDirectory();
 
     public string GetPath(
         RecordingSinkStartRequest request,
@@ -64,6 +76,8 @@ public sealed class DefaultRecordingFilePathProvider : IRecordingFilePathProvide
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(sessionId);
+
+        var resolvedBaseDirectory = ResolveBaseDirectory();
 
         var timestamp = nowProvider()
             .ToUniversalTime()
@@ -84,12 +98,12 @@ public sealed class DefaultRecordingFilePathProvider : IRecordingFilePathProvide
             $"{timestamp}_{channelName}_{channelId}_{sessionId}{extension}");
 
         var combined = Path.Combine(
-            baseDirectory,
+            resolvedBaseDirectory,
             fileName);
 
         var fullPath = Path.GetFullPath(combined);
 
-        EnsureContainedByBaseDirectory(fullPath);
+        EnsureContainedByBaseDirectory(resolvedBaseDirectory, fullPath);
 
         return fullPath;
     }
@@ -187,7 +201,14 @@ public sealed class DefaultRecordingFilePathProvider : IRecordingFilePathProvide
         return DateTimeOffset.UtcNow;
     }
 
-    private void EnsureContainedByBaseDirectory(string fullPath)
+    private string ResolveBaseDirectory()
+    {
+        var candidate = baseDirectoryProvider();
+        ArgumentException.ThrowIfNullOrWhiteSpace(candidate);
+        return Path.GetFullPath(candidate);
+    }
+
+    private static void EnsureContainedByBaseDirectory(string baseDirectory, string fullPath)
     {
         var relative = Path.GetRelativePath(
             baseDirectory,

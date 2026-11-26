@@ -512,14 +512,19 @@ public sealed partial class GenesisAutomaticRecordingEvaluationControllerTests
             Func<RecordingRuleSet, RecordingCandidate, RecordingRuleDecision>? evaluate = null,
             IRecordingSink? sink = null,
             string? outputDirectory = null,
-            IRecordingSessionTerminalObserver? terminalObserver = null)
+            IRecordingSessionTerminalObserver? terminalObserver = null,
+            Func<string>? outputDirectoryProvider = null,
+            int maximumActiveSessionCount = RecordingFileSink.DefaultMaximumActiveSessionCount)
         {
             _directory = outputDirectory ?? _directory;
             _testSink = sink;
             SourceProvider = new BlockingFlvSourceProvider();
             Runtime = new RecordingRuntime(
                 SourceProvider,
-                new DefaultRecordingFilePathProvider(_directory),
+                outputDirectoryProvider is null
+                    ? new DefaultRecordingFilePathProvider(_directory)
+                    : new DefaultRecordingFilePathProvider(outputDirectoryProvider),
+                maximumActiveSessionCount: maximumActiveSessionCount,
                 terminalObserver: terminalObserver);
             if (sink is not null)
             {

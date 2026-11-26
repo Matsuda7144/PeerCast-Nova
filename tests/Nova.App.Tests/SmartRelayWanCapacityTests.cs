@@ -157,7 +157,7 @@ public sealed partial class SmartRelayWanTests
     }
 
     [Fact]
-    public async Task CapacityDisplayAndAdmissionKeepStartupSettingsUntilRestart()
+    public async Task CapacityDisplayAndAdmissionUpdateImmediatelyOnSave()
     {
         await using var test = await Fixture.Create(wan: false, total: 1, ipv4Kbps: 500);
         await using var activation = new GenesisGuiNextRelayActivation(test.Base.Channels);
@@ -167,13 +167,11 @@ public sealed partial class SmartRelayWanTests
         var saved = GenesisGuiNextConnectionInput.From(test.Base.State.Connection.Saved) with
         { MaxRelaysTotal = "0", TotalUpstreamIpv4Kbps = "0" };
         Assert.True((await test.Base.State.Connection.SaveAsync(saved)).Saved);
+        Assert.False(test.Base.State.Connection.HasPendingRestart);
+        Assert.Contains("リレー予約 0/0", activation.Snapshot.Text);
+        Assert.Contains("IPv4帯域予約 0/0", activation.Snapshot.Text);
         await using var peer = await WirePeer.Connect(channel.Owner.LocalEndPoint.Port, channel.Owner.ChannelId, test.Token);
-        Assert.Equal(200, peer.Handshake.HttpStatusCode);
-        Assert.Contains("リレー予約 1/1", activation.Snapshot.Text);
-        Assert.Contains("IPv4帯域予約 500/500", activation.Snapshot.Text);
-        Assert.Contains("チャンネル予約 1/制限なし", channel.Owner.CapacityStatusText);
+        Assert.Equal(503, peer.Handshake.HttpStatusCode);
         Assert.Contains("新規予約不可", channel.Owner.CapacityStatusText);
-        Assert.True(test.Base.State.Connection.HasPendingRestart);
-        await peer.Quit(test.Token);
     }
 }

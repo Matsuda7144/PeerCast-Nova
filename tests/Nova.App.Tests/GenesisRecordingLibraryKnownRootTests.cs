@@ -181,40 +181,35 @@ public sealed class GenesisRecordingLibraryKnownRootTests : IDisposable
     }
 
     [Fact]
-    public async Task SavedNextStartAndResetNeverAlterRuntimeOrRemoveHistoricalRoots()
+    public async Task SavedAndResetUpdateRuntimeAndRegisterRootsWhilePreservingHistory()
     {
         var settingsA = Settings();
         var startA = NovaDailyHttpFlvPlaybackController.CreateProductionRecordingComposition(settingsA, Store);
         Assert.Equal(GenesisRecordingOutputDirectorySaveResult.Saved, settingsA.Save(CustomRoot));
         Assert.Equal(CustomRoot, settingsA.Presentation.EffectiveDirectory);
+        Assert.Equal(CustomRoot, settingsA.CurrentRuntimeDirectory);
+        Assert.Equal(CustomRoot, startA.RecordingDirectory);
+        Assert.Contains(startA.KnownRecordingRoots.GetSnapshot().Roots, x => x.Path == CustomRoot);
+        Assert.Equal(GenesisRecordingOutputDirectorySaveResult.Saved, settingsA.ResetToDefault());
         Assert.Equal(DefaultRoot, settingsA.CurrentRuntimeDirectory);
-        Assert.DoesNotContain(startA.KnownRecordingRoots.GetSnapshot().Roots, x => x.Path == CustomRoot);
+        Assert.Equal(DefaultRoot, startA.RecordingDirectory);
+        Assert.Equal(2, startA.KnownRecordingRoots.GetSnapshot().Count);
         await startA.DisposeAsync();
-        var settingsB = Settings();
-        var startB = NovaDailyHttpFlvPlaybackController.CreateProductionRecordingComposition(settingsB, Store);
-        Assert.Equal(CustomRoot, startB.RecordingDirectory);
-        Assert.Contains(startB.KnownRecordingRoots.GetSnapshot().Roots, x => x.Path == CustomRoot);
-        Assert.Equal(GenesisRecordingOutputDirectorySaveResult.Saved, settingsB.ResetToDefault());
-        Assert.Equal(CustomRoot, settingsB.CurrentRuntimeDirectory);
-        Assert.Equal(CustomRoot, startB.RecordingDirectory);
-        Assert.Equal(DefaultRoot, settingsB.Presentation.EffectiveDirectory);
+        await using var startB = NovaDailyHttpFlvPlaybackController.CreateProductionRecordingComposition(Settings(), Store);
+        Assert.Equal(DefaultRoot, startB.RecordingDirectory);
         Assert.Equal(2, startB.KnownRecordingRoots.GetSnapshot().Count);
-        await startB.DisposeAsync();
-        await using var startC = NovaDailyHttpFlvPlaybackController.CreateProductionRecordingComposition(Settings(), Store);
-        Assert.Equal(DefaultRoot, startC.RecordingDirectory);
-        Assert.Equal(2, startC.KnownRecordingRoots.GetSnapshot().Count);
-        Assert.Contains(startC.KnownRecordingRoots.GetSnapshot().Roots, x => x.Path == CustomRoot);
+        Assert.Contains(startB.KnownRecordingRoots.GetSnapshot().Roots, x => x.Path == CustomRoot);
         Assert.Null(SettingsStore.Load().RecordingOutputDirectory);
     }
 
     [Fact]
-    public async Task FutureConfiguredDirectoryIsNotSeededEvenIfSavedBeforeComposition()
+    public async Task ConfiguredDirectoryBeforeCompositionIsSeededAlongWithDefaultRoot()
     {
         var settings = Settings();
         settings.Save(CustomRoot);
         await using var composition = NovaDailyHttpFlvPlaybackController.CreateProductionRecordingComposition(settings, Store);
-        Assert.Equal(DefaultRoot, composition.RecordingDirectory);
-        Assert.Equal(DefaultStartup, Assert.Single(composition.KnownRecordingRoots.GetSnapshot().Roots).Provenance);
+        Assert.Equal(CustomRoot, composition.RecordingDirectory);
+        Assert.Equal(2, composition.KnownRecordingRoots.GetSnapshot().Count);
         Assert.Equal(CustomRoot, SettingsStore.Load().RecordingOutputDirectory);
     }
 

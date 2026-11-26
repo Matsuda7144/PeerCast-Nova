@@ -140,7 +140,7 @@ public sealed class NovaWindowsStartupComposition
                     CreateSystemNotificationRuntime,
                     token => CaptureSystemNotificationSettingsPlacement(token, appearance),
                     _options.NetworkSettingsController, recordingSettings, ownsGuiNextState: false, appearanceSettings: appearance),
-            cancellationToken: cancellationToken, loadApplicationState: true);
+            loadApplicationState: true, appearance: appearance, cancellationToken: cancellationToken);
     }
 
     // The production root and managed composition tests use the same lifetime.
@@ -149,18 +149,28 @@ public sealed class NovaWindowsStartupComposition
         Func<GenesisGuiNextPlaybackPreferencesSource, GenesisRecordingOutputDirectorySettings,
             IGenesisMainWindowSurfaceTarget> createSurface,
         GenesisRecordingOutputDirectorySettings? recordingSettings = null,
+        CancellationToken cancellationToken = default) =>
+        RunOwnedGenesisAsync(createSurface, recordingSettings, appearance: null, cancellationToken);
+
+    internal ValueTask<NovaWindowsStartupResult> RunOwnedGenesisAsync(
+        Func<GenesisGuiNextPlaybackPreferencesSource, GenesisRecordingOutputDirectorySettings,
+            IGenesisMainWindowSurfaceTarget> createSurface,
+        GenesisRecordingOutputDirectorySettings? recordingSettings,
+        GenesisAppearanceSettings? appearance,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(createSurface);
         return RunOwnedGenesisCoreAsync((paths, settings, _, _, _) => createSurface(paths, settings),
-            recordingSettings, cancellationToken: cancellationToken);
+            recordingSettings, loadApplicationState: false, appearance: appearance, cancellationToken: cancellationToken);
     }
 
     private async ValueTask<NovaWindowsStartupResult> RunOwnedGenesisCoreAsync(
         Func<GenesisGuiNextPlaybackPreferencesSource, GenesisRecordingOutputDirectorySettings,
             INovaObsPublishingReadOnlyStatus, INovaGuiNextPublishingCommands, GenesisGuiNextApplicationState?, IGenesisMainWindowSurfaceTarget> createSurface,
         GenesisRecordingOutputDirectorySettings? recordingSettings = null,
-        bool loadApplicationState = false, CancellationToken cancellationToken = default)
+        bool loadApplicationState = false,
+        GenesisAppearanceSettings? appearance = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(createSurface);
         GenesisGuiNextApplicationState? applicationState = null;
@@ -205,12 +215,55 @@ public sealed class NovaWindowsStartupComposition
                 : _publishingRuntimeFactory;
             publishing = NovaGuiNextPublishingComposition.Create(publishingFactory, settings: publishingSettings);
             playbackController = _genesisPlaybackControllerFactory(paths, recordingSettings, applicationState?.PublicChannels);
-            result = await RunGenesisAsync(
-                createSurface(paths, recordingSettings, publishing.Status, publishing.Commands, applicationState),
-                playbackWindowSurfaceTarget: null,
-                playbackController,
-                networkOwner,
-                cancellationToken).ConfigureAwait(false);
+            while (true)
+            {
+                var switchRequested = 0;
+                using var windowCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                Action<PeerCast.Nova.Foundation.Configuration.NovaGuiMode>? switchHandler = null;
+                if (appearance is not null)
+                {
+                    switchHandler = _ =>
+                    {
+                        Interlocked.Exchange(ref switchRequested, 1);
+                        // Win32 UI スレッド上の保存ハンドラからの同期再入デッドロックを防ぐ。
+                        ThreadPool.QueueUserWorkItem(static state =>
+                        {
+                            var cts = (CancellationTokenSource)state!;
+                            try { cts.Cancel(); }
+                            catch (ObjectDisposedException) { }
+                        }, windowCts);
+                    };
+                    appearance.ModeSwitchRequested += switchHandler;
+                }
+
+                try
+                {
+                    result = await RunGenesisAsync(
+                        createSurface(paths, recordingSettings, publishing.Status, publishing.Commands, applicationState),
+                        playbackWindowSurfaceTarget: null,
+                        playbackController,
+                        networkOwner,
+                        windowCts.Token).ConfigureAwait(false);
+                }
+                finally
+                {
+                    if (appearance is not null && switchHandler is not null)
+                    {
+                        appearance.ModeSwitchRequested -= switchHandler;
+                    }
+                }
+
+                if (appearance is not null &&
+                    !cancellationToken.IsCancellationRequested &&
+                    Volatile.Read(ref switchRequested) != 0 &&
+                    result is NovaWindowsStartupResult.Cancelled or NovaWindowsStartupResult.Completed)
+                {
+                    appearance.ApplyPendingRuntimeMode();
+                    continue;
+                }
+
+                break;
+            }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
