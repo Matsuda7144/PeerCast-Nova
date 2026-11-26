@@ -663,6 +663,31 @@ public sealed class PcpRecordingSourceCompletionEvidenceTests
     }
 
     [Fact]
+    public async Task RegistrationCompletionFaultDuringChildStopReportsCleanupIncomplete()
+    {
+        var fanout = new PcpRelayFanout();
+        var registrationFailure = new IOException("registration completion failure");
+        var factory = new PcpRelayFanoutRecordingStreamSourceLeaseFactory(Channel, Session, fanout)
+        {
+            CleanupObserver = new()
+            {
+                AfterRegistrationCompletion = () => Task.FromException(registrationFailure),
+            },
+        };
+        factory.StartAccepting();
+        var lease = await Acquire(factory);
+        await factory.CompleteAsync();
+
+        var result = await factory.CompleteWithEvidenceAsync(Limit);
+        Assert.Equal(PcpRecordingSourceCompletionOutcome.CleanupIncomplete, result.Outcome);
+        Assert.Equal(1, result.Evidence.RegistrationCleanupFailedLeaseCount);
+
+        var failure = await Assert.ThrowsAsync<IOException>(async () => await lease.DisposeAsync());
+        Assert.Same(registrationFailure, failure);
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => await fanout.DisposeAsync());
+    }
+
+    [Fact]
     public async Task WorkerCleanupFailedPreventsNormalEofAfterSuccessfulLeaseDisposal()
     {
         var fanout = new PcpRelayFanout();

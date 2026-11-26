@@ -78,7 +78,11 @@ public sealed partial class PcpRelayFanoutRecordingStreamSourceLeaseFactory
                 lock (_gate) { acquisitions = _pendingAcquisitions == 0 ? Task.CompletedTask : _acquisitionsSettled!.Task; }
                 await acquisitions.WaitAsync(wait.Token).ConfigureAwait(false);
                 RecordingLease[] leases;
-                lock (_gate) { leases = [.. _leases]; }
+                lock (_gate)
+                {
+                    foreach (var lease in _leases.Where(lease => lease.CleanupCompletion.IsCompleted).ToArray()) Remove(lease);
+                    leases = [.. _leases];
+                }
                 phase = PcpRecordingSourceCompletionPhase.PacketDrain;
                 if (terminalFault is null)
                 {
@@ -115,9 +119,14 @@ public sealed partial class PcpRelayFanoutRecordingStreamSourceLeaseFactory
             }
             catch (Exception)
             {
-                return Result(phase == PcpRecordingSourceCompletionPhase.LeaseCleanup
-                    ? PcpRecordingSourceCompletionOutcome.CleanupIncomplete : PcpRecordingSourceCompletionOutcome.Failed,
-                    phase, deadline.IsCancellationRequested);
+                var evidence = Evidence;
+                return new(
+                    phase == PcpRecordingSourceCompletionPhase.LeaseCleanup || !evidence.CleanupCompleted
+                        ? PcpRecordingSourceCompletionOutcome.CleanupIncomplete
+                        : PcpRecordingSourceCompletionOutcome.Failed,
+                    phase,
+                    deadline.IsCancellationRequested,
+                    evidence);
             }
         }
     }
