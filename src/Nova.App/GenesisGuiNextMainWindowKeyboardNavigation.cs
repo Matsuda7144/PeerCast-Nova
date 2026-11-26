@@ -400,22 +400,10 @@ internal sealed class GenesisGuiNextMainWindowKeyboardNavigation : IDisposable
     private static extern bool IsChild(nint parent, nint window);
 
     [DllImport("user32.dll", SetLastError = true)]
-    private static extern int GetWindowLongW(nint window, int index);
-
-    [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetWindowRect(nint window, out NativeRectangle rectangle);
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool ClientToScreen(nint window, ref NativePoint point);
-
-    [DllImport("user32.dll")]
-    private static extern nint GetForegroundWindow();
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern uint GetWindowThreadProcessId(nint window, out uint processId);
-
-    [DllImport("kernel32.dll")]
-    private static extern uint GetCurrentThreadId();
 }

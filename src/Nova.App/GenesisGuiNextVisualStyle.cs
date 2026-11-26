@@ -7,7 +7,7 @@ namespace PeerCast.Nova.App;
 internal sealed partial class GenesisGuiNextAppShellBridge
 {
     private const nuint VisualSubclassId = 0x4E56534C;
-    private static readonly SubclassProcedure VisualProcedure = ProcessVisualMessage;
+    private static readonly Win32SubclassProcedure VisualProcedure = ProcessVisualMessage;
 
     private static nint ProcessVisualMessage(nint window, uint message, nuint wParam, nint lParam, nuint id, nuint owner)
     {
@@ -416,8 +416,6 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         public uint Mask; public int Width; public nint Text, Bitmap; public int TextCharacters, Format;
         public nint Parameter; public int Image, Order; public uint Type; public nint Filter; public uint State;
     }
-    [DllImport("user32.dll")] private static extern nint GetFocus();
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowTextW(nint window, [Out] char[] text, int length);
     [DllImport("user32.dll", EntryPoint = "SendMessageW", CharSet = CharSet.Unicode)] private static extern nint SendComboText(nint window, uint message, nuint index, [Out] char[] text);
     [DllImport("user32.dll")] private static extern bool TrackMouseEvent(ref VisualMouseTracking request);
     [DllImport("user32.dll", EntryPoint = "SendMessageW")] private static extern nint SendHitTest(nint window, uint message, nuint wParam, ref VisualHit hit);
@@ -425,9 +423,6 @@ internal sealed partial class GenesisGuiNextAppShellBridge
     [DllImport("user32.dll", EntryPoint = "SendMessageW")] private static extern nint SendHeaderRectangle(nint window, uint message, nuint wParam, ref Rectangle rectangle);
     [DllImport("comctl32.dll")] private static extern nint ImageList_Create(int width, int height, uint flags, int initial, int grow);
     [DllImport("comctl32.dll")] private static extern bool ImageList_Destroy(nint images);
-    [DllImport("gdi32.dll")] private static extern nint CreatePen(int style, int width, int color);
-    [DllImport("gdi32.dll")] private static extern nint SelectObject(nint dc, nint value);
-    [DllImport("gdi32.dll")] private static extern nint GetStockObject(int index);
     [DllImport("gdi32.dll")] private static extern bool MoveToEx(nint dc, int x, int y, nint previous);
     [DllImport("gdi32.dll")] private static extern bool LineTo(nint dc, int x, int y);
     [DllImport("gdi32.dll", EntryPoint = "Rectangle")] private static extern bool GdiRectangle(nint dc, int left, int top, int right, int bottom);

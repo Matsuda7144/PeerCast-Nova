@@ -778,10 +778,4 @@ internal sealed class GenesisChannelContextMenuBridge : IAsyncDisposable
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool ScreenToClient(nint window, ref WindowPoint point);
 
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern nint SetParent(nint child, nint newParent);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern nint GetAncestor(nint window, uint flags);
-
 }

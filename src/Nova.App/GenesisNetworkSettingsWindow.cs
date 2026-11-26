@@ -73,7 +73,7 @@ internal sealed partial class GenesisNetworkSettingsWindow : IAsyncDisposable
     private const int WindowHeight = 390;
     private const int CloseControlId = 2001;
     private static readonly WindowProcedure WindowProcedureDelegate = ProcessWindowMessage;
-    private static readonly SubclassProcedure CloseButtonSubclassProcedureDelegate =
+    private static readonly Win32SubclassProcedure CloseButtonSubclassProcedureDelegate =
         ProcessCloseButtonMessage;
 
     private readonly nint _window;
@@ -428,31 +428,7 @@ internal sealed partial class GenesisNetworkSettingsWindow : IAsyncDisposable
         nuint wParam,
         nint lParam);
 
-    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
-    private delegate nint SubclassProcedure(
-        nint window,
-        uint message,
-        nuint wParam,
-        nint lParam,
-        nuint subclassId,
-        nuint referenceData);
-
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern ushort RegisterClassExW(ref WindowClassEx windowClass);
-
-    [DllImport("comctl32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetWindowSubclass(
-        nint window,
-        SubclassProcedure subclassProcedure,
-        nuint subclassId,
-        nuint referenceData);
-
-    [DllImport("comctl32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool RemoveWindowSubclass(
-        nint window,
-        SubclassProcedure subclassProcedure,
-        nuint subclassId);
 
 }

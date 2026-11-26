@@ -17,7 +17,7 @@ internal sealed partial class GenesisNetworkSettingsWindow
     private const uint NatBackground = 0x00412917;
     private const uint NatText = 0x00F7F4F2;
     private static readonly ConcurrentDictionary<nint, NatWindowState> NatStates = new();
-    private static readonly SubclassProcedure NatKeyboardProcedure = ProcessNatKeyboard;
+    private static readonly Win32SubclassProcedure NatKeyboardProcedure = ProcessNatKeyboard;
     private NatWindowState? _natState;
 
     public static GenesisNetworkSettingsWindow? TryCreate(nint owner, IGuiNextNetworkSettingsAdapter adapter)
@@ -337,20 +337,8 @@ internal sealed partial class GenesisNetworkSettingsWindow
         public NatRectangle Rectangle;
         public nuint Data;
     }
-    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(nint window, out uint processId);
-    [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
     [DllImport("user32.dll")] private static extern nuint SetTimer(nint window, nuint id, uint interval, nint callback);
     [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool KillTimer(nint window, nuint id);
-    [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool EnableWindow(nint window, [MarshalAs(UnmanagedType.Bool)] bool enabled);
-    [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool IsWindowEnabled(nint window);
-    [DllImport("user32.dll")] private static extern short GetKeyState(int virtualKey);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)][return: MarshalAs(UnmanagedType.Bool)] private static extern bool SetWindowTextW(nint window, string text);
-    [DllImport("gdi32.dll")] private static extern nint CreateSolidBrush(uint color);
-    [DllImport("gdi32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool DeleteObject(nint handle);
-    [DllImport("gdi32.dll")] private static extern uint SetTextColor(nint dc, uint color);
-    [DllImport("gdi32.dll")] private static extern uint SetBkColor(nint dc, uint color);
-    [DllImport("gdi32.dll")] private static extern int SetBkMode(nint dc, int mode);
-    [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool InvalidateRect(nint window, nint rectangle, [MarshalAs(UnmanagedType.Bool)] bool erase);
     [DllImport("user32.dll")] private static extern int FillRect(nint dc, ref NatRectangle rectangle, nint brush);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int DrawTextW(nint dc, string text, int length, ref NatRectangle rectangle, uint format);
     [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool DrawFocusRect(nint dc, ref NatRectangle rectangle);

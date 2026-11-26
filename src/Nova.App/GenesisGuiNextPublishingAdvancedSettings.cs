@@ -100,7 +100,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                     if (index == changedIndex) return; // Preserve the native open dropdown while its selection changes.
                     var h = _publishingAdvancedFields[index];
                     _ = SendMessageW(h, 0x014B, 0, 0);
-                    foreach (var value in values) _ = SendPublishingComboText(h, 0x0143, 0, value);
+                    foreach (var value in values) _ = SendMessageTextW(h, 0x0143, 0, value);
                     _ = SendMessageW(h, 0x014E, unchecked((nuint)selection), 0);
                 }
                 Choices(0, ["このPCのみ（Loopback）", "LAN（同一Subnet）", "WAN（明示公開）"], input.WanEnabled ? 2 : input.LanEnabled ? 1 : 0);
@@ -400,7 +400,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 return;
             }
 
-            var menu = CreatePublishingPopupMenu();
+            var menu = CreatePopupMenu();
             if (menu == 0)
             {
                 return;
@@ -409,7 +409,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             try
             {
                 var hasBulkOption = presets.Count >= 2;
-                if (hasBulkOption && !AppendPublishingMenuW(menu, 0, 1, $"有効な登録YPをすべて設定（{presets.Count}件・複数YP同時掲載）"))
+                if (hasBulkOption && !AppendMenuW(menu, 0, 1, $"有効な登録YPをすべて設定（{presets.Count}件・複数YP同時掲載）"))
                 {
                     return;
                 }
@@ -419,7 +419,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                     var item = presets[i];
                     var label = $"{item.Name} ({item.Endpoint})";
                     var menuId = (nuint)(i + (hasBulkOption ? 2 : 1));
-                    if (!AppendPublishingMenuW(menu, 0, menuId, label))
+                    if (!AppendMenuW(menu, 0, menuId, label))
                     {
                         return;
                     }
@@ -430,7 +430,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                     return;
                 }
 
-                var selected = TrackPublishingPopupMenuEx(menu, 0x0100u, bounds.Left, bounds.Bottom, _owner, 0);
+                var selected = TrackPopupMenuEx(menu, 0x0100u, bounds.Left, bounds.Bottom, _owner, 0);
                 if (selected == 0 || editor.Input is not { } current)
                 {
                     return;
@@ -497,16 +497,10 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             }
             finally
             {
-                _ = DestroyPublishingMenu(menu);
+                _ = DestroyMenu(menu);
             }
         }
     }
-
-    [DllImport("user32.dll", EntryPoint = "SendMessageW", CharSet = CharSet.Unicode)] private static extern nint SendPublishingComboText(nint window, uint message, nuint value, string text);
-    [DllImport("user32.dll", EntryPoint = "CreatePopupMenu")] private static extern nint CreatePublishingPopupMenu();
-    [DllImport("user32.dll", EntryPoint = "AppendMenuW", CharSet = CharSet.Unicode)][return: MarshalAs(UnmanagedType.Bool)] private static extern bool AppendPublishingMenuW(nint menu, uint flags, nuint id, string text);
-    [DllImport("user32.dll", EntryPoint = "TrackPopupMenuEx")] private static extern uint TrackPublishingPopupMenuEx(nint menu, uint flags, int x, int y, nint owner, nint parameters);
-    [DllImport("user32.dll", EntryPoint = "DestroyMenu")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool DestroyPublishingMenu(nint menu);
 }
 
 internal static class GenesisPublishingAdvancedLayout

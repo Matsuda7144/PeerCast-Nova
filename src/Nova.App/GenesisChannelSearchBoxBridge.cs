@@ -360,7 +360,7 @@ internal sealed class GenesisChannelSearchBoxBridge : IAsyncDisposable
         private const nuint SearchDebounceTimerId = 0x50435342;
         private const nuint EditSubclassId = 0x50435343;
         private static readonly ConcurrentDictionary<nint, SearchState> StatesByEdit = new();
-        private static readonly SubclassProcedure EditSubclassProcedureDelegate = ProcessEditMessage;
+        private static readonly Win32SubclassProcedure EditSubclassProcedureDelegate = ProcessEditMessage;
 
         private readonly nint _statusBar;
         private readonly nint _edit;
@@ -602,29 +602,6 @@ internal sealed class GenesisChannelSearchBoxBridge : IAsyncDisposable
             }
         }
     }
-
-    private delegate nint SubclassProcedure(
-        nint window,
-        uint message,
-        nuint wParam,
-        nint lParam,
-        nuint subclassId,
-        nuint referenceData);
-
-    [DllImport("comctl32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetWindowSubclass(
-        nint window,
-        SubclassProcedure subclassProcedure,
-        nuint subclassIdentifier,
-        nuint referenceData);
-
-    [DllImport("comctl32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool RemoveWindowSubclass(
-        nint window,
-        SubclassProcedure subclassProcedure,
-        nuint subclassIdentifier);
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern nuint SetTimer(nint window, nuint eventId, uint elapsedMilliseconds, nint timerProcedure);

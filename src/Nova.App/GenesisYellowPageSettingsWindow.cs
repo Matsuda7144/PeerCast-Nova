@@ -87,7 +87,7 @@ internal sealed class GenesisYellowPageSettingsWindow : IAsyncDisposable
     ];
     private static readonly ConcurrentDictionary<nint, WindowState> StatesByWindow = new();
     private static readonly WindowProcedure WindowProcedureDelegate = ProcessWindowMessage;
-    private static readonly SubclassProcedure KeyboardControlSubclassProcedureDelegate =
+    private static readonly Win32SubclassProcedure KeyboardControlSubclassProcedureDelegate =
         ProcessKeyboardControlMessage;
 
     private readonly nint _window;
@@ -736,7 +736,7 @@ internal sealed class GenesisYellowPageSettingsWindow : IAsyncDisposable
             for (var index = 0; index < _entries.Count; index++)
             {
                 var entry = _entries[index];
-                _ = SendMessageStringW(
+                _ = SendMessageTextW(
                     _controls.List,
                     ListBoxAddString,
                     0,
@@ -955,56 +955,7 @@ internal sealed class GenesisYellowPageSettingsWindow : IAsyncDisposable
         nuint wParam,
         nint lParam);
 
-    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
-    private delegate nint SubclassProcedure(
-        nint window,
-        uint message,
-        nuint wParam,
-        nint lParam,
-        nuint subclassId,
-        nuint referenceData);
-
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern ushort RegisterClassExW(ref WindowClassEx windowClass);
-
-    [DllImport("user32.dll")]
-    private static extern nint GetDlgItem(nint dialog, int controlId);
-
-    [DllImport("user32.dll")]
-    private static extern int GetDlgCtrlID(nint window);
-
-    [DllImport("user32.dll")]
-    private static extern nint GetNextDlgTabItem(
-        nint dialog,
-        nint control,
-        [MarshalAs(UnmanagedType.Bool)] bool previous);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern int GetWindowTextW(
-        nint window,
-        [Out] char[] text,
-        int maximumCount);
-
-    [DllImport("user32.dll", EntryPoint = "SendMessageW", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern nint SendMessageStringW(
-        nint window,
-        uint message,
-        nuint wParam,
-        string lParam);
-
-    [DllImport("comctl32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetWindowSubclass(
-        nint window,
-        SubclassProcedure subclassProcedure,
-        nuint subclassId,
-        nuint referenceData);
-
-    [DllImport("comctl32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool RemoveWindowSubclass(
-        nint window,
-        SubclassProcedure subclassProcedure,
-        nuint subclassId);
 
 }

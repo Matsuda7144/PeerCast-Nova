@@ -372,9 +372,6 @@ internal sealed class GenesisPlaybackWindowNativeSurface :
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool UpdateWindow(nint window);
 
-    [DllImport("user32.dll")]
-    private static extern nint MonitorFromWindow(nint window, uint flags);
-
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetMonitorInfoW(nint monitor, ref MonitorInfo monitorInfo);

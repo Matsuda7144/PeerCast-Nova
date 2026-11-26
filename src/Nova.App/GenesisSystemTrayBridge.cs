@@ -68,7 +68,7 @@ internal sealed class GenesisSystemTrayBridge : IAsyncDisposable
     private const nuint TraySubclassId = 0x4E545259; // NTRY
     private static readonly uint TaskbarCreatedMessage = RegisterTaskbarCreatedMessage();
     private static readonly ConcurrentDictionary<nint, GenesisSystemTrayBridge> BridgesByWindow = new();
-    private static readonly SubclassProcedure SubclassDelegate = ProcessWindowMessage;
+    private static readonly Win32SubclassProcedure SubclassDelegate = ProcessWindowMessage;
 
     private readonly nint _window;
     private readonly nint _icon;
@@ -326,35 +326,9 @@ internal sealed class GenesisSystemTrayBridge : IAsyncDisposable
         public int Y;
     }
 
-    private delegate nint SubclassProcedure(
-        nint window,
-        uint message,
-        nuint wParam,
-        nint lParam,
-        nuint subclassId,
-        nuint referenceData);
-
-    [DllImport("comctl32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetWindowSubclass(
-        nint window,
-        SubclassProcedure procedure,
-        nuint subclassId,
-        nuint referenceData);
-
-    [DllImport("comctl32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool RemoveWindowSubclass(
-        nint window,
-        SubclassProcedure procedure,
-        nuint subclassId);
-
     [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool Shell_NotifyIconW(uint message, ref NotifyIconData data);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern nint LoadIconW(nint instance, nint iconName);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern uint RegisterWindowMessageW(string messageName);
@@ -366,24 +340,4 @@ internal sealed class GenesisSystemTrayBridge : IAsyncDisposable
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetCursorPos(out Point point);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern nint CreatePopupMenu();
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool AppendMenuW(nint menu, uint flags, nuint id, string text);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern uint TrackPopupMenuEx(
-        nint menu,
-        uint flags,
-        int x,
-        int y,
-        nint owner,
-        nint parameters);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool DestroyMenu(nint menu);
 }

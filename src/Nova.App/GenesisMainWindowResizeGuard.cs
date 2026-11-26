@@ -21,7 +21,7 @@ internal sealed class GenesisMainWindowResizeGuard : IAsyncDisposable
     private const uint SetWindowPositionNoActivate = 0x0010;
     private const uint SetWindowPositionFrameChanged = 0x0020;
     private const nuint SubclassId = 0x4E52535A; // NRSZ; main surface only.
-    private static readonly SubclassProcedure Procedure = ProcessMessage;
+    private static readonly Win32SubclassProcedure Procedure = ProcessMessage;
     private static readonly ConcurrentDictionary<nint, GenesisMainWindowPlacementStore> PlacementStores = new();
     private static readonly GenesisMainWindowPlacementStore DefaultPlacementStore = new();
     private readonly nint _window;
@@ -343,9 +343,6 @@ internal sealed class GenesisMainWindowResizeGuard : IAsyncDisposable
         public Rectangle Work;
         public uint Flags;
     }
-    private delegate nint SubclassProcedure(nint window, uint message, nuint wParam, nint lParam, nuint id, nuint data);
-    [DllImport("user32.dll")]
-    private static extern uint GetDpiForWindow(nint window);
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool AdjustWindowRectExForDpi(ref Rectangle rectangle, uint style, bool menu, uint exStyle, uint dpi);
@@ -360,12 +357,6 @@ internal sealed class GenesisMainWindowResizeGuard : IAsyncDisposable
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetWindowPlacement(nint window, [In] ref WindowPlacement placement);
-    [DllImport("comctl32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetWindowSubclass(nint window, SubclassProcedure procedure, nuint id, nuint data);
-    [DllImport("comctl32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool RemoveWindowSubclass(nint window, SubclassProcedure procedure, nuint id);
 
     private sealed class NoopLifetime : IAsyncDisposable
     {

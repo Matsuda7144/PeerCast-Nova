@@ -2,6 +2,8 @@ using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using PeerCast.Nova.Network.Publishing;
 
+using static PeerCast.Nova.App.Win32NativeMethods;
+
 namespace PeerCast.Nova.App;
 
 /// <summary>Owned Win32 editor. Async saving never calls native controls from its worker.</summary>
@@ -14,7 +16,7 @@ internal sealed class GenesisGuiNextPublishingSettingsWindow : IGenesisPublishin
     internal static readonly string[] FieldLabels = ["チャンネル名", "ジャンル", "概要", "配信者コメント", "コンタクトURL", "ビットレート (kbps)"];
     private static readonly ConcurrentDictionary<nint, WindowState> States = new();
     private static readonly WindowProcedure Procedure = ProcessMessage;
-    private static readonly SubclassProcedure ControlProcedure = ProcessControl;
+    private static readonly Win32SubclassProcedure ControlProcedure = ProcessControl;
     private static readonly Lazy<bool> Registered = new(Register);
     private static long _nextToken;
     private readonly nint _window;
@@ -482,51 +484,14 @@ internal sealed class GenesisGuiNextPublishingSettingsWindow : IGenesisPublishin
         public nint SmallIcon;
     }
     [UnmanagedFunctionPointer(CallingConvention.Winapi)] private delegate nint WindowProcedure(nint window, uint message, nuint wParam, nint lParam);
-    [UnmanagedFunctionPointer(CallingConvention.Winapi)] private delegate nint SubclassProcedure(nint window, uint message, nuint wParam, nint lParam, nuint id, nuint data);
-    [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] private static extern nint GetModuleHandleW(string? name);
-    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(nint window, out uint processId);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern ushort RegisterClassExW(ref WindowClass wc);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern nint CreateWindowExW(uint extended, string className, string text, uint style, int x, int y, int width, int height, nint parent, nint menu, nint instance, nint parameter);
-    [DllImport("user32.dll")] private static extern nint DefWindowProcW(nint window, uint message, nuint wParam, nint lParam);
-    [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool IsWindow(nint window);
-    [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool DestroyWindow(nint window);
-    [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool ShowWindow(nint window, int command);
-    [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool SetForegroundWindow(nint window);
-    [DllImport("user32.dll")] private static extern nint SetFocus(nint control);
-    [DllImport("user32.dll")] private static extern nint GetDlgItem(nint window, int id);
-    [DllImport("user32.dll")] private static extern int GetDlgCtrlID(nint control);
-    [DllImport("user32.dll")] private static extern uint GetDpiForWindow(nint window);
-    [DllImport("user32.dll")] private static extern short GetKeyState(int key);
-    [DllImport("user32.dll")] private static extern nint GetNextDlgTabItem(nint window, nint control, [MarshalAs(UnmanagedType.Bool)] bool previous);
-    [DllImport("user32.dll")] private static extern nint MonitorFromWindow(nint window, uint flags);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)][return: MarshalAs(UnmanagedType.Bool)] private static extern bool GetMonitorInfoW(nint monitor, ref MonitorInfo info);
     [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool GetClientRect(nint window, out Rectangle rectangle);
-    [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool EnableWindow(nint control, [MarshalAs(UnmanagedType.Bool)] bool enabled);
-    [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool MoveWindow(nint window, int x, int y, int width, int height, [MarshalAs(UnmanagedType.Bool)] bool repaint);
-    [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool SetWindowPos(nint window, nint after, int x, int y, int width, int height, uint flags);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "SendMessageW")] private static extern nint SendMessageTextW(nint window, uint message, nuint wParam, string text);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern nint SendMessageW(nint window, uint message, nuint wParam, nint lParam);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)][return: MarshalAs(UnmanagedType.Bool)] private static extern bool PostMessageW(nint window, uint message, nuint wParam, nint lParam);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern nint LoadCursorW(nint instance, nint name);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowTextLengthW(nint control);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowTextW(nint control, [Out] char[] text, int maximum);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)][return: MarshalAs(UnmanagedType.Bool)] private static extern bool SetWindowTextW(nint control, string text);
     [DllImport("user32.dll")] private static extern int SetScrollInfo(nint window, int bar, ref ScrollInfo info, [MarshalAs(UnmanagedType.Bool)] bool redraw);
     [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool GetScrollInfo(nint window, int bar, ref ScrollInfo info);
     [DllImport("user32.dll")] private static extern int FillRect(nint dc, ref Rectangle rectangle, nint brush);
-    [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool RedrawWindow(nint window, nint rectangle, nint region, uint flags);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int DrawTextW(nint dc, string text, int length, ref Rectangle rectangle, uint format);
     [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool DrawFocusRect(nint dc, ref Rectangle rectangle);
-    [DllImport("gdi32.dll")] private static extern nint CreateSolidBrush(uint color);
-    [DllImport("gdi32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool DeleteObject(nint value);
-    [DllImport("gdi32.dll")] private static extern uint SetTextColor(nint dc, uint color);
-    [DllImport("gdi32.dll")] private static extern uint SetBkColor(nint dc, uint color);
-    [DllImport("gdi32.dll")] private static extern int SetBkMode(nint dc, int mode);
-    [DllImport("gdi32.dll")] private static extern nint SelectObject(nint dc, nint value);
-    [DllImport("comctl32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool SetWindowSubclass(nint window, SubclassProcedure procedure, nuint id, nuint data);
-    [DllImport("comctl32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool RemoveWindowSubclass(nint window, SubclassProcedure procedure, nuint id);
-    [DllImport("comctl32.dll")] private static extern nint DefSubclassProc(nint window, uint message, nuint wParam, nint lParam);
 }
 
 internal static class PublishingSettingsWindowLayout
