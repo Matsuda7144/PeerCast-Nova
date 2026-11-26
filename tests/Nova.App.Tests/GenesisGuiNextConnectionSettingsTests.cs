@@ -48,9 +48,10 @@ public sealed class GenesisGuiNextConnectionSettingsTests
         var input = ValidInput();
         Assert.True((await first.Connection.SaveAsync(input)).Saved);
         Assert.Equal(GenesisGuiNextConnectionPreferences.Default, first.Connection.Startup);
+        Assert.Equal(first.Connection.Saved, first.Connection.Active);
         Assert.Equal(17144, first.Connection.Saved.ListenPort);
         Assert.True(first.Connection.Saved.UseIpv6);
-        Assert.True(first.Connection.HasPendingRestart);
+        Assert.False(first.Connection.HasPendingRestart);
         var saved = await store.LoadAsync();
         Assert.Equal(first.Connection.Saved, saved);
         Assert.Equal(2000, saved.TotalUpstreamIpv4Kbps);

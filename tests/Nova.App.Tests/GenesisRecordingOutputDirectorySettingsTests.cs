@@ -169,26 +169,20 @@ public sealed class GenesisRecordingOutputDirectorySettingsTests
     }
 
     [Fact]
-    public async Task SaveResetAndRecreatedProductionCompositionObeyNextStartContract()
+    public async Task SaveResetAndProductionCompositionApplyImmediatelyForNewSessions()
     {
         using var fixture = new Fixture();
         var settings = fixture.Load();
         await using var current = NovaDailyHttpFlvPlaybackController.CreateProductionRecordingComposition(settings, fixture.HistoryStore);
         Assert.Equal(fixture.Default, current.RecordingDirectory);
         Assert.Equal(GenesisRecordingOutputDirectorySaveResult.Saved, settings.Save(fixture.Custom));
+        Assert.Equal(fixture.Custom, current.RecordingDirectory);
+        Assert.Equal(fixture.Custom, settings.Presentation.CurrentRuntimeDirectory);
+        Assert.Equal(fixture.Custom, settings.Presentation.EffectiveDirectory);
+        Assert.Contains("新規録画から即時に反映", settings.Presentation.Notice);
+        Assert.Equal(GenesisRecordingOutputDirectorySaveResult.Saved, settings.ResetToDefault());
         Assert.Equal(fixture.Default, current.RecordingDirectory);
         Assert.Equal(fixture.Default, settings.Presentation.CurrentRuntimeDirectory);
-        Assert.Equal(fixture.Custom, settings.Presentation.EffectiveDirectory);
-        Assert.Contains("次回起動", settings.Presentation.Notice);
-        await using var next = NovaDailyHttpFlvPlaybackController.CreateProductionRecordingComposition(fixture.Load(), fixture.HistoryStore);
-        Assert.Equal(fixture.Custom, next.RecordingDirectory);
-        Assert.Null(next.RelayRuntime.PortMapping);
-        Assert.Equal(0, next.RelayRuntime.OwnedCoordinatorCount);
-        Assert.Empty(await next.Recording.GetActiveRecordingSessionsAsync());
-        Assert.Equal(GenesisRecordingOutputDirectorySaveResult.Saved, settings.ResetToDefault());
-        Assert.Equal(fixture.Custom, next.RecordingDirectory);
-        await using var reset = NovaDailyHttpFlvPlaybackController.CreateProductionRecordingComposition(fixture.Load(), fixture.HistoryStore);
-        Assert.Equal(fixture.Default, reset.RecordingDirectory);
         Assert.False(Directory.Exists(fixture.Default));
         Assert.False(Directory.Exists(fixture.Custom));
     }

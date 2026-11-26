@@ -49,7 +49,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             _yellowPagesCategory = Button("YP", YellowPagesCategoryId);
             CreateConnectionBody(instance);
             _connectionIpv6 = Check("IPv6を使う（未対応）", ConnectionIpv6Id);
-            _connectionWan = Check("WAN Relayを公開（次回起動）", ConnectionWanId);
+            _connectionWan = Check("WAN Relayを公開", ConnectionWanId);
             _ = SetConnectionParent(_connectionWan, _connectionBody);
             _connectionAutoMapping = Check(GenesisNetworkSettingsWindow.NatCheckboxLabel, ConnectionAutoMappingId);
             _natSettingsStatus = Control("STATIC", string.Empty, 0, 0);
@@ -219,21 +219,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             if (token != _networkSettingsToken || Volatile.Read(ref _detached) != 0 || _connectionSave is not { } save) return;
             _connectionPage?.CompleteSave(save);
             if (save.IsCompleted) _connectionSave = null;
-            if (save.IsCompletedSuccessfully && save.Result.Saved &&
-                _connectionPage is { } page && _viewModel.PublicChannels is { } publicChannels)
-            {
-                _ = ApplyLiveConnectionSettingsAsync(publicChannels, page.Saved, _settingsPane, token);
-            }
             if (ConnectionCategory) RefreshIntegratedSettings(); // never display a late result in another category
-        }
-
-        private async Task ApplyLiveConnectionSettingsAsync(GenesisGuiNextPublicChannelComposition publicChannels,
-            GenesisGuiNextConnectionPreferences saved, nint pane, nuint token)
-        {
-            try { await publicChannels.ApplyLivePublicSettingsAsync(saved).ConfigureAwait(false); }
-            catch { /* 安全にスナップショット状態へ留める */ }
-            if (Volatile.Read(ref _detached) == 0 && pane != 0)
-                _ = PostMessageW(pane, LivePublicSettingsApplied, token, 0);
         }
 
         internal void CompleteLivePublicSettingsApply(nuint token)
@@ -254,7 +240,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                     var page = _connectionPage!; page.Refresh();
                     Text(_generalTitle, "接続・帯域・リレー設定");
                     Text(_connectionNotice, ConnectionNotice);
-                    Text(_connectionRuntime, "起動時: " + ConnectionSummary(page.Startup));
+                    Text(_connectionRuntime, "現在適用中: " + ConnectionSummary(page.Active));
                     Text(_connectionSaved, "保存済み: " + ConnectionSummary(page.Saved));
                     Text(_connectionStatus, page.Message);
                     var v = page.Input;

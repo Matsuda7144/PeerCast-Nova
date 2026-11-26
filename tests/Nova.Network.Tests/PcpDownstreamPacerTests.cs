@@ -88,6 +88,27 @@ public sealed class PcpDownstreamPacerTests
         Assert.Equal(0, pacing.WaitingRequests);
     }
 
+    [Fact]
+    public async Task UpdateLimit_ChangesMediaKbpsBetweenBoundedAndUnlimitedAndRejectsNegative()
+    {
+        var clock = new ManualNatTimeProvider();
+        var pacing = new PcpDownstreamPacer(8, clock);
+        Assert.Throws<ArgumentOutOfRangeException>(() => pacing.UpdateLimit(-1));
+        Assert.Equal(8, pacing.MediaKbps);
+
+        pacing.UpdateLimit(null);
+        Assert.Null(pacing.MediaKbps);
+        await pacing.AcquireMediaAsync(32768, default);
+
+        pacing.UpdateLimit(0);
+        Assert.Equal(0, pacing.MediaKbps);
+        await Assert.ThrowsAsync<PcpPacingLimitException>(() => pacing.AcquireMediaAsync(1, default).AsTask());
+
+        pacing.UpdateLimit(16);
+        Assert.Equal(16, pacing.MediaKbps);
+        Assert.Equal(500, pacing.BurstBytes);
+    }
+
     internal static async Task Until(Func<bool> predicate)
     {
         var started = Stopwatch.StartNew();

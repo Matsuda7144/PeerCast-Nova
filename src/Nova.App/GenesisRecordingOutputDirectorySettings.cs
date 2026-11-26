@@ -16,17 +16,19 @@ internal sealed record GenesisRecordingOutputDirectoryPresentation(
     string? Error);
 
 /// <summary>
-/// App-global destination settings. The runtime snapshot is immutable; writes
-/// affect only the next application start, never an existing writer or owner.
+/// App-global destination settings. Saving takes effect immediately for new
+/// recording sessions without modifying any already-active writer.
 /// </summary>
 internal sealed class GenesisRecordingOutputDirectorySettings
 {
-    internal const string NextStartNotice = "録画保存先の変更は次回起動時から有効になります。";
+    internal const string NextStartNotice = "録画保存先の変更は新規録画から即時に反映されます（録画中の出力先はそのまま維持されます）。";
     private readonly NovaSettingsStore _store;
     private readonly string _defaultDirectory;
     private readonly object _gate = new();
     private string? _configuredDirectory;
     private string? _error;
+
+    internal event Action<string>? EffectiveDirectoryChanged;
 
     internal GenesisRecordingOutputDirectorySettings(NovaSettingsStore store, string defaultDirectory)
     {
@@ -57,11 +59,18 @@ internal sealed class GenesisRecordingOutputDirectorySettings
         {
             _error = "設定を読み込めませんでした。今回は既定の録画保存先を使用します。";
         }
-
-        CurrentRuntimeDirectory = _configuredDirectory ?? _defaultDirectory;
     }
 
-    public string CurrentRuntimeDirectory { get; }
+    public string CurrentRuntimeDirectory
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _configuredDirectory ?? _defaultDirectory;
+            }
+        }
+    }
 
     internal string DefaultDirectory => _defaultDirectory;
 
@@ -71,8 +80,9 @@ internal sealed class GenesisRecordingOutputDirectorySettings
         {
             lock (_gate)
             {
-                return new(_configuredDirectory, _configuredDirectory ?? _defaultDirectory,
-                    CurrentRuntimeDirectory, _configuredDirectory is null, NextStartNotice, _error);
+                var effective = _configuredDirectory ?? _defaultDirectory;
+                return new(_configuredDirectory, effective,
+                    effective, _configuredDirectory is null, NextStartNotice, _error);
             }
         }
     }
@@ -158,17 +168,23 @@ internal sealed class GenesisRecordingOutputDirectorySettings
 
     private GenesisRecordingOutputDirectorySaveResult Persist(string? configured)
     {
+        string? changedDirectory = null;
         lock (_gate)
         {
             try
             {
+                var previousEffective = _configuredDirectory ?? _defaultDirectory;
                 // Read the current document rather than writing a startup
                 // snapshot over unrelated settings (including NAT options).
                 _store.UpdateAsync(current => current with { RecordingOutputDirectory = configured })
                     .GetAwaiter().GetResult();
                 _configuredDirectory = configured;
                 _error = null;
-                return GenesisRecordingOutputDirectorySaveResult.Saved;
+                var nextEffective = _configuredDirectory ?? _defaultDirectory;
+                if (!string.Equals(previousEffective, nextEffective, StringComparison.Ordinal))
+                {
+                    changedDirectory = nextEffective;
+                }
             }
             catch (Exception exception) when (IsSettingsFailure(exception))
             {
@@ -176,6 +192,13 @@ internal sealed class GenesisRecordingOutputDirectorySettings
                 return GenesisRecordingOutputDirectorySaveResult.Unavailable;
             }
         }
+
+        if (changedDirectory is not null)
+        {
+            EffectiveDirectoryChanged?.Invoke(changedDirectory);
+        }
+
+        return GenesisRecordingOutputDirectorySaveResult.Saved;
     }
 
     private static bool IsSettingsFailure(Exception exception) =>

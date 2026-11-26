@@ -27,15 +27,31 @@ public enum BandwidthAdmissionDecision
 /// </summary>
 public sealed class UpstreamBandwidthPolicy
 {
+    private UpstreamBandwidthLimits _limits;
+
     public UpstreamBandwidthPolicy(UpstreamBandwidthLimits? limits = null)
     {
-        Limits = limits is null ? new() : limits with { };
-        if (Limits.Ipv4Kbps < 0 || Limits.Ipv6Kbps < 0)
-            throw new ArgumentOutOfRangeException(nameof(limits),
-                "Upstream bandwidth limits cannot be negative.");
+        var normalized = Validate(limits);
+        Volatile.Write(ref _limits, normalized);
     }
 
-    public UpstreamBandwidthLimits Limits { get; }
+    public UpstreamBandwidthLimits Limits => Volatile.Read(ref _limits);
+
+    public void UpdateLimits(UpstreamBandwidthLimits limits)
+    {
+        ArgumentNullException.ThrowIfNull(limits);
+        var normalized = Validate(limits);
+        Volatile.Write(ref _limits, normalized);
+    }
+
+    private static UpstreamBandwidthLimits Validate(UpstreamBandwidthLimits? limits)
+    {
+        var normalized = limits is null ? new UpstreamBandwidthLimits() : limits with { };
+        if (normalized.Ipv4Kbps < 0 || normalized.Ipv6Kbps < 0)
+            throw new ArgumentOutOfRangeException(nameof(limits),
+                "Upstream bandwidth limits cannot be negative.");
+        return normalized;
+    }
 
     public static AddressFamily ClassifyAddress(IPAddress address)
     {

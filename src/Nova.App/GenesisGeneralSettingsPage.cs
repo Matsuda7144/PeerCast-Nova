@@ -23,7 +23,9 @@ internal sealed class GenesisGeneralSettingsPage(GenesisAppearanceSettings setti
         if (IsOpen) return true;
         IsOpen = true;
         Draft = _observedMode = ConfiguredMode;
-        Message = settings.Error ?? "保存しても、現在の表示モードは切り替わりません。";
+        Message = settings.Error ?? (settings.HasLiveSwitchHandler
+            ? "保存すると再起動なしで表示モードを切り替えます。"
+            : "保存しても、現在の表示モードは切り替わりません。");
         IsError = settings.Error is not null;
         return true;
     }
@@ -43,7 +45,11 @@ internal sealed class GenesisGeneralSettingsPage(GenesisAppearanceSettings setti
         Refresh();
         Draft = mode;
         IsError = false;
-        Message = IsDirty ? "未保存の変更があります。保存すると次回起動時から適用されます。" : "保存済みの表示モードを選択しています。";
+        Message = IsDirty
+            ? (settings.HasLiveSwitchHandler
+                ? "未保存の変更があります。保存すると即時に切り替わります。"
+                : "未保存の変更があります。保存すると次回起動時から適用されます。")
+            : "保存済みの表示モードを選択しています。";
     }
 
     internal bool Save()
@@ -54,7 +60,9 @@ internal sealed class GenesisGeneralSettingsPage(GenesisAppearanceSettings setti
         var saved = settings.Save(Draft);
         if (saved) _observedMode = ConfiguredMode;
         IsError = !saved;
-        Message = saved ? "保存しました。次回起動時から適用されます。" : settings.Error!;
+        Message = saved
+            ? (settings.HasLiveSwitchHandler ? "保存しました。表示モードを切り替えます。" : "保存しました。次回起動時から適用されます。")
+            : settings.Error!;
         return saved;
     }
 

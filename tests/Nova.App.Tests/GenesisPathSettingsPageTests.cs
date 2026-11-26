@@ -209,7 +209,7 @@ public sealed class GenesisPathSettingsPageTests : IDisposable
         page.Edit(next);
         Assert.True(page.Save());
         Assert.Equal(next, page.EffectiveDirectory);
-        Assert.Equal(initial, page.RuntimeDirectory);
+        Assert.Equal(next, page.RuntimeDirectory);
         Assert.False(Directory.Exists(next));
         Assert.Equal(next, new NovaSettingsStore(SettingsFile).Load().RecordingOutputDirectory);
         Assert.True(page.Save(reset: true));
@@ -283,7 +283,7 @@ public sealed class GenesisPathSettingsPageTests : IDisposable
         Assert.False(page.Save());
         Assert.False(page.Save(reset: true));
         Assert.Equal(legacy, page.EffectiveDirectory);
-        Assert.Equal(_root, page.RuntimeDirectory);
+        Assert.Equal(legacy, page.RuntimeDirectory);
         page.Cancel();
         Assert.Equal(legacy, page.Draft);
         Assert.False(page.Conflict);

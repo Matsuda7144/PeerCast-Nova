@@ -207,8 +207,8 @@ internal sealed class GenesisGuiNextConnectionSettingsWindow : IGenesisGuiNextCo
         }
 
         private void RefreshStartupNotice() => SetText(StartupId,
-            $"今回の起動時読込値: ポート {settings.Startup.ListenPort} / IPv6 {(settings.Startup.UseIpv6 ? "使用" : "不使用")}\r\n" +
-            (settings.HasPendingRestart ? "保存値が変わりました。再起動後に読み込みます。" : "今回の起動時設定と保存値は同じです。"));
+            $"現在の適用値: ポート {settings.Active.ListenPort} / IPv6 {(settings.Active.UseIpv6 ? "使用" : "不使用")} / WAN {(settings.Active.WanRelayEnabled ? "公開" : "無効")}\r\n" +
+            (settings.HasPendingRestart ? "保存値が変わりました。現在の適用値と異なります。" : "現在の適用値と保存値は同じです。"));
 
         internal void ProcessCommand(int id)
         {

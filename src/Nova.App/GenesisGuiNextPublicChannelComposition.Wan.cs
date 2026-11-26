@@ -8,6 +8,7 @@ internal sealed class GenesisPublicRelayStartException() : IOException("WAN Rela
 
 internal sealed partial class GenesisGuiNextPublicChannelComposition
 {
+    private readonly SemaphoreSlim _publicApplyGate = new(1, 1);
     private GenesisGuiNextConnectionPreferences _publicSettings = GenesisGuiNextConnectionPreferences.Default;
     private INovaSharedPublicRelayProvider? _publicProvider;
     private GenesisSharedPublicRelay? _publicHost;
@@ -37,52 +38,70 @@ internal sealed partial class GenesisGuiNextPublicChannelComposition
     internal async Task<bool> ApplyLivePublicSettingsAsync(GenesisGuiNextConnectionPreferences settings)
     {
         settings.Validate();
-        GenesisSharedPublicRelay? hostToDispose = null;
-        Owner[] currentOwners;
-        bool stopExistingRoutes;
-        lock (_gate)
+        await _publicApplyGate.WaitAsync().ConfigureAwait(false);
+        try
         {
-            if (_disposeTask is not null) return false;
-            stopExistingRoutes = !settings.WanRelayEnabled ||
-                settings.ListenPort != _publicSettings.ListenPort ||
-                settings.UseIpv6 != _publicSettings.UseIpv6;
-            if (_publicHost is not null && stopExistingRoutes)
+            GenesisSharedPublicRelay? hostToDispose = null;
+            Owner[] currentOwners;
+            bool stopExistingRoutes;
+            lock (_gate)
             {
-                hostToDispose = _publicHost;
-                _publicHost = null;
+                if (_disposeTask is not null) return false;
+                if (!settings.WanRelayEnabled && !_publicSettings.WanRelayEnabled && _publicHost is null)
+                {
+                    _publicSettings = settings;
+                    return true;
+                }
+                stopExistingRoutes = !settings.WanRelayEnabled ||
+                    settings.ListenPort != _publicSettings.ListenPort ||
+                    settings.UseIpv6 != _publicSettings.UseIpv6;
+                if (_publicHost is not null && stopExistingRoutes)
+                {
+                    hostToDispose = _publicHost;
+                    _publicHost = null;
+                }
+                _publicSettings = settings;
+                currentOwners = [.. _owners];
             }
-            _publicSettings = settings;
-            currentOwners = [.. _owners];
-        }
 
-        if (stopExistingRoutes)
-        {
+            if (stopExistingRoutes)
+            {
+                foreach (var owner in currentOwners)
+                    await owner.StopPublicRouteAsync().ConfigureAwait(false);
+            }
+
+            if (hostToDispose is not null)
+                await hostToDispose.DisposeAsync().ConfigureAwait(false);
+
+            if (!settings.WanRelayEnabled) return true;
+
+            var started = await StartPublicAsync().ConfigureAwait(false);
+            lock (_gate)
+            {
+                if (_disposeTask is not null) return false;
+                currentOwners = [.. _owners];
+            }
+
             foreach (var owner in currentOwners)
-                await owner.StopPublicRouteAsync().ConfigureAwait(false);
+                owner.StartPublicRouteIfEnabled();
+
+            return started;
         }
-
-        if (hostToDispose is not null)
-            await hostToDispose.DisposeAsync().ConfigureAwait(false);
-
-        if (!settings.WanRelayEnabled) return true;
-
-        var started = await StartPublicAsync().ConfigureAwait(false);
-        lock (_gate)
+        finally
         {
-            if (_disposeTask is not null) return false;
-            currentOwners = [.. _owners];
+            _publicApplyGate.Release();
         }
-
-        foreach (var owner in currentOwners)
-            owner.StartPublicRouteIfEnabled();
-
-        return started;
     }
     internal void ConfigurePublic(GenesisGuiNextConnectionPreferences settings, INovaSharedPublicRelayProvider? provider = null)
     {
         settings.Validate();
         lock (_gate)
         {
+            if (_publicProvider is not null && ReferenceEquals(_publicProvider, provider))
+            {
+                _publicSettings = settings;
+                return;
+            }
             if (_owners.Any(o => o.ActivationStarted)) throw new InvalidOperationException("Public settings are captured before activation.");
             _publicSettings = settings;
             _publicProvider = provider;

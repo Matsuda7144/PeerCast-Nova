@@ -193,7 +193,7 @@ public sealed class NovaPortMappingControlTests
             ListenPort = 17445,
             RecordingOutputDirectory = latestDirectory,
         }, directory.Store.Load());
-        Assert.Equal(original.RecordingOutputDirectory, recording.CurrentRuntimeDirectory);
+        Assert.Equal(latestDirectory, recording.CurrentRuntimeDirectory);
         Assert.Equal(latestDirectory, recording.Presentation.EffectiveDirectory);
         Assert.True(test.Manager.Enabled);
         Assert.Equal(0, test.Router.Count);

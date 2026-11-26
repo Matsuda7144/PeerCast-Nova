@@ -5,9 +5,9 @@ namespace PeerCast.Nova.App;
 internal static class GenesisConnectionSettingsText
 {
     internal const string Notice =
-        "・ポート・帯域・リレー数・WAN公開は、保存後の次回起動から反映されます（IPv6は未対応）。\r\n" +
+        "・ポート・帯域・リレー数・WAN公開は、保存すると即時に反映されます（IPv6は未対応）。\r\n" +
         "・「ポート自動開放」はチェックすると即座に反映・保存され、ルーターへのポート開放を自動試行します。\r\n" +
-        "・帯域・リレー数は半角数字で入力します（空欄＝無制限、0＝許可しない）。※IPv4上り帯域を設定中は配信できません。";
+        "・帯域・リレー数は半角数字で入力します（空欄＝無制限、0＝許可しない）。";
 
     internal static string Summary(GenesisGuiNextConnectionPreferences value)
     {

@@ -90,9 +90,7 @@ public sealed class GenesisGuiNextRelayRuntimeTests
         await upstream.SendAsync(timeout.Token);
         Assert.True(await start.WaitAsync(timeout.Token));
         var owner = model.RelayActivation.CurrentOwner!;
-        // Saving next-start values cannot mutate the shared active policy.
-        Assert.True((await fixture.State.Connection.SaveAsync(GenesisGuiNextConnectionInput.From(new()
-        { MaxRelaysTotal = 50, MaxRelaysPerViewingChannel = 50 }), timeout.Token)).Saved);
+        // 再保存しない状態では起動時の上限設定がそのまま適用される。
         var peers = await Task.WhenAll(Enumerable.Range(0, 2).Select(_ => Peer.ConnectAsync(owner, timeout.Token)));
         try
         {
@@ -107,6 +105,11 @@ public sealed class GenesisGuiNextRelayRuntimeTests
             await UntilAsync(() => owner.ReservationCount == 0, timeout.Token);
             await using var replacement = await Peer.ConnectAsync(owner, timeout.Token);
             Assert.Equal(accepted == 0 ? PcpCompatibilityOutcome.RelayFull : PcpCompatibilityOutcome.Accepted, replacement.Handshake.Outcome);
+            // 接続上限を保存すると実行中のリレー所有者へ即時に反映される。
+            Assert.True((await fixture.State.Connection.SaveAsync(GenesisGuiNextConnectionInput.From(new()
+            { MaxRelaysTotal = 50, MaxRelaysPerViewingChannel = 50 }), timeout.Token)).Saved);
+            await using var afterLiveIncrease = await Peer.ConnectAsync(owner, timeout.Token);
+            Assert.Equal(PcpCompatibilityOutcome.Accepted, afterLiveIncrease.Handshake.Outcome);
         }
         finally { foreach (var peer in peers) await peer.DisposeAsync(); }
         await model.RelayActivation.StopAsync().WaitAsync(timeout.Token);

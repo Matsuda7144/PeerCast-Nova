@@ -48,6 +48,7 @@ public sealed class RelayAdmissionPolicy : IDisposable
     private readonly UpstreamBandwidthPolicy _bandwidth;
     private readonly Dictionary<ChannelId, ChannelState> _channels = [];
     private readonly Dictionary<long, Reservation> _reservations = [];
+    private RelayAdmissionLimits _limits;
     private long _reservedCount;
     private bool _disposed;
 
@@ -56,21 +57,43 @@ public sealed class RelayAdmissionPolicy : IDisposable
     {
         Pacing = pacing;
         _bandwidth = bandwidth ?? new();
-        Limits = limits is null ? new() : limits with { };
-        if (Limits.MaxRelaysTotal < 0 ||
-            Limits.MaxRelaysPerBroadcastChannel < 0 ||
-            Limits.MaxRelaysPerViewingChannel < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(limits),
-                "Relay limits cannot be negative.");
-        }
+        _limits = ValidateLimits(limits);
     }
 
-    public RelayAdmissionLimits Limits { get; }
+    public RelayAdmissionLimits Limits { get { lock (_gate) return _limits; } }
     public PcpDownstreamTrafficMeter Traffic { get; } = new();
     public PcpDownstreamPacer? Pacing { get; }
     public UpstreamBandwidthLimits BandwidthLimits => _bandwidth.Limits;
     public RelayAdmissionCapacitySnapshot Snapshot { get { lock (_gate) return ReadSnapshot(null); } }
+
+    /// <summary>既存の予約は維持しつつ、後続の予約上限と帯域上限を即時更新する。</summary>
+    public void UpdateLimits(RelayAdmissionLimits limits, UpstreamBandwidthLimits? bandwidthLimits = null)
+    {
+        ArgumentNullException.ThrowIfNull(limits);
+        var normalized = ValidateLimits(limits);
+        lock (_gate)
+        {
+            if (bandwidthLimits is not null)
+            {
+                _bandwidth.UpdateLimits(bandwidthLimits);
+                Pacing?.UpdateLimit(bandwidthLimits.Ipv4Kbps);
+            }
+            _limits = normalized;
+        }
+    }
+
+    private static RelayAdmissionLimits ValidateLimits(RelayAdmissionLimits? limits)
+    {
+        var normalized = limits is null ? new RelayAdmissionLimits() : limits with { };
+        if (normalized.MaxRelaysTotal < 0 ||
+            normalized.MaxRelaysPerBroadcastChannel < 0 ||
+            normalized.MaxRelaysPerViewingChannel < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(limits),
+                "Relay limits cannot be negative.");
+        }
+        return normalized;
+    }
 
     public long ReservedCount
     {

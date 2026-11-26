@@ -341,11 +341,77 @@ public sealed class GuiNextNetworkCompositionTests
     }
 
     [Fact]
-    public void NativeNetworkSettingsRemainUnavailableAndUseSeparateGenericContract()
+    public async Task NativeNetworkSettingsRemainUnavailableAndUseSeparateGenericContract()
     {
         var controller = new NovaWindowsStartupOptions().NetworkSettingsController;
         Assert.Same(GenesisUnavailableNetworkSettingsController.Instance, controller);
         Assert.Equal(GenesisRelayListenerRuntimeState.Unavailable, controller.Snapshot.RuntimeStatus.ListenerState);
+    }
+
+    [Fact]
+    public async Task AppearanceSwitchReopensMainWindowWithoutDisposingNetworkOwnerOrPlaybackController()
+    {
+        using var dir = new TempDir();
+        var store = new NovaSettingsStore(Path.Combine(dir.Path, "settings.json"));
+        var appearance = new GenesisAppearanceSettings(store);
+        Assert.Equal(PeerCast.Nova.Foundation.Configuration.NovaGuiMode.Classic, appearance.CurrentRuntimeMode);
+
+        var events = new List<string>();
+        var openedModes = new List<PeerCast.Nova.Foundation.Configuration.NovaGuiMode>();
+        var playback = new Playback(events);
+        var playbackCreates = 0;
+        var ownerCreates = 0;
+        var network = new Network();
+        var clock = new ManualNatTimeProvider();
+        var router = new FakeNatRouter();
+        await using var realOwner = new NovaApplicationNetworkOwner(store, () => null,
+            options => new CountedRuntime(new NatPortMappingRuntime(options, router, network, clock), () => false),
+            (manager, s, saved, overridden) => new CountedControl(new NovaPortMappingControl(manager, s, saved, overridden), () => false),
+            _ => throw new InvalidOperationException("No public relay expected."));
+        var countedOwner = new CountedOwner(realOwner, events);
+        var hostCreates = 0;
+        var secondHostEntered = Signal();
+        var hostFactory = new ReloadableHostFactory(() =>
+        {
+            var index = ++hostCreates;
+            return new CancellableHost(events, async token =>
+            {
+                if (index == 1)
+                {
+                    Assert.Equal(0, countedOwner.Disposals);
+                    Assert.False(playback.Disposed);
+                    Assert.True(appearance.Save(PeerCast.Nova.Foundation.Configuration.NovaGuiMode.Modern));
+                    try { await Task.Delay(Timeout.Infinite, token); }
+                    catch (OperationCanceledException) { }
+                    return PlaybackWindowsPhysicalRunnerResult.Cancelled;
+                }
+
+                secondHostEntered.TrySetResult();
+                Assert.Equal(PeerCast.Nova.Foundation.Configuration.NovaGuiMode.Modern, appearance.CurrentRuntimeMode);
+                Assert.Equal(0, countedOwner.Disposals);
+                Assert.False(playback.Disposed);
+                return PlaybackWindowsPhysicalRunnerResult.Stopped;
+            });
+        });
+
+        var composition = new NovaWindowsStartupComposition(new(), hostFactory,
+            () => { playbackCreates++; return playback; },
+            () => { ownerCreates++; return countedOwner; });
+        var recording = new GenesisRecordingOutputDirectorySettings(store, Path.Combine(dir.Path, "recordings"));
+        var result = await composition.RunOwnedGenesisAsync(
+            (_, _) => new ModeCapturingSurface(events, appearance, openedModes),
+            recording,
+            appearance);
+
+        await Await(secondHostEntered.Task);
+        Assert.Equal(NovaWindowsStartupResult.Completed, result);
+        Assert.Equal([PeerCast.Nova.Foundation.Configuration.NovaGuiMode.Classic, PeerCast.Nova.Foundation.Configuration.NovaGuiMode.Modern], openedModes);
+        Assert.Equal(2, hostCreates);
+        Assert.Equal(1, ownerCreates);
+        Assert.Equal(1, playbackCreates);
+        Assert.Equal(1, countedOwner.Disposals);
+        Assert.True(playback.Disposed);
+        Assert.Equal(PeerCast.Nova.Foundation.Configuration.NovaGuiMode.Modern, appearance.CurrentRuntimeMode);
     }
 
     private static TaskCompletionSource Signal() => new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -561,5 +627,48 @@ public sealed class GuiNextNetworkCompositionTests
             Disposed = true;
             if (FailDisposal) throw new InvalidOperationException("private-playback-cleanup-error");
         }
+    }
+
+    private sealed class ReloadableHostFactory(Func<INovaWindowsStartupHost> create) : INovaWindowsStartupHostFactory
+    {
+        public INovaWindowsStartupHost Create(PlaybackWindowsPhysicalRunnerOptions options) => create();
+    }
+
+    private sealed class CancellableHost(List<string> events, Func<CancellationToken, Task<PlaybackWindowsPhysicalRunnerResult>> wait)
+        : INovaWindowsStartupHost, IGenesisMainWindowDispatcher
+    {
+        public long WindowToken => 7144;
+        public ValueTask<PlaybackWindowsPhysicalRunnerResult> StartAsync(CancellationToken cancellationToken)
+        {
+            events.Add("HostStart");
+            return ValueTask.FromResult(PlaybackWindowsPhysicalRunnerResult.Started);
+        }
+        public ValueTask<PlaybackWindowsPhysicalRunnerResult> WaitForExitAsync(CancellationToken cancellationToken) =>
+            new(wait(cancellationToken));
+        public ValueTask<PlaybackWindowsPhysicalRunnerResult> StopAsync(CancellationToken cancellationToken) =>
+            ValueTask.FromResult(PlaybackWindowsPhysicalRunnerResult.Stopped);
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        public async ValueTask<GenesisMainWindowDispatcherInvocation> InvokeGenesisAsync(
+            Func<long, CancellationToken, ValueTask<IAsyncDisposable?>> operation, CancellationToken cancellationToken) =>
+            new(GenesisMainWindowDispatcherResult.Completed, await operation(WindowToken, cancellationToken));
+    }
+
+    private sealed class ModeCapturingSurface(
+        List<string> events,
+        GenesisAppearanceSettings appearance,
+        List<PeerCast.Nova.Foundation.Configuration.NovaGuiMode> openedModes) : IGenesisMainWindowSurfaceTarget
+    {
+        public ValueTask<IAsyncDisposable?> OpenAsync(long windowToken, GenesisMainViewModel viewModel, CancellationToken cancellationToken)
+        {
+            openedModes.Add(appearance.CurrentRuntimeMode);
+            return ValueTask.FromResult<IAsyncDisposable?>(new Lifetime(() => events.Add("SurfaceClose")));
+        }
+    }
+
+    private sealed class TempDir : IDisposable
+    {
+        public string Path { get; } = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "Nova-appearance-switch-" + Guid.NewGuid().ToString("N"));
+        public TempDir() => Directory.CreateDirectory(Path);
+        public void Dispose() { if (Directory.Exists(Path)) Directory.Delete(Path, recursive: true); }
     }
 }
