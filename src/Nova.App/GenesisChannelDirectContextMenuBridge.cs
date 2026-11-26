@@ -345,7 +345,9 @@ internal sealed class GenesisChannelDirectContextMenuBridge : IAsyncDisposable
 
             var notification = Marshal.PtrToStructure<HeaderNotify>(lParam);
             if (_guiNextTabs is null ||
-                _guiNextTabs.SelectedTab == GenesisGuiNextTab.Channels)
+                _guiNextTabs.SelectedTab == GenesisGuiNextTab.Channels ||
+                _guiNextTabs.SelectedTab == GenesisGuiNextTab.New ||
+                _guiNextTabs.SelectedTab == GenesisGuiNextTab.Favorites)
             {
                 _ = _interaction.SortChannelColumn(notification.Item);
             }

@@ -7,6 +7,8 @@ namespace PeerCast.Nova.App;
 /// </summary>
 internal static class GenesisChannelSearchFilter
 {
+    private readonly record struct ParsedTerm(string Text, bool Excluded);
+
     public static IReadOnlyList<GenesisChannelItem> Apply(
         IReadOnlyList<GenesisChannelItem> channels,
         string? query)
@@ -20,7 +22,7 @@ internal static class GenesisChannelSearchFilter
 
         return Array.AsReadOnly(
             channels
-                .Where(channel => terms.All(term => Matches(channel, term)))
+                .Where(channel => MatchesAll(channel, terms))
                 .ToArray());
     }
 
@@ -37,7 +39,7 @@ internal static class GenesisChannelSearchFilter
 
         return Array.AsReadOnly(
             notices
-                .Where(notice => terms.All(term => Matches(notice, term)))
+                .Where(notice => MatchesAll(notice, terms))
                 .ToArray());
     }
 
@@ -54,14 +56,80 @@ internal static class GenesisChannelSearchFilter
 
         return Array.AsReadOnly(
             favorites
-                .Where(favorite => terms.All(term => Matches(favorite, term)))
+                .Where(favorite => MatchesAll(favorite, terms))
                 .ToArray());
     }
 
-    private static string[] ParseTerms(string? query) =>
-        (query ?? string.Empty).Split(
+    private static ParsedTerm[] ParseTerms(string? query)
+    {
+        var rawTerms = (query ?? string.Empty).Split(
             (char[]?)null,
             StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (rawTerms.Length == 0)
+        {
+            return [];
+        }
+
+        var parsed = new ParsedTerm[rawTerms.Length];
+        for (var i = 0; i < rawTerms.Length; i++)
+        {
+            var token = rawTerms[i];
+            if (token.Length > 1 && token[0] is '-' or '－')
+            {
+                parsed[i] = new(token[1..], Excluded: true);
+            }
+            else
+            {
+                parsed[i] = new(token, Excluded: false);
+            }
+        }
+
+        return parsed;
+    }
+
+    private static bool MatchesAll(GenesisChannelItem channel, ParsedTerm[] terms)
+    {
+        foreach (var term in terms)
+        {
+            var matched = Matches(channel, term.Text);
+            if (term.Excluded ? matched : !matched)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool MatchesAll(GenesisYellowPageNoticeView notice, ParsedTerm[] terms)
+    {
+        foreach (var term in terms)
+        {
+            var matched = Matches(notice, term.Text);
+            if (term.Excluded ? matched : !matched)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool MatchesAll(
+        GenesisFavoriteChannelProjectionEntry favorite,
+        ParsedTerm[] terms)
+    {
+        foreach (var term in terms)
+        {
+            var matched = Matches(favorite, term.Text);
+            if (term.Excluded ? matched : !matched)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     private static bool Matches(GenesisChannelItem channel, string term) =>
         Contains(channel.Name, term) ||

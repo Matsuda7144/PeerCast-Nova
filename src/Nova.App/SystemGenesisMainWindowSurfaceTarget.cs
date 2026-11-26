@@ -331,6 +331,23 @@ internal sealed class GenesisMainWindowNativeSurface : IAsyncDisposable
         return header == 0 ? 0 : Math.Max(0, SendMessageW(header, 0x1200, 0, 0).ToInt32()); // HDM_GETITEMCOUNT
     }
 
+    internal static int[] GetColumnWidths(nint listView, int columnCount)
+    {
+        if (listView == 0 || columnCount <= 0)
+        {
+            return [];
+        }
+
+        const uint listViewMessageGetColumnWidth = 0x1000 + 29; // LVM_GETCOLUMNWIDTH
+        var widths = new int[columnCount];
+        for (var i = 0; i < columnCount; i++)
+        {
+            widths[i] = SendMessageW(listView, listViewMessageGetColumnWidth, (nuint)i, 0).ToInt32();
+        }
+
+        return widths;
+    }
+
     internal static bool ReplaceColumns(
         nint listView,
         int existingColumnCount,

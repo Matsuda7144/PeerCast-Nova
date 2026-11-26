@@ -88,6 +88,29 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
         return Array.AsReadOnly(rows.ToArray());
     }
 
+    internal static IReadOnlyList<GenesisGuiNextNativeTabRow> CreateNewRowsForNativeList(
+        IReadOnlyList<GenesisChannelItem> visibleNewChannels,
+        GenesisChannelSort? sort)
+    {
+        ArgumentNullException.ThrowIfNull(visibleNewChannels);
+        return GenesisGuiNextNativeTabProjection.CreateLiveChannels(
+            GenesisChannelListOrdering.Apply(visibleNewChannels, sort));
+    }
+
+    internal static IReadOnlyList<GenesisGuiNextNativeTabRow> CreateFavoriteRowsForNativeList(
+        GenesisGuiNextTabsViewModel guiNextTabs,
+        GenesisChannelSort? sort)
+    {
+        ArgumentNullException.ThrowIfNull(guiNextTabs);
+        var rows = GenesisGuiNextNativeTabProjection.Create(
+            guiNextTabs,
+            GenesisGuiNextTab.Favorites);
+        return GenesisChannelListOrdering.Apply(
+            rows,
+            static row => row.DisplayChannel,
+            sort);
+    }
+
     internal static int FindSelectedRow(
         IReadOnlyList<GenesisGuiNextNativeTabRow> rows,
         GenesisChannelItem selectedChannel)
@@ -337,9 +360,11 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
         private readonly nint _channelList;
         private readonly nint _status;
         private readonly GenesisSourceTextProjection _sourceTextProjection = new();
+        private readonly GenesisNativeColumnWidthMemory _columnWidths = new();
         private GenesisGuiNextNativeRowRebuildIdentity? _renderedRowIdentity;
         private object? _renderedChannelFilterRows;
         private object? _renderedNoticeFilterRows;
+        private GenesisChannelSort? _renderedChannelSort;
         private IReadOnlyList<GenesisNativeListColumnPresentation>? _renderedColumns =
             GenesisGuiNextRecordingListPresentation.Columns(GenesisGuiNextTab.Channels,
                 GenesisGuiNextRecordingPageMode.ActiveRecordings);
@@ -479,7 +504,9 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
             if (code == ListViewNotifyColumnClick)
             {
                 if (_guiNextTabs is null ||
-                    _guiNextTabs.SelectedTab == GenesisGuiNextTab.Channels)
+                    _guiNextTabs.SelectedTab is GenesisGuiNextTab.Channels or
+                        GenesisGuiNextTab.New or
+                        GenesisGuiNextTab.Favorites)
                 {
                     var notification = Marshal.PtrToStructure<ListViewNotify>(lParam);
                     _ = _interaction.SortChannelColumn(notification.SubItem);
@@ -542,7 +569,10 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
                 selectedTab == GenesisGuiNextTab.Channels &&
                 (!ReferenceEquals(_renderedChannelFilterRows, channelFilterRows) ||
                     !ReferenceEquals(_renderedNoticeFilterRows, noticeFilterRows));
-            if (rowIdentity.RequiresRebuild(_renderedRowIdentity) || channelsFilterChanged)
+            var sortChanged =
+                selectedTab is GenesisGuiNextTab.New or GenesisGuiNextTab.Favorites &&
+                !Equals(_renderedChannelSort, _viewModel.ChannelSort);
+            if (rowIdentity.RequiresRebuild(_renderedRowIdentity) || channelsFilterChanged || sortChanged)
             {
                 IReadOnlyList<GenesisGuiNextNativeTabRow> rows;
                 if (_guiNextTabs is null)
@@ -557,6 +587,18 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
                         _viewModel.Channels,
                         _guiNextTabs);
                 }
+                else if (selectedTab == GenesisGuiNextTab.New)
+                {
+                    rows = CreateNewRowsForNativeList(
+                        _guiNextTabs.VisibleNewChannels,
+                        _viewModel.ChannelSort);
+                }
+                else if (selectedTab == GenesisGuiNextTab.Favorites)
+                {
+                    rows = CreateFavoriteRowsForNativeList(
+                        _guiNextTabs,
+                        _viewModel.ChannelSort);
+                }
                 else
                 {
                     rows = GenesisGuiNextNativeTabProjection.Create(
@@ -567,6 +609,16 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
                 var newColumns = GenesisGuiNextRecordingListPresentation.Columns(selectedTab, recordingPageMode);
                 if (!ReferenceEquals(_renderedColumns, newColumns))
                 {
+                    if (_renderedColumns is not null)
+                    {
+                        _columnWidths.Capture(
+                            _renderedColumns,
+                            GenesisMainWindowNativeSurface.GetColumnWidths(
+                                _channelList,
+                                _renderedColumns.Count));
+                    }
+
+                    var columnsToApply = _columnWidths.ApplySavedWidths(newColumns);
                     Interlocked.Exchange(ref _selectionChangesSuppressed, 1);
                     var columnsReplaced = false;
                     try
@@ -574,7 +626,7 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
                         columnsReplaced = GenesisGuiNextRecordingListPresentation.TryReplaceColumns(
                             () => GenesisMainWindowNativeSurface.ReplaceRows(_channelList, Array.Empty<string[]>()),
                             () => GenesisMainWindowNativeSurface.ReplaceColumns(
-                                _channelList, GenesisMainWindowNativeSurface.GetColumnCount(_channelList), newColumns),
+                                _channelList, GenesisMainWindowNativeSurface.GetColumnCount(_channelList), columnsToApply),
                             () =>
                             {
                                 _ = GenesisMainWindowNativeSurface.ReplaceColumns(
@@ -591,6 +643,7 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
                         _renderedColumns = null;
                         _renderedRows = [];
                         _renderedRowIdentity = null;
+                        _renderedChannelSort = null;
                         GenesisChannelListRenderedChannels.SetRows(_channelList, _renderedRows);
                         _viewModel.SelectedChannel = null;
                         GenesisGuiNextAppShellBridge.SynchronizeRenderedList(_channelList, null, []);
@@ -612,6 +665,7 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
                     _renderedRowIdentity = rowsReplaced ? rowIdentity : null;
                     _renderedChannelFilterRows = channelFilterRows;
                     _renderedNoticeFilterRows = noticeFilterRows;
+                    _renderedChannelSort = rowsReplaced ? _viewModel.ChannelSort : null;
                     _renderedRows = rowsReplaced
                         ? rows
                         : Array.AsReadOnly(Array.Empty<GenesisGuiNextNativeTabRow>());

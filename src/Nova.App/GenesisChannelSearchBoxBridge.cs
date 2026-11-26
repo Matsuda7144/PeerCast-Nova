@@ -1,9 +1,48 @@
+using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 
 using static PeerCast.Nova.App.Win32NativeMethods;
 
 namespace PeerCast.Nova.App;
+
+internal enum GenesisChannelSearchInputAction
+{
+    DeferWhileComposing,
+    ScheduleDebounce,
+    CommitImmediately,
+}
+
+internal sealed class GenesisChannelSearchInputGate
+{
+    internal const uint DebounceMilliseconds = 150;
+
+    public bool IsComposing { get; private set; }
+
+    public void OnCompositionStart() => IsComposing = true;
+
+    public bool OnCompositionEnd()
+    {
+        IsComposing = false;
+        return true;
+    }
+
+    public GenesisChannelSearchInputAction OnTextChanged(string text)
+    {
+        if (IsComposing)
+        {
+            return GenesisChannelSearchInputAction.DeferWhileComposing;
+        }
+
+        return string.IsNullOrEmpty(text)
+            ? GenesisChannelSearchInputAction.CommitImmediately
+            : GenesisChannelSearchInputAction.ScheduleDebounce;
+    }
+
+    public bool OnDebounceTimerElapsed() => !IsComposing;
+
+    public bool OnEnterKey() => !IsComposing;
+}
 
 internal sealed class GenesisChannelSearchBoxBridge : IAsyncDisposable
 {
@@ -312,11 +351,24 @@ internal sealed class GenesisChannelSearchBoxBridge : IAsyncDisposable
 
     private sealed class SearchState
     {
+        private const uint WindowMessageNcDestroy = 0x0082;
+        private const uint WindowMessageKeyDown = 0x0100;
+        private const uint WindowMessageImeStartComposition = 0x010D;
+        private const uint WindowMessageImeEndComposition = 0x010E;
+        private const uint WindowMessageTimer = 0x0113;
+        private const nuint VirtualKeyReturn = 0x0D;
+        private const nuint SearchDebounceTimerId = 0x50435342;
+        private const nuint EditSubclassId = 0x50435343;
+        private static readonly ConcurrentDictionary<nint, SearchState> StatesByEdit = new();
+        private static readonly SubclassProcedure EditSubclassProcedureDelegate = ProcessEditMessage;
+
         private readonly nint _statusBar;
         private readonly nint _edit;
         private readonly nint _yellowPageFilter;
         private readonly GenesisGuiNextTabsViewModel _tabs;
+        private readonly GenesisChannelSearchInputGate _inputGate = new();
         private int _detached;
+        private bool _editSubclassed;
 
         public SearchState(
             nint statusBar,
@@ -330,14 +382,38 @@ internal sealed class GenesisChannelSearchBoxBridge : IAsyncDisposable
             _tabs = tabs;
         }
 
-        public void Attach() =>
+        public void Attach()
+        {
             _tabs.PropertyChanged += OnTabsPropertyChanged;
+            if (_edit != 0 &&
+                IsWindow(_edit) &&
+                StatesByEdit.TryAdd(_edit, this))
+            {
+                if (SetWindowSubclass(_edit, EditSubclassProcedureDelegate, EditSubclassId, 0))
+                {
+                    _editSubclassed = true;
+                }
+                else
+                {
+                    _ = StatesByEdit.TryRemove(_edit, out _);
+                }
+            }
+        }
 
         public void Detach()
         {
             if (Interlocked.Exchange(ref _detached, 1) == 0)
             {
                 _tabs.PropertyChanged -= OnTabsPropertyChanged;
+                _ = StatesByEdit.TryRemove(_edit, out _);
+                if (_edit != 0 && IsWindow(_edit))
+                {
+                    _ = KillTimer(_edit, SearchDebounceTimerId);
+                    if (_editSubclassed)
+                    {
+                        _ = RemoveWindowSubclass(_edit, EditSubclassProcedureDelegate, EditSubclassId);
+                    }
+                }
             }
         }
 
@@ -351,7 +427,26 @@ internal sealed class GenesisChannelSearchBoxBridge : IAsyncDisposable
             var notificationCode = (int)((wParam >> 16) & 0xffff);
             if (notificationCode == EditNotificationChange && lParam == _edit)
             {
-                _tabs.SearchText = ReadWindowText(_edit);
+                var currentText = ReadWindowText(_edit);
+                if (!_editSubclassed)
+                {
+                    _tabs.SearchText = currentText;
+                    return;
+                }
+
+                switch (_inputGate.OnTextChanged(currentText))
+                {
+                    case GenesisChannelSearchInputAction.DeferWhileComposing:
+                        break;
+                    case GenesisChannelSearchInputAction.CommitImmediately:
+                        _ = KillTimer(_edit, SearchDebounceTimerId);
+                        _tabs.SearchText = currentText;
+                        break;
+                    case GenesisChannelSearchInputAction.ScheduleDebounce:
+                        _ = SetTimer(_edit, SearchDebounceTimerId, GenesisChannelSearchInputGate.DebounceMilliseconds, 0);
+                        break;
+                }
+
                 return;
             }
 
@@ -433,7 +528,110 @@ internal sealed class GenesisChannelSearchBoxBridge : IAsyncDisposable
                 0,
                 0);
         }
+
+        private void CommitSearchText()
+        {
+            if (Volatile.Read(ref _detached) == 0 && _edit != 0 && IsWindow(_edit))
+            {
+                _tabs.SearchText = ReadWindowText(_edit);
+            }
+        }
+
+        private static nint ProcessEditMessage(
+            nint window,
+            uint message,
+            nuint wParam,
+            nint lParam,
+            nuint subclassId,
+            nuint referenceData)
+        {
+            _ = referenceData;
+            if (message == WindowMessageNcDestroy)
+            {
+                _ = StatesByEdit.TryRemove(window, out _);
+                _ = KillTimer(window, SearchDebounceTimerId);
+                _ = RemoveWindowSubclass(window, EditSubclassProcedureDelegate, subclassId);
+                return DefSubclassProc(window, message, wParam, lParam);
+            }
+
+            if (!StatesByEdit.TryGetValue(window, out var state) ||
+                Volatile.Read(ref state._detached) != 0)
+            {
+                return DefSubclassProc(window, message, wParam, lParam);
+            }
+
+            switch (message)
+            {
+                case WindowMessageImeStartComposition:
+                    _ = KillTimer(window, SearchDebounceTimerId);
+                    state._inputGate.OnCompositionStart();
+                    return DefSubclassProc(window, message, wParam, lParam);
+
+                case WindowMessageImeEndComposition:
+                    {
+                        var result = DefSubclassProc(window, message, wParam, lParam);
+                        if (state._inputGate.OnCompositionEnd())
+                        {
+                            _ = KillTimer(window, SearchDebounceTimerId);
+                            state.CommitSearchText();
+                        }
+
+                        return result;
+                    }
+
+                case WindowMessageTimer when wParam == SearchDebounceTimerId:
+                    _ = KillTimer(window, SearchDebounceTimerId);
+                    if (state._inputGate.OnDebounceTimerElapsed())
+                    {
+                        state.CommitSearchText();
+                    }
+
+                    return 0;
+
+                case WindowMessageKeyDown when wParam == VirtualKeyReturn:
+                    if (state._inputGate.OnEnterKey())
+                    {
+                        _ = KillTimer(window, SearchDebounceTimerId);
+                        state.CommitSearchText();
+                    }
+
+                    return DefSubclassProc(window, message, wParam, lParam);
+
+                default:
+                    return DefSubclassProc(window, message, wParam, lParam);
+            }
+        }
     }
+
+    private delegate nint SubclassProcedure(
+        nint window,
+        uint message,
+        nuint wParam,
+        nint lParam,
+        nuint subclassId,
+        nuint referenceData);
+
+    [DllImport("comctl32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowSubclass(
+        nint window,
+        SubclassProcedure subclassProcedure,
+        nuint subclassIdentifier,
+        nuint referenceData);
+
+    [DllImport("comctl32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool RemoveWindowSubclass(
+        nint window,
+        SubclassProcedure subclassProcedure,
+        nuint subclassIdentifier);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern nuint SetTimer(nint window, nuint eventId, uint elapsedMilliseconds, nint timerProcedure);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool KillTimer(nint window, nuint eventId);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern int GetWindowTextW(nint window, nint text, int maximumCharacters);

@@ -50,3 +50,53 @@ internal static class GenesisGuiNextRecordingListPresentation
         return false;
     }
 }
+
+internal sealed class GenesisNativeColumnWidthMemory
+{
+    private const int MinimumColumnWidth = 24;
+    private readonly Dictionary<IReadOnlyList<GenesisNativeListColumnPresentation>, int[]> _widthsBySchema =
+        new(ReferenceEqualityComparer.Instance);
+
+    public void Capture(
+        IReadOnlyList<GenesisNativeListColumnPresentation>? schema,
+        IReadOnlyList<int> widths)
+    {
+        ArgumentNullException.ThrowIfNull(widths);
+        if (schema is null || widths.Count != schema.Count || schema.Count == 0)
+        {
+            return;
+        }
+
+        var normalized = new int[widths.Count];
+        for (var i = 0; i < widths.Count; i++)
+        {
+            if (widths[i] <= 0)
+            {
+                return;
+            }
+
+            normalized[i] = Math.Max(MinimumColumnWidth, widths[i]);
+        }
+
+        _widthsBySchema[schema] = normalized;
+    }
+
+    public IReadOnlyList<GenesisNativeListColumnPresentation> ApplySavedWidths(
+        IReadOnlyList<GenesisNativeListColumnPresentation> schema)
+    {
+        ArgumentNullException.ThrowIfNull(schema);
+        if (!_widthsBySchema.TryGetValue(schema, out var saved) || saved.Length != schema.Count)
+        {
+            return schema;
+        }
+
+        var adjusted = new GenesisNativeListColumnPresentation[schema.Count];
+        for (var i = 0; i < schema.Count; i++)
+        {
+            var column = schema[i];
+            adjusted[i] = column with { PreferredWidth = saved[i] };
+        }
+
+        return Array.AsReadOnly(adjusted);
+    }
+}

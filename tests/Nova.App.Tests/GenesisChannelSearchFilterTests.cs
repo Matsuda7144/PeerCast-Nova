@@ -126,6 +126,41 @@ public sealed class GenesisChannelSearchFilterTests
         Assert.Empty(filtered);
     }
 
+    [Fact]
+    public void ExcludedTermsRemoveMatchingChannelsNoticesAndFavorites()
+    {
+        var gameFlv = new GenesisChannelItem("Game Live", "pcp://example/1", Description: "雑談枠", Type: "FLV");
+        var musicFlv = new GenesisChannelItem("Music Live", "pcp://example/2", Description: "演奏枠", Type: "FLV");
+        var excludedNotice = new GenesisYellowPageNoticeView(
+            new GenesisYellowPageNotice("メンテナンス告知", "定期", "RAW"),
+            "sp",
+            "SP",
+            0);
+        var keptNotice = new GenesisYellowPageNoticeView(
+            new GenesisYellowPageNotice("イベント案内", "告知", "RAW"),
+            "sp",
+            "SP",
+            1);
+
+        var filtered = GenesisChannelSearchFilter.Apply([gameFlv, musicFlv], "live -雑談 －game");
+        Assert.Same(musicFlv, Assert.Single(filtered));
+
+        var notices = GenesisChannelSearchFilter.ApplyNotices([excludedNotice, keptNotice], "-メンテナンス");
+        Assert.Same(keptNotice, Assert.Single(notices));
+
+        var favorites = GenesisChannelSearchFilter.ApplyFavorites(
+            [
+                new(GenesisFavoriteChannel.FromChannel(gameFlv), gameFlv),
+                new(GenesisFavoriteChannel.FromChannel(musicFlv), musicFlv),
+            ],
+            "-雑談");
+        Assert.Same(musicFlv, Assert.Single(favorites).CurrentChannel);
+
+        // 単独ハイフンは通常語として扱う
+        var dashChannel = new GenesisChannelItem("Test - Live", "pcp://example/3");
+        Assert.Same(dashChannel, Assert.Single(GenesisChannelSearchFilter.Apply([dashChannel, musicFlv], "-")));
+    }
+
     private static GenesisChannelItem Channel(string name, string source) =>
         new(name, source);
 }

@@ -14,10 +14,17 @@ internal static class GenesisChannelListOrdering
 {
     public static IReadOnlyList<GenesisChannelItem> Apply(
         IEnumerable<GenesisChannelItem> channels,
+        GenesisChannelSort? sort) =>
+        Apply(channels, static channel => channel, sort);
+
+    public static IReadOnlyList<T> Apply<T>(
+        IEnumerable<T> items,
+        Func<T, GenesisChannelItem> selector,
         GenesisChannelSort? sort)
     {
-        ArgumentNullException.ThrowIfNull(channels);
-        var snapshot = channels.ToArray();
+        ArgumentNullException.ThrowIfNull(items);
+        ArgumentNullException.ThrowIfNull(selector);
+        var snapshot = items.ToArray();
         if (sort is null || snapshot.Length < 2)
         {
             return Array.AsReadOnly(snapshot);
@@ -25,7 +32,7 @@ internal static class GenesisChannelListOrdering
 
         return Array.AsReadOnly(
             snapshot.OrderBy(
-                    static channel => channel,
+                    selector,
                     new ChannelComparer(sort))
                 .ToArray());
     }

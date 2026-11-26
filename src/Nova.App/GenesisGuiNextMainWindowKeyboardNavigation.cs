@@ -245,32 +245,90 @@ internal sealed class GenesisGuiNextMainWindowKeyboardNavigation : IDisposable
 
         _ = EnumChildWindows(_owner, callback, 0);
         GC.KeepAlive(callback);
-        tabStops.Sort(static (left, right) =>
+
+        var origin = default(NativePoint);
+        _ = ClientToScreen(_owner, ref origin);
+        var dpi = GenesisMainWindowResizeGuard.GetDpi(_owner);
+        var sidebarSplitPixels = GenesisMainWindowLayout.Scale(
+            GenesisMainWindowLayout.ContentLeft - 4,
+            dpi);
+        var rowBandHeight = Math.Max(1, GenesisMainWindowLayout.Scale(12, dpi));
+        var bounds = new List<TabStopBounds>(tabStops.Count);
+        foreach (var stop in tabStops)
         {
-            var result = left.Rectangle.Top.CompareTo(right.Rectangle.Top);
-            if (result != 0)
-            {
-                return result;
-            }
+            bounds.Add(new(
+                stop.Window,
+                stop.Rectangle.Left,
+                stop.Rectangle.Top,
+                stop.Rectangle.Right,
+                stop.Rectangle.Bottom));
+        }
 
-            result = left.Rectangle.Left.CompareTo(right.Rectangle.Left);
-            if (result != 0)
-            {
-                return result;
-            }
+        SortTabStops(bounds, origin.X, origin.Y, sidebarSplitPixels, rowBandHeight);
+        for (var i = 0; i < bounds.Count; i++)
+        {
+            var entry = bounds[i];
+            tabStops[i] = new(
+                entry.Window,
+                new NativeRectangle
+                {
+                    Left = entry.Left,
+                    Top = entry.Top,
+                    Right = entry.Right,
+                    Bottom = entry.Bottom,
+                });
+        }
 
-            result = left.Rectangle.Bottom.CompareTo(right.Rectangle.Bottom);
-            if (result != 0)
-            {
-                return result;
-            }
-
-            result = left.Rectangle.Right.CompareTo(right.Rectangle.Right);
-            return result != 0
-                ? result
-                : left.Window.ToInt64().CompareTo(right.Window.ToInt64());
-        });
         return tabStops;
+    }
+
+    internal readonly record struct TabStopBounds(
+        nint Window,
+        int Left,
+        int Top,
+        int Right,
+        int Bottom);
+
+    internal static void SortTabStops(
+        List<TabStopBounds> tabStops,
+        int ownerClientLeft,
+        int ownerClientTop,
+        int sidebarSplitPixels,
+        int rowBandHeight = 12)
+    {
+        ArgumentNullException.ThrowIfNull(tabStops);
+        if (tabStops.Count < 2)
+        {
+            return;
+        }
+
+        var sidebarBoundary = ownerClientLeft + sidebarSplitPixels;
+        var sidebarCount = 0;
+        foreach (var stop in tabStops)
+        {
+            if (stop.Right <= sidebarBoundary)
+            {
+                sidebarCount++;
+            }
+        }
+
+        // GUI Next 構成（左サイドバーのボタン群が 3 つ以上ある場合）では
+        // 左サイドバーを先に巡回し、続けて右ペイン（上バー→一覧→詳細ボタン）を巡回する。
+        var hasSidebar = sidebarSplitPixels > 0 && sidebarCount >= 3;
+        var bandHeight = Math.Max(1, rowBandHeight);
+
+        (int Region, int RowBand, int Left, int Top, int Bottom, int Right, long Window) KeyOf(
+            TabStopBounds stop)
+        {
+            var inSidebar = hasSidebar && stop.Right <= sidebarBoundary;
+            var region = inSidebar ? 0 : 1;
+            var rowBand = inSidebar
+                ? stop.Top
+                : Math.Max(0, stop.Top - ownerClientTop) / bandHeight;
+            return (region, rowBand, stop.Left, stop.Top, stop.Bottom, stop.Right, stop.Window.ToInt64());
+        }
+
+        tabStops.Sort((left, right) => KeyOf(left).CompareTo(KeyOf(right)));
     }
 
     private readonly record struct TabStopWindow(
@@ -347,6 +405,10 @@ internal sealed class GenesisGuiNextMainWindowKeyboardNavigation : IDisposable
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetWindowRect(nint window, out NativeRectangle rectangle);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ClientToScreen(nint window, ref NativePoint point);
 
     [DllImport("user32.dll")]
     private static extern nint GetForegroundWindow();
