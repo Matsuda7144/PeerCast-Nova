@@ -63,6 +63,7 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
     private long _data;
     private bool _registered;
     private ObsPublishChannelResult? _result;
+    private ChannelMetadataSnapshot _currentMetadata = new();
     private string? _httpStreamUrl;
     private readonly object _statusGate = new();
     private ObsPublishStatusSnapshot? _lastPublishingStatus;
@@ -118,6 +119,7 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
         };
         _options.Validate();
         InitialMetadata = _options.CreateMetadata();
+        _currentMetadata = InitialMetadata;
         ChannelId = channelId ?? new ChannelId(Guid.NewGuid());
         SessionId = new ChannelSessionId(Guid.NewGuid());
         _tracker = new ChannelStatusTracker(ChannelId, SessionId);
@@ -133,16 +135,18 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
         var wanControl = _options.Wan.Enabled ? wanIngressForTests ?? new PcpWanIngressOptions() : null;
         _relay = new PcpDownstreamRelayServer(
             bindForTests?.Invoke(endpoint) ?? endpoint, _fanout, ChannelId, SessionId.Value,
-            initialMetadata: InitialMetadata, admission: _options.Lan.Enabled || _options.Wan.Enabled || _useLoopbackAdmission ? new LanAdmission(this) : null,
+            initialMetadata: null, admission: _options.Lan.Enabled || _options.Wan.Enabled || _useLoopbackAdmission ? new LanAdmission(this) : null,
             acceptRemoteAddress: _options.Wan.Enabled ? address => CanAcceptWan && wanControl!.SourceAllowed(address)
                 : _options.Lan.Enabled ? address => Volatile.Read(ref _lanBinding)?.Accepts(address) == true : null,
-            wanOptions: wanControl);
+            wanOptions: wanControl,
+            initialMetadataProvider: () => PcpInitialChannelMetadata.Encode(ChannelId.Value, CurrentMetadata));
         _ingest = new ObsRtmpIngestHost(ChannelId, SessionId, new PublishConsumer(this), _options.Ingest);
     }
 
     public ChannelId ChannelId { get; }
     public ChannelSessionId SessionId { get; }
     public ChannelMetadataSnapshot InitialMetadata { get; }
+    public ChannelMetadataSnapshot CurrentMetadata => Volatile.Read(ref _currentMetadata);
     public ChannelStatusSnapshot Snapshot => _tracker.Snapshot;
     public Task<bool> HeadAvailable => _headAvailable.Task;
     public IPEndPoint IngestEndPoint => _ingest.LocalEndPoint;
@@ -214,6 +218,44 @@ public sealed partial class ObsPublishChannelHost : IAsyncDisposable
             _announceStart = _announceTime.GetTimestamp();
             _completion = RunAsync(cancellationToken);
         }
+    }
+
+    public bool TryUpdateLiveMetadata(ChannelMetadataSnapshot metadata)
+    {
+        ArgumentNullException.ThrowIfNull(metadata);
+        lock (_gate)
+        {
+            if (_completion is null || _disposeTask is not null || _stop.IsCancellationRequested || _result is not null)
+            {
+                return false;
+            }
+
+            Volatile.Write(ref _currentMetadata, metadata);
+        }
+
+        if (_tracker.Snapshot.State is ChannelSessionState.Negotiating or ChannelSessionState.Receiving or ChannelSessionState.Reconnecting)
+        {
+            try
+            {
+                _tracker.UpdateMetadata(metadata);
+            }
+            catch (InvalidOperationException)
+            {
+                // 状態遷移の競合で非更新状態へ変わった場合はスキップする。
+            }
+        }
+
+        if (Volatile.Read(ref _announce) is { } announce &&
+            _options.Wan.AdvertisedAddress.Length != 0 &&
+            _options.Wan.AdvertisedPort > 0 &&
+            IPAddress.TryParse(_options.Wan.AdvertisedAddress, out var advertisedAddress))
+        {
+            _ = announce.UpdateMetadata(
+                metadata,
+                new IPEndPoint(advertisedAddress, _options.Wan.AdvertisedPort));
+        }
+
+        return true;
     }
 
     private async Task<ObsPublishChannelResult> RunAsync(CancellationToken cancellationToken)

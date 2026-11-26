@@ -33,6 +33,26 @@ internal sealed class NovaGuiNextPublishingComposition : INovaObsPublishingReadO
         catch { owner = null; } // Startup remains available; no raw exception text.
         _current = new(1, owner, _finishTimeProvider, preparedSettings);
         if (owner is not null) _seenOwners.Add(owner, new());
+        if (settings is not null) settings.SavedUpdated += OnSettingsSavedUpdated;
+    }
+
+    internal bool TryApplyLiveMetadata(PublishingSettingsSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        Generation generation;
+        lock (_gate)
+        {
+            if (_closed) return false;
+            generation = _current;
+        }
+
+        return generation.Lifecycle.TryUpdateLiveMetadata(snapshot.Values.ToOptions().CreateMetadata());
+    }
+
+    private void OnSettingsSavedUpdated(PublishingSettingsSnapshot snapshot)
+    {
+        try { _ = TryApplyLiveMetadata(snapshot); }
+        catch { }
     }
 
     // Application/testing access only. GUI binding receives stable interfaces.
@@ -387,6 +407,7 @@ internal sealed class NovaGuiNextPublishingComposition : INovaObsPublishingReadO
 
     public ValueTask DisposeAsync()
     {
+        if (Settings is not null) Settings.SavedUpdated -= OnSettingsSavedUpdated;
         lock (_gate)
         {
             CloseAdmission();
