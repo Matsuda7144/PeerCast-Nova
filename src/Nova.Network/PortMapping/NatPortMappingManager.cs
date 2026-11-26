@@ -75,13 +75,15 @@ public sealed class NatPortMappingManager : IAsyncDisposable
                     entry.Identity,
                     OwnerCountLocked(entry.Identity),
                     entry.Status,
-                    NatExternalReachability.Unknown,
+                    entry.ExternalReachability,
                     entry.ReturnedExternalPort,
                     entry.Lease,
                     entry.Pending is not null,
                     entry.MayExist,
                     entry.Pending?.Request.Operation,
-                    entry.Pending is null ? entry.Backend : backend.GetDisplayName(entry.Identity), entry.DetailCode)).ToArray();
+                    entry.Pending is null ? entry.Backend : backend.GetDisplayName(entry.Identity),
+                    entry.DetailCode,
+                    entry.ExternalAddress)).ToArray();
             }
         }
     }
@@ -146,6 +148,47 @@ public sealed class NatPortMappingManager : IAsyncDisposable
                 network = value;
                 DesiredChangedLocked("NetworkChanged");
             }
+        }
+    }
+
+    public bool ReportExternalReachability(int internalPort, NatExternalReachability reachability, string? externalAddress = null)
+    {
+        if (internalPort is < 1 or > 65535 || !Enum.IsDefined(reachability))
+        {
+            return false;
+        }
+
+        lock (gate)
+        {
+            if (shuttingDown || network is null)
+            {
+                return false;
+            }
+
+            var identity = new NatMappingIdentity(network, NatMappingProtocol.Tcp, internalPort);
+            if (!entries.TryGetValue(identity, out var entry))
+            {
+                return false;
+            }
+
+            var validAddress = PeerCast.Nova.Network.Publishing.PublishingIpv4.IsPublicAddress(externalAddress)
+                ? externalAddress!.Trim()
+                : null;
+            if (entry.ExternalReachability == reachability &&
+                (validAddress is null || string.Equals(entry.ExternalAddress, validAddress, StringComparison.Ordinal)))
+            {
+                return false;
+            }
+
+            entry.ExternalReachability = reachability;
+            if (validAddress is not null)
+            {
+                entry.ExternalAddress = validAddress;
+            }
+
+            generation = checked(generation + 1);
+            RecordLocked("ExternalReachabilityObserved");
+            return true;
         }
     }
 
@@ -406,12 +449,18 @@ public sealed class NatPortMappingManager : IAsyncDisposable
             {
                 case NatBackendOutcome.Success when pending.Request.Operation == NatMappingOperation.Unmap:
                     entry.MayExist = false;
+                    entry.ExternalAddress = null;
+                    entry.ExternalReachability = NatExternalReachability.Unknown;
                     entry.Status = NatMappingStatus.Unmapped;
                     entry.RetryAt = schedulingNow;
                     break;
                 case NatBackendOutcome.Success:
                     entry.MayExist = true;
                     entry.ReturnedExternalPort = result.ExternalPort;
+                    if (!string.IsNullOrWhiteSpace(result.ExternalAddress))
+                    {
+                        entry.ExternalAddress = result.ExternalAddress;
+                    }
                     entry.Lease = new NatLeaseEvidence(pending.Request.RequestedLifetimeSeconds,
                         result.LifetimeSeconds, now,
                         result.LeaseKind == NatLeaseKind.Permanent ? null : pending.StartedAt.AddSeconds(result.LifetimeSeconds!.Value),
@@ -594,6 +643,8 @@ public sealed class NatPortMappingManager : IAsyncDisposable
     {
         public NatMappingIdentity Identity { get; } = identity;
         public NatMappingStatus Status { get; set; }
+        public NatExternalReachability ExternalReachability { get; set; } = NatExternalReachability.Unknown;
+        public string? ExternalAddress { get; set; }
         public bool MayExist { get; set; }
         public int? ReturnedExternalPort { get; set; }
         public NatLeaseEvidence? Lease { get; set; }

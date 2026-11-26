@@ -30,7 +30,9 @@ public sealed class SmartRelayPacingStartupTests
             var input = GenesisGuiNextConnectionInput.From(test.State.Connection.Saved) with { TotalUpstreamIpv4Kbps = "9000" };
             Assert.True((await test.State.Connection.SaveAsync(input)).Saved);
             Assert.Equal(9000, pacing.MediaKbps);
-            using var off = GenesisGuiNextNetworkPolicies.Create(test.State.Connection, _ => null);
+            using var defaultEnabled = GenesisGuiNextNetworkPolicies.Create(test.State.Connection, _ => null);
+            Assert.NotNull(defaultEnabled.Relays.Pacing);
+            using var off = GenesisGuiNextNetworkPolicies.Create(test.State.Connection, name => name == "NOVA_SMART_RELAY_PACING" ? "0" : null);
             Assert.Null(off.Relays.Pacing);
             Assert.Equal(kbps, off.Bandwidth.Limits.Ipv4Kbps);
             Assert.Equal(9000, test.State.NetworkPolicies.Bandwidth.Limits.Ipv4Kbps);

@@ -9,6 +9,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge
 {
     private const int AdvancedToggleId = 1250, AdvancedEditId = 1251, AdvancedSaveId = 1252, AdvancedCancelId = 1253, AdvancedInputId = 1254,
         AdvancedFillNatId = 1265, AdvancedPickYpId = 1266;
+    private const uint PublishingExternalProbeCompleted = 0x8733;
+    private static int _nextPublishingProbeToken;
     private static readonly string[] AdvancedLabels = ["PCP公開モード", "待受NIC / IPv4", "内部IPv4（設定）", "内部PCPポート", "公開IPv4（設定）", "外部ポート", "YP Announce", "YP名", "PCP Endpoint"];
 
     private sealed partial class AppShellState
@@ -19,6 +21,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private nint[] _publishingAdvancedFields = [], _publishingAdvancedLabels = [];
         private IReadOnlyList<ObsPublishLanInterface> _publishingInterfaces = [];
         private int _publishingAdvancedScroll;
+        private nuint _publishingProbeGeneration;
+        private string? _pendingExternalProbeAddress, _pendingExternalProbeMessage;
         private nint[] PublishingAdvancedButtons => IsModern ? [_publishingAdvancedToggle, _publishingAdvancedEdit, _publishingAdvancedSave, _publishingAdvancedCancel, _publishingAdvancedFillNat, _publishingAdvancedPickYp] : [];
         private nint[] PublishingAdvancedControls => IsModern ? [_publishingAdvancedPane, _publishingAdvancedHint, .. _publishingAdvancedLabels, .. _publishingAdvancedFields] : [];
         internal bool IsPublishingAdvancedCombo(nint window) => IsModern && _publishingAdvancedFields.Length == 9 &&
@@ -184,16 +188,32 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 {
                     _publishingAdvancedExpanded = _publishingEditAdvanced = true;
                     var interfaces = _publishingInterfaces.Count > 0 ? _publishingInterfaces : editor.InterfaceChoices();
+                    var fallbackListenPort = _viewModel.ConnectionSettings?.Active.ListenPort ?? 7144;
                     var suggestion = PublishingAdvancedAssist.TryApplyNatSuggestion(
                         editor.Input!,
                         _viewModel.NetworkSettingsAdapter?.ReadSnapshot(),
                         interfaces,
-                        _viewModel.ConnectionSettings?.Startup.ListenPort ?? 7144);
+                        fallbackListenPort);
                     if (suggestion.Applied && editor.EditAdvanced(suggestion.UpdatedInput))
                     {
                         InitializePublishingAdvanced();
+                        editor.SetStatus(suggestion.Message);
                     }
-                    editor.SetStatus(suggestion.Message);
+                    else
+                    {
+                        var presets = PublishingAdvancedAssist.TryBuildAllAnnouncePresets(_viewModel.YellowPageSettings?.Entries ?? []);
+                        var endpoint = !string.IsNullOrWhiteSpace(editor.Input!.AnnounceEndpoint)
+                            ? editor.Input.AnnounceEndpoint.Trim()
+                            : presets.Count > 0 ? presets[0].Endpoint : null;
+                        if (!string.IsNullOrWhiteSpace(endpoint))
+                        {
+                            StartPublishingExternalIpProbe(editor, endpoint, _detailsPane);
+                        }
+                        else
+                        {
+                            editor.SetStatus(suggestion.Message);
+                        }
+                    }
                 }
             }
             else if (id == AdvancedPickYpId && control == _publishingAdvancedPickYp)
@@ -322,17 +342,57 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             ? [.. GenesisPublishingAdvancedLayout.Rows(input).Where(i => i != 2 && (i != 6 || input.WanEnabled || input.AnnounceEnabled)).Select(i => _publishingAdvancedFields[i]), _publishingAdvancedFillNat, _publishingAdvancedPickYp, _publishingAdvancedSave, _publishingAdvancedCancel, _publishingEdit]
             : [.. _publishingInputs, _publishingSave, _publishingCancel, _publishingAdvancedToggle];
 
+        private void StartPublishingExternalIpProbe(GenesisPublishingBasicEditor editor, string trackerEndpoint, nint targetPane)
+        {
+            var token = unchecked((nuint)Interlocked.Increment(ref _nextPublishingProbeToken));
+            _publishingProbeGeneration = token;
+            Volatile.Write(ref _pendingExternalProbeAddress, null);
+            Volatile.Write(ref _pendingExternalProbeMessage, null);
+            editor.SetStatus("NATから公開IPv4が未取得のため、登録YPへ問い合わせています…");
+            _ = Task.Run(async () =>
+            {
+                var probe = await PcpExternalReachabilityProbe.ProbeAsync(trackerEndpoint, listenPort: 0).ConfigureAwait(false);
+                Volatile.Write(ref _pendingExternalProbeAddress, probe.Succeeded ? probe.ExternalAddress : null);
+                Volatile.Write(ref _pendingExternalProbeMessage, probe.FailureReason);
+                if (Volatile.Read(ref _detached) == 0 && targetPane != 0)
+                {
+                    _ = PostMessageW(targetPane, PublishingExternalProbeCompleted, token, 0);
+                }
+            });
+        }
+
+        internal void CompletePublishingExternalProbe(nuint token)
+        {
+            if (token != _publishingProbeGeneration || Volatile.Read(ref _detached) != 0 ||
+                _publishingEditor is not { Editing: true, Saving: false } editor || editor.Input is not { } input)
+            {
+                return;
+            }
+
+            var externalAddress = Volatile.Read(ref _pendingExternalProbeAddress);
+            var failureMessage = Volatile.Read(ref _pendingExternalProbeMessage);
+            var interfaces = _publishingInterfaces.Count > 0 ? _publishingInterfaces : editor.InterfaceChoices();
+            var suggestion = PublishingAdvancedAssist.TryApplyExternalAddressSuggestion(
+                input,
+                externalAddress,
+                _viewModel.NetworkSettingsAdapter?.ReadSnapshot(),
+                interfaces,
+                _viewModel.ConnectionSettings?.Active.ListenPort ?? 7144,
+                sourceLabel: "YP Tracker",
+                failureMessage: string.IsNullOrWhiteSpace(failureMessage)
+                    ? "NATおよびYP Trackerから公開IPv4を取得できませんでした。手動で入力してください。"
+                    : $"公開IPv4を自動取得できませんでした（{failureMessage}）。");
+            if (suggestion.Applied && editor.EditAdvanced(suggestion.UpdatedInput))
+            {
+                InitializePublishingAdvanced();
+            }
+            editor.SetStatus(suggestion.Message);
+        }
+
         private void ShowPublishingYellowPagePresetMenu(GenesisPublishingBasicEditor editor)
         {
             var entries = _viewModel.YellowPageSettings?.Entries ?? [];
-            var presets = new List<(GenesisYellowPageDefinition Definition, PublishingAnnouncePreset Preset)>();
-            foreach (var entry in entries)
-            {
-                if (PublishingAdvancedAssist.TryBuildAnnouncePreset(entry, out var preset) && preset is not null)
-                {
-                    presets.Add((entry, preset));
-                }
-            }
+            var presets = PublishingAdvancedAssist.TryBuildAllAnnouncePresets(entries);
 
             if (presets.Count == 0)
             {
@@ -348,11 +408,18 @@ internal sealed partial class GenesisGuiNextAppShellBridge
 
             try
             {
+                var hasBulkOption = presets.Count >= 2;
+                if (hasBulkOption && !AppendPublishingMenuW(menu, 0, 1, $"有効な登録YPをすべて設定（{presets.Count}件・複数YP同時掲載）"))
+                {
+                    return;
+                }
+
                 for (var i = 0; i < presets.Count; i++)
                 {
                     var item = presets[i];
-                    var label = $"{item.Preset.Name} ({item.Preset.Endpoint})";
-                    if (!AppendPublishingMenuW(menu, 0, (nuint)(i + 1), label))
+                    var label = $"{item.Name} ({item.Endpoint})";
+                    var menuId = (nuint)(i + (hasBulkOption ? 2 : 1));
+                    if (!AppendPublishingMenuW(menu, 0, menuId, label))
                     {
                         return;
                     }
@@ -364,17 +431,50 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 }
 
                 var selected = TrackPublishingPopupMenuEx(menu, 0x0100u, bounds.Left, bounds.Bottom, _owner, 0);
-                if (selected == 0 || selected > (uint)presets.Count || editor.Input is not { } current)
+                if (selected == 0 || editor.Input is not { } current)
                 {
                     return;
                 }
 
-                var picked = presets[(int)selected - 1];
+                if (hasBulkOption && selected == 1)
+                {
+                    var primary = presets[0];
+                    var additional = presets.Skip(1)
+                        .Select(static preset => new PublishingAnnounceTarget(preset.Name, preset.Endpoint))
+                        .ToArray();
+                    var bulkUpdated = current with
+                    {
+                        AnnounceEnabled = current.WanEnabled || current.AnnounceEnabled,
+                        AnnounceName = primary.Name,
+                        AnnounceEndpoint = primary.Endpoint,
+                        AdditionalAnnounceTargets = additional,
+                    };
+                    if (!editor.EditAdvanced(bulkUpdated))
+                    {
+                        return;
+                    }
+
+                    InitializePublishingAdvanced();
+                    var names = string.Join(" / ", presets.Select(static p => p.Name));
+                    editor.SetStatus(current.WanEnabled
+                        ? $"{presets.Count}件のYP（{names}）を同時掲載対象に設定しました。保存して反映してください。"
+                        : $"{presets.Count}件のYPを設定しました。YP Announce を ON にするには公開モードを「WAN（明示公開）」にしてください。");
+                    return;
+                }
+
+                var itemIndex = (int)selected - (hasBulkOption ? 2 : 1);
+                if (itemIndex < 0 || itemIndex >= presets.Count)
+                {
+                    return;
+                }
+
+                var picked = presets[itemIndex];
                 var updated = current with
                 {
                     AnnounceEnabled = current.WanEnabled || current.AnnounceEnabled,
-                    AnnounceName = picked.Preset.Name,
-                    AnnounceEndpoint = picked.Preset.Endpoint,
+                    AnnounceName = picked.Name,
+                    AnnounceEndpoint = picked.Endpoint,
+                    AdditionalAnnounceTargets = [],
                 };
                 if (!editor.EditAdvanced(updated))
                 {
@@ -384,15 +484,15 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 InitializePublishingAdvanced();
                 if (!current.WanEnabled)
                 {
-                    editor.SetStatus($"YP「{picked.Preset.Name}」を反映しました。YP Announce を ON にするには公開モードを「WAN（明示公開）」にしてください。");
+                    editor.SetStatus($"YP「{picked.Name}」を反映しました。YP Announce を ON にするには公開モードを「WAN（明示公開）」にしてください。");
                 }
-                else if (picked.Preset.UsedFallbackPort)
+                else if (picked.UsedFallbackPort)
                 {
-                    editor.SetStatus($"YP「{picked.Preset.Name}」({picked.Preset.Endpoint}) を反映しました。ポート番号はYPの案内値に合わせて確認してください。");
+                    editor.SetStatus($"YP「{picked.Name}」({picked.Endpoint}) を反映しました。ポート番号はYPの案内値に合わせて確認してください。");
                 }
                 else
                 {
-                    editor.SetStatus($"YP「{picked.Preset.Name}」({picked.Preset.Endpoint}) を反映しました。保存して次回配信から適用してください。");
+                    editor.SetStatus($"YP「{picked.Name}」({picked.Endpoint}) を反映しました。保存して次回配信から適用してください。");
                 }
             }
             finally

@@ -54,7 +54,7 @@ public sealed class DefaultRecordingFilePathProvider : IRecordingFilePathProvide
 
         var resolvedBaseDirectory = Path.GetFullPath(baseDirectory);
         this.baseDirectoryProvider = () => resolvedBaseDirectory;
-        this.nowProvider = nowProvider ?? GetUtcNow;
+        this.nowProvider = nowProvider ?? GetLocalNow;
     }
 
     public DefaultRecordingFilePathProvider(
@@ -65,7 +65,7 @@ public sealed class DefaultRecordingFilePathProvider : IRecordingFilePathProvide
 
         this.baseDirectoryProvider = baseDirectoryProvider;
         _ = ResolveBaseDirectory();
-        this.nowProvider = nowProvider ?? GetUtcNow;
+        this.nowProvider = nowProvider ?? GetLocalNow;
     }
 
     public string BaseDirectory => ResolveBaseDirectory();
@@ -80,7 +80,6 @@ public sealed class DefaultRecordingFilePathProvider : IRecordingFilePathProvide
         var resolvedBaseDirectory = ResolveBaseDirectory();
 
         var timestamp = nowProvider()
-            .ToUniversalTime()
             .ToString(
                 "yyyyMMdd_HHmmss",
                 CultureInfo.InvariantCulture);
@@ -196,9 +195,9 @@ public sealed class DefaultRecordingFilePathProvider : IRecordingFilePathProvide
         return $".{candidate.ToLowerInvariant()}";
     }
 
-    private static DateTimeOffset GetUtcNow()
+    private static DateTimeOffset GetLocalNow()
     {
-        return DateTimeOffset.UtcNow;
+        return DateTimeOffset.Now;
     }
 
     private string ResolveBaseDirectory()

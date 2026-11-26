@@ -207,4 +207,26 @@ public sealed class NatPortMappingProjectionTests
         Assert.DoesNotContain(display.Diagnostics, item => item.Code == "ResponseTimeout");
         Assert.DoesNotContain(display.Diagnostics, item => item.Code == "RouterRejected");
     }
+
+    [Fact]
+    public async Task ExternalReachabilityAndPublicAddress_ProjectToNatDisplay()
+    {
+        await using var test = new NatPortMappingTestHarness();
+        using var owner = test.Acquire(7144);
+        await test.MapAsync(7144, lifetime: 120);
+
+        var initial = Read(test);
+        Assert.Equal(NatDisplayReachability.NotChecked, initial.ExternalReachability);
+        Assert.Null(initial.ExternalAddress);
+
+        Assert.True(test.Manager.ReportExternalReachability(7144, NatExternalReachability.Reachable, "198.41.0.4"));
+        var reachable = Read(test);
+        Assert.Equal(NatDisplayReachability.Reachable, reachable.ExternalReachability);
+        Assert.Equal("198.41.0.4", reachable.ExternalAddress);
+
+        Assert.True(test.Manager.ReportExternalReachability(7144, NatExternalReachability.Unreachable));
+        var unreachable = Read(test);
+        Assert.Equal(NatDisplayReachability.Unreachable, unreachable.ExternalReachability);
+        Assert.Equal("198.41.0.4", unreachable.ExternalAddress);
+    }
 }

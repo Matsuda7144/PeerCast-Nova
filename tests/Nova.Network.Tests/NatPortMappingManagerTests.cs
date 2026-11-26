@@ -374,4 +374,35 @@ public sealed class NatPortMappingManagerTests
         Assert.Equal(200, test.Router.Count);
         Assert.Equal(1, test.Router.MaximumActive);
     }
+
+    [Fact]
+    public async Task ReportExternalReachability_UpdatesSnapshotAndResetsOnUnmap()
+    {
+        await using var test = new NatPortMappingTestHarness();
+        using var owner = test.Acquire(7144);
+        await test.MapAsync(7144, lifetime: 120);
+
+        Assert.True(test.Manager.ReportExternalReachability(7144, NatExternalReachability.Reachable, "198.41.0.4"));
+        var snapshot = Assert.Single(test.Manager.Snapshot);
+        Assert.Equal(NatExternalReachability.Reachable, snapshot.ExternalReachability);
+        Assert.Equal("198.41.0.4", snapshot.ExternalAddress);
+
+        Assert.True(test.Manager.ReportExternalReachability(7144, NatExternalReachability.Unreachable));
+        snapshot = Assert.Single(test.Manager.Snapshot);
+        Assert.Equal(NatExternalReachability.Unreachable, snapshot.ExternalReachability);
+        Assert.Equal("198.41.0.4", snapshot.ExternalAddress);
+
+        Assert.False(test.Manager.ReportExternalReachability(9999, NatExternalReachability.Reachable, "198.41.0.5"));
+
+        owner.Dispose();
+        var unmapTurn = test.Manager.ReconcileAsync();
+        var unmap = await test.Router.NextAsync();
+        Assert.Equal(NatMappingOperation.Unmap, unmap.Request.Operation);
+        unmap.Succeed(7144, 0);
+        await unmapTurn;
+
+        snapshot = Assert.Single(test.Manager.Snapshot);
+        Assert.Equal(NatExternalReachability.Unknown, snapshot.ExternalReachability);
+        Assert.Null(snapshot.ExternalAddress);
+    }
 }

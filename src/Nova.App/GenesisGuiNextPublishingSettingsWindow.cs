@@ -196,7 +196,7 @@ internal sealed class GenesisGuiNextPublishingSettingsWindow : IGenesisPublishin
                 Add("EDIT", "", 1012, 272, 822, 320, 28, true, 0x10080) &&
                 Add("STATIC", "PCP Announce Endpoint", 0, 20, 866, 240, 24) &&
                 Add("EDIT", "", 1013, 272, 864, 320, 28, true, 0x10080) &&
-                Add("STATIC", "既定はこのPCのみ。LANは同一Subnetのみ受付。\r\nWANは次の配信開始で明示公開します。外部到達性は未確認。\r\n帯域数値上限がある場合はLAN/WAN開始不可。\r\nYP ONは次回StartでTrackerへ接続します。到達性・掲載は未確認。", 0, 20, 916, 640, 88, true) &&
+                Add("STATIC", "既定はこのPCのみ。LANは同一Subnetのみ受付。\r\nWANは次の配信開始で明示公開します。\r\n帯域設定時は実測/申告ビットレートとペーサーで制御します。\r\nYP ONは次回StartでTrackerへ接続します。", 0, 20, 916, 640, 88, true) &&
                 Add("STATIC", "", NoticeId, 20, 1018, 640, 44, true) &&
                 Add("STATIC", "", RevisionId, 20, 1070, 640, 24, true) &&
                 Add("BUTTON", "保存", SaveId, 20, 1104, 120, 32, style: 0x1000B) &&

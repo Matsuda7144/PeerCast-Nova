@@ -11,15 +11,14 @@ public sealed class PublishingLanTests
     [Theory]
     [InlineData(0)]
     [InlineData(1000)]
-    public async Task NumericBandwidthFailsBeforeRegistration(int budget)
+    public async Task NumericBandwidthAllowsLanRegistrationEvenWithoutDeclaredBitrate(int budget)
     {
         await using var fixture = await PublicChannelTestFixture.CreateAsync(new() { TotalUpstreamIpv4Kbps = budget });
         await using var fanout = new PcpRelayFanout();
         var factory = new SystemNovaObsPublishingRuntimeFactory(fixture.State);
-        var exception = Assert.Throws<ObsPublishLanException>(() => factory.Register(new(Guid.NewGuid()), new(Guid.NewGuid()), fanout));
-        Assert.Equal(ObsPublishLanFailure.BandwidthUnsupported, exception.Failure);
+        using var owner = factory.Register(new(Guid.NewGuid()), new(Guid.NewGuid()), fanout);
+        Assert.NotNull(owner);
         Assert.Equal(0, fixture.State.DownstreamRelays.ActiveRelayCount);
-        Assert.Equal(0, fixture.State.PublicChannels.OwnerCount);
     }
 
     [Fact]

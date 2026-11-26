@@ -63,12 +63,67 @@ internal sealed record PublishingSettingsInput(string ChannelName, string Genre,
     internal string WanPort { get; init; } = "";
     internal string AdvertisedAddress { get; init; } = "";
     internal string AdvertisedPort { get; init; } = "";
+    internal IReadOnlyList<PublishingAnnounceTarget> AdditionalAnnounceTargets { get; init; } = [];
+
+    public bool Equals(PublishingSettingsInput? other)
+    {
+        if (ReferenceEquals(this, other)) return true;
+        if (other is null) return false;
+        return string.Equals(ChannelName, other.ChannelName, StringComparison.Ordinal) &&
+            string.Equals(Genre, other.Genre, StringComparison.Ordinal) &&
+            string.Equals(Description, other.Description, StringComparison.Ordinal) &&
+            string.Equals(Comment, other.Comment, StringComparison.Ordinal) &&
+            string.Equals(ContactUrl, other.ContactUrl, StringComparison.Ordinal) &&
+            string.Equals(BitrateKbps, other.BitrateKbps, StringComparison.Ordinal) &&
+            AnnounceEnabled == other.AnnounceEnabled &&
+            string.Equals(AnnounceName, other.AnnounceName, StringComparison.Ordinal) &&
+            string.Equals(AnnounceEndpoint, other.AnnounceEndpoint, StringComparison.Ordinal) &&
+            AdditionalAnnounceTargets.SequenceEqual(other.AdditionalAnnounceTargets) &&
+            LanEnabled == other.LanEnabled &&
+            string.Equals(LanInterfaceId, other.LanInterfaceId, StringComparison.Ordinal) &&
+            string.Equals(LanAddress, other.LanAddress, StringComparison.Ordinal) &&
+            string.Equals(LanPort, other.LanPort, StringComparison.Ordinal) &&
+            WanEnabled == other.WanEnabled &&
+            string.Equals(WanInterfaceId, other.WanInterfaceId, StringComparison.Ordinal) &&
+            string.Equals(WanAddress, other.WanAddress, StringComparison.Ordinal) &&
+            string.Equals(WanPort, other.WanPort, StringComparison.Ordinal) &&
+            string.Equals(AdvertisedAddress, other.AdvertisedAddress, StringComparison.Ordinal) &&
+            string.Equals(AdvertisedPort, other.AdvertisedPort, StringComparison.Ordinal);
+    }
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(ChannelName, StringComparer.Ordinal);
+        hash.Add(Genre, StringComparer.Ordinal);
+        hash.Add(Description, StringComparer.Ordinal);
+        hash.Add(Comment, StringComparer.Ordinal);
+        hash.Add(ContactUrl, StringComparer.Ordinal);
+        hash.Add(BitrateKbps, StringComparer.Ordinal);
+        hash.Add(AnnounceEnabled);
+        hash.Add(AnnounceName, StringComparer.Ordinal);
+        hash.Add(AnnounceEndpoint, StringComparer.Ordinal);
+        foreach (var target in AdditionalAnnounceTargets) hash.Add(target);
+        hash.Add(LanEnabled);
+        hash.Add(LanInterfaceId, StringComparer.Ordinal);
+        hash.Add(LanAddress, StringComparer.Ordinal);
+        hash.Add(LanPort, StringComparer.Ordinal);
+        hash.Add(WanEnabled);
+        hash.Add(WanInterfaceId, StringComparer.Ordinal);
+        hash.Add(WanAddress, StringComparer.Ordinal);
+        hash.Add(WanPort, StringComparer.Ordinal);
+        hash.Add(AdvertisedAddress, StringComparer.Ordinal);
+        hash.Add(AdvertisedPort, StringComparer.Ordinal);
+        return hash.ToHashCode();
+    }
+
     internal static PublishingSettingsInput From(PublishingChannelPreferences value) => new(value.ChannelName,
         value.Genre, value.Description, value.Comment, value.ContactUrl, value.BitrateKbps?.ToString(CultureInfo.InvariantCulture) ?? "")
     {
         AnnounceEnabled = value.Announce.Enabled,
         AnnounceName = value.Announce.Name,
         AnnounceEndpoint = value.Announce.Endpoint,
+        AdditionalAnnounceTargets = value.Announce.AdditionalTargets?.ToArray() ?? [],
         LanEnabled = value.Lan.Enabled,
         LanInterfaceId = value.Lan.InterfaceId,
         LanAddress = value.Lan.Address,
@@ -99,7 +154,11 @@ internal sealed record PublishingSettingsInput(string ChannelName, string Genre,
             AdvertisedAddress, ParsePort(AdvertisedPort, nameof(AdvertisedPort)));
         try { wan.Validate(); if (lan.Enabled && wan.Enabled) throw new ObsPublishWanException(ObsPublishWanFailure.InvalidSettings); }
         catch (ObsPublishWanException) { throw new ArgumentException("WANのNIC/IP・内部ポート・公開IPv4/外部ポートを確認してください。", nameof(WanAddress)); }
-        return new PublishingChannelPreferences(ChannelName, Genre, Description, Comment, ContactUrl, bitrate) { Lan = lan, Wan = wan, Announce = new(AnnounceEnabled, AnnounceName, AnnounceEndpoint) }.Validate();
+        var announce = new PublishingAnnounceOptions(AnnounceEnabled, AnnounceName, AnnounceEndpoint)
+        {
+            AdditionalTargets = AdditionalAnnounceTargets.Count == 0 ? null : AdditionalAnnounceTargets.ToArray(),
+        };
+        return new PublishingChannelPreferences(ChannelName, Genre, Description, Comment, ContactUrl, bitrate) { Lan = lan, Wan = wan, Announce = announce }.Validate();
     }
     private static int ParsePort(string text, string field)
     {

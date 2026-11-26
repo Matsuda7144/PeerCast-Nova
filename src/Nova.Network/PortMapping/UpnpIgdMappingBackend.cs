@@ -107,8 +107,22 @@ public sealed class UpnpIgdMappingBackend : INatMappingBackend
             if (entry is null || !Matches(entry, port, receipt))
                 return Result(NatBackendOutcome.ResultUnknown, "OwnershipUnconfirmed", receipt);
             var confirmedLifetime = ReadLifetime(entry);
+            string? externalAddress = null;
+            try
+            {
+                var candidate = await transport.TryGetExternalIpAddressAsync(budget.Token).ConfigureAwait(false);
+                if (PeerCast.Nova.Network.Publishing.PublishingIpv4.IsPublicAddress(candidate))
+                {
+                    externalAddress = candidate;
+                }
+            }
+            catch (Exception exception) when (exception is OperationCanceledException or HttpRequestException or IOException or XmlException)
+            {
+                // 公開 IP 取得に失敗してもポート開放自体の成功は維持する。
+            }
             return new(NatBackendOutcome.Success, receipt.ExternalPort, confirmedLifetime,
-                Backend: "UPnP IGD", LeaseKind: confirmedLifetime == 0 ? NatLeaseKind.Permanent : NatLeaseKind.Finite);
+                Backend: "UPnP IGD", LeaseKind: confirmedLifetime == 0 ? NatLeaseKind.Permanent : NatLeaseKind.Finite,
+                ExternalAddress: externalAddress);
         }
         catch (Exception exception) when (exception is OperationCanceledException or HttpRequestException or IOException or XmlException or FormatException or OverflowException)
         {

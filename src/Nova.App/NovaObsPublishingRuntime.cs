@@ -76,26 +76,27 @@ internal sealed class SystemNovaObsPublishingRuntimeFactory : INovaObsPublishing
         Register(channel, session, fanout, null, publicRelay: true);
 
     internal GenesisDownstreamRelayOwnerRegistry.Owner Register(ChannelId channel, ChannelSessionId session, PcpRelayFanout fanout,
-        int? bitrateKbps) =>
-        Register(channel, session, fanout, bitrateKbps, publicRelay: true);
+        int? bitrateKbps, Func<int?>? readBitrateKbps = null) =>
+        Register(channel, session, fanout, bitrateKbps, publicRelay: true, readBitrateKbps);
 
     private GenesisDownstreamRelayOwnerRegistry.Owner Register(ChannelId channel, ChannelSessionId session, PcpRelayFanout fanout,
-        int? bitrateKbps, bool publicRelay)
+        int? bitrateKbps, bool publicRelay, Func<int?>? readBitrateKbps = null)
     {
         if (_state is null || publicRelay && (!_allowLan || _state.Connection.LoadFailed))
             throw new ObsPublishLanException(ObsPublishLanFailure.AdmissionUnavailable);
-        // 配信ビットレートが正の値で申告されていれば UpstreamBandwidthPolicy による帯域制御が可能。
-        // ビットレート不明のまま IPv4 上り帯域上限が設定されている場合のみ拒否する。
-        if (publicRelay && _state.NetworkPolicies.Bandwidth.Limits.Ipv4Kbps is not null && bitrateKbps is null or <= 0)
-            throw new ObsPublishLanException(ObsPublishLanFailure.BandwidthUnsupported);
-        try { return _state.DownstreamRelays.Register(channel, session, RelayChannelKind.Broadcast, fanout, () => bitrateKbps); }
+        try { return _state.DownstreamRelays.Register(channel, session, RelayChannelKind.Broadcast, fanout, readBitrateKbps ?? (() => bitrateKbps)); }
         catch { throw new ObsPublishLanException(ObsPublishLanFailure.AdmissionUnavailable); }
     }
-    internal NovaObsPublishingRuntime Create(ObsPublishChannelOptions options) =>
-        NovaObsPublishingRuntime.ForOwner(new ObsPublishChannelHost(options, interfaces: _interfaces,
+    internal NovaObsPublishingRuntime Create(ObsPublishChannelOptions options)
+    {
+        ObsPublishChannelHost? created = null;
+        created = new ObsPublishChannelHost(options, interfaces: _interfaces,
             registerRelay: (channel, session, fanout) => Register(channel, session, fanout, options.BitrateKbps,
-                options.Lan.Enabled || options.Wan.Enabled), announceOwner: _state?.AnnounceOwner,
-            useLoopbackAdmission: _state is not null, portMapping: _portMappingProvider?.Invoke()));
+                options.Lan.Enabled || options.Wan.Enabled, () => created?.EffectiveBitrateKbps ?? options.BitrateKbps),
+            announceOwner: _state?.AnnounceOwner,
+            useLoopbackAdmission: _state is not null, portMapping: _portMappingProvider?.Invoke());
+        return NovaObsPublishingRuntime.ForOwner(created);
+    }
 
     public INovaObsPublishingRuntime Create() => Create(new ObsPublishChannelOptions());
     public INovaObsPublishingRuntime Create(PublishingSettingsSnapshot settings) => Create(settings.Values.ToOptions());

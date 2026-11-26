@@ -22,7 +22,7 @@ public sealed class PcpSharedDownstreamRelayListener : IAsyncDisposable
     private readonly PcpDownstreamChildOptions _childOptions;
     private readonly PcpWanIngressPolicy? _wanIngress;
     private readonly Guid _pingSessionId;
-    internal PcpWanIngressSnapshot? WanIngress => _wanIngress?.Snapshot;
+    public PcpWanIngressSnapshot? WanIngress => _wanIngress?.Snapshot;
     private readonly CancellationTokenSource _stopSource = new();
     private readonly HashSet<SessionEntry> _sessions = [];
 
