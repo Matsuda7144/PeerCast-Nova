@@ -56,4 +56,41 @@ public sealed class GenesisPlayerInformationTests
         Assert.Throws<ArgumentException>(() =>
             PcrPlayerExternalPlayerLauncher.CreateStartInfo(executable, "http://example.test" + playbackPath));
     }
+
+    [Fact]
+    public void CustomArgumentsTemplateExpandsPlaceholdersAndPreservesQuotes()
+    {
+        const string url = "http://127.0.0.1:57133/pls/531DC8DFC7FB42928AC2C0A626517A87.pls";
+        var start = PcrPlayerExternalPlayerLauncher.CreateStartInfo(
+            "mpv.exe",
+            url,
+            "My \"Cool\" Channel\nSecond",
+            "https://example.invalid/watch?a=1",
+            "--no-border --title=\"{TITLE}\" --referrer=\"{contact}\" \"{url}\" --channel={channel}");
+
+        Assert.False(start.UseShellExecute);
+        Assert.Equal(
+            [
+                "--no-border",
+                "--title=My \"Cool\" ChannelSecond",
+                "--referrer=https://example.invalid/watch?a=1",
+                url,
+                "--channel=My \"Cool\" ChannelSecond",
+            ],
+            start.ArgumentList);
+    }
+
+    [Fact]
+    public void CustomArgumentsTemplateAppendsPlaybackUrlWhenPlaceholderIsOmitted()
+    {
+        const string url = "http://127.0.0.1:57133/stream/531DC8DFC7FB42928AC2C0A626517A87";
+        var start = PcrPlayerExternalPlayerLauncher.CreateStartInfo(
+            "vlc.exe",
+            url,
+            "Channel",
+            "https://example.invalid/",
+            "--fullscreen --qt-minimal-view");
+
+        Assert.Equal(["--fullscreen", "--qt-minimal-view", url], start.ArgumentList);
+    }
 }

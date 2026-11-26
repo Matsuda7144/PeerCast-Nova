@@ -159,6 +159,48 @@ public sealed class GenesisGuiNextPlaybackSettingsTests
     }
 
     [Fact]
+    public async Task ExternalPlayerArgumentsAreNormalizedAndPersistedAcrossRestarts()
+    {
+        using var fixture = new TemporaryDirectory();
+        var storePath = Path.Combine(fixture.Path, "playback.json");
+        var store = new JsonGenesisGuiNextPlaybackPreferencesStore(storePath);
+        var source = new GenesisGuiNextPlaybackPreferencesSource();
+
+        await store.SaveAsync(new GenesisGuiNextPlaybackPreferences(
+            PcrPlayerExecutablePath: null,
+            PlayerMode: GenesisPlaybackPlayerMode.External,
+            ExternalPlayerArguments: "  --fs\r\n --title=\"{title}\" \"{url}\"  "));
+
+        await using (var state = await GenesisGuiNextApplicationState.LoadAsync(
+            new EmptyFavoriteStore(),
+            new EmptyNotificationStore(),
+            DefaultGenesisYellowPageConfigurationStore.Instance,
+            store,
+            new SilentSoundPlayer(),
+            source))
+        {
+            Assert.Equal("--fs --title=\"{title}\" \"{url}\"", state.Playback.Preferences.ExternalPlayerArguments);
+            Assert.Equal("--fs --title=\"{title}\" \"{url}\"", source.Current.ExternalPlayerArguments);
+
+            var updated = state.Playback.Save(
+                state.Playback.Preferences,
+                state.Playback.Preferences with { ExternalPlayerArguments = "  --quiet {url}\t " });
+            Assert.Equal(GenesisGuiNextPlaybackSettingsUpdateResult.Saved, updated.Result);
+            Assert.Equal("--quiet {url}", state.Playback.Preferences.ExternalPlayerArguments);
+            Assert.Equal("--quiet {url}", source.Current.ExternalPlayerArguments);
+
+            var cleared = state.Playback.Save(
+                state.Playback.Preferences,
+                state.Playback.Preferences with { ExternalPlayerArguments = "   " });
+            Assert.Equal(GenesisGuiNextPlaybackSettingsUpdateResult.Saved, cleared.Result);
+            Assert.Null(state.Playback.Preferences.ExternalPlayerArguments);
+        }
+
+        var reloaded = await new JsonGenesisGuiNextPlaybackPreferencesStore(storePath).LoadAsync();
+        Assert.Null(reloaded.ExternalPlayerArguments);
+    }
+
+    [Fact]
     public void OpenFileNameLayoutMatchesWin32PointerAndWordAlignment()
     {
         Assert.Equal(IntPtr.Size == 8 ? 152 : 88,

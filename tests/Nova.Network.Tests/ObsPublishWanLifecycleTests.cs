@@ -147,6 +147,36 @@ public sealed class ObsPublishWanLifecycleTests
         finally { occupied.Stop(); }
     }
 
+    [Fact]
+    public async Task WanPublishingAcquiresAndReleasesNatPortMappingLease()
+    {
+        await using var nat = new NatPortMappingTestHarness();
+        var interfaces = new ObsPublishWanTests.Interfaces(ObsPublishWanTests.Nic);
+        var changes = new ObsPublishWanTests.Changes();
+        await using var host = new ObsPublishChannelHost(
+            new ObsPublishChannelOptions { Wan = ObsPublishWanTests.Options, Ingest = new() { Port = 0 } },
+            null, null, null, null, null, interfaces,
+            (id, session, _) => new Registration(id, session), changes,
+            bindForTests: _ => new(IPAddress.Any, 0),
+            wanIngressForTests: new() { SourceAllowed = address => address is not null && IPAddress.IsLoopback(address) },
+            portMapping: nat.Manager);
+
+        host.Start();
+        var expectedPort = host.RelayEndPoint.Port;
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        while (!nat.Manager.ReadState().RegisteredInternalPorts.Contains(expectedPort))
+        {
+            await Task.Delay(10, deadline.Token);
+        }
+
+        using var publisher = await ObsPublishChannelHostTests.PublishAsync(host);
+        await ObsPublishChannelHostTests.ConfigureAsync(publisher);
+        await ObsPublishChannelHostTests.StopAsync(publisher);
+        var result = await host.Completion.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(ObsPublishChannelEndReason.PublisherStopped, result.EndReason);
+        Assert.DoesNotContain(expectedPort, nat.Manager.ReadState().RegisteredInternalPorts);
+    }
+
     private sealed class Registration(ChannelId channel, ChannelSessionId session) : IPcpDownstreamRelayRegistration
     {
         public ChannelId ChannelId => channel;

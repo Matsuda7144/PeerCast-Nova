@@ -10,7 +10,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
     private const int PlaybackCategoryId = 1190, RecordingCategoryId = 1191, NotificationsCategoryId = 1192,
         NotifyNewId = 1193, NotifyFavoriteId = 1194, NotifySoundId = 1195, TestSoundId = 1196,
         SettingsPathId = 1197, SettingsBrowseId = 1198, SettingsResetId = 1199;
-    private const int InternalPlayerChoiceId = 1235, ExternalPlayerChoiceId = 1236, LowLatencyPlaybackId = 1237, SetupLibMpvId = 1238;
+    private const int InternalPlayerChoiceId = 1235, ExternalPlayerChoiceId = 1236, LowLatencyPlaybackId = 1237, SetupLibMpvId = 1238, ExternalPlayerArgsId = 1239;
 
     private sealed partial class AppShellState
     {
@@ -18,7 +18,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private long _settingsCategoryRevision;
         private GenesisPathSettingsPage? _pathSettings;
         private nint _playbackCategory, _recordingCategory, _notificationsCategory, _settingsPath, _settingsBrowse, _settingsReset;
-        private nint _internalPlayerChoice, _externalPlayerChoice, _lowLatencyPlayback, _setupLibMpv;
+        private nint _internalPlayerChoice, _externalPlayerChoice, _lowLatencyPlayback, _setupLibMpv, _externalPlayerArgsLabel, _externalPlayerArgs;
         private nint _notifyNew, _notifyFavorite, _notifySound, _testSound;
         private bool _updatingSettingsPath, _notificationError, _settingUpLibMpv;
         private string _notificationMessage = string.Empty;
@@ -50,6 +50,11 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             _ = SendMessageW(_settingsPath, 0x00C5, GenesisGuiNextPlaybackSettingsWindow.BrowseFileCapacity - 1, 0); // EM_SETLIMITTEXT
             _settingsBrowse = Button("参照…", SettingsBrowseId);
             _lowLatencyPlayback = Check("低遅延再生", LowLatencyPlaybackId);
+            _externalPlayerArgsLabel = CreateWindowExW(0, "STATIC", "起動引数", WindowStyleChild | WindowStyleVisible, 0, 0, 1, 1, _settingsPane, 0, instance, 0);
+            _externalPlayerArgs = CreateWindowExW(0, "EDIT", string.Empty, WindowStyleChild | WindowStyleVisible | WindowStyleTabStop | 0x0080,
+                0, 0, 1, 1, _settingsPane, (nint)ExternalPlayerArgsId, instance, 0);
+            _ = SendMessageW(_externalPlayerArgs, 0x00C5, 1024, 0); // EM_SETLIMITTEXT
+            _ = SendCueBannerMessage(_externalPlayerArgs, 0x1501, 1, "{url} {title} {contact}（空欄で既定）");
             _settingsReset = Button("未設定に戻す", SettingsResetId);
             _setupLibMpv = Button("公式 libmpv を自動導入", SetupLibMpvId);
             _testSound = Button("通知音テスト", TestSoundId);
@@ -99,8 +104,11 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             Show(_generalStatus, true);
             Show(_generalRuntime, !notification); Show(_generalConfigured, !notification);
             Show(_generalSave, !notification); Show(_generalCancel, !notification);
+            var internalPlayback = PlaybackCategory && _pathSettings!.PlayerMode == GenesisPlaybackPlayerMode.Internal;
+            var externalPlayback = PlaybackCategory && _pathSettings!.PlayerMode == GenesisPlaybackPlayerMode.External;
             Show(_internalPlayerChoice, PlaybackCategory); Show(_externalPlayerChoice, PlaybackCategory);
-            Show(_lowLatencyPlayback, PlaybackCategory);
+            Show(_lowLatencyPlayback, internalPlayback);
+            Show(_externalPlayerArgsLabel, externalPlayback); Show(_externalPlayerArgs, externalPlayback);
             Show(_settingsPath, PathCategory); Show(_settingsBrowse, PathCategory);
             Show(_settingsReset, PathCategory && _pathSettings!.CanReset);
             Show(_setupLibMpv, PlaybackCategory && _pathSettings!.CanSetupLibMpv);
@@ -113,28 +121,47 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             if (GetClientRect(_settingsPane, out var bounds)) PlaceIntegratedSettings(LogicalWidth(bounds.Right), LogicalWidth(bounds.Bottom));
         }
 
-        private bool ReadSettingsPath(out string text)
+        private bool ReadSettingsTextBox(nint control, int maxLength, out string text)
         {
             text = string.Empty;
-            var length = GetSettingsTextLength(_settingsPath);
-            if (length < 0 || length >= GenesisGuiNextPlaybackSettingsWindow.BrowseFileCapacity)
+            var length = GetSettingsTextLength(control);
+            if (length < 0 || length >= maxLength)
             { _pathSettings!.ReportInputError("入力が長すぎます。保存値は変更していません。"); return false; }
             var buffer = new char[length + 1];
-            var copied = GetWindowTextW(_settingsPath, buffer, buffer.Length);
+            var copied = GetWindowTextW(control, buffer, buffer.Length);
             if (copied != length) { _pathSettings!.ReportInputError("入力を読み取れませんでした。保存値は変更していません。"); return false; }
             text = new string(buffer, 0, copied);
             return true;
         }
 
+        private bool ReadSettingsPath(out string text) =>
+            ReadSettingsTextBox(_settingsPath, GenesisGuiNextPlaybackSettingsWindow.BrowseFileCapacity, out text);
+
+        private bool ReadExternalPlayerArguments(out string text) =>
+            ReadSettingsTextBox(_externalPlayerArgs, 1025, out text);
+
         private bool ProcessSettingsPathInput(int id, int code, nint control)
         {
-            if (id != SettingsPathId || control != _settingsPath || code != 0x0300 || !SettingsPageOpen || !PathCategory) return false;
-            if (!_updatingSettingsPath)
+            if (code != 0x0300 || !SettingsPageOpen || !PathCategory) return false;
+            if (id == SettingsPathId && control == _settingsPath)
             {
-                if (ReadSettingsPath(out var text)) _pathSettings!.Edit(text);
-                RefreshIntegratedSettings();
+                if (!_updatingSettingsPath)
+                {
+                    if (ReadSettingsPath(out var text)) _pathSettings!.Edit(text);
+                    RefreshIntegratedSettings();
+                }
+                return true;
             }
-            return true;
+            if (id == ExternalPlayerArgsId && control == _externalPlayerArgs && PlaybackCategory)
+            {
+                if (!_updatingSettingsPath)
+                {
+                    if (ReadExternalPlayerArguments(out var text)) _pathSettings!.EditExternalPlayerArguments(text);
+                    RefreshIntegratedSettings();
+                }
+                return true;
+            }
+            return false;
         }
 
         private bool ProcessSettingsCategoryCommand(int id, nint control)
@@ -233,8 +260,12 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                     _ = SetWindowTextW(_generalConfigured, internalSelected ? libMpvStatus!.FieldLabel : "外部プレイヤーの実行ファイル（.exe）");
                     SetPlayerChoiceText(_internalPlayerChoice, GenesisPlaybackPlayerMode.Internal, page.PlayerMode);
                     SetPlayerChoiceText(_externalPlayerChoice, GenesisPlaybackPlayerMode.External, page.PlayerMode);
+                    _ = ShowWindow(_lowLatencyPlayback, internalSelected ? ShowWindowShowNoActivate : ShowWindowHide);
+                    _ = ShowWindow(_externalPlayerArgsLabel, !internalSelected ? ShowWindowShowNoActivate : ShowWindowHide);
+                    _ = ShowWindow(_externalPlayerArgs, !internalSelected ? ShowWindowShowNoActivate : ShowWindowHide);
                     _ = SendMessageW(_lowLatencyPlayback, 0x00F1, page.LowLatencyInternalPlayback ? 1u : 0u, 0);
                     _ = EnableWindow(_lowLatencyPlayback, page.CanEditLowLatency);
+                    _ = EnableWindow(_externalPlayerArgs, page.CanEditExternalPlayerArguments);
                 }
                 else
                 {
@@ -249,6 +280,11 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 {
                     if (GetSettingsTextLength(_settingsPath) != page.Draft.Length || !ReadSettingsPath(out var existing) || existing != page.Draft)
                         _ = SetWindowTextW(_settingsPath, page.Draft);
+                    if (PlaybackCategory &&
+                        (GetSettingsTextLength(_externalPlayerArgs) != page.ExternalPlayerArguments.Length ||
+                        !ReadExternalPlayerArguments(out var existingArgs) ||
+                        existingArgs != page.ExternalPlayerArguments))
+                        _ = SetWindowTextW(_externalPlayerArgs, page.ExternalPlayerArguments);
                 }
                 finally { _updatingSettingsPath = false; }
                 _ = SetWindowTextW(_settingsReset, PlaybackCategory ? "未設定に戻す" : "既定値に戻す");
@@ -290,6 +326,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             Place(_internalPlayerChoice, GenesisGuiNextSettingsLayout.InternalPlayerChoice);
             Place(_externalPlayerChoice, GenesisGuiNextSettingsLayout.ExternalPlayerChoice);
             Place(_lowLatencyPlayback, layout.LowLatencyPlayback);
+            Place(_externalPlayerArgsLabel, GenesisGuiNextSettingsLayout.ExternalPlayerArgsLabel);
+            Place(_externalPlayerArgs, layout.ExternalPlayerArgsInput);
             Place(_settingsReset, layout.Reset); Place(_setupLibMpv, layout.SetupLibMpv); Place(_testSound, layout.SoundTest);
             if (PathCategory)
             {
@@ -310,7 +348,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         internal bool IsSettingsPane(nint window) => window == _settingsPane && _settingsPane != 0;
         internal void RefreshSettingsPathFocus(nint window)
         {
-            if ((window == _settingsPath || NetworkSettingsInputs.Contains(window)) && SettingsPageOpen) _ = RedrawWindow(_settingsPane, 0, 0, 0x0001 | 0x0004);
+            if ((window == _settingsPath || window == _externalPlayerArgs || NetworkSettingsInputs.Contains(window)) && SettingsPageOpen) _ = RedrawWindow(_settingsPane, 0, 0, 0x0001 | 0x0004);
         }
 
         private void StartLibMpvAutoSetup()
@@ -380,4 +418,5 @@ internal sealed partial class GenesisGuiNextAppShellBridge
     }
 
     [DllImport("user32.dll", EntryPoint = "GetWindowTextLengthW")] private static extern int GetSettingsTextLength(nint window);
+    [DllImport("user32.dll", EntryPoint = "SendMessageW", CharSet = CharSet.Unicode)] private static extern nint SendCueBannerMessage(nint window, uint message, nuint wParam, string text);
 }

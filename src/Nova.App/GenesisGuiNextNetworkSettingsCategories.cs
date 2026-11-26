@@ -48,7 +48,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             _connectionCategory = Button("通信", ConnectionCategoryId);
             _yellowPagesCategory = Button("YP", YellowPagesCategoryId);
             CreateConnectionBody(instance);
-            _connectionIpv6 = Check("IPv6を使う（次回用）", ConnectionIpv6Id);
+            _connectionIpv6 = Check("IPv6を使う（未対応）", ConnectionIpv6Id);
             _connectionWan = Check("WAN Relayを公開（次回起動）", ConnectionWanId);
             _ = SetConnectionParent(_connectionWan, _connectionBody);
             _connectionAutoMapping = Check(GenesisNetworkSettingsWindow.NatCheckboxLabel, ConnectionAutoMappingId);
@@ -58,7 +58,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             _ypNew = Button("新規", YpNewId); _ypRemove = Button("削除…", YpRemoveId); _ypToggle = Button("有効 / 無効", YpToggleId);
             _ypList = Control("LISTBOX", "登録YP", YpListId, WindowStyleTabStop | 0x00200000 | 0x0010 | 0x0040 | 1); // native fixed owner draw, no sorting
             _ = SendMessageW(_ypList, 0x01A0, 0, Scale(24)); // LB_SETITEMHEIGHT
-            var connectionLabels = new[] { "待受ポート", "IPv4上り (kbps)", "IPv6上り (kbps)", "合計リレー数", "配信毎リレー数", "視聴毎リレー数" };
+            var connectionLabels = new[] { "待受ポート", "IPv4上り (kbps)", "IPv6上り (kbps・未対応)", "合計リレー数", "配信毎リレー数", "視聴毎リレー数" };
             var ypLabels = new[] { "ID", "YP名", "Index URL", "Tracker URL", "Namespace" };
             for (var i = 0; i < _connectionInputs.Length; i++)
             {
@@ -259,9 +259,9 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                     Text(_connectionStatus, page.Message);
                     var v = page.Input;
                     var values = new[] { v.ListenPort, v.TotalUpstreamIpv4Kbps, v.TotalUpstreamIpv6Kbps, v.MaxRelaysTotal, v.MaxRelaysPerBroadcastChannel, v.MaxRelaysPerViewingChannel };
-                    for (var i = 0; i < values.Length; i++) { Input(_connectionInputs[i], values[i]); _ = EnableWindow(_connectionInputs[i], !page.IsSaving); }
+                    for (var i = 0; i < values.Length; i++) { Input(_connectionInputs[i], values[i]); _ = EnableWindow(_connectionInputs[i], i != 2 && !page.IsSaving); }
                     _ = SendMessageW(_connectionIpv6, 0xF1, v.UseIpv6 ? 1u : 0u, 0);
-                    _ = EnableWindow(_connectionIpv6, !page.IsSaving);
+                    _ = EnableWindow(_connectionIpv6, false);
                     _ = SendMessageW(_connectionWan, 0xF1, v.WanRelayEnabled ? 1u : 0u, 0);
                     _ = EnableWindow(_connectionWan, !page.IsSaving);
                     var nat = _natSettingsPage?.Refresh();

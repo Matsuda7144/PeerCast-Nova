@@ -37,12 +37,17 @@ internal sealed class NovaApplicationPortMappingControl(NovaPortMappingControl c
     public void Dispose() => control.Dispose();
 }
 
+internal interface INovaPublishingPortMappingProvider
+{
+    NatPortMappingManager? TryGetPortMappingManager();
+}
+
 /// <summary>
 /// Application lifetime for NAT desired state and field-only persistence.
 /// Construction and reads are inert. Public relay acquisition is explicit and
 /// separate from NAT desired state; listener details stay behind a driver.
 /// </summary>
-internal sealed class NovaApplicationNetworkOwner : INovaApplicationNetworkOwner, INovaSharedPublicRelayProvider
+internal sealed class NovaApplicationNetworkOwner : INovaApplicationNetworkOwner, INovaSharedPublicRelayProvider, INovaPublishingPortMappingProvider
 {
     private readonly object gate = new();
     private readonly NovaSettingsStore store;
@@ -62,6 +67,14 @@ internal sealed class NovaApplicationNetworkOwner : INovaApplicationNetworkOwner
     private GenesisGuiNextConnectionPreferences? sharedRelaySettings;
     private Func<PeerCast.Nova.Core.Channels.ChannelId, PeerCast.Nova.Network.Pcp.PcpRelayFanout,
         PeerCast.Nova.Network.Pcp.PcpRelayCoordinator?>? sharedResolver;
+
+    public NatPortMappingManager? TryGetPortMappingManager()
+    {
+        lock (gate)
+        {
+            return initialized && !disposing && !disposed ? runtime?.Manager : null;
+        }
+    }
 
     public GenesisSharedPublicRelay GetSharedRelay(GenesisGuiNextConnectionPreferences settings,
         Func<PeerCast.Nova.Core.Channels.ChannelId, PeerCast.Nova.Network.Pcp.PcpRelayFanout,

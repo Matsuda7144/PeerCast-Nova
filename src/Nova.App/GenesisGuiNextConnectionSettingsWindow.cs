@@ -10,7 +10,7 @@ internal sealed class GenesisGuiNextConnectionSettingsWindow : IGenesisGuiNextCo
 {
     internal const string Title = "接続 / 帯域 / リレー数";
     internal static readonly string[] FieldLabels =
-        ["ポート番号", "合計(IPv4) kbps", "合計(IPv6) kbps", "合計リレー数", "チャンネル毎(配信時)", "チャンネル毎(視聴時)"];
+        ["ポート番号", "合計(IPv4) kbps", "合計(IPv6) kbps（未対応）", "合計リレー数", "チャンネル毎(配信時)", "チャンネル毎(視聴時)"];
     private const uint Command = 0x0111, Close = 0x0010, NcDestroy = 0x0082, DpiChanged = 0x02E0, SaveCompleted = 0x8001, CloseRequested = 0x8002;
     private const int Ipv6Id = 1010, WanId = 1011, SaveId = 1020, CloseId = 1021, RuntimeId = 1022, StatusId = 1023, StartupId = 1024;
     private const uint ChildVisible = 0x50000000, TabStop = 0x00010000;
@@ -174,7 +174,7 @@ internal sealed class GenesisGuiNextConnectionSettingsWindow : IGenesisGuiNextCo
                 !Add("STATIC", "接続待ち受け", 0, 16, 66, 652, 22) ||
                 !Add("STATIC", FieldLabels[0], 0, 28, 96, 214, 22) ||
                 !Add("EDIT", string.Empty, 1000, 250, 92, 140, 26, TabStop | 0x0080) ||
-                !Add("BUTTON", "IPv6を使う", Ipv6Id, 420, 92, 180, 28, TabStop | 3) ||
+                !Add("BUTTON", "IPv6を使う（未対応）", Ipv6Id, 420, 92, 180, 28, TabStop | 3) ||
                 !Add("BUTTON", "WAN Relayを公開", WanId, 420, 168, 210, 28, TabStop | 3) ||
                 !Add("STATIC", "最大上り帯域", 0, 16, 138, 652, 22)) return false;
             for (var index = 1; index < FieldLabels.Length; index++)
@@ -202,6 +202,8 @@ internal sealed class GenesisGuiNextConnectionSettingsWindow : IGenesisGuiNextCo
             _ = SendMessageW(GetDlgItem(window, WanId), 0x00f1, input.WanRelayEnabled ? 1u : 0u, 0);
             SetText(StatusId, _editor.Status);
             RefreshStartupNotice();
+            _ = EnableWindow(GetDlgItem(window, Ipv6Id), false);
+            _ = EnableWindow(GetDlgItem(window, 1002), false);
         }
 
         private void RefreshStartupNotice() => SetText(StartupId,
@@ -249,8 +251,8 @@ internal sealed class GenesisGuiNextConnectionSettingsWindow : IGenesisGuiNextCo
 
         private void EnableInputs(bool enabled)
         {
-            for (var i = 0; i < FieldLabels.Length; i++) _ = EnableWindow(GetDlgItem(window, 1000 + i), enabled);
-            _ = EnableWindow(GetDlgItem(window, Ipv6Id), enabled);
+            for (var i = 0; i < FieldLabels.Length; i++) _ = EnableWindow(GetDlgItem(window, 1000 + i), i != 2 && enabled);
+            _ = EnableWindow(GetDlgItem(window, Ipv6Id), false);
             _ = EnableWindow(GetDlgItem(window, WanId), enabled);
             _ = EnableWindow(GetDlgItem(window, SaveId), enabled);
         }

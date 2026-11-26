@@ -25,6 +25,8 @@ internal readonly record struct GenesisGuiNextSettingsLayout(int Width, int Heig
     internal static GenesisGuiNextAppShellPlacement.WindowRectangle InternalPlayerChoice => Box(32, 150, 192, 30);
     internal static GenesisGuiNextAppShellPlacement.WindowRectangle ExternalPlayerChoice => Box(232, 150, 192, 30);
     internal GenesisGuiNextAppShellPlacement.WindowRectangle LowLatencyPlayback => Box(448, 152, Width - 480, 26);
+    internal static GenesisGuiNextAppShellPlacement.WindowRectangle ExternalPlayerArgsLabel => Box(436, 154, 52, 22);
+    internal GenesisGuiNextAppShellPlacement.WindowRectangle ExternalPlayerArgsInput => Box(492, 151, Width - 524, 28);
     internal GenesisGuiNextAppShellPlacement.WindowRectangle PathNotice(bool playback) => Box(32, playback ? 184 : 150, Width - 64, playback ? 38 : 40);
     internal GenesisGuiNextAppShellPlacement.WindowRectangle PathRuntime(bool playback) => Box(32, playback ? 224 : 192, Width - 64, 20);
     internal GenesisGuiNextAppShellPlacement.WindowRectangle PathSaved(bool playback) => Box(32, playback ? 246 : 216, Width - 64, playback ? 18 : 20);

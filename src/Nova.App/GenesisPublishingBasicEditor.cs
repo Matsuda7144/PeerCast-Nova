@@ -35,6 +35,27 @@ internal sealed class GenesisPublishingBasicEditor(PublishingSettingsController 
         }
     }
 
+    internal static string NormalizeSingleLineMetadataText(string value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        if (value.IndexOfAny(['\r', '\n', '\u2028', '\u2029']) < 0) return value;
+        return value
+            .Replace("\r\n", " ", StringComparison.Ordinal)
+            .Replace('\r', ' ')
+            .Replace('\n', ' ')
+            .Replace('\u2028', ' ')
+            .Replace('\u2029', ' ');
+    }
+
+    internal void SetStatus(string message)
+    {
+        lock (_gate)
+        {
+            if (_released || _saving) return;
+            Result = new(false, message);
+        }
+    }
+
     internal void Edit(string name, string genre, string description, string comment, string contact, string bitrate)
     {
         lock (_gate)
@@ -44,8 +65,8 @@ internal sealed class GenesisPublishingBasicEditor(PublishingSettingsController 
             {
                 ChannelName = name,
                 Genre = genre,
-                Description = description,
-                Comment = comment,
+                Description = NormalizeSingleLineMetadataText(description),
+                Comment = NormalizeSingleLineMetadataText(comment),
                 ContactUrl = contact,
                 BitrateKbps = bitrate,
             }); // Preserve all advanced settings captured by this same editor.

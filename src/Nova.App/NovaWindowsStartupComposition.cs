@@ -200,7 +200,8 @@ public sealed class NovaWindowsStartupComposition
                 }
             }
             var publishingFactory = ReferenceEquals(_publishingRuntimeFactory, SystemNovaObsPublishingRuntimeFactory.Instance) && applicationState is not null
-                ? new SystemNovaObsPublishingRuntimeFactory(applicationState, allowLan: _options.ValidationProfile is null)
+                ? new SystemNovaObsPublishingRuntimeFactory(applicationState, allowLan: _options.ValidationProfile is null,
+                    portMappingProvider: () => (networkOwner as INovaPublishingPortMappingProvider)?.TryGetPortMappingManager())
                 : _publishingRuntimeFactory;
             publishing = NovaGuiNextPublishingComposition.Create(publishingFactory, settings: publishingSettings);
             playbackController = _genesisPlaybackControllerFactory(paths, recordingSettings, applicationState?.PublicChannels);
@@ -315,7 +316,9 @@ public sealed class NovaWindowsStartupComposition
 
             if (explicitPlayerPath is not null)
             {
-                return new PcrPlayerExternalPlayerLauncher(explicitPlayerPath);
+                return new PcrPlayerExternalPlayerLauncher(
+                    explicitPlayerPath,
+                    () => pathSource.Current.ExternalPlayerArguments);
             }
 
             if (preferences.PlayerMode == GenesisPlaybackPlayerMode.Internal)
@@ -340,7 +343,9 @@ public sealed class NovaWindowsStartupComposition
                     windowStateStore);
             }
 
-            return new PcrPlayerExternalPlayerLauncher(preferences.PcrPlayerExecutablePath);
+            return new PcrPlayerExternalPlayerLauncher(
+                preferences.PcrPlayerExecutablePath,
+                () => pathSource.Current.ExternalPlayerArguments);
         }
 
         return GuiNextDailyPlaybackSessionController.CreateSystemWithPlayerLauncherFactory(

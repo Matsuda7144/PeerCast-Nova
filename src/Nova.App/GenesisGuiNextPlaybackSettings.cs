@@ -6,7 +6,8 @@ internal sealed record GenesisGuiNextPlaybackPreferences(
     string? PcrPlayerExecutablePath,
     GenesisPlaybackPlayerMode PlayerMode = GenesisPlaybackPlayerMode.External,
     string? LibMpvLibraryPath = null,
-    bool LowLatencyInternalPlayback = false)
+    bool LowLatencyInternalPlayback = false,
+    string? ExternalPlayerArguments = null)
 {
     public static GenesisGuiNextPlaybackPreferences Default { get; } =
         new(PcrPlayerExecutablePath: null);
@@ -56,6 +57,7 @@ internal sealed class GenesisGuiNextPlaybackSettings
             LibMpvLibraryPath = NormalizePath(preferences.LibMpvLibraryPath),
             PlayerMode = preferences.PlayerMode == GenesisPlaybackPlayerMode.Internal
                 ? GenesisPlaybackPlayerMode.Internal : GenesisPlaybackPlayerMode.External,
+            ExternalPlayerArguments = NormalizeArguments(preferences.ExternalPlayerArguments),
         };
         _preferencesSource = preferencesSource;
         _validateExecutablePath = validateExecutablePath ?? ValidateExecutablePath;
@@ -110,6 +112,7 @@ internal sealed class GenesisGuiNextPlaybackSettings
         {
             PcrPlayerExecutablePath = NormalizePath(draft.PcrPlayerExecutablePath),
             LibMpvLibraryPath = NormalizePath(draft.LibMpvLibraryPath),
+            ExternalPlayerArguments = NormalizeArguments(draft.ExternalPlayerArguments),
         };
         var internalSelected = requested.PlayerMode == GenesisPlaybackPlayerMode.Internal;
         if (internalSelected && requested.LibMpvLibraryPath is null)
@@ -249,5 +252,21 @@ internal sealed class GenesisGuiNextPlaybackSettings
         }
 
         return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
+    }
+
+    internal static string? NormalizeArguments(string? arguments)
+    {
+        if (string.IsNullOrWhiteSpace(arguments))
+        {
+            return null;
+        }
+
+        var normalized = new string(arguments.Where(static ch => !char.IsControl(ch)).ToArray()).Trim();
+        if (normalized.Length == 0)
+        {
+            return null;
+        }
+
+        return normalized.Length <= 1024 ? normalized : normalized[..1024];
     }
 }

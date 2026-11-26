@@ -7,17 +7,19 @@ namespace PeerCast.Nova.App;
 
 internal sealed partial class GenesisGuiNextAppShellBridge
 {
-    private const int AdvancedToggleId = 1250, AdvancedEditId = 1251, AdvancedSaveId = 1252, AdvancedCancelId = 1253, AdvancedInputId = 1254;
+    private const int AdvancedToggleId = 1250, AdvancedEditId = 1251, AdvancedSaveId = 1252, AdvancedCancelId = 1253, AdvancedInputId = 1254,
+        AdvancedFillNatId = 1265, AdvancedPickYpId = 1266;
     private static readonly string[] AdvancedLabels = ["PCP公開モード", "待受NIC / IPv4", "内部IPv4（設定）", "内部PCPポート", "公開IPv4（設定）", "外部ポート", "YP Announce", "YP名", "PCP Endpoint"];
 
     private sealed partial class AppShellState
     {
         private bool _publishingAdvancedExpanded, _publishingEditAdvanced, _publishingWritingAdvanced, _publishingPlacingAdvanced;
-        private nint _publishingAdvancedPane, _publishingAdvancedHint, _publishingAdvancedToggle, _publishingAdvancedEdit, _publishingAdvancedSave, _publishingAdvancedCancel;
+        private nint _publishingAdvancedPane, _publishingAdvancedHint, _publishingAdvancedToggle, _publishingAdvancedEdit, _publishingAdvancedSave, _publishingAdvancedCancel,
+            _publishingAdvancedFillNat, _publishingAdvancedPickYp;
         private nint[] _publishingAdvancedFields = [], _publishingAdvancedLabels = [];
         private IReadOnlyList<ObsPublishLanInterface> _publishingInterfaces = [];
         private int _publishingAdvancedScroll;
-        private nint[] PublishingAdvancedButtons => IsModern ? [_publishingAdvancedToggle, _publishingAdvancedEdit, _publishingAdvancedSave, _publishingAdvancedCancel] : [];
+        private nint[] PublishingAdvancedButtons => IsModern ? [_publishingAdvancedToggle, _publishingAdvancedEdit, _publishingAdvancedSave, _publishingAdvancedCancel, _publishingAdvancedFillNat, _publishingAdvancedPickYp] : [];
         private nint[] PublishingAdvancedControls => IsModern ? [_publishingAdvancedPane, _publishingAdvancedHint, .. _publishingAdvancedLabels, .. _publishingAdvancedFields] : [];
         internal bool IsPublishingAdvancedCombo(nint window) => IsModern && _publishingAdvancedFields.Length == 9 &&
             (window == _publishingAdvancedFields[0] || window == _publishingAdvancedFields[1] || window == _publishingAdvancedFields[6]);
@@ -79,6 +81,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             _publishingAdvancedEdit = CreateRecordingModeButton("詳細設定を編集", _detailsPane, AdvancedEditId, 0, instance);
             _publishingAdvancedSave = CreateRecordingModeButton("保存", _detailsPane, AdvancedSaveId, 0, instance);
             _publishingAdvancedCancel = CreateRecordingModeButton("全体をキャンセル", _detailsPane, AdvancedCancelId, 0, instance);
+            _publishingAdvancedFillNat = CreateRecordingModeButton("NATから自動入力", _publishingAdvancedPane, AdvancedFillNatId, 0, instance);
+            _publishingAdvancedPickYp = CreateRecordingModeButton("登録YPから選択…", _publishingAdvancedPane, AdvancedPickYpId, 0, instance);
         }
 
         private void InitializePublishingAdvanced(int changedIndex = -1)
@@ -174,6 +178,32 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                     InitializePublishingAdvanced();
                 }
             }
+            else if (id == AdvancedFillNatId && control == _publishingAdvancedFillNat)
+            {
+                if (editor.Editing || editor.Begin())
+                {
+                    _publishingAdvancedExpanded = _publishingEditAdvanced = true;
+                    var interfaces = _publishingInterfaces.Count > 0 ? _publishingInterfaces : editor.InterfaceChoices();
+                    var suggestion = PublishingAdvancedAssist.TryApplyNatSuggestion(
+                        editor.Input!,
+                        _viewModel.NetworkSettingsAdapter?.ReadSnapshot(),
+                        interfaces,
+                        _viewModel.ConnectionSettings?.Startup.ListenPort ?? 7144);
+                    if (suggestion.Applied && editor.EditAdvanced(suggestion.UpdatedInput))
+                    {
+                        InitializePublishingAdvanced();
+                    }
+                    editor.SetStatus(suggestion.Message);
+                }
+            }
+            else if (id == AdvancedPickYpId && control == _publishingAdvancedPickYp)
+            {
+                if (editor.Editing || editor.Begin())
+                {
+                    _publishingAdvancedExpanded = _publishingEditAdvanced = true;
+                    ShowPublishingYellowPagePresetMenu(editor);
+                }
+            }
             else if (id == AdvancedSaveId && control == _publishingAdvancedSave) _ = SavePublishingInlineAsync();
             else if (id == AdvancedCancelId && control == _publishingAdvancedCancel) _ = editor.Cancel();
             else return false;
@@ -191,7 +221,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             _ = PresentText(_publishingAdvancedToggle, _publishingAdvancedExpanded ? "折りたたむ" : "展開");
             _ = PresentText(_publishingOptionsTitle, active ? "詳細設定（編集中）" : "詳細設定（保存値）");
             _ = PresentVisible(_publishingAdvancedEdit, visible && _publishingAdvancedExpanded && !active ? ShowWindowShowNoActivate : ShowWindowHide);
-            foreach (var h in new[] { _publishingAdvancedSave, _publishingAdvancedCancel, _publishingAdvancedPane, _publishingAdvancedHint })
+            foreach (var h in new[] { _publishingAdvancedSave, _publishingAdvancedCancel, _publishingAdvancedPane, _publishingAdvancedHint, _publishingAdvancedFillNat, _publishingAdvancedPickYp })
                 _ = PresentVisible(h, visible && active ? ShowWindowShowNoActivate : ShowWindowHide);
             foreach (var h in PublishingAdvancedButtons) _ = PresentEnabled(h, _publishingEditor is { Saving: false });
             var input = _publishingEditor?.Input;
@@ -245,7 +275,10 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                     _ = MoveWindow(_publishingAdvancedFields[index], Scale(120), Scale(y), Scale(Math.Max(32, width - 124)), Scale(combo ? 200 : 30), true);
                     if (combo) _ = SendMessageW(_publishingAdvancedFields[index], 0x0153, nuint.MaxValue, Scale(24));
                 }
-                _ = MoveWindow(_publishingAdvancedHint, Scale(2), Scale(rows.Length * GenesisPublishingAdvancedLayout.RowHeight + 8 - _publishingAdvancedScroll), Scale(Math.Max(32, width - 6)), Scale(100), true);
+                var assistY = 4 + rows.Length * GenesisPublishingAdvancedLayout.RowHeight - _publishingAdvancedScroll;
+                _ = MoveWindow(_publishingAdvancedFillNat, Scale(2), Scale(assistY), Scale(148), Scale(28), true);
+                _ = MoveWindow(_publishingAdvancedPickYp, Scale(158), Scale(assistY), Scale(148), Scale(28), true);
+                _ = MoveWindow(_publishingAdvancedHint, Scale(2), Scale(assistY + 36), Scale(Math.Max(32, width - 6)), Scale(100), true);
                 _ = RedrawWindow(_publishingAdvancedPane, 0, 0, 0x0001 | 0x0004 | 0x0080);
             }
             finally { _publishingPlacingAdvanced = false; }
@@ -286,11 +319,94 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         }
 
         private nint[] PublishingEditTabOrder => _publishingEditAdvanced && _publishingEditor?.Input is { } input
-            ? [.. GenesisPublishingAdvancedLayout.Rows(input).Where(i => i != 2 && (i != 6 || input.WanEnabled || input.AnnounceEnabled)).Select(i => _publishingAdvancedFields[i]), _publishingAdvancedSave, _publishingAdvancedCancel, _publishingEdit]
+            ? [.. GenesisPublishingAdvancedLayout.Rows(input).Where(i => i != 2 && (i != 6 || input.WanEnabled || input.AnnounceEnabled)).Select(i => _publishingAdvancedFields[i]), _publishingAdvancedFillNat, _publishingAdvancedPickYp, _publishingAdvancedSave, _publishingAdvancedCancel, _publishingEdit]
             : [.. _publishingInputs, _publishingSave, _publishingCancel, _publishingAdvancedToggle];
+
+        private void ShowPublishingYellowPagePresetMenu(GenesisPublishingBasicEditor editor)
+        {
+            var entries = _viewModel.YellowPageSettings?.Entries ?? [];
+            var presets = new List<(GenesisYellowPageDefinition Definition, PublishingAnnouncePreset Preset)>();
+            foreach (var entry in entries)
+            {
+                if (PublishingAdvancedAssist.TryBuildAnnouncePreset(entry, out var preset) && preset is not null)
+                {
+                    presets.Add((entry, preset));
+                }
+            }
+
+            if (presets.Count == 0)
+            {
+                editor.SetStatus("選択可能な登録YPがありません。設定タブの「YP」からYPを登録してください。");
+                return;
+            }
+
+            var menu = CreatePublishingPopupMenu();
+            if (menu == 0)
+            {
+                return;
+            }
+
+            try
+            {
+                for (var i = 0; i < presets.Count; i++)
+                {
+                    var item = presets[i];
+                    var label = $"{item.Preset.Name} ({item.Preset.Endpoint})";
+                    if (!AppendPublishingMenuW(menu, 0, (nuint)(i + 1), label))
+                    {
+                        return;
+                    }
+                }
+
+                if (!GetWindowRect(_publishingAdvancedPickYp, out var bounds))
+                {
+                    return;
+                }
+
+                var selected = TrackPublishingPopupMenuEx(menu, 0x0100u, bounds.Left, bounds.Bottom, _owner, 0);
+                if (selected == 0 || selected > (uint)presets.Count || editor.Input is not { } current)
+                {
+                    return;
+                }
+
+                var picked = presets[(int)selected - 1];
+                var updated = current with
+                {
+                    AnnounceEnabled = current.WanEnabled || current.AnnounceEnabled,
+                    AnnounceName = picked.Preset.Name,
+                    AnnounceEndpoint = picked.Preset.Endpoint,
+                };
+                if (!editor.EditAdvanced(updated))
+                {
+                    return;
+                }
+
+                InitializePublishingAdvanced();
+                if (!current.WanEnabled)
+                {
+                    editor.SetStatus($"YP「{picked.Preset.Name}」を反映しました。YP Announce を ON にするには公開モードを「WAN（明示公開）」にしてください。");
+                }
+                else if (picked.Preset.UsedFallbackPort)
+                {
+                    editor.SetStatus($"YP「{picked.Preset.Name}」({picked.Preset.Endpoint}) を反映しました。ポート番号はYPの案内値に合わせて確認してください。");
+                }
+                else
+                {
+                    editor.SetStatus($"YP「{picked.Preset.Name}」({picked.Preset.Endpoint}) を反映しました。保存して次回配信から適用してください。");
+                }
+            }
+            finally
+            {
+                _ = DestroyPublishingMenu(menu);
+            }
+        }
     }
 
     [DllImport("user32.dll", EntryPoint = "SendMessageW", CharSet = CharSet.Unicode)] private static extern nint SendPublishingComboText(nint window, uint message, nuint value, string text);
+    [DllImport("user32.dll", EntryPoint = "CreatePopupMenu")] private static extern nint CreatePublishingPopupMenu();
+    [DllImport("user32.dll", EntryPoint = "AppendMenuW", CharSet = CharSet.Unicode)][return: MarshalAs(UnmanagedType.Bool)] private static extern bool AppendPublishingMenuW(nint menu, uint flags, nuint id, string text);
+    [DllImport("user32.dll", EntryPoint = "TrackPopupMenuEx")] private static extern uint TrackPublishingPopupMenuEx(nint menu, uint flags, int x, int y, nint owner, nint parameters);
+    [DllImport("user32.dll", EntryPoint = "DestroyMenu")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool DestroyPublishingMenu(nint menu);
 }
 
 internal static class GenesisPublishingAdvancedLayout
@@ -298,7 +414,7 @@ internal static class GenesisPublishingAdvancedLayout
     internal static int[] Rows(PublishingSettingsInput input) => input.WanEnabled ? (input.AnnounceEnabled ? [0, 1, 2, 3, 4, 5, 6, 7, 8] : [0, 1, 2, 3, 4, 5, 6]) :
         input.LanEnabled ? (input.AnnounceEnabled ? [0, 1, 2, 3, 6, 7, 8] : [0, 1, 2, 3, 6]) : (input.AnnounceEnabled ? [0, 6, 7, 8] : [0, 6]);
     internal const int RowHeight = 38;
-    internal static int ContentHeight(int rows) => rows * RowHeight + 112;
+    internal static int ContentHeight(int rows) => rows * RowHeight + 148;
     internal static int Clamp(int scroll, int height, int rows) => Math.Clamp(scroll, 0, Math.Max(0, ContentHeight(rows) - height));
     internal static int Reveal(int scroll, int height, int row, int rows) => Clamp(row * RowHeight + 4 < scroll ? row * RowHeight + 4 : Math.Max(scroll, row * RowHeight + 34 - height), height, rows);
 }
