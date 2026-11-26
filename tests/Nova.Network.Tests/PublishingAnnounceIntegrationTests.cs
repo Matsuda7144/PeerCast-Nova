@@ -111,6 +111,91 @@ public sealed class PublishingAnnounceIntegrationTests
             }, CancellationToken.None));
         Assert.Equal(1, calls);
     }
+    [Fact]
+    public async Task TransientTransportDropAutomaticallyReconnectsWithLatestMetadata()
+    {
+        var first = new AnnounceFakeConnection();
+        var second = new AnnounceFakeConnection();
+        foreach (var connection in new[] { first, second })
+        {
+            var oleh = PcpHeloCodec.CreateOleh("fake", Guid.NewGuid());
+            var fields = oleh.Children.Concat(new[]
+            {
+                PcpAtom.Leaf(PcpKnownAtomNames.HeloRemoteIp, PcpWireValueCodec.EncodeLegacyIpv4(IPAddress.Parse("198.41.0.4"))),
+                PcpAtom.Leaf(PcpKnownAtomNames.HeloPort, PcpWireValueCodec.EncodeUInt16(17144)),
+            }).ToList();
+            connection.ReplaceHandshake(PcpAtom.Parent(oleh.Name, fields));
+        }
+
+        var queue = new Queue<AnnounceFakeConnection>([first, second]);
+        var connectorCalls = 0;
+        var connector = new SequentialConnector(() =>
+        {
+            Interlocked.Increment(ref connectorCalls);
+            return queue.Dequeue();
+        });
+
+        await using var owner = new PublishingAnnounceOwner(
+            connector,
+            (_, _) => throw new InvalidOperationException("Numeric endpoint must not resolve DNS."),
+            reconnectBaseDelay: TimeSpan.FromMilliseconds(10));
+        var advertised = new IPEndPoint(IPAddress.Parse("198.41.0.4"), 17144);
+        var session = StartFixture(
+            owner,
+            new(true, "test", "pcp://198.41.0.5:7144"),
+            new(Guid.NewGuid()),
+            new(Guid.NewGuid()),
+            new("Initial Title", "", "", "https://example.com/", "FLV", 128),
+            new(IPAddress.Parse("192.168.1.2"), 7144),
+            advertised,
+            () => true);
+
+        _ = await first.NextWriteAsync(); // HELO
+        var initialBcst = AnnounceTestData.Decode(await first.NextWriteAsync());
+        Assert.Equal("Initial Title", AnnounceTestData.Name(initialBcst));
+
+        Assert.True(session.UpdateMetadata(new("Updated Title", "", "", "https://example.com/", "FLV", 128), advertised));
+        _ = await first.NextWriteAsync();
+
+        first.Disconnect();
+
+        _ = await second.NextWriteAsync(); // HELO on reconnect
+        var reconnectBcst = AnnounceTestData.Decode(await second.NextWriteAsync());
+        Assert.Equal("Updated Title", AnnounceTestData.Name(reconnectBcst));
+        Assert.Equal(2, Volatile.Read(ref connectorCalls));
+
+        Assert.True(await session.StopAsync(PcpAnnounceStopReason.Finish));
+        Assert.True(session.CleanupProven);
+    }
+
+    [Fact]
+    public void ReconnectPolicyAndBackoffRespectPermanentFailuresAndCap()
+    {
+        var id = new PcpAnnounceIdentity(1, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        Assert.True(PublishingAnnounceSession.ShouldReconnect(new(id, PcpAnnounceFailure.Transport, true, false, false, true, null)));
+        Assert.True(PublishingAnnounceSession.ShouldReconnect(new(id, PcpAnnounceFailure.Connection, false, false, false, true, null)));
+        Assert.True(PublishingAnnounceSession.ShouldReconnect(new(id, PcpAnnounceFailure.Timeout, false, false, false, true, null)));
+
+        Assert.False(PublishingAnnounceSession.ShouldReconnect(new(id, PcpAnnounceFailure.Transport, true, false, false, false, null)));
+        Assert.False(PublishingAnnounceSession.ShouldReconnect(new(id, PcpAnnounceFailure.Protocol, false, false, false, true, null)));
+        Assert.False(PublishingAnnounceSession.ShouldReconnect(new(id, PcpAnnounceFailure.Banned, false, false, false, true, null)));
+        Assert.False(PublishingAnnounceSession.ShouldReconnect(new(id, PcpAnnounceFailure.Cancelled, false, false, false, true, null)));
+        Assert.False(PublishingAnnounceSession.ShouldReconnect(new(id, PcpAnnounceFailure.None, true, true, true, true, PcpAnnounceStopReason.Finish)));
+
+        var baseDelay = TimeSpan.FromSeconds(5);
+        Assert.Equal(TimeSpan.FromSeconds(5), PublishingAnnounceSession.ComputeReconnectDelay(0, baseDelay));
+        Assert.Equal(TimeSpan.FromSeconds(10), PublishingAnnounceSession.ComputeReconnectDelay(1, baseDelay));
+        Assert.Equal(TimeSpan.FromSeconds(20), PublishingAnnounceSession.ComputeReconnectDelay(2, baseDelay));
+        Assert.Equal(TimeSpan.FromSeconds(30), PublishingAnnounceSession.ComputeReconnectDelay(3, baseDelay));
+        Assert.Equal(TimeSpan.FromSeconds(30), PublishingAnnounceSession.ComputeReconnectDelay(10, baseDelay));
+    }
+
+    private sealed class SequentialConnector(Func<IPcpAnnounceConnection> nextConnection) : IPcpAnnounceConnector
+    {
+        public Task<IPcpAnnounceConnection> ConnectAsync(IPEndPoint endpoint, CancellationToken cancellationToken) =>
+            Task.FromResult(nextConnection());
+    }
+
     private static PublishingAnnounceSession StartFixture(PublishingAnnounceOwner owner, PublishingAnnounceOptions options,
         ChannelId channel, ChannelSessionId session, ChannelMetadataSnapshot metadata, IPEndPoint bind,
         IPEndPoint advertised, Func<bool> ready) => owner.Start(options, channel, session, metadata, bind, advertised, ready,

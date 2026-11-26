@@ -15,6 +15,7 @@ internal interface ILibMpvPlaybackWindow : IAsyncDisposable
     event Action<bool>? PauseChanged { add { } remove { } }
     event Action<double>? SpeedChanged { add { } remove { } }
     event Action? ReloadRequested { add { } remove { } }
+    event Action<double>? SeekRequested { add { } remove { } }
     event Action<LibMpvVideoAdjustment, string>? VideoAdjustmentChanged { add { } remove { } }
     void UpdateStatusStats(string? statsText) { }
     void UpdateVideoStats(LibMpvPlaybackStats stats) { }
@@ -252,6 +253,7 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
             _host.PauseChanged += OnPauseChanged;
             _host.SpeedChanged += OnSpeedChanged;
             _host.ReloadRequested += OnReloadRequested;
+            _host.SeekRequested += OnSeekRequested;
             _host.VideoAdjustmentChanged += OnVideoAdjustmentChanged;
         }
 
@@ -263,6 +265,7 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
         public event Action<bool>? PauseChanged;
         public event Action<double>? SpeedChanged;
         public event Action? ReloadRequested;
+        public event Action<double>? SeekRequested;
         public event Action<LibMpvVideoAdjustment, string>? VideoAdjustmentChanged;
         public Task Closed => _host.Closed;
 
@@ -277,6 +280,7 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
             _host.PauseChanged -= OnPauseChanged;
             _host.SpeedChanged -= OnSpeedChanged;
             _host.ReloadRequested -= OnReloadRequested;
+            _host.SeekRequested -= OnSeekRequested;
             _host.VideoAdjustmentChanged -= OnVideoAdjustmentChanged;
             if (_windowStateStore is not null)
             {
@@ -305,6 +309,9 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
 
         private void OnReloadRequested() =>
             ReloadRequested?.Invoke();
+
+        private void OnSeekRequested(double seconds) =>
+            SeekRequested?.Invoke(seconds);
 
         private void OnVideoAdjustmentChanged(LibMpvVideoAdjustment adjustment, string summary) =>
             VideoAdjustmentChanged?.Invoke(adjustment, summary);
@@ -473,11 +480,24 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
                 client.ShowOsdText("ストリームを再読込しました", 1500);
             }
 
+            void OnSeekRequested(double seconds)
+            {
+                var clamped = LibMpvPlaybackClient.ClampSeekDelta(seconds);
+                if (Math.Abs(clamped) < 0.01)
+                {
+                    return;
+                }
+
+                client.SeekRelative(clamped);
+                client.ShowOsdText($"シーク: {LibMpvPlaybackClient.FormatSeekOsd(clamped)}", 1500);
+            }
+
             window.AudioStateChanged += OnAudioStateChanged;
             window.ScreenshotRequested += OnScreenshotRequested;
             window.PauseChanged += OnPauseChanged;
             window.SpeedChanged += OnSpeedChanged;
             window.ReloadRequested += OnReloadRequested;
+            window.SeekRequested += OnSeekRequested;
             window.VideoAdjustmentChanged += OnVideoAdjustmentChanged;
             if (window.BbsSession is { } bbsSession)
             {
@@ -530,6 +550,7 @@ internal sealed class LibMpvPlaybackPlayerLauncher : IDailyPlaybackPlayerLaunche
                 }
 
                 window.VideoAdjustmentChanged -= OnVideoAdjustmentChanged;
+                window.SeekRequested -= OnSeekRequested;
                 window.ReloadRequested -= OnReloadRequested;
                 window.SpeedChanged -= OnSpeedChanged;
                 window.PauseChanged -= OnPauseChanged;

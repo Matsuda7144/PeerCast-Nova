@@ -582,6 +582,32 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
         Assert.Equal(1, pending);
     }
 
+    [Fact]
+    public async Task WindowSeekRequest_ClampsPropagatesToClientAndShowsOsd()
+    {
+        using var dll = new TestLibrary();
+        using var timeout = new CancellationTokenSource(TestTimeout);
+        var client = new ControlledClient();
+        var window = new ControlledWindow(static () => { });
+        var launcher = new LibMpvPlaybackPlayerLauncher(dll.Path, _ => client, _ => new(window));
+
+        var launching = launcher.LaunchAsync(Source, timeout.Token).AsTask();
+        await client.Loaded.Task.WaitAsync(timeout.Token);
+        client.Signal(LibMpvPlaybackEvent.FileLoaded);
+        await using var player = await launching.WaitAsync(timeout.Token);
+
+        window.RaiseSeekRequested(-5);
+        window.RaiseSeekRequested(30);
+        window.RaiseSeekRequested(999);
+        window.RaiseSeekRequested(0);
+        window.RaiseSeekRequested(double.NaN);
+
+        Assert.Equal([-5.0, 30.0, 300.0], client.Seeks);
+        Assert.Contains(client.OsdMessages, message => message.Text == "シーク: -5秒");
+        Assert.Contains(client.OsdMessages, message => message.Text == "シーク: +30秒");
+        Assert.Contains(client.OsdMessages, message => message.Text == "シーク: +300秒");
+    }
+
     private sealed class ControlledClient(
         Action<PlaybackMediaContainer, uint, LibMpvPlaybackAudioState, bool>? setStartupOptions = null) : ILibMpvPlaybackClient
     {
@@ -594,6 +620,7 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
         public List<bool> Pauses { get; } = [];
         public List<double> Speeds { get; } = [];
         public List<(string Text, int DurationMs)> OsdMessages { get; } = [];
+        public List<double> Seeks { get; } = [];
         public int ReloadCount { get; private set; }
         public int DisposeCount { get; private set; }
 
@@ -610,6 +637,7 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
         public void SetPaused(bool paused) => Pauses.Add(paused);
         public void SetSpeed(double speed) => Speeds.Add(speed);
         public void Reload() => ReloadCount++;
+        public void SeekRelative(double seconds) => Seeks.Add(seconds);
         public void ShowOsdText(string text, int durationMs) => OsdMessages.Add((text, durationMs));
         public bool SaveScreenshot(string filePath) => true;
         public void SetVideoAdjustment(LibMpvVideoAdjustment adjustment) { }
@@ -633,6 +661,7 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
         public event Action<bool>? PauseChanged;
         public event Action<double>? SpeedChanged;
         public event Action? ReloadRequested;
+        public event Action<double>? SeekRequested;
         public Task Closed => _closed.Task;
         public int DisposeCount { get; private set; }
 
@@ -647,6 +676,8 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
         public void RaiseSpeedChanged(double speed) => SpeedChanged?.Invoke(speed);
 
         public void RaiseReloadRequested() => ReloadRequested?.Invoke();
+
+        public void RaiseSeekRequested(double seconds) => SeekRequested?.Invoke(seconds);
 
         public void Close() => _closed.TrySetResult();
 
