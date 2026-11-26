@@ -9,7 +9,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
 {
     private static readonly ConcurrentDictionary<nint, AppShellState> StatesByOwner = new();
     private const nuint PaneSplitterSubclassId = 0x5053504C;
-    private static readonly SubclassProcedure PaneSplitterProcedure = ProcessPaneSplitter;
+    private static readonly Win32SubclassProcedure PaneSplitterProcedure = ProcessPaneSplitter;
 
     internal static void ResizeForOwner(nint owner)
     {
@@ -206,7 +206,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 }
 
                 var background = IsModern ? GenesisGuiNextDesign.Background : (uint)BackgroundColor;
-                var bgBrush = CreateSplitterSolidBrush(background);
+                var bgBrush = CreateSolidBrush(background);
                 if (bgBrush != 0)
                 {
                     try { _ = FillSplitterRect(dc, ref area, bgBrush); }
@@ -227,7 +227,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 var gripColor = _splitterDragging || _splitterHover
                     ? (IsModern ? GenesisGuiNextDesign.Accent : 0x00A0A0A0u)
                     : (IsModern ? GenesisGuiNextDesign.Border : 0x00505050u);
-                var gripBrush = CreateSplitterSolidBrush(gripColor);
+                var gripBrush = CreateSolidBrush(gripColor);
                 if (gripBrush != 0)
                 {
                     try { _ = FillSplitterRect(dc, ref gripRect, gripBrush); }
@@ -377,9 +377,6 @@ internal sealed partial class GenesisGuiNextAppShellBridge
     [DllImport("user32.dll", EntryPoint = "EndPaint")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool EndSplitterPaint(nint window, ref SplitterPaint paint);
-
-    [DllImport("gdi32.dll", EntryPoint = "CreateSolidBrush")]
-    private static extern nint CreateSplitterSolidBrush(uint color);
 
     [DllImport("user32.dll", EntryPoint = "FillRect")]
     private static extern int FillSplitterRect(nint dc, ref Rectangle rectangle, nint brush);

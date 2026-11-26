@@ -65,7 +65,7 @@ internal static class GenesisSourceUrlPlaybackDialog
     private static readonly ConcurrentDictionary<nint, DialogState> StatesByOwner = new();
     private static readonly object RegistrationSync = new();
     private static readonly WindowProcedure WindowProcedureDelegate = ProcessWindowMessage;
-    private static readonly SubclassProcedure KeyboardSubclassProcedureDelegate =
+    private static readonly Win32SubclassProcedure KeyboardSubclassProcedureDelegate =
         ProcessKeyboardMessage;
     private static nint _instance;
     private static nint _backgroundBrush;
@@ -783,15 +783,6 @@ internal static class GenesisSourceUrlPlaybackDialog
     [UnmanagedFunctionPointer(CallingConvention.Winapi)]
     private delegate nint WindowProcedure(nint window, uint message, nuint wParam, nint lParam);
 
-    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
-    private delegate nint SubclassProcedure(
-        nint window,
-        uint message,
-        nuint wParam,
-        nint lParam,
-        nuint subclassIdentifier,
-        nuint referenceData);
-
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern ushort RegisterClassExW(ref WindowClassEx windowClass);
 
@@ -801,33 +792,6 @@ internal static class GenesisSourceUrlPlaybackDialog
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern int GetWindowTextW(nint window, nint text, int maximumCharacters);
-
-    [DllImport("comctl32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetWindowSubclass(
-        nint window,
-        SubclassProcedure subclassProcedure,
-        nuint subclassIdentifier,
-        nuint referenceData);
-
-    [DllImport("comctl32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool RemoveWindowSubclass(
-        nint window,
-        SubclassProcedure subclassProcedure,
-        nuint subclassIdentifier);
-
-    [DllImport("gdi32.dll")]
-    private static extern nint CreateSolidBrush(uint color);
-
-    [DllImport("gdi32.dll")]
-    private static extern int SetBkMode(nint deviceContext, int mode);
-
-    [DllImport("gdi32.dll")]
-    private static extern int SetBkColor(nint deviceContext, int color);
-
-    [DllImport("gdi32.dll")]
-    private static extern int SetTextColor(nint deviceContext, int color);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern int DrawTextW(

@@ -8,7 +8,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
 {
     private const int PublishingEditId = 1240, PublishingSaveId = 1241, PublishingCancelId = 1242, PublishingInputId = 1243;
     private const nuint PublishingEditorSubclassId = 0x50424945;
-    private static readonly SubclassProcedure PublishingEditorProcedure = ProcessPublishingEditor;
+    private static readonly Win32SubclassProcedure PublishingEditorProcedure = ProcessPublishingEditor;
     private static readonly string[] BasicFieldNames = ["ChannelName", "Genre", "Description", "Comment", "ContactUrl", "BitrateKbps"];
 
     private static nint ProcessPublishingEditor(nint window, uint message, nuint wParam, nint lParam, nuint id, nuint owner)

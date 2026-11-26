@@ -127,7 +127,7 @@ internal static class GenesisRecordingRuleEditorWindow
         private void Combo(int id, string[] items, int selection, int x, int y, int width)
         {
             var combo = Add(id, "COMBOBOX", "", x, y, width, 140, 0x3 | 0x00200000);
-            foreach (var item in items) _ = SendMessageText(combo, 0x143, 0, item);
+            foreach (var item in items) _ = SendMessageTextW(combo, 0x143, 0, item);
             _ = SendMessageW(combo, 0x14E, (nuint)selection, 0);
         }
         public bool CreateControls()
@@ -228,10 +228,6 @@ internal static class GenesisRecordingRuleEditorWindow
     [DllImport("user32.dll")] private static extern nint DispatchMessageW(ref Message message);
     [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool IsDialogMessageW(nint window, ref Message message);
     [DllImport("user32.dll")] private static extern void PostQuitMessage(int code);
-    [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool EnableWindow(nint window, bool enabled);
-    [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool IsWindowEnabled(nint window);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int MessageBoxW(nint window, string text, string caption, uint type);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "SendMessageW")] private static extern nint SendMessageText(nint window, uint message, nuint wParam, string text);
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct WindowClassEx
     {
@@ -254,8 +250,5 @@ internal static class GenesisRecordingRuleEditorWindow
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern ushort RegisterClassExW(ref WindowClassEx windowClass);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern int GetWindowTextW(nint window, [Out] char[] text, int maximumCount);
 
 }

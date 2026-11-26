@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using PeerCast.Nova.Foundation.Configuration;
 
 using static PeerCast.Nova.App.Win32NativeMethods;
@@ -7,7 +6,6 @@ namespace PeerCast.Nova.App;
 
 internal sealed partial class GenesisGuiNextAppShellBridge
 {
-    [DllImport("user32.dll")] private static extern nint SetFocus(nint window);
     private const int GeneralCategoryId = 1180, LegacySettingsId = 1181, ClassicChoiceId = 1182,
         ModernChoiceId = 1183, GeneralSaveId = 1184, GeneralCancelId = 1185, GeneralBackId = 1186,
         CheckUpdatesId = 1187, OpenReleasePageId = 1188;

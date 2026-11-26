@@ -595,17 +595,6 @@ internal static class GenesisChannelContextMenuNative
     private static extern bool ClientToScreen(nint window, ref WindowPoint point);
 
     [DllImport("user32.dll", SetLastError = true)]
-    private static extern nint CreatePopupMenu();
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool AppendMenuW(
-        nint menu,
-        uint flags,
-        nuint identifier,
-        string text);
-
-    [DllImport("user32.dll", SetLastError = true)]
     private static extern uint TrackPopupMenuEx(
         nint menu,
         uint flags,
@@ -613,10 +602,6 @@ internal static class GenesisChannelContextMenuNative
         int y,
         nint owner,
         nint parameters);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool DestroyMenu(nint menu);
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

@@ -7,8 +7,39 @@ namespace PeerCast.Nova.App;
 /// </summary>
 internal static class Win32NativeMethods
 {
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct Win32Point
+    {
+        public int X;
+        public int Y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct Win32Rect
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+    internal delegate nint Win32SubclassProcedure(
+        nint window,
+        uint message,
+        nuint wParam,
+        nint lParam,
+        nuint subclassIdentifier,
+        nuint referenceData);
+
+    [DllImport("kernel32.dll")]
+    internal static extern uint GetCurrentThreadId();
+
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     internal static extern nint GetModuleHandleW(string? moduleName);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    internal static extern uint GetWindowThreadProcessId(nint window, out uint processId);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     internal static extern nint CreateWindowExW(
@@ -160,10 +191,179 @@ internal static class Win32NativeMethods
         nuint wParam,
         nint lParam);
 
+    [DllImport("comctl32.dll", EntryPoint = "SetWindowSubclass", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool SetWindowSubclass(
+        nint window,
+        Win32SubclassProcedure callback,
+        nuint subclassIdentifier,
+        nuint referenceData);
+
+    [DllImport("comctl32.dll", EntryPoint = "RemoveWindowSubclass", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool RemoveWindowSubclass(
+        nint window,
+        Win32SubclassProcedure callback,
+        nuint subclassIdentifier);
+
     [DllImport("gdi32.dll")]
     internal static extern nint GetStockObject(int objectIndex);
 
     [DllImport("gdi32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool DeleteObject(nint value);
+
+    [DllImport("gdi32.dll", SetLastError = true)]
+    internal static extern nint CreateSolidBrush(uint color);
+
+    [DllImport("gdi32.dll", SetLastError = true)]
+    internal static extern nint SelectObject(nint deviceContext, nint value);
+
+    [DllImport("gdi32.dll", SetLastError = true)]
+    internal static extern nint CreatePen(int style, int width, uint color);
+
+    [DllImport("gdi32.dll", EntryPoint = "CreatePen", SetLastError = true)]
+    internal static extern nint CreatePen(int style, int width, int color);
+
+    [DllImport("gdi32.dll", SetLastError = true)]
+    internal static extern nint CreateCompatibleDC(nint deviceContext);
+
+    [DllImport("gdi32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool DeleteDC(nint deviceContext);
+
+    [DllImport("gdi32.dll", SetLastError = true)]
+    internal static extern uint SetTextColor(nint deviceContext, uint color);
+
+    [DllImport("gdi32.dll", EntryPoint = "SetTextColor", SetLastError = true)]
+    internal static extern int SetTextColor(nint deviceContext, int color);
+
+    [DllImport("gdi32.dll", SetLastError = true)]
+    internal static extern uint SetBkColor(nint deviceContext, uint color);
+
+    [DllImport("gdi32.dll", EntryPoint = "SetBkColor", SetLastError = true)]
+    internal static extern int SetBkColor(nint deviceContext, int color);
+
+    [DllImport("gdi32.dll", SetLastError = true)]
+    internal static extern int SetBkMode(nint deviceContext, int mode);
+
+    [DllImport("user32.dll")]
+    internal static extern nint GetDlgItem(nint dialog, int controlId);
+
+    [DllImport("user32.dll")]
+    internal static extern int GetDlgCtrlID(nint control);
+
+    [DllImport("user32.dll")]
+    internal static extern uint GetDpiForWindow(nint window);
+
+    [DllImport("user32.dll")]
+    internal static extern nint GetNextDlgTabItem(
+        nint dialog,
+        nint control,
+        [MarshalAs(UnmanagedType.Bool)] bool previous);
+
+    [DllImport("user32.dll")]
+    internal static extern nint MonitorFromWindow(nint window, uint flags);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool SetWindowPos(
+        nint window,
+        nint insertAfter,
+        int x,
+        int y,
+        int width,
+        int height,
+        uint flags);
+
+    [DllImport("user32.dll")]
+    internal static extern nint GetForegroundWindow();
+
+    [DllImport("user32.dll", SetLastError = true)]
+    internal static extern nint GetAncestor(nint window, uint flags);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    internal static extern nint SetParent(nint child, nint newParent);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    internal static extern nint GetWindow(nint window, uint command);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    internal static extern int GetWindowLongW(nint window, int index);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    internal static extern int SetWindowLongW(nint window, int index, int value);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    internal static extern nint FindWindowW(string? className, string? windowName);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool ShowScrollBar(nint window, int bar, [MarshalAs(UnmanagedType.Bool)] bool show);
+
+    [DllImport("user32.dll", EntryPoint = "SendMessageW", CharSet = CharSet.Unicode, SetLastError = true)]
+    internal static extern nint SendMessageTextW(nint window, uint message, nuint wParam, string? text);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    internal static extern nint CreatePopupMenu();
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool AppendMenuW(nint menu, uint flags, nuint identifier, string? text);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool DestroyMenu(nint menu);
+
+    [DllImport("user32.dll")]
+    internal static extern uint CheckMenuItem(nint menu, uint itemId, uint checkFlags);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool EnableMenuItem(nint menu, uint itemId, uint enableFlags);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    internal static extern uint TrackPopupMenuEx(nint menu, uint flags, int x, int y, nint owner, nint parameters);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    internal static extern nint LoadIconW(nint instance, nint iconName);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool DestroyIcon(nint icon);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool GetWindowRect(nint window, out Win32Rect rectangle);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool GetClientRect(nint window, out Win32Rect rectangle);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool ScreenToClient(nint window, ref Win32Point point);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool ClientToScreen(nint window, ref Win32Point point);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool GetCursorPos(out Win32Point point);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    internal static extern int FillRect(nint deviceContext, ref Win32Rect rectangle, nint brush);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    internal static extern int DrawTextW(
+        nint deviceContext,
+        [MarshalAs(UnmanagedType.LPWStr)] string text,
+        int characterCount,
+        ref Win32Rect rectangle,
+        uint format);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool DrawFocusRect(nint deviceContext, ref Win32Rect rectangle);
 }

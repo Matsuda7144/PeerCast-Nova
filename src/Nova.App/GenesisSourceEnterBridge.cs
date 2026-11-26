@@ -70,7 +70,7 @@ internal sealed class GenesisSourceEnterBridge : IAsyncDisposable
     private const nuint CarriageReturn = 0x0D;
     private const nuint EscapeCharacter = 0x1B;
     private static readonly ConcurrentDictionary<nint, SourceState> StatesByEdit = new();
-    private static readonly SubclassProcedure SubclassProcedureDelegate = ProcessSubclassMessage;
+    private static readonly Win32SubclassProcedure SubclassProcedureDelegate = ProcessSubclassMessage;
     private readonly nint _sourceEdit;
     private int _disposed;
 
@@ -265,30 +265,6 @@ internal sealed class GenesisSourceEnterBridge : IAsyncDisposable
             }
         }
     }
-
-    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
-    private delegate nint SubclassProcedure(
-        nint window,
-        uint message,
-        nuint wParam,
-        nint lParam,
-        nuint subclassIdentifier,
-        nuint referenceData);
-
-    [DllImport("comctl32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetWindowSubclass(
-        nint window,
-        SubclassProcedure subclassProcedure,
-        nuint subclassIdentifier,
-        nuint referenceData);
-
-    [DllImport("comctl32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool RemoveWindowSubclass(
-        nint window,
-        SubclassProcedure subclassProcedure,
-        nuint subclassIdentifier);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern int GetWindowTextW(

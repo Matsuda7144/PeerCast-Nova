@@ -130,7 +130,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
     private static readonly ConcurrentDictionary<nint, AppShellState> StatesByContainer = new();
     private static readonly ConcurrentDictionary<nint, AppShellState> StatesByListView = new();
     private static readonly WindowProcedure WindowProcedureDelegate = ProcessWindowMessage;
-    private static readonly SubclassProcedure ListViewSubclassProcedureDelegate =
+    private static readonly Win32SubclassProcedure ListViewSubclassProcedureDelegate =
         ProcessListViewMessage;
     private readonly nint _listView;
     private readonly GenesisGuiNextAppShellPlacement.WindowRectangle _listRectangle;

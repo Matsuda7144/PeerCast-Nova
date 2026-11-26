@@ -27,13 +27,7 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
     private static readonly ConcurrentDictionary<nint, BridgeState> StatesByContainer = new();
     private static readonly WindowProcedure WindowProcedureDelegate = ProcessWindowMessage;
     private const nuint OwnerSubclassIdentifier = 0x7144336;
-    private static readonly SubclassProcedure OwnerProcedure = ProcessOwnerMessage;
-    private delegate nint SubclassProcedure(nint window, uint message, nuint wParam, nint lParam, nuint id, nuint data);
-    [DllImport("comctl32.dll")]
-    private static extern bool SetWindowSubclass(nint window, SubclassProcedure procedure, nuint id, nuint data);
-    [DllImport("comctl32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool RemoveWindowSubclass(nint window, SubclassProcedure procedure, nuint id);
+    private static readonly Win32SubclassProcedure OwnerProcedure = ProcessOwnerMessage;
     private static nint ProcessOwnerMessage(nint window, uint message, nuint wParam, nint lParam, nuint id, nuint data)
     {
         if (message == WindowMessageNcDestroy)
@@ -993,9 +987,6 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetClientRect(nint window, out WindowRectangle rectangle);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern nint SetParent(nint child, nint newParent);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern int GetWindowTextW(

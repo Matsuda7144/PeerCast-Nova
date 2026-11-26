@@ -110,7 +110,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 try
                 {
                     _ = SendMessageW(_relayTreeChannels, 0x014B, 0, 0);
-                    foreach (var channel in channels) _ = TreeSendText(_relayTreeChannels, 0x0143, 0, channel.Name);
+                    foreach (var channel in channels) _ = SendMessageTextW(_relayTreeChannels, 0x0143, 0, channel.Name);
                     _treeChannels = channels;
                 }
                 finally { _treeUpdating = false; }
@@ -266,14 +266,14 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             SynchronizeNativeSelection();
             if (GenesisRelayTreeSelection.Resolve(_treeSnapshot, _treeSelected) is null) return true;
             var key = _treeSelected;
-            var menu = TreeCreateMenu();
+            var menu = CreatePopupMenu();
             if (menu == 0) return true;
             try
             {
-                _ = TreeAppendMenu(menu, 0, 1, "ノードの詳細を表示");
-                _ = TreeAppendMenu(menu, 0, 2, "表示IDをコピー");
+                _ = AppendMenuW(menu, 0, 1, "ノードの詳細を表示");
+                _ = AppendMenuW(menu, 0, 2, "表示IDをコピー");
                 if (_treeDisconnectTask?.IsCompleted != false && GenesisRelayTreeSelection.HasDownstreamIdentity(_treeSnapshot, key))
-                    _ = TreeAppendMenu(menu, 0, 3, "下流を切断...");
+                    _ = AppendMenuW(menu, 0, 3, "下流を切断...");
                 var command = TreeTrackMenu(menu, 0x0100 | 0x0002, x, y, 0, _owner, 0);
                 // Resolve against a fresh observation after the modal menu.
                 SynchronizeNativeSelection();
@@ -290,7 +290,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 if (node is not null && command == 3 && key is not null && _treeDisconnectTask?.IsCompleted != false)
                     ConfirmTreeDisconnect(key);
             }
-            finally { _ = TreeDestroyMenu(menu); }
+            finally { _ = DestroyMenu(menu); }
             return true;
         }
 
@@ -353,10 +353,6 @@ internal sealed partial class GenesisGuiNextAppShellBridge
     { public uint Mask; public nint Handle; public uint State, StateMask; public nint Text; public int TextMax, Image, SelectedImage, Children; public nint Data; }
     [StructLayout(LayoutKind.Sequential)] private struct TreeInsert { public nint Parent, After; public TreeItem Item; }
     [DllImport("comctl32.dll", EntryPoint = "InitCommonControlsEx")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool TreeInitialize(ref TreeInit init);
-    [DllImport("user32.dll", EntryPoint = "CreatePopupMenu")] private static extern nint TreeCreateMenu();
-    [DllImport("user32.dll", EntryPoint = "AppendMenuW", CharSet = CharSet.Unicode)][return: MarshalAs(UnmanagedType.Bool)] private static extern bool TreeAppendMenu(nint menu, uint flags, nuint id, string label);
     [DllImport("user32.dll", EntryPoint = "TrackPopupMenu")] private static extern int TreeTrackMenu(nint menu, uint flags, int x, int y, int reserved, nint owner, nint rect);
-    [DllImport("user32.dll", EntryPoint = "DestroyMenu")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool TreeDestroyMenu(nint menu);
-    [DllImport("user32.dll", EntryPoint = "SendMessageW", CharSet = CharSet.Unicode)] private static extern nint TreeSendText(nint window, uint message, nuint value, string text);
     [DllImport("user32.dll", EntryPoint = "GetCursorPos")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool TreeGetCursor(out Point point);
 }

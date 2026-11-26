@@ -85,15 +85,6 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         nuint wParam,
         nint lParam);
 
-    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
-    private delegate nint SubclassProcedure(
-        nint window,
-        uint message,
-        nuint wParam,
-        nint lParam,
-        nuint subclassIdentifier,
-        nuint referenceData);
-
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetWindowRect(nint window, out Rectangle rectangle);
@@ -110,41 +101,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
     private static extern ushort RegisterClassExW(ref WindowClassEx windowClass);
 
     [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool InvalidateRect(
-        nint window,
-        nint rectangle,
-        [MarshalAs(UnmanagedType.Bool)] bool erase);
-
-    [DllImport("comctl32.dll", EntryPoint = "SetWindowSubclass", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetWindowSubclass(
-        nint window,
-        SubclassProcedure callback,
-        nuint subclassIdentifier,
-        nuint referenceData);
-
-    [DllImport("comctl32.dll", EntryPoint = "RemoveWindowSubclass", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool RemoveWindowSubclass(
-        nint window,
-        SubclassProcedure callback,
-        nuint subclassIdentifier);
-
-    [DllImport("gdi32.dll", SetLastError = true)]
-    private static extern nint CreateSolidBrush(uint color);
-
-    [DllImport("user32.dll", SetLastError = true)]
     private static extern int FillRect(nint deviceContext, ref Rectangle rectangle, nint brush);
-
-    [DllImport("gdi32.dll", SetLastError = true)]
-    private static extern int SetBkMode(nint deviceContext, int mode);
-
-    [DllImport("gdi32.dll", SetLastError = true)]
-    private static extern int SetBkColor(nint deviceContext, int color);
-
-    [DllImport("gdi32.dll", SetLastError = true)]
-    private static extern uint SetTextColor(nint deviceContext, int color);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern int DrawTextW(

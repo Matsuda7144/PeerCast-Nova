@@ -7,7 +7,7 @@ namespace PeerCast.Nova.App;
 internal sealed partial class GenesisGuiNextAppShellBridge
 {
     private const nuint ConnectionBodySubclassId = 0x4E43424F;
-    private static readonly SubclassProcedure ConnectionBodyProcedure = ProcessConnectionBody;
+    private static readonly Win32SubclassProcedure ConnectionBodyProcedure = ProcessConnectionBody;
 
     internal static nint CreateConnectionBodyWindow(nint parent, nint instance, nint owner)
     {

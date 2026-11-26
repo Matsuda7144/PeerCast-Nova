@@ -130,7 +130,7 @@ internal static class GenesisWindowUiFont
     private const uint DpiChangedMessage = 0x02E0;
     private const nuint SubclassId = 0x4E464F4E; // NFON; distinct from existing GUI subclasses.
     private static readonly Dictionary<nint, GenesisUiWindowFont> Fonts = new();
-    private static readonly SubclassProcedure Procedure = ProcessMessage;
+    private static readonly Win32SubclassProcedure Procedure = ProcessMessage;
     private static readonly SystemUiFontNativeApi Api = new();
 
     // Fonts live until the owning root HWND has finished destruction. This is longer
@@ -234,18 +234,6 @@ internal static class GenesisWindowUiFont
 
     private static void ApplyFont(nint control, nint font) =>
         _ = SendMessageW(control, SetFontMessage, (nuint)font, 1);
-    private delegate nint SubclassProcedure(nint window, uint message, nuint wParam, nint lParam, nuint id, nuint data);
-
-    [DllImport("user32.dll")]
-    private static extern nint GetAncestor(nint window, uint flags);
-    [DllImport("user32.dll")]
-    private static extern uint GetDpiForWindow(nint window);
-    [DllImport("comctl32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetWindowSubclass(nint window, SubclassProcedure procedure, nuint id, nuint data);
-    [DllImport("comctl32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool RemoveWindowSubclass(nint window, SubclassProcedure procedure, nuint id);
 }
 
 internal sealed class SystemUiFontNativeApi : IGenesisUiFontNativeApi
@@ -401,15 +389,8 @@ internal sealed class SystemUiFontNativeApi : IGenesisUiFontNativeApi
     private static extern int GetDeviceCaps(nint dc, int index);
     [DllImport("gdi32.dll", CharSet = CharSet.Unicode)]
     private static extern nint CreateFontIndirectW(ref GenesisUiLogFont font);
-    [DllImport("gdi32.dll")]
-    private static extern nint CreateCompatibleDC(nint dc);
-    [DllImport("gdi32.dll")]
-    private static extern nint SelectObject(nint dc, nint value);
     [DllImport("gdi32.dll", CharSet = CharSet.Unicode)]
     private static extern uint GetGlyphIndicesW(nint dc, string text, int count, [Out] ushort[] indices, uint flags);
-    [DllImport("gdi32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool DeleteDC(nint dc);
 }
 
 // Managed lifetime/rotation policy, independent of HWND creation. Native teardown

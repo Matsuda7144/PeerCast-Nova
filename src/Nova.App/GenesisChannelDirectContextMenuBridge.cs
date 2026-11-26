@@ -205,7 +205,7 @@ internal sealed class GenesisChannelDirectContextMenuBridge : IAsyncDisposable
     private const ushort VirtualKeyControl = 0x11;
     private const nuint SubclassIdentifier = 0x7144230;
     private static readonly ConcurrentDictionary<nint, ContextState> StatesByListView = new();
-    private static readonly SubclassProcedure SubclassProcedureDelegate = ProcessListViewMessage;
+    private static readonly Win32SubclassProcedure SubclassProcedureDelegate = ProcessListViewMessage;
     private readonly nint _listView;
     private int _disposed;
 
@@ -744,32 +744,5 @@ internal sealed class GenesisChannelDirectContextMenuBridge : IAsyncDisposable
         public int Button;
         public nint ItemData;
     }
-
-    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
-    private delegate nint SubclassProcedure(
-        nint window,
-        uint message,
-        nuint wParam,
-        nint lParam,
-        nuint subclassIdentifier,
-        nuint referenceData);
-
-    [DllImport("comctl32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetWindowSubclass(
-        nint window,
-        SubclassProcedure subclassProcedure,
-        nuint subclassIdentifier,
-        nuint referenceData);
-
-    [DllImport("comctl32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool RemoveWindowSubclass(
-        nint window,
-        SubclassProcedure subclassProcedure,
-        nuint subclassIdentifier);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern nint GetAncestor(nint window, uint flags);
 
 }
