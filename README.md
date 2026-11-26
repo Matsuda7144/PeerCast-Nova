@@ -2,170 +2,131 @@
 
 > **Code for Community. Design for the Future.**
 
-PeerCast Nova は、既存 PeerCast ネットワークとの互換性を保ちながら、P2P ライブ配信の視聴とリレーをシンプルに行えるソフトウェアを目指すオープンソースプロジェクトです。
+PeerCast Nova は、既存の PeerCast / PeerCastStation ネットワークとの互換性を保ちながら、P2P ライブ配信の視聴・リレー・録画・配信をシンプルに行えるオープンソースソフトウェアです。
 
-Project Founder: **7144**  
-License: **Apache License 2.0**
+- **License**: [Apache License 2.0](LICENSE)
 
-Smart Relay Phase W integrates the existing shared public PCP listener with the
-current channel Owner, shared relay limits and application NAT manager:
-[ADR-0495](docs/adr/ADR-0495-shared-public-smart-relay-owner-and-nat-integration.md),
-[PCN-0505](docs/reviews/PCN-0505-SHARED-PUBLIC-SMART-RELAY-OWNER-AND-NAT-INTEGRATION.md).
-WAN Relay defaults OFF. Enable it in Classic/Modern connection settings, choose
-the existing receiving port (1..65535), save and restart Nova, then explicitly
-start Relay. The shared IPv4 listener uses that fixed port; existing automatic
-mapping or manual router forwarding can be used. Saving/startup alone does not
-publish. Recovery opt-in is independent. TCP bind and mapping success do not prove
-external reachability: **WAN実機受入未確認**.
+---
 
-Smart Relay Phase C adds opt-in upstream recovery, bounded discovery and long
-low-frequency retry: [ADR-0494](docs/adr/ADR-0494-opt-in-smart-relay-recovery.md).
-Default GUI Relay behavior is unchanged. To opt in, set process environment
-`NOVA_SMART_RELAY_RECOVERY=limited` (five-minute limit) or `persistent`
-(low-frequency retry after five minutes), then start Nova and explicitly press
-Relay. It does not start on settings save or enable WAN access. Validation:
-[PCN-0504](docs/reviews/PCN-0504-OPT-IN-SMART-RELAY-RECOVERY.md).
+## 主な機能（v0.2.0）
 
-Smart Relay Phase B adds owner-scoped HOST candidate management and bounded
-standard PCP referrals on capacity refusal:
-[ADR-0493](docs/adr/ADR-0493-owner-scoped-pcp-host-directory-and-referrals.md).
-This managed integration does not establish physical or WAN relay acceptance.
+- **チャンネル視聴とリレー**
+  - Yellow Pages 一覧表示・検索・お気に入り管理・通知設定、PCP によるリレー配信。
+- **内蔵プレイヤー（`libmpv`）と外部プレイヤー連携**
+  - 内蔵 `libmpv` 再生（初回自動セットアップ対応、再生中の音声出力デバイス切替、スクリーンショット・低遅延再生対応）。
+  - 内蔵プレイヤー未導入時や設定に応じて外部プレイヤー（`PCRPlayer64.exe` / `DSPlayer` / 任意のプレイヤー＋カスタム引数テンプレート `NOVA_PCRPLAYER_ARGS`）を利用可能。詳細手順は [内蔵 FLV プレイヤーのセットアップ（Windows x64）](docs/internal-flv-player-setup-ja.md) を参照してください。
+- **手動・自動録画と録画ルール**
+  - FLV タイムスタンプ正規化対応の手動／ルールベース自動録画、録画履歴およびルール編集・並び替え UI。
+- **OBS 配信取り込みと公開支援**
+  - ループバック RTMP → FLV → PCP 配信ホスト、YP アナウンス、NAT-PMP によるポート自動開放および WAN 接続診断支援。
+- **日本語 UI と高 DPI 対応**
+  - `PerMonitorV2` DPI スケーリング、メイン画面の一覧／詳細スプリッター高さ復元、日本語設定ダイアログ。
 
-Smart Relay Phase 0 / A-1 adds standard PCP QUIT 1003 capacity replies and typed
-QUIT reasons while preserving current ID/Owner contracts:
-[ADR-0492](docs/adr/ADR-0492-typed-pcp-quit-compatibility-without-identity-migration.md).
-Recovery was outside A-1; see Phase C and the Phase W integration above.
+---
 
 ## プロジェクトの方針
 
 | 方針 | 内容 |
 | --- | --- |
-| P2P First | 中央サービスを必須にせず、既存のピアネットワーク上で受信・リレーできることを優先します。 |
-| Simplicity / Lightweight | MVP に必要な機能と依存関係に絞り、使い方と障害の追跡を簡単にします。 |
-| Compatibility | PeerCastStation との互換性を最優先し、MVP では Nova 固有の必須 wire protocol を導入しません。 |
-| Open / Community | Apache-2.0 を採用し、公開可能な protocol／設計資料を整えて、コミュニティが参加しやすい形を目指します。 |
-| Transparency | 実装済み、検証済み、未実装を区別し、継続的な設計判断を ADR と記録に残します。 |
-| Core / UI Separation | ネットワークや制御のコアを UI から独立させ、別の host からも利用できる境界を保ちます。 |
+| P2P First | 中央サービスに依存せず、既存のピアネットワーク上で受信・リレーできることを優先します。 |
+| Simplicity / Lightweight | 必要な機能と依存関係に絞り、使い方と障害追跡をシンプルにします。 |
+| Compatibility | PeerCastStation との互換性を重視し、独自の必須 wire protocol を導入しません。 |
+| Open / Community | Apache-2.0 の下で設計資料・検証記録を公開し、コミュニティが参加しやすい形を保ちます。 |
+| Core / UI Separation | ネットワーク・配信・録画コアを UI から分離し、独立したテスト可能性を維持します。 |
 
-## MVP の確定状態 (Version 0.1.0)
+---
 
-PeerCast Nova Version 0.1.0 の MVP は完成し、main に統合済みです。受入済みの MVP は既存 PeerCast／PeerCastStation ネットワーク上でチャンネルを再生し、選択した配信を他の peer へ relay すること、ならびにチャンネル選択、開始・停止、接続状態と利用者が対処できるエラーを扱うことです。
+## 設定・ログ・データの保存先
 
-- MVP PLAYBACK: ESTABLISHED / INTEGRATED INTO MAIN
-- MVP RELAY: ESTABLISHED / INTEGRATED INTO MAIN
-- MVP OVERALL: ESTABLISHED / INTEGRATED INTO MAIN
-- PEERCAST NOVA MVP IMPLEMENTATION: COMPLETE
+実行時の設定ファイルや状態データ・ログは、原則として以下に保存されます。
 
-main `8caf7069c54c879fd1a7eb2683ab214a337aa883` に PR #245/#246 が landing 済みです。resulting-main CI run `36020495159` / job `107703845407` は Restore、Build、Test、Format がすべて SUCCESS で、実機受入も完了しています。CI と実機受入は独立した証拠です。
+- **メインデータディレクトリ**: `%LOCALAPPDATA%\PeerCast Nova\`
+  - 一般／ネットワーク／再生設定: `settings.json`
+    - 旧バージョンで使用していた `%LOCALAPPDATA%\PeerCast\Nova\settings.json` が存在する場合は、初回読み込み時に自動でフォールバック読み込みし、設定保存時に `%LOCALAPPDATA%\PeerCast Nova\settings.json` へ移行します。
+  - お気に入り・通知・YP・接続・再生・配信プリファレンス・ウィンドウ配置・録画履歴／ルール等も同じディレクトリに保存されます。
+  - アプリケーションログ: `%LOCALAPPDATA%\PeerCast Nova\logs\nova.log`
 
-採用済みの再生経路は、PCP 入力を loopback 限定の HTTP-FLV endpoint 経由で PCRPlayer／DSPlayer などの対応 external player に handoff する経路です。この external-player playback path が MVP の再生要件を満たします。Relay 操作は選択チャンネルの bounded PCP relay listener を開始し、LAN peer に共有する endpoint を表示します。
+既定の録画保存先は `%USERPROFILE%\Videos\PeerCast Nova\Recordings`（`MyVideos` 未定義時は `%LOCALAPPDATA%\PeerCast Nova\Recordings`）で、設定画面から変更できます。
 
-Nova 内の managed decoder、scheduler、Windows output を使う playback の追加経路、managed 経路による regular MP4 production playback、Windows output の拡張、ならびに将来の productization／post-MVP hardening は MVP 完了後の作業です。これらは完成済み MVP の blocker ではありません。実装履歴と追加範囲は [ROADMAP.md](ROADMAP.md) を参照してください。
-
-## 現在の再生経路
-
-通常配信の開発方針はOBSでキャプチャ・合成・H.264/AACエンコードを行い、Novaはingest / FLV / PCP publish / relay / YPを担当する構成です。[ADR-0491](docs/adr/ADR-0491-loopback-OBS-RTMP-FLV-ingest-foundation.md) と [OBS ingest foundation](docs/obs-flv-ingest-foundation.md) はloopback限定のライブラリ基盤を記録しています。アプリの配信開始操作、YP、実OBSと物理A/Vの受入は後続sliceです。
-
-[Headless publish channel foundation](docs/headless-obs-publish-channel.md) は同じchannel generationを既存relayとHTTP-FLVへ接続します。managed localhost roundtripまでが検証範囲で、実OBS相互運用は未検証です。
-
-Modern の「設定 → 再生」で内蔵プレイヤーと外部プレイヤーを選択できます。「保存」を押すと次の再生から適用されます。初期設定は外部プレイヤーです。どちらも PCP 入力を loopback 限定の HTTP-FLV 経由で再生します。
-
-外部プレイヤーには PCRPlayer や DSPlayer を指定できます。実在する読み取り可能な `.exe` の絶対パスを指定するか、空欄にして環境変数または PATH を使用します。実行ファイルは次の順で解決します。
-
-1. `--pcrplayer-executable <path>`
-2. GUI に保存したパス
-3. `NOVA_PCRPLAYER_EXE`
-4. PATH 上の `PCRPlayer64.exe`
-
-CLI と環境変数でも実行ファイルの絶対パスを指定します。互換性のため、従来の `PCRPlayer64.exe` という名前だけの指定は PATH から解決します。明示した設定が無効な場合はエラーを表示します。`PCRPlayer64.exe` は従来の追加引数を使い、ほかの実行ファイルには再生URLだけを渡します。
-
-内蔵プレイヤーには、利用者が用意した互換性のある libmpv（client API 2）の DLL の絶対パスを指定します。チャンネルを選んで「再生」を押すと、Nova の再生ウィンドウに表示します。ライブラリとその依存ファイルは別途用意してください。外部プレイヤーと内蔵プレイヤーのパスはそれぞれ保存されます。
-
-入手先と設定手順は [内蔵 FLV プレイヤーのセットアップ（Windows x64）](docs/internal-flv-player-setup-ja.md) を参照してください。
-
-`--libmpv-library` または `--pcrplayer-executable` を起動時に指定すると、その起動中は保存済みのプレイヤー選択より優先されます。
+起動時オプションや環境変数の例:
 
 ```powershell
+# 外部プレイヤーや libmpv を一時指定して起動
 Nova.App.exe --libmpv-library "C:\path\libmpv-2.dll"
-```
+Nova.App.exe --pcrplayer-executable "C:\path\PCRPlayer64.exe"
 
-## 公開 Relay のポート自動開放
-
-PCP downstream relay listener の IPv4 TCP ポートを、NAT-PMP 対応ルーターへ
-自動で開放・更新・閉鎖する foundation を追加しています。既定は OFF です。
-日常アプリの「ポート自動開放 (ON / OFF)」で切り替えます。設定は
-`%LOCALAPPDATA%\PeerCast\Nova\settings.json` に保存します（未設定は OFF）。
-起動時に `NOVA_AUTO_PORT_MAPPING` が指定されている場合は、その `on` / `off` を
-保存設定より優先します。起動後の GUI 変更は現在の desired state と保存設定へ反映します。
-
-~~~powershell
+# ポート自動開放を一時有効化して起動
 $env:NOVA_AUTO_PORT_MAPPING = "on"
 dotnet run --project src/Nova.App
-~~~
+```
 
-公開 listener が実際に bind したポートを対象とし、最後の公開要求がなくなると
-削除を要求します。loopback の HTTP-FLV 再生用 listener は対象外です。
-最初の backend は NAT-PMP で、複数 adapter など経路が曖昧な場合は自動選択しません。
-ルーターの mapping 応答とインターネット側からの到達確認は別の状態です。
-GUI にルーター設定・外部接続の別表示、lease の証拠、診断コード付き要約を追加しています。
-実ルーターで NAT-PMP の Map/Renew/Unmap と restart 後の Map を確認済みです。
-外部到達は `NotChecked`、GUI の実画面 physical acceptance は GUI 操作環境の制約で未完です。
-UPnP、IPv6、外部アドレス取得・到達確認は後続 slice に残ります。
+---
 
-管理境界・競合テスト・cleanup の証拠は
-[NAT Port Mapping Foundation](docs/architecture/NAT-PORT-MAPPING-FOUNDATION.md) を参照してください。
+## 必要環境とビルド・テスト
 
-## Post-MVP の追加範囲
+- **.NET 10 SDK**
+- **Windows**（`Nova.App` GUI の実行・発行時。コアライブラリとクロスプラットフォームテストは Linux でも実行可能）
 
-- `Nova.App` から managed decoder、scheduler、Windows output までを結ぶ追加 playback 経路と、managed 経路による regular MP4 production playback。
-- Windows output の拡張、完全な A/V synchronization、resampling、drift correction と幅広い codec support。
-- recorder、advanced GUI、installer、code signing、updater、将来の productization と post-MVP hardening。
+### アプリ本体向け軽量ソリューション（推奨）
 
-詳細な scope は [ROADMAP.md](ROADMAP.md) を参照してください。
+デスクトップアプリ本体と中核ライブラリ・テストのみを素早くビルド・テストする場合は [PeerCast-Nova.App.sln](PeerCast-Nova.App.sln) を使用できます。
 
-## 必要環境とビルド
+```powershell
+dotnet restore PeerCast-Nova.App.sln
+dotnet build PeerCast-Nova.App.sln -c Release --no-restore
+dotnet test PeerCast-Nova.App.sln -c Release --no-build --no-restore
+```
 
-- .NET 10 SDK
-- 日常アプリを起動する場合は Windows
-- 再生には PCRPlayer64、DSPlayer、または利用者が指定する対応 player が必要です。
+### フルソリューション（CLI・旧再生サブシステム含む）
 
-~~~powershell
+CI と同様に全プロジェクトを対象とする場合は [PeerCast-Nova.sln](PeerCast-Nova.sln) を使用します。
+
+```powershell
 dotnet restore PeerCast-Nova.sln
 dotnet build PeerCast-Nova.sln -c Release --no-restore
 dotnet test PeerCast-Nova.sln -c Release --no-build --no-restore
 dotnet format PeerCast-Nova.sln --verify-no-changes --no-restore
-~~~
+```
 
-Windows アプリは次のように起動します。
+---
 
-~~~powershell
-dotnet run --project src/Nova.App
-dotnet run --project src/Nova.App -- --pcrplayer-executable "C:\path\PCRPlayer64.exe"
-~~~
+## 配布・パッケージング
 
-## CI と検証の境界
+Windows x64 向けに 2 種類の発行プロファイルを用意しています。
 
-GitHub Actions が main への push と Pull Request で自動実行され、restore、Release build、full solution tests、format verification を行います。CircleCI は GitHub Actions が開始できない場合に限る手動 fallback です。PR の判断には対象 SHA の結果を確認してください。
+- **Portable（.NET 10 ランタイム別途必要・PDB 除外）**: [WindowsPortable.pubxml](src/Nova.App/Properties/PublishProfiles/WindowsPortable.pubxml)
+- **Self-Contained（ランタイム同梱・診断用 PDB 別パッケージ化対応）**: [WindowsSelfContained.pubxml](src/Nova.App/Properties/PublishProfiles/WindowsSelfContained.pubxml)
 
-CI は managed build／tests を検証します。Windows 上の native device output や人による映像・音声の確認は routine CI の結果から推定できません。詳細は [NAVIGATION.md](NAVIGATION.md) と [ROADMAP.md](ROADMAP.md) を参照してください。
+```powershell
+# Portable 版の発行
+dotnet publish src/Nova.App/Nova.App.csproj -p:PublishProfile=WindowsPortable -o artifacts/publish-portable
 
-## 構成と詳細資料
+# Self-Contained 版の発行
+dotnet publish src/Nova.App/Nova.App.csproj -p:PublishProfile=WindowsSelfContained -o artifacts/publish-self-contained
+```
 
+`v*` タグのプッシュまたは手動トリガーにより、[release.yml](.github/workflows/release.yml) が Portable ZIP・Self-Contained ZIP・PDB シンボル ZIP・`SHA256SUMS.txt` を自動生成します。
+
+---
+
+## ドキュメントと設計資料
+
+- [ナビゲーション (NAVIGATION.md)](NAVIGATION.md)
+- [ロードマップ (ROADMAP.md)](ROADMAP.md)
+- [変更履歴 (CHANGELOG.md)](CHANGELOG.md)
 - [システムアーキテクチャ](docs/architecture/PCN-0004-SYSTEM-ARCHITECTURE.md)
 - [Solution と project 構成](docs/architecture/PCN-0005-SOLUTION-STRUCTURE.md)
 - [Control plane と data plane](docs/architecture/CONTROL-AND-DATA-PLANES.md)
+- [NAT ポートマッピング基盤](docs/architecture/NAT-PORT-MAPPING-FOUNDATION.md)
 - [PeerCastStation 互換性計画](docs/protocol/PCP-COMPATIBILITY-PLAN.md)
 - [Protocol と Relay の検証記録](docs/protocol/PCP-RELAY-COMPATIBILITY.md)
-- [設計判断 ADR](docs/adr)
-- [実装・検証レビュー](docs/reviews)
-- [CHANGELOG.md](CHANGELOG.md)
-- [ROADMAP.md](ROADMAP.md)
-- [NAVIGATION.md](NAVIGATION.md)
+- [設計判断記録 (ADR)](docs/adr)
+- [実装・検証レビュー (PCN)](docs/reviews)
 
-現在の managed playback 技術境界: [ADR-0489](docs/adr/ADR-0489-bounded-iso-bmff-regular-movie-native-decoder-discontinuity-reset.md) ／ [PCN-0499](docs/reviews/PCN-0499-BOUNDED-ISO-BMFF-REGULAR-MOVIE-NATIVE-DECODER-DISCONTINUITY-RESET.md)。これは post-MVP の追加 playback 経路に関する bounded slice であり、採用済み MVP 経路の範囲を変更したり、regular MP4 の一般向け再生全体を主張したりするものではありません。
+---
 
-録画Coreは、[ADR-0490](docs/adr/ADR-0490-shared-manual-and-automatic-recording-runtime.md) ／ [PCN-0500](docs/reviews/PCN-0500-SHARED-MANUAL-AND-AUTOMATIC-RECORDING-RUNTIME.md) に記録したGUI非依存の手動・自動録画ランタイムを基盤にしています。PR #242のcloseoutでは managed 検証に加え、**END-USER RECORDING ACCEPTANCE — PROVEN** と **FLV TIMESTAMP NORMALIZATION — PHYSICAL ACCEPTANCE PROVEN** を確認しました。Run-IDと実行時のコードHEADは[PR #242](https://github.com/Matsuda7144/PeerCast-Nova/pull/242)に記録しています。GUI録画操作とルール編集は別作業の[PR #230](https://github.com/Matsuda7144/PeerCast-Nova/pull/230)に残ります。
+## ライセンスと外部ランタイム
 
-## ライセンス
+PeerCast Nova のソースコードは [Apache License 2.0](LICENSE)（および [NOTICE](NOTICE)）の下で提供されています。
 
-PeerCast Nova のコードは [Apache License 2.0](LICENSE) の下で公開されています。FFmpeg は別ライセンスの外部 runtime であり、既定の Nova 配布物には FFmpeg binary を含めません。runtime の境界と法務資料は [FFmpeg External Runtime Compliance Policy](docs/legal/FFMPEG-EXTERNAL-RUNTIME-COMPLIANCE.md) を参照してください。
+FFmpeg および `libmpv` は外部ランタイムとして扱われ、既定の Nova 配布物にはバイナリを同梱しません。法務・ライセンス境界の詳細は [FFmpeg External Runtime Compliance Policy](docs/legal/FFMPEG-EXTERNAL-RUNTIME-COMPLIANCE.md) および [THIRD-PARTY-LICENSES/FFmpeg/NOTICE.md](THIRD-PARTY-LICENSES/FFmpeg/NOTICE.md) を参照してください。

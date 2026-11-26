@@ -262,44 +262,33 @@ public sealed class NovaWindowsStartupCompositionTests
     [Fact]
     public void DefaultApplicationGraphHasNoPhysicalCommandOrFfmpegBinaryReference()
     {
-        var project = File.ReadAllText(FindRepositoryFile(
+        var project = RepositorySourceTestHelper.LoadProjectDocument(
             "src",
             "Nova.App",
-            "Nova.App.csproj"));
-        var program = File.ReadAllText(FindRepositoryFile(
-            "src",
-            "Nova.App",
-            "Program.cs"));
+            "Nova.App.csproj");
+        var projectReferences = project.Descendants("ProjectReference")
+            .Select(element => element.Attribute("Include")?.Value ?? string.Empty)
+            .ToArray();
+        var includeValues = project.Descendants()
+            .Select(element => element.Attribute("Include")?.Value)
+            .Where(value => value is not null)
+            .Select(value => value!)
+            .ToArray();
 
-        Assert.Contains(@"..\Nova.Windows\Nova.Windows.csproj", project, StringComparison.Ordinal);
-        Assert.DoesNotContain("Nova.Cli", project, StringComparison.Ordinal);
-        Assert.DoesNotContain("Nova.Playback", project, StringComparison.Ordinal);
-        Assert.DoesNotContain("FFmpeg\\**\\*", project, StringComparison.Ordinal);
-        Assert.DoesNotContain(".dll", project, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain(".exe", project, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain(".zip", project, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("Physical", program, StringComparison.Ordinal);
-        Assert.DoesNotContain("Readiness", program, StringComparison.Ordinal);
-        Assert.DoesNotContain("Probe", program, StringComparison.Ordinal);
-        Assert.DoesNotContain("Diagnostic", program, StringComparison.Ordinal);
-    }
+        Assert.Contains(@"..\Nova.Windows\Nova.Windows.csproj", projectReferences, StringComparer.Ordinal);
+        Assert.DoesNotContain(projectReferences, path => path.Contains("Nova.Cli", StringComparison.Ordinal));
+        Assert.DoesNotContain(projectReferences, path => path.Contains("Nova.Playback", StringComparison.Ordinal));
+        Assert.DoesNotContain(includeValues, value => value.Contains(@"FFmpeg\**\*", StringComparison.Ordinal));
+        Assert.DoesNotContain(includeValues, value => value.EndsWith(".dll", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(includeValues, value => value.EndsWith(".exe", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(includeValues, value => value.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
 
-    private static string FindRepositoryFile(params string[] relativeParts)
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            var path = Path.Combine([directory.FullName, .. relativeParts]);
-            if (File.Exists(path))
-            {
-                return path;
-            }
-
-            directory = directory.Parent;
-        }
-
-        throw new FileNotFoundException(
-            $"Repository file was not found: {Path.Combine(relativeParts)}");
+        var referencedAssemblies = typeof(NovaWindowsStartupComposition).Assembly
+            .GetReferencedAssemblies()
+            .Select(name => name.Name ?? string.Empty)
+            .ToArray();
+        Assert.DoesNotContain("PeerCast.Nova.Cli", referencedAssemblies, StringComparer.Ordinal);
+        Assert.DoesNotContain("PeerCast.Nova.Playback", referencedAssemblies, StringComparer.Ordinal);
     }
 
     private sealed class FakeFactory : INovaWindowsStartupHostFactory

@@ -14,7 +14,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/Nova.App/Nova.App.csproj" />
-    <ProjectReference Include="../../src/Nova.Playback/Nova.Playback.csproj" />
+    <ProjectReference Include="../../src/Nova.Playback.Contracts/Nova.Playback.Contracts.csproj" />
     <Compile Include="../Nova.Network.Tests/ObsRtmpTestClient.cs" Link="ObsRtmpTestClient.cs" />
     <Compile Include="../Nova.Network.Tests/NatPortMappingTestHarness.cs" Link="NatPortMappingTestHarness.cs" />
   </ItemGroup>

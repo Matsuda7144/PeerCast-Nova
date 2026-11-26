@@ -721,7 +721,7 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
 
 internal static class SystemGenesisGuiNextApplicationState
 {
-    internal const string ApplicationDirectoryName = "PeerCast Nova";
+    internal const string ApplicationDirectoryName = PeerCast.Nova.Foundation.Configuration.NovaAppDataPaths.PrimaryDirectoryName;
     private const string FavoriteFileName = "favorites.json";
     private const string NotificationPreferenceFileName =
         "notification-preferences.json";

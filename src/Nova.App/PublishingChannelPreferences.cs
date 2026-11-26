@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using PeerCast.Nova.Foundation.Configuration;
 using PeerCast.Nova.Network.Publishing;
 
 namespace PeerCast.Nova.App;
@@ -117,8 +118,8 @@ internal interface IPublishingPreferencesStore
 
 internal sealed class JsonPublishingPreferencesStore(string path, Action? beforeReplace = null) : IPublishingPreferencesStore
 {
-    internal static JsonPublishingPreferencesStore CreateDefault() => new(Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PeerCast Nova", "publishing-preferences.json"));
+    internal static JsonPublishingPreferencesStore CreateDefault() => new(
+        NovaAppDataPaths.GetPrimaryFilePath("publishing-preferences.json"));
     internal const int MaximumBytes = 64 * 1024;
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true, MaxDepth = 16, AllowDuplicateProperties = false };
     private readonly string _path = Path.GetFullPath(path);

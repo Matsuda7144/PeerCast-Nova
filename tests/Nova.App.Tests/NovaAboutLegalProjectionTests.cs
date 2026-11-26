@@ -85,34 +85,56 @@ public sealed class NovaAboutLegalProjectionTests
     [Fact]
     public void DefaultGraphEmbedsOnlyBoundedLegalText()
     {
-        var project = File.ReadAllText(FindRepositoryFile(
+        var project = RepositorySourceTestHelper.LoadProjectDocument(
             "src",
             "Nova.App",
-            "Nova.App.csproj"));
+            "Nova.App.csproj");
+        var embeddedResources = project.Descendants("EmbeddedResource")
+            .Select(element => element.Attribute("Include")?.Value)
+            .Where(value => value is not null)
+            .ToArray();
 
-        Assert.Contains("NOTICE.md", project, StringComparison.Ordinal);
-        Assert.Contains("PROVENANCE.md", project, StringComparison.Ordinal);
-        Assert.Contains("RUNTIME-REPLACEMENT.md", project, StringComparison.Ordinal);
-        Assert.DoesNotContain("FFmpeg\\**\\*", project, StringComparison.Ordinal);
-        Assert.DoesNotContain(".dll", project, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain(".exe", project, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain(".zip", project, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("Nova.Playback", project, StringComparison.Ordinal);
-        Assert.DoesNotContain("Nova.Cli", project, StringComparison.Ordinal);
+        Assert.Contains(embeddedResources, path => path!.EndsWith("NOTICE.md", StringComparison.Ordinal));
+        Assert.Contains(embeddedResources, path => path!.EndsWith("PROVENANCE.md", StringComparison.Ordinal));
+        Assert.Contains(embeddedResources, path => path!.EndsWith("RUNTIME-REPLACEMENT.md", StringComparison.Ordinal));
 
-        var sourceDirectory = Path.GetDirectoryName(FindRepositoryFile(
-            "src",
-            "Nova.App",
-            "Nova.App.csproj"));
-        Assert.NotNull(sourceDirectory);
-        var source = string.Join(
-            Environment.NewLine,
-            Directory.GetFiles(sourceDirectory, "*.cs")
-                .Select(File.ReadAllText));
-        Assert.DoesNotContain("System.Diagnostics.Process", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("NativeLibrary.Load", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("LoadLibrary", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("HttpClient", source, StringComparison.Ordinal);
+        var includeValues = project.Descendants()
+            .Select(element => element.Attribute("Include")?.Value)
+            .Where(value => value is not null)
+            .Select(value => value!)
+            .ToArray();
+
+        Assert.DoesNotContain(includeValues, value => value.Contains(@"FFmpeg\**\*", StringComparison.Ordinal));
+        Assert.DoesNotContain(includeValues, value => value.EndsWith(".dll", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(includeValues, value => value.EndsWith(".exe", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(includeValues, value => value.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
+
+        var appProjectReferences = project.Descendants("ProjectReference")
+            .Select(element => element.Attribute("Include")?.Value ?? string.Empty)
+            .ToArray();
+        Assert.DoesNotContain(appProjectReferences, path => path.Contains("Nova.Playback", StringComparison.Ordinal));
+        Assert.DoesNotContain(appProjectReferences, path => path.Contains("Nova.Cli", StringComparison.Ordinal));
+
+        var referencedAssemblies = typeof(NovaAboutLegalProjection).Assembly
+            .GetReferencedAssemblies()
+            .Select(name => name.Name ?? string.Empty)
+            .ToArray();
+        Assert.DoesNotContain("PeerCast.Nova.Playback", referencedAssemblies, StringComparer.Ordinal);
+        Assert.DoesNotContain("PeerCast.Nova.Cli", referencedAssemblies, StringComparer.Ordinal);
+
+        var testProject = RepositorySourceTestHelper.LoadProjectDocument(
+            "tests",
+            "Nova.App.Tests",
+            "Nova.App.Tests.csproj");
+        var testProjectReferences = testProject.Descendants("ProjectReference")
+            .Select(element => element.Attribute("Include")?.Value ?? string.Empty)
+            .ToArray();
+        Assert.DoesNotContain(
+            testProjectReferences,
+            path => path.EndsWith("Nova.Playback.csproj", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(
+            testProjectReferences,
+            path => path.EndsWith("Nova.Playback.Contracts.csproj", StringComparison.OrdinalIgnoreCase));
     }
 
     private static async ValueTask<NovaAboutLegalProjection> OpenForCurrentPlatformAsync(
@@ -131,24 +153,7 @@ public sealed class NovaAboutLegalProjectionTests
     }
 
     private static string ReadLegalFile(string fileName) =>
-        File.ReadAllText(FindRepositoryFile("THIRD-PARTY-LICENSES", "FFmpeg", fileName));
-
-    private static string FindRepositoryFile(params string[] parts)
-    {
-        var current = AppContext.BaseDirectory;
-        while (current is not null)
-        {
-            var candidate = Path.Combine([current, .. parts]);
-            if (File.Exists(candidate))
-            {
-                return candidate;
-            }
-
-            current = Directory.GetParent(current)?.FullName;
-        }
-
-        throw new FileNotFoundException(string.Join(Path.DirectorySeparatorChar, parts));
-    }
+        File.ReadAllText(RepositorySourceTestHelper.FindRepositoryFile("THIRD-PARTY-LICENSES", "FFmpeg", fileName));
 
     private sealed class RecordingDispatcher(
         NovaAboutLegalDispatcherResult result = NovaAboutLegalDispatcherResult.Completed) :

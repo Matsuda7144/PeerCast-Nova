@@ -1,4 +1,5 @@
 using System.Text.Json;
+using PeerCast.Nova.Foundation.Configuration;
 
 namespace PeerCast.Nova.App;
 
@@ -47,10 +48,7 @@ internal sealed class GenesisMainWindowPlacementStore
     }
 
     public static string ResolveDefaultPath() =>
-        Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "PeerCast Nova",
-            "main-window-placement.json");
+        NovaAppDataPaths.GetPrimaryFilePath("main-window-placement.json");
 
     public GenesisMainWindowPlacement? Load()
     {

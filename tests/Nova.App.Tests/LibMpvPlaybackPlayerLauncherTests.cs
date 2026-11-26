@@ -205,11 +205,9 @@ public sealed class LibMpvPlaybackPlayerLauncherTests
         using var cancellation = new CancellationTokenSource();
         using var timeout = new CancellationTokenSource(TestTimeout);
         using var error = new StringWriter();
-        await using var host = new PlaybackFmp4HttpStreamHost(
-            new ChannelId(Guid.NewGuid()), new ChannelSessionId(Guid.NewGuid()));
         var client = new ControlledClient();
         var window = new ControlledWindow(() => Assert.Equal(1, client.DisposeCount));
-        var url = host.StreamUri.AbsoluteUri;
+        var url = $"http://127.0.0.1:45913/fmp4/{new ChannelId(Guid.NewGuid())}";
         string[] args = ["--play-fmp4", url, "--libmpv-library", dll.Path];
         if (lowLatency)
         {
