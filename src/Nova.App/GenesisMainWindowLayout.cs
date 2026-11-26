@@ -23,7 +23,8 @@ internal static class GenesisMainWindowLayout
         out GenesisGuiNextAppShellPlacement.WindowRectangle sidebar,
         out GenesisGuiNextAppShellPlacement.WindowRectangle status,
         out GenesisGuiNextAppShellPlacement.WindowRectangle list,
-        out GenesisGuiNextAppShellPlacement.WindowRectangle details)
+        out GenesisGuiNextAppShellPlacement.WindowRectangle details,
+        int? preferredDetailsHeight = null)
     {
         sidebar = status = list = details = default;
         if (width is <= 0 or > 32767 || height is <= 0 or > 32767) return false;
@@ -32,6 +33,6 @@ internal static class GenesisMainWindowLayout
         return logicalWidth >= MinimumClientWidth && logicalHeight >= MinimumClientHeight &&
             GenesisGuiNextAppShellPlacement.TryResolveLayout(
                 new(ContentLeft, 46, logicalWidth - RightInset, logicalHeight - BottomInset), ShellTop,
-                out sidebar, out status, out list, out details);
+                out sidebar, out status, out list, out details, preferredDetailsHeight);
     }
 }

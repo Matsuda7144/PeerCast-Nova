@@ -55,6 +55,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 _publishingPaneVisibility = (expanded, SettingsPageOpen);
                 _ = ShowWindow(_listView, expanded || SettingsPageOpen ? ShowWindowHide : ShowWindowShowNoActivate);
                 _ = ShowWindow(_detailsPane, SettingsPageOpen ? ShowWindowHide : ShowWindowShowNoActivate);
+                UpdatePaneSplitterVisibility();
             }
         }
 

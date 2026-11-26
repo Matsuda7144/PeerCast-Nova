@@ -10,6 +10,7 @@ internal sealed class GenesisGuiNextAppShellPlacement
     internal const int StatusHeight = 28;
     internal const int StatusGap = 4;
     internal const int MinimumListHeight = 80;
+    internal const int MinimumDetailsHeight = 140;
     internal const int DetailsHeight = 224;
     internal const int DetailsGap = 8;
     private readonly nint _owner;
@@ -163,16 +164,29 @@ internal sealed class GenesisGuiNextAppShellPlacement
             out movedListRectangle,
             out _);
 
+    internal static int ResolveDetailsHeight(int availableContentHeight, int? preferredDetailsHeight)
+    {
+        if (preferredDetailsHeight is null)
+        {
+            return DetailsHeight;
+        }
+
+        var maxDetails = Math.Max(MinimumDetailsHeight, availableContentHeight - MinimumListHeight - DetailsGap);
+        return Math.Clamp(preferredDetailsHeight.Value, MinimumDetailsHeight, maxDetails);
+    }
+
     internal static bool TryResolveLayout(
         WindowRectangle listRectangle,
         int shellTop,
         out WindowRectangle sidebarRectangle,
         out WindowRectangle statusRectangle,
         out WindowRectangle movedListRectangle,
-        out WindowRectangle detailsRectangle)
+        out WindowRectangle detailsRectangle,
+        int? preferredDetailsHeight = null)
     {
         var movedTop = shellTop + StatusHeight + StatusGap;
-        var detailsTop = listRectangle.Bottom - DetailsHeight;
+        var resolvedDetailsHeight = ResolveDetailsHeight(listRectangle.Bottom - movedTop, preferredDetailsHeight);
+        var detailsTop = listRectangle.Bottom - resolvedDetailsHeight;
         var movedBottom = detailsTop - DetailsGap;
         var movedHeight = movedBottom - movedTop;
         var sidebarRight = listRectangle.Left - SidebarGap;

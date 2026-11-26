@@ -80,6 +80,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             _ = ShowWindow(_listView, ShowWindowHide);
             _ = ShowWindow(_detailsPane, ShowWindowHide);
             _ = ShowWindow(_settingsPane, ShowWindowShowNoActivate);
+            UpdatePaneSplitterVisibility();
             RefreshIntegratedSettings();
             _favoriteUpdates.Reset();
             SynchronizeNativeSelection();
@@ -99,6 +100,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             _ = ShowWindow(_settingsPane, ShowWindowHide);
             _ = ShowWindow(_listView, ShowWindowShowNoActivate);
             _ = ShowWindow(_detailsPane, ShowWindowShowNoActivate);
+            UpdatePaneSplitterVisibility();
             _favoriteUpdates.Reset();
             SynchronizeNativeSelection();
         }

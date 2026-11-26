@@ -49,16 +49,20 @@ internal sealed partial class GenesisNetworkSettingsWindow
                 throw new GenesisNetworkSettingsWindowCleanupException(classLifetime);
             return null;
         }
+        var dpi = GenesisMainWindowResizeGuard.GetDpi(owner);
         var window = CreateWindowExW(0x00010000, className, "通信 / ポート自動開放",
             WindowStyleCaption | WindowStyleSysMenu | WindowStyleClipChildren,
-            UseDefaultPosition, UseDefaultPosition, 820, 760, owner, 0, instance, 0);
+            UseDefaultPosition, UseDefaultPosition,
+            GenesisMainWindowLayout.Scale(820, dpi),
+            GenesisMainWindowLayout.Scale(760, dpi),
+            owner, 0, instance, 0);
         if (window == 0)
         {
             if (!classLifetime.TryRelease())
                 throw new GenesisNetworkSettingsWindowCleanupException(classLifetime);
             return null;
         }
-        var state = new NatWindowState(window, instance, classLifetime, brush, adapter);
+        var state = new NatWindowState(window, instance, classLifetime, brush, adapter, dpi);
         NatStates[window] = state;
         if (!GenesisNetworkSettingsWindowInitialization.TryInitialize(
             state.CreateControls, state.Render,
@@ -140,6 +144,7 @@ internal sealed partial class GenesisNetworkSettingsWindow
         private readonly nint instance;
         private readonly GenesisNetworkSettingsWindowClassLifetime classLifetime;
         private readonly nint brush;
+        private readonly uint dpi;
         private readonly uint threadId = GetCurrentThreadId();
         private readonly object disposalGate = new();
         private readonly TaskCompletionSource closed = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -147,9 +152,9 @@ internal sealed partial class GenesisNetworkSettingsWindow
         private bool closingNative;
         private nint checkbox, settings, listener, mapping, diagnostics, notice, close;
         private GuiNextNetworkSettingsPresentation? last;
-        public NatWindowState(nint window, nint instance, GenesisNetworkSettingsWindowClassLifetime classLifetime, nint brush, IGuiNextNetworkSettingsAdapter adapter)
+        public NatWindowState(nint window, nint instance, GenesisNetworkSettingsWindowClassLifetime classLifetime, nint brush, IGuiNextNetworkSettingsAdapter adapter, uint dpi)
         {
-            this.window = window; this.instance = instance; this.classLifetime = classLifetime; this.brush = brush;
+            this.window = window; this.instance = instance; this.classLifetime = classLifetime; this.brush = brush; this.dpi = dpi;
             Model = new GuiNextNetworkSettingsViewModel(adapter, generation =>
             {
                 if (NatStates.TryGetValue(window, out var active) && ReferenceEquals(active, this))
@@ -178,7 +183,12 @@ internal sealed partial class GenesisNetworkSettingsWindow
         }
 
         private nint Add(string type, string text, int x, int y, int width, int height, int id, uint style = 0) =>
-            CreateControl(type, text, WindowStyleChild | WindowStyleVisible | style, x, y, width, height, window, id, instance);
+            CreateControl(type, text, WindowStyleChild | WindowStyleVisible | style,
+                GenesisMainWindowLayout.Scale(x, dpi),
+                GenesisMainWindowLayout.Scale(y, dpi),
+                GenesisMainWindowLayout.Scale(width, dpi),
+                GenesisMainWindowLayout.Scale(height, dpi),
+                window, id, instance);
 
         public void Render()
         {

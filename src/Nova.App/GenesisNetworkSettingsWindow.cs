@@ -127,18 +127,19 @@ internal sealed partial class GenesisNetworkSettingsWindow : IAsyncDisposable
             return null;
         }
 
+        var dpi = GenesisMainWindowResizeGuard.GetDpi(owner);
         var window = CreateWindowExW(
             0,
             className,
-            "Network / Relay",
+            "通信 / リレー状態",
             WindowStyleCaption |
                 WindowStyleSysMenu |
                 WindowStyleMinimizeBox |
                 WindowStyleClipChildren,
             UseDefaultPosition,
             UseDefaultPosition,
-            WindowWidth,
-            WindowHeight,
+            GenesisMainWindowLayout.Scale(WindowWidth, dpi),
+            GenesisMainWindowLayout.Scale(WindowHeight, dpi),
             owner,
             0,
             instance,
@@ -150,7 +151,7 @@ internal sealed partial class GenesisNetworkSettingsWindow : IAsyncDisposable
         }
 
         var content = GenesisNetworkSettingsWindowContent.Create(viewModel);
-        if (!TryCreateControls(window, instance, content))
+        if (!TryCreateControls(window, instance, content, dpi))
         {
             _ = DestroyWindow(window);
             _ = UnregisterClassW(className, instance);
@@ -193,12 +194,20 @@ internal sealed partial class GenesisNetworkSettingsWindow : IAsyncDisposable
     private static bool TryCreateControls(
         nint window,
         nint instance,
-        GenesisNetworkSettingsWindowContent content)
+        GenesisNetworkSettingsWindowContent content,
+        uint dpi)
     {
         var y = 18;
         foreach (var line in content.StatusLines)
         {
-            if (CreateLabel(window, instance, line, 22, y, 510, 22) == 0)
+            if (CreateLabel(
+                    window,
+                    instance,
+                    line,
+                    GenesisMainWindowLayout.Scale(22, dpi),
+                    GenesisMainWindowLayout.Scale(y, dpi),
+                    GenesisMainWindowLayout.Scale(510, dpi),
+                    GenesisMainWindowLayout.Scale(22, dpi)) == 0)
             {
                 return false;
             }
@@ -210,22 +219,22 @@ internal sealed partial class GenesisNetworkSettingsWindow : IAsyncDisposable
                 window,
                 instance,
                 content.AvailabilityNote,
-                22,
-                y + 6,
-                510,
-                48) == 0)
+                GenesisMainWindowLayout.Scale(22, dpi),
+                GenesisMainWindowLayout.Scale(y + 6, dpi),
+                GenesisMainWindowLayout.Scale(510, dpi),
+                GenesisMainWindowLayout.Scale(48, dpi)) == 0)
         {
             return false;
         }
 
         var closeButton = CreateControl(
             "BUTTON",
-            "Close",
+            "閉じる",
             WindowStyleChild | WindowStyleVisible | WindowStyleTabStop,
-            448,
-            306,
-            84,
-            28,
+            GenesisMainWindowLayout.Scale(448, dpi),
+            GenesisMainWindowLayout.Scale(306, dpi),
+            GenesisMainWindowLayout.Scale(84, dpi),
+            GenesisMainWindowLayout.Scale(28, dpi),
             window,
             CloseControlId,
             instance);
@@ -362,14 +371,7 @@ internal sealed partial class GenesisNetworkSettingsWindow : IAsyncDisposable
         return control;
     }
 
-    private static void ApplyDefaultFont(nint control)
-    {
-        var font = GetStockObject(DefaultGuiFont);
-        if (font != 0)
-        {
-            _ = SendMessageW(control, WindowMessageSetFont, (nuint)font, 1);
-        }
-    }
+    private static void ApplyDefaultFont(nint control) => _ = GenesisWindowUiFont.Apply(control);
 
     private static nint ProcessWindowMessage(
         nint window,

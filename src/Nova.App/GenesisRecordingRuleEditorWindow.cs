@@ -32,13 +32,17 @@ internal static class GenesisRecordingRuleEditorWindow
         if (RegisterClassExW(ref windowClass) == 0) { editor.Cancel(); return false; }
         nint window = 0;
         var wasEnabled = IsWindowEnabled(owner);
+        var dpi = GenesisMainWindowResizeGuard.GetDpi(owner);
         try
         {
             window = CreateWindowExW(0, className, Title,
                 0x00C00000 | 0x00080000 | 0x02000000, unchecked((int)0x80000000),
-                unchecked((int)0x80000000), 690, 590, owner, 0, instance, 0);
+                unchecked((int)0x80000000),
+                GenesisMainWindowLayout.Scale(690, dpi),
+                GenesisMainWindowLayout.Scale(590, dpi),
+                owner, 0, instance, 0);
             if (window == 0) return false;
-            var state = new State(window, instance, editor, draft);
+            var state = new State(window, instance, editor, draft, dpi);
             States[window] = state;
             if (!state.CreateControls()) return false;
             _ = EnableWindow(owner, false);
@@ -87,7 +91,7 @@ internal static class GenesisRecordingRuleEditorWindow
         return DefWindowProcW(window, message, wParam, lParam);
     }
 
-    private sealed class State(nint window, nint instance, GenesisRecordingRuleEditor editor, GenesisRecordingRuleDraft draft)
+    private sealed class State(nint window, nint instance, GenesisRecordingRuleEditor editor, GenesisRecordingRuleDraft draft, uint dpi)
     {
         private readonly Dictionary<int, nint> controls = [];
         private GenesisRecordingRuleDraft frozen = draft;
@@ -100,9 +104,13 @@ internal static class GenesisRecordingRuleEditorWindow
         {
             var value = CreateWindowExW(type == "EDIT" ? 0x200u : 0, type, text,
                 0x40000000 | 0x10000000 | (id == 0 ? 0u : 0x10000u) | extra,
-                x, y, width, height, window, (nint)id, instance, 0);
+                GenesisMainWindowLayout.Scale(x, dpi),
+                GenesisMainWindowLayout.Scale(y, dpi),
+                GenesisMainWindowLayout.Scale(width, dpi),
+                GenesisMainWindowLayout.Scale(height, dpi),
+                window, (nint)id, instance, 0);
             if (id != 0) controls[id] = value;
-            _ = SendMessageW(value, 0x30, (nuint)GetStockObject(17), 1);
+            if (value != 0) _ = GenesisWindowUiFont.Apply(value);
             return value;
         }
         private void Field(int id, string label, string text, int y)
