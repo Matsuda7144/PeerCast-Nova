@@ -305,8 +305,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                         sidebar.Width, GenesisGuiNextNavigationPresentation.RowHeight(IsModern) - 2);
                 Place(_playButton, playLeft, playbackTop, playbackWidth, playbackHeight);
                 Place(_stopButton, stopLeft, playbackTop, playbackWidth, playbackHeight);
-                var statusLabel = FindWindowExW(_statusBar, 0, "STATIC", null);
-                Place(statusLabel, 8, 0, statusWidth, status.Height);
+                Place(_statusLabel, 8, 0, statusWidth, status.Height);
                 _searchBox.ApplyLayout(searchLeft, searchWidth, status.Height, dpi);
                 var topControlHeight = IsModern ? GenesisGuiNextTopBarLayout.Height : status.Height - 4;
                 Place(_refreshButton, refreshLeft, 2, RefreshButtonWidth, topControlHeight);

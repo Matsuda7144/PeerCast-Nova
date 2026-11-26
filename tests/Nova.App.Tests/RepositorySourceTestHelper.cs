@@ -27,12 +27,35 @@ internal static class RepositorySourceTestHelper
     {
         var root = FindRepositoryRoot();
         var path = Path.Combine([root, .. relativeParts]);
-        if (!File.Exists(path))
+        if (File.Exists(path))
         {
-            throw new FileNotFoundException($"Repository file was not found: {Path.Combine(relativeParts)}", path);
+            return path;
         }
 
-        return path;
+        if (relativeParts.Length == 3 &&
+            string.Equals(relativeParts[0], "src", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(relativeParts[1], "Nova.App", StringComparison.OrdinalIgnoreCase))
+        {
+            var appDirectory = Path.Combine(root, "src", "Nova.App");
+            if (Directory.Exists(appDirectory))
+            {
+                var matches = Directory
+                    .EnumerateFiles(appDirectory, relativeParts[2], SearchOption.AllDirectories)
+                    .ToArray();
+                if (matches.Length == 1)
+                {
+                    return matches[0];
+                }
+
+                if (matches.Length > 1)
+                {
+                    throw new InvalidOperationException(
+                        $"Multiple Nova.App files matched '{relativeParts[2]}': {string.Join(", ", matches)}");
+                }
+            }
+        }
+
+        throw new FileNotFoundException($"Repository file was not found: {Path.Combine(relativeParts)}", path);
     }
 
     public static string ReadAppSource(string fileName) =>

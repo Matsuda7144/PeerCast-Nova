@@ -150,20 +150,6 @@ public sealed class GenesisGuiNextPrimaryCommandIntegrationTests
         Assert.Contains("GetFocus() == _edit", focus, StringComparison.Ordinal);
     }
 
-    private static string ReadSource(string fileName)
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            var sourcePath = Path.Combine(directory.FullName, "src", "Nova.App", fileName);
-            if (File.Exists(sourcePath))
-            {
-                return File.ReadAllText(sourcePath);
-            }
-
-            directory = directory.Parent;
-        }
-
-        throw new FileNotFoundException($"Repository source was not found: {fileName}");
-    }
+    private static string ReadSource(string fileName) =>
+        RepositorySourceTestHelper.ReadAppSource(fileName);
 }

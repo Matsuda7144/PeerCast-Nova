@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using static PeerCast.Nova.Windows.Win32WindowNativeMethods;
 
 namespace PeerCast.Nova.Windows;
 
@@ -605,140 +606,9 @@ public sealed class NovaDailyPlaybackWindowHost : IAsyncDisposable
         _started.TrySetResult(result);
     }
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct WindowClassEx
-    {
-        public uint Size;
-        public uint Style;
-        public nint WindowProcedure;
-        public int ClassExtraBytes;
-        public int WindowExtraBytes;
-        public nint Instance;
-        public nint Icon;
-        public nint Cursor;
-        public nint BackgroundBrush;
-        [MarshalAs(UnmanagedType.LPWStr)]
-        public string? MenuName;
-        [MarshalAs(UnmanagedType.LPWStr)]
-        public string? ClassName;
-        public nint SmallIcon;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct WindowRectangle
-    {
-        public int Left;
-        public int Top;
-        public int Right;
-        public int Bottom;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct WindowMessage
-    {
-        public nint Window;
-        public uint Message;
-        public nuint WParam;
-        public nint LParam;
-        public uint Time;
-        public Point Point;
-        public uint Private;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct Point
-    {
-        public int X;
-        public int Y;
-    }
-
-    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
-    private delegate nint WindowProcedure(nint window, uint message, nuint wParam, nint lParam);
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, EntryPoint = "GetModuleHandleW", SetLastError = true)]
-    private static extern nint GetModuleHandleW(string? moduleName);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "RegisterClassExW", SetLastError = true)]
-    private static extern ushort RegisterClassExW(ref WindowClassEx windowClass);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "UnregisterClassW", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool UnregisterClassW(string className, nint instance);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "CreateWindowExW", SetLastError = true)]
-    private static extern nint CreateWindowExW(
-        uint extendedStyle,
-        string className,
-        string windowName,
-        uint style,
-        int x,
-        int y,
-        int width,
-        int height,
-        nint parent,
-        nint menu,
-        nint instance,
-        nint parameter);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "DefWindowProcW")]
-    private static extern nint DefWindowProcW(nint window, uint message, nuint wParam, nint lParam);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "AdjustWindowRectEx", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool AdjustWindowRectEx(ref WindowRectangle rectangle, uint style, bool hasMenu, uint extendedStyle);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "LoadCursorW")]
-    private static extern nint LoadCursorW(nint instance, nint cursorName);
-
-    [DllImport("user32.dll", EntryPoint = "ShowWindow")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool ShowWindow(nint window, int command);
-
-    [DllImport("user32.dll", EntryPoint = "UpdateWindow")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool UpdateWindow(nint window);
-
-    [DllImport("user32.dll", EntryPoint = "GetMessageW", SetLastError = true)]
-    private static extern int GetMessageW(out WindowMessage message, nint window, uint minimum, uint maximum);
-
-    [DllImport("user32.dll", EntryPoint = "TranslateMessage")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool TranslateMessage(ref WindowMessage message);
-
-    [DllImport("user32.dll", EntryPoint = "DispatchMessageW")]
-    private static extern nint DispatchMessageW(ref WindowMessage message);
-
-    [DllImport("user32.dll", EntryPoint = "PostQuitMessage")]
-    private static extern void PostQuitMessage(int exitCode);
-
-    [DllImport("user32.dll", EntryPoint = "DestroyWindow", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool DestroyWindow(nint window);
-
-    [DllImport("user32.dll", EntryPoint = "IsWindow")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool IsWindow(nint window);
-
-    [DllImport("user32.dll", EntryPoint = "PostMessageW")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool PostMessageW(nint window, uint message, nuint wParam, nint lParam);
-
-    [DllImport("user32.dll", EntryPoint = "SendMessageW", CharSet = CharSet.Unicode)]
-    private static extern nint SendMessageW(nint window, uint message, nuint wParam, nint lParam);
-
-    [DllImport("user32.dll", EntryPoint = "SendMessageW", CharSet = CharSet.Unicode)]
-    private static extern nint SendMessageW(nint window, uint message, nuint wParam, string lParam);
-
     [DllImport("user32.dll", EntryPoint = "GetDlgItem")]
     private static extern nint GetDlgItem(nint dialog, int controlId);
 
-    [DllImport("user32.dll", EntryPoint = "EnableWindow")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool EnableWindow(nint window, bool enabled);
-
     [DllImport("user32.dll", EntryPoint = "MessageBoxW", CharSet = CharSet.Unicode)]
     private static extern int MessageBoxW(nint window, string text, string caption, uint type);
-
-    [DllImport("gdi32.dll", EntryPoint = "GetStockObject")]
-    private static extern nint GetStockObject(int objectId);
 }

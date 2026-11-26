@@ -21,8 +21,7 @@ internal sealed class GenesisChannelContextMenuPlacement
             return null;
         }
 
-        var parent = (nint)windowToken;
-        var listView = FindWindowExW(parent, 0, "SysListView32", null);
+        var listView = GenesisMainWindowControlRegistry.ResolveChannelList((nint)windowToken);
         return listView == 0 ? null : new(listView);
     }
 

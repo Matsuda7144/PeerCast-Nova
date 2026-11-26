@@ -37,10 +37,7 @@ internal sealed class GenesisPlaybackModeButtonPlacement
         }
 
         var parent = (nint)windowToken;
-        var sourceLabel = FindWindowExW(parent, 0, "STATIC", "Source");
-        var status = sourceLabel == 0
-            ? 0
-            : FindWindowExW(parent, sourceLabel, "STATIC", null);
+        var status = GenesisMainWindowControlRegistry.ResolveStatusText(parent);
         if (status == 0 || !GetWindowRect(status, out var rectangle))
         {
             return null;

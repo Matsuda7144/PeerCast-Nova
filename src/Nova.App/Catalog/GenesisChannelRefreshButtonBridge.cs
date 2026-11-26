@@ -31,7 +31,7 @@ internal sealed class GenesisChannelRefreshButtonPlacement
         }
 
         var parent = (nint)windowToken;
-        var sourceEdit = FindWindowExW(parent, 0, "EDIT", null);
+        var sourceEdit = GenesisMainWindowControlRegistry.ResolveSourceEdit(parent);
         if (sourceEdit == 0 || !GetWindowRect(sourceEdit, out var rectangle))
         {
             return null;

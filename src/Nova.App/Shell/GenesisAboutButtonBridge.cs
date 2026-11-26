@@ -28,7 +28,7 @@ internal sealed class GenesisAboutButtonPlacement
         }
 
         var owner = (nint)windowToken;
-        var sourceEdit = FindWindowExW(owner, 0, "EDIT", null);
+        var sourceEdit = GenesisMainWindowControlRegistry.ResolveSourceEdit(owner);
         if (sourceEdit == 0)
         {
             return null;

@@ -92,11 +92,13 @@ internal sealed class GenesisMainWindowNativeSurface : IAsyncDisposable
     private const int ListViewColumnFormatRight = 1;
     private const uint WindowMessageClose = 0x0010;
     private const uint CommonControlsListViewClasses = 0x00000001;
+    private readonly nint _owner;
     private readonly nint[] _controls;
     private int _disposed;
 
-    private GenesisMainWindowNativeSurface(nint[] controls)
+    private GenesisMainWindowNativeSurface(nint owner, nint[] controls)
     {
+        _owner = owner;
         _controls = controls;
     }
 
@@ -150,7 +152,8 @@ internal sealed class GenesisMainWindowNativeSurface : IAsyncDisposable
             int left,
             int top,
             int controlWidth,
-            int controlHeight)
+            int controlHeight,
+            int controlId)
         {
             var control = CreateWindowExW(
                 extendedStyle,
@@ -162,7 +165,7 @@ internal sealed class GenesisMainWindowNativeSurface : IAsyncDisposable
                 controlWidth,
                 controlHeight,
                 parent,
-                0,
+                (nint)controlId,
                 0,
                 0);
             if (control != 0)
@@ -181,7 +184,8 @@ internal sealed class GenesisMainWindowNativeSurface : IAsyncDisposable
             margin,
             sourceTop + 4,
             sourceLabelWidth - 4,
-            sourceHeight);
+            sourceHeight,
+            GenesisMainWindowControlIds.SourceLabel);
         var sourceEdit = Create(
             WindowExtendedStyleClientEdge,
             "EDIT",
@@ -190,7 +194,8 @@ internal sealed class GenesisMainWindowNativeSurface : IAsyncDisposable
             editLeft,
             sourceTop,
             editWidth,
-            sourceHeight);
+            sourceHeight,
+            GenesisMainWindowControlIds.SourceEdit);
         var playButton = Create(
             0,
             "BUTTON",
@@ -199,7 +204,8 @@ internal sealed class GenesisMainWindowNativeSurface : IAsyncDisposable
             playLeft,
             sourceTop,
             commandWidth,
-            sourceHeight);
+            sourceHeight,
+            GenesisMainWindowControlIds.PlayButton);
         var stopButton = Create(
             0,
             "BUTTON",
@@ -208,7 +214,8 @@ internal sealed class GenesisMainWindowNativeSurface : IAsyncDisposable
             stopLeft,
             sourceTop,
             commandWidth,
-            sourceHeight);
+            sourceHeight,
+            GenesisMainWindowControlIds.StopButton);
         var channelList = Create(
             WindowExtendedStyleClientEdge,
             "SysListView32",
@@ -220,7 +227,8 @@ internal sealed class GenesisMainWindowNativeSurface : IAsyncDisposable
             listLeft,
             listTop,
             listWidth,
-            listHeight);
+            listHeight,
+            GenesisMainWindowControlIds.ChannelList);
         var status = Create(
             0,
             "STATIC",
@@ -229,7 +237,8 @@ internal sealed class GenesisMainWindowNativeSurface : IAsyncDisposable
             listLeft,
             statusTop + 4,
             listWidth,
-            statusHeight);
+            statusHeight,
+            GenesisMainWindowControlIds.StatusText);
 
         if (sourceLabel == 0 ||
             sourceEdit == 0 ||
@@ -265,13 +274,22 @@ internal sealed class GenesisMainWindowNativeSurface : IAsyncDisposable
         }
 
         _ = FocusInitialControl(sourceEdit, SetFocus);
-        return new(controls.ToArray());
+        GenesisMainWindowControlRegistry.Register(new(
+            parent,
+            sourceLabel,
+            sourceEdit,
+            playButton,
+            stopButton,
+            channelList,
+            status));
+        return new(parent, controls.ToArray());
     }
 
     public ValueTask DisposeAsync()
     {
         if (Interlocked.Exchange(ref _disposed, 1) == 0)
         {
+            GenesisMainWindowControlRegistry.Unregister(_owner);
             CloseControls(_controls);
         }
 

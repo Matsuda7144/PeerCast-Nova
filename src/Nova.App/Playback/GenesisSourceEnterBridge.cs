@@ -37,7 +37,7 @@ internal sealed class GenesisSourceEnterPlacement
             return null;
         }
 
-        var sourceEdit = FindWindowExW((nint)windowToken, 0, "EDIT", null);
+        var sourceEdit = GenesisMainWindowControlRegistry.ResolveSourceEdit((nint)windowToken);
         return sourceEdit == 0 ? null : new(sourceEdit);
     }
 

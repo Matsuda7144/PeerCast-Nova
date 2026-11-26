@@ -419,22 +419,8 @@ public sealed class GenesisWindowUiFontTests
         return api;
     }
 
-    private static string ReadSource(string fileName)
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            var sourcePath = Path.Combine(directory.FullName, "src", "Nova.App", fileName);
-            if (File.Exists(sourcePath))
-            {
-                return File.ReadAllText(sourcePath);
-            }
-
-            directory = directory.Parent;
-        }
-
-        throw new FileNotFoundException($"Repository source was not found: {fileName}");
-    }
+    private static string ReadSource(string fileName) =>
+        RepositorySourceTestHelper.ReadAppSource(fileName);
 
     private sealed class FontApi(string family) : IGenesisUiFontNativeApi
     {

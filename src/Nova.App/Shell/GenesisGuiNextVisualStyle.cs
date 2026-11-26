@@ -97,7 +97,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private readonly Dictionary<nint, nint> _originalFonts = new();
         private nint[] VisualButtons => [.. _navigationButtons, _refreshButton, _favoriteButton];
         private nint[] VisualFontControls => [.. VisualButtons, .. RecordingVisualControls, .. PublishingVisualControls, .. SettingsVisualControls, .. RelayTreeVisualControls, _publishingConnectionState, _listView, TopStatusWindow, _searchBox.LabelWindow,
-            FindWindowExW(_statusBar, 0, "EDIT", null), FindWindowExW(_statusBar, 0, "COMBOBOX", null)];
+            _searchBox.EditWindow, _searchBox.FilterWindow];
 
         internal void AttachVisuals()
         {

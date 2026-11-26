@@ -91,23 +91,8 @@ public sealed class GenesisGuiNextMainWindowKeyboardNavigationTests
         Assert.Contains("UnhookWindowsHookEx(hook)", source, StringComparison.Ordinal);
     }
 
-    private static string FindRepositoryFile(params string[] relativeParts)
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            var path = Path.Combine([directory.FullName, .. relativeParts]);
-            if (File.Exists(path))
-            {
-                return path;
-            }
-
-            directory = directory.Parent;
-        }
-
-        throw new FileNotFoundException(
-            $"Repository file was not found: {Path.Combine(relativeParts)}");
-    }
+    private static string FindRepositoryFile(params string[] relativeParts) =>
+        RepositorySourceTestHelper.FindRepositoryFile(relativeParts);
 
     private static readonly int[] MultiRegionMap = [0, 0, 1, 1, 2];
     private static readonly int[] SingleRegionMap = [0, 0];

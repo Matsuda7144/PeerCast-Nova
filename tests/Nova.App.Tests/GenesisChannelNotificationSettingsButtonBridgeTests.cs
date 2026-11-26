@@ -185,23 +185,8 @@ public sealed class GenesisChannelNotificationSettingsButtonBridgeTests
             "All bounded native placement-open rejection paths should report failure.");
     }
 
-    private static string FindRepositoryFile(params string[] relativeParts)
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            var path = Path.Combine([directory.FullName, .. relativeParts]);
-            if (File.Exists(path))
-            {
-                return path;
-            }
-
-            directory = directory.Parent;
-        }
-
-        throw new FileNotFoundException(
-            $"Repository file was not found: {Path.Combine(relativeParts)}");
-    }
+    private static string FindRepositoryFile(params string[] relativeParts) =>
+        RepositorySourceTestHelper.FindRepositoryFile(relativeParts);
 
     private sealed class RecordingSoundPlayer : IGenesisSystemNotificationSoundPlayer
     {
