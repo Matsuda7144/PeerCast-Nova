@@ -75,8 +75,8 @@ internal sealed partial class GenesisPublishingTabController(IGenesisGuiNextShel
     internal void Detach()
     {
         _publishingEditor?.Dispose();
-        if (IsWindow(_publishingEditPane)) _ = RemoveWindowSubclass(_publishingEditPane, PublishingEditorProcedure, PublishingEditorSubclassId);
-        if (IsWindow(_publishingAdvancedPane)) _ = RemoveWindowSubclass(_publishingAdvancedPane, PublishingEditorProcedure, PublishingEditorSubclassId);
+        if (_publishingEditPane != 0 && IsWindow(_publishingEditPane)) _ = RemoveWindowSubclass(_publishingEditPane, PublishingEditorProcedure, PublishingEditorSubclassId);
+        if (_publishingAdvancedPane != 0 && IsWindow(_publishingAdvancedPane)) _ = RemoveWindowSubclass(_publishingAdvancedPane, PublishingEditorProcedure, PublishingEditorSubclassId);
         _publishingSettingsWindow?.Dispose();
         _publishingSettingsWindow = null;
         _ = ControllersByOwner.TryRemove(KeyValuePair.Create(_host.Owner, this));
