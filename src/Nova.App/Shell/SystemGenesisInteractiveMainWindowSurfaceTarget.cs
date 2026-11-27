@@ -422,6 +422,9 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
             return null;
         }
 
+        // Modern UI・テーマ適用・初期配置がすべて揃った段階で初めてメインウィンドウを表示する。
+        GenesisMainWindowResizeGuard.RevealWindow((nint)windowToken);
+
         // The application network owner is initialized before opening this surface.
         // Start only after the bridge is accepted, so rejected windows never publish.
         if (guiNextState is not null && viewModel.NetworkSettingsAdapter is GuiNextNetworkSettingsAdapter)

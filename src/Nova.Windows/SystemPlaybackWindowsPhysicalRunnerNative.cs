@@ -109,8 +109,11 @@ internal sealed class SystemPlaybackWindowsPhysicalRunnerNative :
                 requestStop = _stopRequested;
             }
 
-            _ = ShowWindow(window, ShowWindowNormal);
-            UpdateWindow(window);
+            if (!options.DeferInitialShow)
+            {
+                _ = ShowWindow(window, ShowWindowNormal);
+                UpdateWindow(window);
+            }
             callbacks.Started(window.ToInt64());
             if (requestStop)
             {

@@ -50,6 +50,8 @@ public sealed record PlaybackWindowsPhysicalRunnerOptions
     public int MaximumPendingOperations { get; init; } = 8;
 
     internal string? ApplicationIconPath { get; init; }
+
+    internal bool DeferInitialShow { get; init; }
 }
 
 public sealed record PlaybackWindowsPhysicalRunnerSnapshot(

@@ -499,7 +499,10 @@ public sealed class NovaWindowsStartupComposition
         INovaApplicationNetworkOwner? networkOwner,
         CancellationToken cancellationToken)
     {
-        await using var host = _hostFactory.Create(_options.Host);
+        var hostOptions = genesisSurfaceTarget is not null
+            ? _options.Host with { DeferInitialShow = true }
+            : _options.Host;
+        await using var host = _hostFactory.Create(hostOptions);
         IAsyncDisposable? projectionLifetime = null;
         IAsyncDisposable? genesisLifetime = null;
         GenesisPlaybackWindowCoordinator? playbackWindowCoordinator = null;
