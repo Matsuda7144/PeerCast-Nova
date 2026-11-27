@@ -14,7 +14,6 @@ internal sealed partial class GenesisPublishingTabController(IGenesisGuiNextShel
     private nint _publishingSubtitle, _publishingObsTitle, _publishingBasicTitle, _publishingOptionsTitle;
     private nint _publishingBasic, _publishingOptions, _publishingDiagnostic;
     private (bool Expanded, int Width, int Height, uint Dpi, GenesisGuiNextAppShellPlacement.WindowRectangle Bounds)? _publishingPanePlacement;
-    private (bool Expanded, bool Settings)? _publishingPaneVisibility;
     private nint _publishingServerLabel, _publishingServerValue, _publishingKeyLabel, _publishingKeyValue;
     private nint _publishingServerCopy, _publishingKeyReveal, _publishingKeyCopy, _publishingConnectionState, _publishingInstructions;
     private nint _publishingSettingsButton;
@@ -124,14 +123,7 @@ internal sealed partial class GenesisPublishingTabController(IGenesisGuiNextShel
             }
             finally { _host.LayoutInProgress = wasInProgress; }
         }
-        var settingsOpen = _host.IsSettingsPageOpen;
-        if (_publishingPaneVisibility != (expanded, settingsOpen))
-        {
-            _publishingPaneVisibility = (expanded, settingsOpen);
-            _ = ShowWindow(_host.ListView, expanded || settingsOpen ? ShowWindowHide : ShowWindowShowNoActivate);
-            _ = ShowWindow(_host.DetailsPane, settingsOpen ? ShowWindowHide : ShowWindowShowNoActivate);
-            _host.UpdatePaneSplitterVisibility();
-        }
+        _host.SynchronizeMainPaneVisibility();
     }
 
     private void SynchronizePage(bool visible)

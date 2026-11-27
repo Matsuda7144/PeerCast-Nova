@@ -12,6 +12,7 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
     private const uint WindowStyleChild = 0x40000000;
     private const uint WindowStyleVisible = 0x10000000;
     private const uint WindowStyleClipChildren = 0x02000000;
+    private const uint WindowMessageSetRedraw = 0x000B;
     private const uint WindowMessageNotify = 0x004E;
     private const uint WindowMessageCommand = 0x0111;
     private const uint WindowMessageNcDestroy = 0x0082;
@@ -603,93 +604,102 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
                         selectedTab);
                 }
 
-                var newColumns = GenesisGuiNextRecordingListPresentation.Columns(selectedTab, recordingPageMode);
-                if (!ReferenceEquals(_renderedColumns, newColumns))
+                _ = SendMessageW(_channelList, WindowMessageSetRedraw, 0, 0);
+                try
                 {
-                    if (_renderedColumns is not null)
+                    var newColumns = GenesisGuiNextRecordingListPresentation.Columns(selectedTab, recordingPageMode);
+                    if (!ReferenceEquals(_renderedColumns, newColumns))
                     {
-                        _columnWidths.Capture(
-                            _renderedColumns,
-                            GenesisMainWindowNativeSurface.GetColumnWidths(
-                                _channelList,
-                                _renderedColumns.Count));
+                        if (_renderedColumns is not null)
+                        {
+                            _columnWidths.Capture(
+                                _renderedColumns,
+                                GenesisMainWindowNativeSurface.GetColumnWidths(
+                                    _channelList,
+                                    _renderedColumns.Count));
+                        }
+
+                        var columnsToApply = _columnWidths.ApplySavedWidths(newColumns);
+                        Interlocked.Exchange(ref _selectionChangesSuppressed, 1);
+                        var columnsReplaced = false;
+                        try
+                        {
+                            columnsReplaced = GenesisGuiNextRecordingListPresentation.TryReplaceColumns(
+                                () => GenesisMainWindowNativeSurface.ReplaceRows(_channelList, Array.Empty<string[]>()),
+                                () => GenesisMainWindowNativeSurface.ReplaceColumns(
+                                    _channelList, GenesisMainWindowNativeSurface.GetColumnCount(_channelList), columnsToApply),
+                                () =>
+                                {
+                                    _ = GenesisMainWindowNativeSurface.ReplaceColumns(
+                                    _channelList, GenesisMainWindowNativeSurface.GetColumnCount(_channelList),
+                                    Array.Empty<GenesisNativeListColumnPresentation>());
+                                });
+                        }
+                        finally
+                        {
+                            Volatile.Write(ref _selectionChangesSuppressed, 0);
+                        }
+                        if (!columnsReplaced)
+                        {
+                            _renderedColumns = null;
+                            _renderedRows = [];
+                            _renderedRowIdentity = null;
+                            _renderedChannelSort = null;
+                            GenesisChannelListRenderedChannels.SetRows(_channelList, _renderedRows);
+                            _viewModel.SelectedChannel = null;
+                            GenesisGuiNextAppShellBridge.SynchronizeRenderedList(_channelList, null, []);
+                            return;
+                        }
+
+                        _renderedColumns = newColumns;
                     }
 
-                    var columnsToApply = _columnWidths.ApplySavedWidths(newColumns);
+                    var rowValues = GenesisGuiNextChannelListStyle.Applies(_viewModel.UsesModernAppearance, selectedTab)
+                        ? rows.Select(row => GenesisGuiNextRecordingListPresentation.ModernValues(row, selectedTab, newColumns)).ToArray()
+                        : rows.Select(GenesisGuiNextRecordingListPresentation.Values).ToArray();
                     Interlocked.Exchange(ref _selectionChangesSuppressed, 1);
-                    var columnsReplaced = false;
                     try
                     {
-                        columnsReplaced = GenesisGuiNextRecordingListPresentation.TryReplaceColumns(
-                            () => GenesisMainWindowNativeSurface.ReplaceRows(_channelList, Array.Empty<string[]>()),
-                            () => GenesisMainWindowNativeSurface.ReplaceColumns(
-                                _channelList, GenesisMainWindowNativeSurface.GetColumnCount(_channelList), columnsToApply),
-                            () =>
-                            {
-                                _ = GenesisMainWindowNativeSurface.ReplaceColumns(
-                                _channelList, GenesisMainWindowNativeSurface.GetColumnCount(_channelList),
-                                Array.Empty<GenesisNativeListColumnPresentation>());
-                            });
+                        var rowsReplaced = GenesisMainWindowNativeSurface.ReplaceRows(
+                            _channelList,
+                            rowValues);
+                        _renderedRowIdentity = rowsReplaced ? rowIdentity : null;
+                        _renderedChannelFilterRows = channelFilterRows;
+                        _renderedNoticeFilterRows = noticeFilterRows;
+                        _renderedChannelSort = rowsReplaced ? _viewModel.ChannelSort : null;
+                        _renderedRows = rowsReplaced
+                            ? rows
+                            : Array.AsReadOnly(Array.Empty<GenesisGuiNextNativeTabRow>());
+                        if (_guiNextTabs is { RecordingRuleSelectionAfterSave: { } ruleId } &&
+                            selectedTab == GenesisGuiNextTab.Recording &&
+                            recordingPageMode == GenesisGuiNextRecordingPageMode.Rules)
+                        {
+                            GenesisChannelListRenderedChannels.AnchorRecordingRule(_channelList, ruleId);
+                            _guiNextTabs.ClearRecordingRuleSelectionAfterSave();
+                        }
+                        GenesisChannelListRenderedChannels.SetRows(
+                            _channelList,
+                            _renderedRows,
+                            historyMode: _guiNextTabs?.IsRecordingHistoryPage == true);
+                        if (rowsReplaced)
+                        {
+                            RestoreSelectedChannel();
+                        }
+                        else
+                        {
+                            _viewModel.SelectedChannel = null;
+                        }
+                        GenesisGuiNextAppShellBridge.SynchronizeRenderedList(_channelList, newColumns, rowsReplaced ? rowValues : []);
                     }
                     finally
                     {
                         Volatile.Write(ref _selectionChangesSuppressed, 0);
                     }
-                    if (!columnsReplaced)
-                    {
-                        _renderedColumns = null;
-                        _renderedRows = [];
-                        _renderedRowIdentity = null;
-                        _renderedChannelSort = null;
-                        GenesisChannelListRenderedChannels.SetRows(_channelList, _renderedRows);
-                        _viewModel.SelectedChannel = null;
-                        GenesisGuiNextAppShellBridge.SynchronizeRenderedList(_channelList, null, []);
-                        return;
-                    }
-
-                    _renderedColumns = newColumns;
-                }
-
-                var rowValues = GenesisGuiNextChannelListStyle.Applies(_viewModel.UsesModernAppearance, selectedTab)
-                    ? rows.Select(row => GenesisGuiNextRecordingListPresentation.ModernValues(row, selectedTab, newColumns)).ToArray()
-                    : rows.Select(GenesisGuiNextRecordingListPresentation.Values).ToArray();
-                Interlocked.Exchange(ref _selectionChangesSuppressed, 1);
-                try
-                {
-                    var rowsReplaced = GenesisMainWindowNativeSurface.ReplaceRows(
-                        _channelList,
-                        rowValues);
-                    _renderedRowIdentity = rowsReplaced ? rowIdentity : null;
-                    _renderedChannelFilterRows = channelFilterRows;
-                    _renderedNoticeFilterRows = noticeFilterRows;
-                    _renderedChannelSort = rowsReplaced ? _viewModel.ChannelSort : null;
-                    _renderedRows = rowsReplaced
-                        ? rows
-                        : Array.AsReadOnly(Array.Empty<GenesisGuiNextNativeTabRow>());
-                    if (_guiNextTabs is { RecordingRuleSelectionAfterSave: { } ruleId } &&
-                        selectedTab == GenesisGuiNextTab.Recording &&
-                        recordingPageMode == GenesisGuiNextRecordingPageMode.Rules)
-                    {
-                        GenesisChannelListRenderedChannels.AnchorRecordingRule(_channelList, ruleId);
-                        _guiNextTabs.ClearRecordingRuleSelectionAfterSave();
-                    }
-                    GenesisChannelListRenderedChannels.SetRows(
-                        _channelList,
-                        _renderedRows,
-                        historyMode: _guiNextTabs?.IsRecordingHistoryPage == true);
-                    if (rowsReplaced)
-                    {
-                        RestoreSelectedChannel();
-                    }
-                    else
-                    {
-                        _viewModel.SelectedChannel = null;
-                    }
-                    GenesisGuiNextAppShellBridge.SynchronizeRenderedList(_channelList, newColumns, rowsReplaced ? rowValues : []);
                 }
                 finally
                 {
-                    Volatile.Write(ref _selectionChangesSuppressed, 0);
+                    _ = SendMessageW(_channelList, WindowMessageSetRedraw, 1, 0);
+                    _ = RedrawWindow(_channelList, 0, 0, 0x0001 | 0x0080 | 0x0400);
                 }
             }
 

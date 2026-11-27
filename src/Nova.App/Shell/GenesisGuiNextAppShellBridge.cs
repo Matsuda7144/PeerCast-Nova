@@ -1011,9 +1011,9 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
         {
             return customDrawResult;
         }
-        else if (message == 0x0135 && state.Settings.IsPane(window)) // WM_CTLCOLORBTN for native notification checkboxes.
+        else if (message == 0x0135) // WM_CTLCOLORBTN: ボタン系子コントロールの既定白・明灰背景を抑止する
         {
-            return state.PrepareStaticControl(wParam, window);
+            return state.PrepareButtonControl(wParam, window);
         }
         else if (message == WindowMessageControlColorStatic)
         {
@@ -1563,10 +1563,11 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                     itemIndex,
                     out var selectedTab))
             {
-                _settings.Close();
+                _settings.Close(synchronizeVisibility: false);
                 if (selectedTab == GenesisGuiNextTab.RelayTree) _relayTree.CaptureSelectedChannel();
                 _utilityNavigationSelection.SelectView(_tabs, selectedTab);
-                _ = InvalidateRect(_sidebar, 0, true);
+                SynchronizeMainPaneVisibility();
+                _ = InvalidateRect(_sidebar, 0, false);
                 if (selectedTab == GenesisGuiNextTab.Recording)
                 {
                     _ = RefreshActiveRecordingsAsync();
@@ -1586,17 +1587,18 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             {
                 if (primaryCommand == GenesisGuiNextPrimaryCommand.Search)
                 {
-                    _settings.Close();
+                    _settings.Close(synchronizeVisibility: false);
                     _ = _utilityNavigationSelection.ActivateSearch(
                         _tabs,
                         _searchBox.Focus);
-                    _ = InvalidateRect(_sidebar, 0, true);
+                    SynchronizeMainPaneVisibility();
+                    _ = InvalidateRect(_sidebar, 0, false);
                 }
                 else
                 {
                     if (primaryCommand != GenesisGuiNextPrimaryCommand.Settings) _settings.Close();
                     _utilityNavigationSelection.SelectUtility(itemIndex);
-                    _ = InvalidateRect(_sidebar, 0, true);
+                    _ = InvalidateRect(_sidebar, 0, false);
                     if (primaryCommand == GenesisGuiNextPrimaryCommand.Settings)
                     {
                         if (!_settings.Open())
@@ -2062,6 +2064,25 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             ((UsesRecordingPanel && control == _recordingHistoryDetails) ||
              _publishing.IsDarkReadOnlyControl(control));
 
+        public nint PrepareButtonControl(nuint deviceContext, nint pane)
+        {
+            if (_settings.IsPane(pane))
+            {
+                return PrepareStaticControl(deviceContext, pane);
+            }
+
+            _ = SetBkMode((nint)deviceContext, TransparentBackgroundMode);
+            if (!IsModern)
+            {
+                return _backgroundBrush;
+            }
+
+            if (pane == _sidebar) return _sidebarBrush;
+            if (pane == _statusBar) return _topBrush;
+            if (pane == _detailsPane) return _mainBrush;
+            return _backgroundBrush;
+        }
+
         public nint PrepareStaticControl(nuint deviceContext, nint pane)
         {
             _ = SetBkMode((nint)deviceContext, TransparentBackgroundMode);
@@ -2118,7 +2139,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             {
                 if (button != 0 && IsWindow(button))
                 {
-                    _ = InvalidateRect(button, 0, true);
+                    _ = InvalidateRect(button, 0, false);
                 }
             }
 
@@ -2138,8 +2159,9 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 return false;
             }
 
-            _settings.Close();
+            _settings.Close(synchronizeVisibility: false);
             var focused = _utilityNavigationSelection.ActivateSearch(_tabs, _searchBox.Focus);
+            SynchronizeMainPaneVisibility();
             _ = InvalidateRect(_sidebar, 0, true);
             return focused;
         }
@@ -2931,9 +2953,10 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             {
                 if (eventArgs.PropertyName == nameof(GenesisGuiNextTabsViewModel.SelectedTab))
                 {
-                    _settings.Close();
+                    _settings.Close(synchronizeVisibility: false);
                     _utilityNavigationSelection.OnSelectedTabChanged();
-                    _ = InvalidateRect(_sidebar, 0, true);
+                    SynchronizeMainPaneVisibility();
+                    _ = InvalidateRect(_sidebar, 0, false);
                 }
 
                 _ = PostMessageW(

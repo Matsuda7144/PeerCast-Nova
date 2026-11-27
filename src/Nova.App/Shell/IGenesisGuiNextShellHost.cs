@@ -49,6 +49,7 @@ internal interface IGenesisGuiNextShellHost
     void ResetDetailsUpdates();
     void ResetFavoriteUpdates();
     void SynchronizeNativeSelection();
+    void SynchronizeMainPaneVisibility();
     void UpdatePaneSplitterVisibility();
     void ProcessCommand(nuint wParam, nint lParam);
     nint PrepareStaticControl(nuint deviceContext, nint pane);

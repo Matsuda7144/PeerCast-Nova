@@ -68,6 +68,8 @@ internal sealed class GenesisMainWindowNativeSurface : IAsyncDisposable
     private const uint WindowStyleChild = 0x40000000;
     private const uint WindowStyleVisible = 0x10000000;
     private const uint WindowStyleTabStop = 0x00010000;
+    private const uint WindowStyleClipSiblings = 0x04000000;
+    private const uint WindowStyleClipChildren = 0x02000000;
     private const uint WindowExtendedStyleClientEdge = 0x00000200;
     private const uint EditStyleAutoHorizontalScroll = 0x0080;
     private const uint EditMessageSetLimitText = 0x00C5;
@@ -221,8 +223,10 @@ internal sealed class GenesisMainWindowNativeSurface : IAsyncDisposable
             "SysListView32",
             string.Empty,
             WindowStyleTabStop |
+                WindowStyleClipChildren |
+                WindowStyleClipSiblings |
                 ListViewStyleReport |
-            ListViewStyleSingleSelect |
+                ListViewStyleSingleSelect |
                 ListViewStyleShowSelectionAlways,
             listLeft,
             listTop,
