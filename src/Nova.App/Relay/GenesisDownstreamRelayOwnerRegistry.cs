@@ -37,6 +37,33 @@ internal sealed partial class GenesisDownstreamRelayOwnerRegistry : IDisposable
         lock (_gate) { return _connections.ContainsKey(connectionId); }
     }
 
+    internal ChannelId[] ActiveChannelIds()
+    {
+        lock (_gate)
+        {
+            if (_disposed)
+            {
+                return [];
+            }
+
+            var ids = new HashSet<ChannelId>();
+            foreach (var pair in _owners)
+            {
+                if (!pair.Value.Retired)
+                {
+                    _ = ids.Add(pair.Key);
+                }
+            }
+
+            foreach (var reservation in _connections.Values)
+            {
+                _ = ids.Add(reservation.Owner.ChannelId);
+            }
+
+            return [.. ids];
+        }
+    }
+
     public Owner Register(ChannelId channelId, ChannelSessionId sessionId,
         RelayChannelKind kind, PcpRelayFanout? fanout = null, Func<int?>? readBitrateKbps = null)
     {

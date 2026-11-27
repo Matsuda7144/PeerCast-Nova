@@ -1,10 +1,92 @@
 using System.Globalization;
+using PeerCast.Nova.Core.Channels;
 using PeerCast.Nova.Network.Pcp;
 
 namespace PeerCast.Nova.App;
 
+internal sealed record GenesisRelayTreeChannelOption(ChannelId ChannelId, string DisplayName);
+
 internal static class GenesisRelayTreeNodePresentation
 {
+    internal static GenesisRelayTreeChannelOption[] BuildActiveChannelOptions(
+        IReadOnlyList<ChannelId> activeIds,
+        IReadOnlyList<GenesisChannelItem> catalogChannels,
+        IReadOnlyList<GenesisGuiNextPlayingEntry> playingEntries,
+        IReadOnlyList<GenesisGuiNextActiveRecording> activeRecordings)
+    {
+        if (activeIds.Count == 0)
+        {
+            return [];
+        }
+
+        var options = new List<GenesisRelayTreeChannelOption>();
+        var seen = new HashSet<ChannelId>();
+        foreach (var channelId in activeIds)
+        {
+            if (!seen.Add(channelId))
+            {
+                continue;
+            }
+
+            var displayName = ResolveChannelDisplayName(channelId, catalogChannels, playingEntries, activeRecordings);
+            options.Add(new(channelId, displayName));
+        }
+
+        return options
+            .OrderBy(static o => o.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static o => o.ChannelId.Value)
+            .ToArray();
+    }
+
+    private static string ResolveChannelDisplayName(
+        ChannelId channelId,
+        IReadOnlyList<GenesisChannelItem> catalogChannels,
+        IReadOnlyList<GenesisGuiNextPlayingEntry> playingEntries,
+        IReadOnlyList<GenesisGuiNextActiveRecording> activeRecordings)
+    {
+        foreach (var channel in catalogChannels)
+        {
+            if (GenesisGuiNextRelayActivation.TryResolve(channel, out var resolved) &&
+                resolved == channelId &&
+                !string.IsNullOrWhiteSpace(channel.Name))
+            {
+                return channel.Name.Trim();
+            }
+        }
+
+        foreach (var entry in playingEntries)
+        {
+            if (TryMatchPlaying(entry, channelId) &&
+                !string.IsNullOrWhiteSpace(entry.ChannelName))
+            {
+                return entry.ChannelName.Trim();
+            }
+        }
+
+        foreach (var recording in activeRecordings)
+        {
+            if (recording.ChannelId == channelId &&
+                !string.IsNullOrWhiteSpace(recording.ChannelName))
+            {
+                return recording.ChannelName.Trim();
+            }
+        }
+
+        return $"チャンネル ({channelId.Value.ToString("N")[..8]})";
+    }
+
+    private static bool TryMatchPlaying(GenesisGuiNextPlayingEntry entry, ChannelId channelId)
+    {
+        if (Guid.TryParse(entry.ChannelId, out var parsed) && parsed == channelId.Value)
+        {
+            return true;
+        }
+
+        return DailyPcpPlaybackSourceParser.TryParse(entry.Source, out var source) &&
+            source is not null &&
+            source.ChannelId == channelId;
+    }
+
     internal const string UnattachedGroupParentKey = "__unattached_group__";
 
     internal static string UnattachedGroupLabel(int count) => $"その他の観測ピア（接続元不明・{count}件）";
@@ -79,10 +161,11 @@ internal static class GenesisRelayTreeNodePresentation
         return (unattachedRoots, unattachedNodes);
     }
 
-    internal static string Summary(GenesisRelayTreeSnapshot tree) =>
-        $"{GenesisGuiNextRelayTreePresentation.State(tree.State)} · 直接下流 {tree.Nodes.Count(n => n.Kind == GenesisRelayTreeNodeKind.Downstream)} · " +
-        $"観測ピア {tree.Nodes.Count(n => n.Kind == GenesisRelayTreeNodeKind.ReportedPeer)} · " +
-        "（※観測ピアの情報は各ピアからの申告値）";
+    internal static string Summary(GenesisRelayTreeSnapshot tree) => tree.ChannelId is null
+        ? "現在リレー中のチャンネルはありません"
+        : $"{GenesisGuiNextRelayTreePresentation.State(tree.State)} · 直接下流 {tree.Nodes.Count(n => n.Kind == GenesisRelayTreeNodeKind.Downstream)} · " +
+          $"観測ピア {tree.Nodes.Count(n => n.Kind == GenesisRelayTreeNodeKind.ReportedPeer)} · " +
+          "（※観測ピアの情報は各ピアからの申告値）";
 
     internal static string Row(GenesisRelayTreeSnapshot tree, GenesisRelayTreeNode node, bool mask)
     {

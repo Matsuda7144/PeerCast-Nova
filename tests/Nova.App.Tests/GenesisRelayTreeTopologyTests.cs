@@ -1,7 +1,9 @@
 using System.Buffers;
 using System.Net;
 using PeerCast.Nova.Core.Channels;
+using PeerCast.Nova.Core.Recording;
 using PeerCast.Nova.Network.Pcp;
+using PeerCast.Nova.Network.Policies;
 using PeerCast.Nova.Protocol.Pcp;
 
 namespace PeerCast.Nova.App.Tests;
@@ -224,6 +226,82 @@ public sealed class GenesisRelayTreeTopologyTests
         Assert.Equal(2, all.Count);
         Assert.Contains("rep-orphan-root", all);
         Assert.Contains("rep-orphan-child", all);
+    }
+
+    [Fact]
+    public async Task ActiveChannelIdsTracksLiveOwnersAndDropsRetiredChannelsOnceCleanupCompletes()
+    {
+        using var policy = new RelayAdmissionPolicy(new());
+        using var registry = new GenesisDownstreamRelayOwnerRegistry(policy);
+        var channelA = new ChannelId(Guid.NewGuid());
+        var channelB = new ChannelId(Guid.NewGuid());
+        await using var fanoutA = new PcpRelayFanout();
+        await using var fanoutB = new PcpRelayFanout();
+
+        using var ownerA = registry.Register(channelA, new(Guid.NewGuid()), RelayChannelKind.Viewing, fanoutA);
+        using var ownerB = registry.Register(channelB, new(Guid.NewGuid()), RelayChannelKind.Viewing, fanoutB);
+
+        var activeBoth = registry.ActiveChannelIds();
+        Assert.Equal(2, activeBoth.Length);
+        Assert.Contains(channelA, activeBoth);
+        Assert.Contains(channelB, activeBoth);
+
+        ownerA.Dispose();
+        var activeOnlyB = registry.ActiveChannelIds();
+        Assert.Equal(channelB, Assert.Single(activeOnlyB));
+
+        Assert.True(ownerB.TryReserve(100, out var lease));
+        ownerB.Dispose();
+        // 未解放の接続予約リースが残っている間は一覧に残る。
+        Assert.Equal(channelB, Assert.Single(registry.ActiveChannelIds()));
+
+        lease!.Dispose();
+        Assert.Empty(registry.ActiveChannelIds());
+    }
+
+    [Fact]
+    public void BuildActiveChannelOptionsExcludesInactiveChannelsAndResolvesNamesDeterministically()
+    {
+        var chCatalog = new ChannelId(Guid.NewGuid());
+        var chPlaying = new ChannelId(Guid.NewGuid());
+        var chRecording = new ChannelId(Guid.NewGuid());
+        var chFallback = new ChannelId(Guid.Parse("abcdef12-0000-0000-0000-000000000000"));
+        var chPastCatalog = new ChannelId(Guid.NewGuid());
+
+        var catalog = new[]
+        {
+            new GenesisChannelItem("Catalog Zeta", $"pcp://127.0.0.1:7144/channel/{chCatalog.Value:N}"),
+            new GenesisChannelItem("Past Inactive", $"pcp://127.0.0.1:7144/channel/{chPastCatalog.Value:N}"),
+            new GenesisChannelItem(" ", $"pcp://127.0.0.1:7144/channel/{chPlaying.Value:N}"),
+        };
+        var playing = new[]
+        {
+            new GenesisGuiNextPlayingEntry(PlaybackSessionState.Playing, $"pcp://127.0.0.1:7144/channel/{chPlaying.Value:N}", null, "alpha Playing", chPlaying.Value.ToString("N")),
+        };
+        var recordings = new[]
+        {
+            new GenesisGuiNextActiveRecording(chRecording, new RecordingSessionId(Guid.NewGuid()), RecordingSessionOrigin.Manual, "Beta Recording", "録画中", null, null),
+        };
+
+        var options = GenesisRelayTreeNodePresentation.BuildActiveChannelOptions(
+            [chCatalog, chPlaying, chRecording, chFallback, chCatalog],
+            catalog,
+            playing,
+            recordings);
+
+        Assert.Equal(4, options.Length);
+        Assert.DoesNotContain(options, o => o.ChannelId == chPastCatalog);
+        // 大文字小文字を無視した昇順: alpha Playing -> Beta Recording -> Catalog Zeta -> チャンネル (abcdef12)
+        Assert.Equal("alpha Playing", options[0].DisplayName);
+        Assert.Equal(chPlaying, options[0].ChannelId);
+        Assert.Equal("Beta Recording", options[1].DisplayName);
+        Assert.Equal(chRecording, options[1].ChannelId);
+        Assert.Equal("Catalog Zeta", options[2].DisplayName);
+        Assert.Equal(chCatalog, options[2].ChannelId);
+        Assert.Equal("チャンネル (abcdef12)", options[3].DisplayName);
+        Assert.Equal(chFallback, options[3].ChannelId);
+
+        Assert.Equal("現在リレー中のチャンネルはありません", GenesisRelayTreeNodePresentation.Summary(GenesisRelayTreeSnapshot.Empty()));
     }
 
     private sealed class TopologyClock : TimeProvider

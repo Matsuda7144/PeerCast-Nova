@@ -71,6 +71,7 @@ internal sealed class GenesisGuiNextRelayActivation : IAsyncDisposable
     private Func<string>? _publicStatus;
     private Func<string>? _capacityStatus;
     private readonly Func<ChannelId, GenesisRelayTreeSnapshot>? _readRelayTree;
+    private readonly Func<ChannelId[]>? _listActiveChannels;
     private readonly Func<PcpDownstreamDisconnectTarget, PcpDownstreamDisconnectRequest>? _disconnectDownstream;
     private GenesisRelayActivationSnapshot _snapshot = new();
 
@@ -82,8 +83,11 @@ internal sealed class GenesisGuiNextRelayActivation : IAsyncDisposable
         _publicStatus = () => channels.PublicStatusText;
         _capacityStatus = () => channels.Registry.CapacityStatusText();
         _readRelayTree = channels.Registry.ReadRelayTree;
+        _listActiveChannels = channels.Registry.ActiveChannelIds;
         _disconnectDownstream = channels.Registry.RequestDisconnect;
     }
+
+    internal IReadOnlyList<ChannelId> ActiveChannelIds() => _listActiveChannels?.Invoke() ?? [];
 
     internal GenesisRelayTreeSnapshot ReadRelayTree(ChannelId channelId)
     {

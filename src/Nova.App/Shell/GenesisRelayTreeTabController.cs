@@ -27,7 +27,7 @@ internal sealed class GenesisRelayTreeTabController
     private bool _treeUpdating;
     private bool _treeListHidden;
     private bool _maskTreeAddresses = true;
-    private GenesisChannelItem[] _treeChannels = [];
+    private GenesisRelayTreeChannelOption[] _treeChannels = [];
     private ChannelId? _treeChannelId;
     private GenesisRelayTreeSnapshot _treeSnapshot = GenesisRelayTreeSnapshot.Empty();
     private GenesisRelayTreeSelectionKey? _treeSelected;
@@ -136,14 +136,19 @@ internal sealed class GenesisRelayTreeTabController
             return false;
         }
 
-        if (id == RelayTreeChannelsControlId && control == _relayTreeChannels && notification == 1)
+        if (id == RelayTreeChannelsControlId && control == _relayTreeChannels)
         {
-            var index = SendMessageW(control, 0x0147, 0, 0).ToInt32();
-            _treeChannelId = index >= 0 &&
-                index < _treeChannels.Length &&
-                GenesisGuiNextRelayActivation.TryResolve(_treeChannels[index], out var channel)
-                ? channel
-                : null;
+            if (notification == 1)
+            {
+                var index = SendMessageW(control, 0x0147, 0, 0).ToInt32();
+                _treeChannelId = index >= 0 && index < _treeChannels.Length
+                    ? _treeChannels[index].ChannelId
+                    : null;
+            }
+            else if (notification != 8)
+            {
+                return false;
+            }
         }
         else if (id == RelayTreeMaskControlId && control == _relayTreeMask && notification == 0)
         {
@@ -203,28 +208,31 @@ internal sealed class GenesisRelayTreeTabController
             draw.ControlWindow == _relayTreeMask && !_maskTreeAddresses);
     }
 
-    private GenesisChannelItem? SynchronizeChannels()
+    private ChannelId? SynchronizeChannels()
     {
-        var channels = _host.Tabs.Channels
-            .Where(c => GenesisGuiNextRelayActivation.TryResolve(c, out _))
-            .DistinctBy(c =>
-            {
-                GenesisGuiNextRelayActivation.TryResolve(c, out var id);
-                return id;
-            })
-            .ToArray();
-        if (!_treeChannels.SequenceEqual(channels))
+        // ドロップダウン展開中にリセット・選択上書きを行うとユーザーのスクロール位置が強制的に戻るため保護する。
+        if (_relayTreeChannels != 0 && SendMessageW(_relayTreeChannels, 0x0157, 0, 0) != 0)
+        {
+            return _treeChannelId;
+        }
+
+        var options = GenesisRelayTreeNodePresentation.BuildActiveChannelOptions(
+            _host.ViewModel.ActiveRelayChannelIds(),
+            _host.Tabs.Channels,
+            _host.Tabs.Playing,
+            _host.Tabs.ActiveRecordings);
+        if (!_treeChannels.SequenceEqual(options))
         {
             _treeUpdating = true;
             try
             {
                 _ = SendMessageW(_relayTreeChannels, 0x014B, 0, 0);
-                foreach (var channel in channels)
+                foreach (var option in options)
                 {
-                    _ = SendMessageTextW(_relayTreeChannels, 0x0143, 0, channel.Name);
+                    _ = SendMessageTextW(_relayTreeChannels, 0x0143, 0, option.DisplayName);
                 }
 
-                _treeChannels = channels;
+                _treeChannels = options;
             }
             finally
             {
@@ -232,22 +240,26 @@ internal sealed class GenesisRelayTreeTabController
             }
         }
 
-        var selected = Array.FindIndex(
-            channels,
-            c => GenesisGuiNextRelayActivation.TryResolve(c, out var id) && id == _treeChannelId);
-        if (selected < 0 && channels.Length > 0)
+        var selected = Array.FindIndex(options, o => o.ChannelId == _treeChannelId);
+        if (selected < 0 && options.Length > 0)
         {
             selected = 0;
         }
 
-        _treeUpdating = true;
-        try
+        var currentIndex = _relayTreeChannels != 0
+            ? SendMessageW(_relayTreeChannels, 0x0147, 0, 0).ToInt32()
+            : -1;
+        if (_relayTreeChannels != 0 && currentIndex != selected)
         {
-            _ = SendMessageW(_relayTreeChannels, 0x014E, (nuint)selected, 0);
-        }
-        finally
-        {
-            _treeUpdating = false;
+            _treeUpdating = true;
+            try
+            {
+                _ = SendMessageW(_relayTreeChannels, 0x014E, unchecked((nuint)selected), 0);
+            }
+            finally
+            {
+                _treeUpdating = false;
+            }
         }
 
         if (selected < 0)
@@ -256,8 +268,8 @@ internal sealed class GenesisRelayTreeTabController
             return null;
         }
 
-        GenesisGuiNextRelayActivation.TryResolve(channels[selected], out _treeChannelId);
-        return channels[selected];
+        _treeChannelId = options[selected].ChannelId;
+        return _treeChannelId;
     }
 
     private void PlacePage()
@@ -293,7 +305,7 @@ internal sealed class GenesisRelayTreeTabController
 
     internal void Present()
     {
-        var snapshot = _host.ViewModel.ReadRelayTree(SynchronizeChannels());
+        var snapshot = _host.ViewModel.ReadRelayTreeById(SynchronizeChannels());
         _treeSnapshot = snapshot;
         var scope = (snapshot.ChannelId, snapshot.OwnerId);
         _treeUpdating = true;
