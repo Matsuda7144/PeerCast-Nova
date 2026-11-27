@@ -50,14 +50,14 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             panel.Left += Scale(6); panel.Top += Scale(6); panel.Right -= Scale(6); panel.Bottom -= Scale(6);
             _ = FillRect(dc, ref panel, _topBrush);
             var layout = new GenesisGuiNextRecordingLayout(LogicalWidth(client.Right), _tabs.RecordingPageMode, LogicalWidth(client.Bottom));
-            using var pen = new VisualPen(dc, Scale(1), GenesisGuiNextDesign.Border);
+            using var pen = new GenesisVisualPen(dc, Scale(1), GenesisGuiNextDesign.Border);
             _ = GdiRectangle(dc, panel.Left, panel.Top, panel.Right, panel.Bottom);
             Line(dc, Scale(16), Scale(layout.TopDividerY), client.Right - Scale(16), Scale(layout.TopDividerY));
             Line(dc, Scale(16), Scale(layout.BottomDividerY), client.Right - Scale(16), Scale(layout.BottomDividerY));
             if (_tabs.IsRecordingHistoryPage)
             {
                 var area = layout.History;
-                using var focus = new VisualPen(dc, Scale(1), GetFocus() == _recordingHistoryDetails ? GenesisGuiNextDesign.Accent : GenesisGuiNextDesign.Border);
+                using var focus = new GenesisVisualPen(dc, Scale(1), GetFocus() == _recordingHistoryDetails ? GenesisGuiNextDesign.Accent : GenesisGuiNextDesign.Border);
                 _ = GdiRectangle(dc, Scale(area.Left) - 1, Scale(area.Top) - 1, Scale(area.Right) + 1, Scale(area.Bottom) + 1);
             }
             return true;
@@ -102,7 +102,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 var colors = GenesisGuiNextDesign.RecordingButtonColors(selected, disabled,
                     _hoverControl == draw.ControlWindow, (draw.ItemState & 1) != 0, (draw.ItemState & DrawItemFocused) != 0);
                 FillRectangle(draw.DeviceContext, draw.ItemRectangle, colors.Background);
-                using var pen = new VisualPen(draw.DeviceContext, Scale(1), colors.Border);
+                using var pen = new GenesisVisualPen(draw.DeviceContext, Scale(1), colors.Border);
                 var box = draw.ItemRectangle;
                 _ = GdiRectangle(draw.DeviceContext, box.Left, box.Top, box.Right, box.Bottom);
                 if (selected)

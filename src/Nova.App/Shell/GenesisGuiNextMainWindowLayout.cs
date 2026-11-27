@@ -100,7 +100,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         {
             if (_paneSplitter != 0 && IsWindow(_paneSplitter))
             {
-                _ = ShowWindow(_paneSplitter, !SettingsPageOpen && !UsesPublishingPanel && !TreePageShown ? ShowWindowShowNoActivate : ShowWindowHide);
+                _ = ShowWindow(_paneSplitter, !_settings.IsOpen && !_publishing.UsesPanel && !_relayTree.IsPageShown ? ShowWindowShowNoActivate : ShowWindowHide);
             }
         }
 
@@ -289,17 +289,17 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 Pane(_sidebar, sidebar);
                 Pane(_statusBar, status);
                 Pane(_listView, list);
-                Pane(_detailsPane, GenesisMainWindowLayout.ResolveDetailsPaneBounds(UsesPublishingPanel, list, details));
+                Pane(_detailsPane, GenesisMainWindowLayout.ResolveDetailsPaneBounds(_publishing.UsesPanel, list, details));
                 if (_paneSplitter != 0)
                 {
                     Pane(_paneSplitter, new(list.Left, list.Bottom, list.Right, details.Top));
                     UpdatePaneSplitterVisibility();
                 }
-                _publishingPanePlacement = null;
-                if (_settingsPane != 0)
+                _publishing.ResetPanePlacement();
+                if (_settings.PaneWindow != 0)
                 {
-                    Pane(_settingsPane, new(list.Left, list.Top, list.Right, details.Bottom));
-                    PlaceIntegratedSettings(list.Width, details.Bottom - list.Top);
+                    Pane(_settings.PaneWindow, new(list.Left, list.Top, list.Right, details.Bottom));
+                    _settings.Place(list.Width, details.Bottom - list.Top);
                 }
                 for (var i = 0; i < _navigationButtons.Length; i++)
                     Place(_navigationButtons[i], 0, NavigationItemTop + GenesisGuiNextNavigationPresentation.Row(i, IsModern) * GenesisGuiNextNavigationPresentation.RowHeight(IsModern),

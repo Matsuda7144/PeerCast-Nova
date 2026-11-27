@@ -12,7 +12,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private nint[] CardTexts => [_detailsTitle, _detailsDescription, _detailsMetadata, _detailsIdentity];
         private nint[] CardButtons => [_detailsRecordButton, _detailsStopRecordingButton, _detailsCopyButton,
             _playButton, _stopButton, _relayStart, _relayStop];
-        private nint[] VisualSubclassControls => [.. VisualButtons, .. CardTexts, .. CardButtons, .. RelayTreeVisualControls, .. TopVisualControls, .. RecordingVisualControls, .. PublishingVisualControls, .. SettingsVisualControls, _listView, GetParent(_listView), _owner];
+        private nint[] VisualSubclassControls => [.. VisualButtons, .. CardTexts, .. CardButtons, .. _relayTree.VisualControls, .. TopVisualControls, .. RecordingVisualControls, .. _publishing.VisualControls, .. _settings.VisualControls, _listView, GetParent(_listView), _owner];
 
         private void PlaceChannelCard()
         {
@@ -49,7 +49,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             card.Top += Scale(6); card.Bottom -= Scale(6);
             DrawModernSurface(dc, card, GenesisGuiNextDesign.Panel, GenesisGuiNextDesign.Border, Scale(12));
             if (_tabs.SelectedTab == GenesisGuiNextTab.Logs) return true;
-            using var border = new VisualPen(dc, Scale(1), GenesisGuiNextDesign.Border);
+            using var border = new GenesisVisualPen(dc, Scale(1), GenesisGuiNextDesign.Border);
             var layout = new GenesisGuiNextChannelCardLayout(LogicalWidth(client.Right), LogicalWidth(client.Bottom));
             Line(dc, Scale(layout.DividerLeft), Scale(layout.DividerTop), Scale(layout.DividerLeft), Scale(layout.DividerBottom));
             return true;
@@ -97,7 +97,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 var colors = GenesisGuiNextDesign.CardButtonColors(play, recording, disabled,
                     _hoverControl == draw.ControlWindow, pressed);
                 FillRectangle(draw.DeviceContext, draw.ItemRectangle, GenesisGuiNextDesign.Panel);
-                using var pen = new VisualPen(draw.DeviceContext, Scale(1), colors.Border);
+                using var pen = new GenesisVisualPen(draw.DeviceContext, Scale(1), colors.Border);
                 var box = draw.ItemRectangle;
                 DrawModernSurface(draw.DeviceContext, box, colors.Background, colors.Border, Scale(8));
                 var x = box.Left + Scale(12); var y = (box.Top + box.Bottom) / 2;
@@ -164,6 +164,16 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 _ = DrawTextW(dc, text, -1, ref bounds, flags | DrawTextNoPrefix);
             }
             finally { if (previous != 0) _ = SelectObject(dc, previous); }
+        }
+
+        private void DrawModernSurface(nint dc, Win32Rect box, int background, int border, int radius)
+        {
+            using var pen = new GenesisVisualPen(dc, Scale(1), border);
+            var brush = CreateSolidBrush((uint)background);
+            if (brush == 0) return;
+            var previous = SelectObject(dc, brush);
+            try { _ = RoundRect(dc, box.Left, box.Top, box.Right, box.Bottom, radius, radius); }
+            finally { _ = SelectObject(dc, previous); _ = DeleteObject(brush); }
         }
     }
 }

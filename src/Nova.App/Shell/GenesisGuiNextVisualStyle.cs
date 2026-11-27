@@ -16,25 +16,25 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         else if (StatesByOwner.TryGetValue((nint)owner, out var state))
         {
             if (window == (nint)owner && message is (0x001A or 0x031A)) state.RefreshWindowChrome();
-            if (window == (nint)owner && message == 0x0010 && !state.CanLeavePublishingEditor()) return 0;
-            if (state.PublishingInlineControlMessage(window, message, wParam)) return 0;
-            if (state.ConnectionBodyControlMessage(window, message, wParam)) return 0;
-            if (state.IsPublishingInlineInput(window))
+            if (window == (nint)owner && message == 0x0010 && !state.Publishing.CanLeaveEditor()) return 0;
+            if (state.Publishing.HandleInlineControlMessage(window, message, wParam)) return 0;
+            if (state.Settings.HandleControlMessage(window, message, wParam)) return 0;
+            if (state.Publishing.IsInlineInput(window))
             {
                 if (message is 0x0007 or 0x0008) _ = RedrawWindow(window, 0, 0, 0x0001);
                 if (message is WindowMessagePaint or 0x0085)
                 {
                     var painted = DefSubclassProc(window, message, wParam, lParam);
-                    if (state.IsPublishingAdvancedCombo(window)) state.PaintTopInputFrame(window);
-                    else state.PaintPublishingInlineInput(window);
+                    if (state.Publishing.IsAdvancedCombo(window)) state.PaintTopInputFrame(window);
+                    else state.Publishing.PaintInlineInput(window);
                     return painted;
                 }
             }
-            if (state.RelayTreeContext(window, message, lParam)) return 0;
+            if (state.RelayTree.HandleContextMenu(window, message, lParam)) return 0;
             if (window == GetParent(state.ListWindow) && message == WindowMessageCommand &&
-                state.ProcessRelayTreeCommand((int)(wParam & 0xffff), lParam, (int)((wParam >> 16) & 0xffff))) return 0;
-            if (message == WindowMessageDrawItem && state.DrawRelayTreeControl(lParam)) return 1;
-            if (message == WindowMessageNotify && state.HandleRelayTreeNotify(lParam)) return 1;
+                state.RelayTree.ProcessCommand((int)(wParam & 0xffff), lParam, (int)((wParam >> 16) & 0xffff))) return 0;
+            if (message == WindowMessageDrawItem && state.RelayTree.DrawControl(lParam)) return 1;
+            if (message == WindowMessageNotify && state.RelayTree.HandleNotify(lParam)) return 1;
             if (window == state.ListWindow)
             {
                 var result = DefSubclassProc(window, message, wParam, lParam);
@@ -52,11 +52,11 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 state.PaintTopInputFrame(window);
                 return result;
             }
-            state.RefreshSettingsOnActivation(window, message, wParam);
-            if (message is 0x0007 or 0x0008) state.RefreshSettingsPathFocus(window);
-            if (state.PaintSettingsText(window, message)) return message == 0x0014 ? 1 : 0;
-            if (state.PaintPublishingText(window, message)) return message == 0x0014 ? 1 : 0;
-            if (message is 0x0007 or 0x0008) state.RefreshPublishingFocus(window);
+            state.Settings.RefreshOnActivation(window, message, wParam);
+            if (message is 0x0007 or 0x0008) state.Settings.RefreshPathFocus(window);
+            if (state.Settings.PaintText(window, message)) return message == 0x0014 ? 1 : 0;
+            if (state.Publishing.PaintText(window, message)) return message == 0x0014 ? 1 : 0;
+            if (message is 0x0007 or 0x0008) state.Publishing.RefreshFocus(window);
             if (state.PaintRecordingText(window, message)) return message == 0x0014 ? 1 : 0;
             if (message is 0x0007 or 0x0008) state.RefreshRecordingFocus(window);
             if (state.PaintChannelCardText(window, message)) return message == 0x0014 ? 1 : 0;
@@ -96,7 +96,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private GenesisUiFontLease? _visualFont;
         private readonly Dictionary<nint, nint> _originalFonts = new();
         private nint[] VisualButtons => [.. _navigationButtons, _refreshButton, _favoriteButton];
-        private nint[] VisualFontControls => [.. VisualButtons, .. RecordingVisualControls, .. PublishingVisualControls, .. SettingsVisualControls, .. RelayTreeVisualControls, _publishingConnectionState, _listView, TopStatusWindow, _searchBox.LabelWindow,
+        private nint[] VisualFontControls => [.. VisualButtons, .. RecordingVisualControls, .. _publishing.VisualControls, .. _settings.VisualControls, .. _relayTree.VisualControls, _publishing.ConnectionStateWindow, _listView, TopStatusWindow, _searchBox.LabelWindow,
             _searchBox.EditWindow, _searchBox.FilterWindow];
 
         internal void AttachVisuals()
@@ -175,8 +175,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         internal bool PaintPaneBackground(nint pane, nint dc)
         {
             if (!IsModern) return false;
-            if (PaintIntegratedSettings(pane, dc)) return true;
-            if (PaintPublishingPanel(pane, dc)) return true;
+            if (_settings.PaintBackground(pane, dc)) return true;
+            if (_publishing.PaintPanel(pane, dc)) return true;
             if (PaintRecordingPanel(pane, dc)) return true;
             if (PaintChannelCard(pane, dc)) return true;
             var brush = pane == _sidebar ? _sidebarBrush : pane == _statusBar ? _topBrush : 0;
@@ -319,7 +319,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 if ((item.Format & 0x0600) != 0)
                 {
                     var x = rectangle.Right - Scale(5); var y = (rectangle.Top + rectangle.Bottom) / 2;
-                    using var pen = new VisualPen(draw.DeviceContext, Scale(1), GenesisGuiNextDesign.Accent);
+                    using var pen = new GenesisVisualPen(draw.DeviceContext, Scale(1), GenesisGuiNextDesign.Accent);
                     var direction = (item.Format & 0x0400) != 0 ? -1 : 1;
                     Line(draw.DeviceContext, x - Scale(3), y - direction * Scale(2), x, y + direction * Scale(2));
                     Line(draw.DeviceContext, x, y + direction * Scale(2), x + Scale(3), y - direction * Scale(2));
@@ -336,7 +336,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
 
         private void DrawNavigationIcon(nint dc, int index, Win32Rect bounds, bool disabled)
         {
-            using var pen = new VisualPen(dc, Scale(1), disabled ? GenesisGuiNextDesign.SecondaryText : GenesisGuiNextDesign.Text);
+            using var pen = new GenesisVisualPen(dc, Scale(1), disabled ? GenesisGuiNextDesign.SecondaryText : GenesisGuiNextDesign.Text);
             var left = bounds.Left + Scale(12);
             var top = bounds.Top + (bounds.Bottom - bounds.Top - Scale(18)) / 2;
             int X(int x) => left + Scale(x);
@@ -377,24 +377,6 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 case 10: Box(0, 0, 6, 5); L(3, 5, 3, 15); L(3, 9, 11, 9); L(3, 15, 11, 15); Box(11, 6, 18, 11); Box(11, 13, 18, 18); break;
                 default: Circle(0, 0, 18, 18); L(9, 7, 9, 14); L(9, 3, 9, 4); break;
             }
-        }
-    }
-
-    private sealed class VisualPen : IDisposable
-    {
-        private readonly nint _dc, _pen, _previousPen, _previousBrush;
-        internal VisualPen(nint dc, int width, int color)
-        {
-            _dc = dc;
-            _pen = CreatePen(0, Math.Max(1, width), color);
-            if (_pen != 0) _previousPen = SelectObject(dc, _pen);
-            _previousBrush = SelectObject(dc, GetStockObject(5)); // NULL_BRUSH
-        }
-        public void Dispose()
-        {
-            if (_previousBrush != 0) _ = SelectObject(_dc, _previousBrush);
-            if (_previousPen != 0) _ = SelectObject(_dc, _previousPen);
-            if (_pen != 0) _ = DeleteObject(_pen);
         }
     }
 
