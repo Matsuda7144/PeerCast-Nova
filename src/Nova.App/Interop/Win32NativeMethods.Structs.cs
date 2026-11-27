@@ -217,6 +217,15 @@ internal static partial class Win32NativeMethods
     }
 
     [StructLayout(LayoutKind.Sequential)]
+    internal struct Win32TreeViewCustomDraw
+    {
+        public Win32CustomDraw Draw;
+        public int TextColor;
+        public int TextBackgroundColor;
+        public int Level;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     internal struct Win32ListViewNotify
     {
         public Win32NotifyHeader Header;

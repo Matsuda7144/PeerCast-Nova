@@ -148,6 +148,84 @@ public sealed class GenesisRelayTreeTopologyTests
         directory.Dispose(); Assert.Empty(directory.ObserveLocalTree().Reports);
     }
 
+    [Fact]
+    public void PresentationHidesInternalIdsAndFormatsLoopbackAndColorsPerPeerCastStation()
+    {
+        var loopback = new PcpLocalRelayEndpoint(0x7F000001u, 58151);
+        var publicEp = new PcpLocalRelayEndpoint(0xCB00710Au, 7144);
+        var reportOk = new PcpLocalHostInfo(null, null, publicEp, null, null, 0x12, 1, 3, 1218, 27);
+        var reportFull = reportOk with { Flags = 0x10 };
+        var reportFw = reportOk with { Flags = 0x18 };
+        var reportStopped = reportOk with { Flags = 0x02 };
+
+        var nova = new GenesisRelayTreeNode("nova", "up-2", GenesisRelayTreeNodeKind.LocalNova, PcpRelayConnectionPhase.Connected,
+            Details: new(null, loopback));
+        var upstream = new GenesisRelayTreeNode("up-2", null, GenesisRelayTreeNodeKind.Upstream, PcpRelayConnectionPhase.Connected,
+            WriteKbps: null, ConnectionId: 2, Details: new(null, publicEp, Report: reportOk, Source: new(PcpLocalHostSourceKind.UpstreamStream, 2)));
+        var reported = new GenesisRelayTreeNode("reported-5", null, GenesisRelayTreeNodeKind.ReportedPeer, PcpRelayConnectionPhase.Unknown,
+            ReportId: 5, Details: new(null, publicEp, Report: reportOk, Source: new(PcpLocalHostSourceKind.DownstreamControl, 9), ViaBroadcast: true, Age: TimeSpan.FromSeconds(12)));
+
+        var tree = new GenesisRelayTreeSnapshot(_channel, _owner, GenesisRelayTreeState.Active, new[] { upstream, nova, reported });
+
+        var novaRow = GenesisRelayTreeNodePresentation.Row(tree, nova, false);
+        Assert.Contains("★ PeerCast Nova（自分）", novaRow);
+        Assert.Contains("ローカル視聴", novaRow);
+        Assert.DoesNotContain("127.0.0.1", novaRow);
+
+        var upRow = GenesisRelayTreeNodePresentation.Row(tree, upstream, false);
+        Assert.DoesNotContain("OwnedConnection", upRow);
+        Assert.DoesNotContain("up-2", upRow);
+        Assert.DoesNotContain("Unknown", upRow);
+
+        var repRow = GenesisRelayTreeNodePresentation.Row(tree, reported, false);
+        Assert.DoesNotContain("reported-5", repRow);
+        Assert.DoesNotContain("HOST申告", repRow);
+        Assert.DoesNotContain("（申告）", repRow);
+
+        Assert.Contains("127.0.0.1:58151", GenesisRelayTreeNodePresentation.Details(tree, nova, false));
+        Assert.Contains("ID reported-5", GenesisRelayTreeNodePresentation.Details(tree, reported, true));
+        Assert.Contains("BCST内HOST", GenesisRelayTreeNodePresentation.Details(tree, reported, true));
+        Assert.Contains("色の見方", GenesisRelayTreeNodePresentation.Details(tree, null, true));
+
+        // PeerCastStation準拠の色判定
+        Assert.Equal(GenesisGuiNextDesign.Success, GenesisRelayTreeNodePresentation.NodeTextColor(tree, reported));
+        Assert.Equal(GenesisGuiNextDesign.RelayFull, GenesisRelayTreeNodePresentation.NodeTextColor(tree, reported with { Details = reported.Details! with { Report = reportFull } }));
+        Assert.Equal(GenesisGuiNextDesign.Warning, GenesisRelayTreeNodePresentation.NodeTextColor(tree, reported with { Details = reported.Details! with { Report = reportFw } }));
+        Assert.Equal(GenesisGuiNextDesign.Recording, GenesisRelayTreeNodePresentation.NodeTextColor(tree, reported with { Details = reported.Details! with { Report = reportStopped } }));
+        Assert.Equal(GenesisGuiNextDesign.SecondaryText, GenesisRelayTreeNodePresentation.NodeTextColor(tree, reported with { Details = null }));
+
+        Assert.Equal(GenesisGuiNextDesign.RelaySelf, GenesisRelayTreeNodePresentation.NodeTextColor(tree, nova));
+        Assert.Equal(GenesisGuiNextDesign.Warning, GenesisRelayTreeNodePresentation.NodeTextColor(tree with { State = GenesisRelayTreeState.Recovering }, nova));
+        Assert.Equal(GenesisGuiNextDesign.Recording, GenesisRelayTreeNodePresentation.NodeTextColor(tree with { State = GenesisRelayTreeState.Stopped }, nova));
+
+        Assert.Equal(GenesisGuiNextDesign.Success, GenesisRelayTreeNodePresentation.NodeTextColor(tree, upstream));
+        Assert.Equal(GenesisGuiNextDesign.Text, GenesisRelayTreeNodePresentation.NodeTextColor(tree, upstream with { Details = new(null, publicEp) }));
+        Assert.Equal(GenesisGuiNextDesign.Warning, GenesisRelayTreeNodePresentation.NodeTextColor(tree, upstream with { Phase = PcpRelayConnectionPhase.Connecting }));
+        Assert.Equal(GenesisGuiNextDesign.Recording, GenesisRelayTreeNodePresentation.NodeTextColor(tree, upstream with { Phase = PcpRelayConnectionPhase.Closing }));
+    }
+
+    [Fact]
+    public void PartitionUnattachedReportedPeersSeparatesDisconnectedSubtreesWithoutHidingUpstreamAncestors()
+    {
+        var nodes = new[]
+        {
+            new GenesisRelayTreeNode("rep-ancestor", null, GenesisRelayTreeNodeKind.ReportedPeer, PcpRelayConnectionPhase.Unknown, ReportId: 1),
+            new GenesisRelayTreeNode("up-1", "rep-ancestor", GenesisRelayTreeNodeKind.Upstream, PcpRelayConnectionPhase.Connected, ConnectionId: 1, ReportedParent: true),
+            new GenesisRelayTreeNode("nova", "up-1", GenesisRelayTreeNodeKind.LocalNova, PcpRelayConnectionPhase.Connected),
+            new GenesisRelayTreeNode("down-1", "nova", GenesisRelayTreeNodeKind.Downstream, PcpRelayConnectionPhase.Connected, ConnectionId: 2),
+            new GenesisRelayTreeNode("rep-under-down", "down-1", GenesisRelayTreeNodeKind.ReportedPeer, PcpRelayConnectionPhase.Unknown, ReportId: 2, ReportedParent: true),
+            new GenesisRelayTreeNode("rep-orphan-root", null, GenesisRelayTreeNodeKind.ReportedPeer, PcpRelayConnectionPhase.Unknown, ReportId: 3),
+            new GenesisRelayTreeNode("rep-orphan-child", "rep-orphan-root", GenesisRelayTreeNodeKind.ReportedPeer, PcpRelayConnectionPhase.Unknown, ReportId: 4, ReportedParent: true),
+        };
+
+        var (roots, all) = GenesisRelayTreeNodePresentation.PartitionUnattachedReportedPeers(nodes);
+
+        Assert.Equal("rep-orphan-root", Assert.Single(roots));
+        Assert.Equal(2, all.Count);
+        Assert.Contains("rep-orphan-root", all);
+        Assert.Contains("rep-orphan-child", all);
+    }
+
     private sealed class TopologyClock : TimeProvider
     {
         private long _ticks;

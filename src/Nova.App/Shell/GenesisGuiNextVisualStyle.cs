@@ -34,7 +34,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             if (window == GetParent(state.ListWindow) && message == WindowMessageCommand &&
                 state.RelayTree.ProcessCommand((int)(wParam & 0xffff), lParam, (int)((wParam >> 16) & 0xffff))) return 0;
             if (message == WindowMessageDrawItem && state.RelayTree.DrawControl(lParam)) return 1;
-            if (message == WindowMessageNotify && state.RelayTree.HandleNotify(lParam)) return 1;
+            if (message == WindowMessageNotify && state.RelayTree.HandleNotify(lParam, out var treeNotifyResult)) return treeNotifyResult;
             if (state.ListHeaderWindow != 0 && window == state.ListHeaderWindow && message == 0x0014 &&
                 state.HeaderBrush != 0 && GetClientRect(window, out var headerRect))
             {

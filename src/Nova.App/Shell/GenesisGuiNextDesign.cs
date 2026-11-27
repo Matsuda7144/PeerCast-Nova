@@ -22,6 +22,8 @@ internal static class GenesisGuiNextDesign
     internal const int Recording = 0x006660EE;
     internal const int Warning = 0x004ABCF5;
     internal const int Special = 0x00DA8AB6;
+    internal const int RelayFull = 0x00FFB055;
+    internal const int RelaySelf = 0x00F5EA5C;
     internal const int BodyFontHeight = 14;
     internal const int RowImageHeight = 26;
     internal const int CardTitleFontHeight = 20;
