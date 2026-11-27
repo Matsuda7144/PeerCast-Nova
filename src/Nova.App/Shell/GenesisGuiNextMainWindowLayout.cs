@@ -43,6 +43,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private bool _splitterDragging, _splitterHover;
         private int _splitterDragStartScreenY, _splitterDragStartHeight;
         private (int Width, int Height, uint Dpi)? _clientLayout;
+        private (bool ListVisible, bool DetailsVisible, bool SplitterVisible)? _mainPaneVisibility;
         internal int? DetailsHeight => _detailsHeight;
         internal bool LayoutInProgress { get; private set; }
         internal bool IsDetailsPane(nint window) => window == _detailsPane;
@@ -96,11 +97,40 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             }
         }
 
+        internal void SynchronizeMainPaneVisibility()
+        {
+            if (Volatile.Read(ref _detached) != 0)
+            {
+                return;
+            }
+
+            var visibility = ResolveMainPaneVisibility(
+                _settings.IsOpen,
+                _relayTree.IsPageShown,
+                _publishing.UsesPanel);
+            if (_mainPaneVisibility == visibility)
+            {
+                return;
+            }
+
+            _mainPaneVisibility = visibility;
+            _ = PresentVisible(_listView, visibility.ListVisible ? ShowWindowShowNoActivate : ShowWindowHide);
+            _ = PresentVisible(_detailsPane, visibility.DetailsVisible ? ShowWindowShowNoActivate : ShowWindowHide);
+            if (_paneSplitter != 0 && IsWindow(_paneSplitter))
+            {
+                _ = ShowWindow(_paneSplitter, visibility.SplitterVisible ? ShowWindowShowNoActivate : ShowWindowHide);
+            }
+        }
+
         private void UpdatePaneSplitterVisibility()
         {
             if (_paneSplitter != 0 && IsWindow(_paneSplitter))
             {
-                _ = ShowWindow(_paneSplitter, !_settings.IsOpen && !_publishing.UsesPanel && !_relayTree.IsPageShown ? ShowWindowShowNoActivate : ShowWindowHide);
+                var visible = ResolveMainPaneVisibility(
+                    _settings.IsOpen,
+                    _relayTree.IsPageShown,
+                    _publishing.UsesPanel).SplitterVisible;
+                _ = ShowWindow(_paneSplitter, visible ? ShowWindowShowNoActivate : ShowWindowHide);
             }
         }
 
@@ -339,6 +369,16 @@ internal sealed partial class GenesisGuiNextAppShellBridge
     }
 
     private static int RecordingToolbarLeft(int slot) => 12 + slot * (RecordingModeButtonWidth + RecordingModeButtonGap);
+
+    internal static (bool ListVisible, bool DetailsVisible, bool SplitterVisible) ResolveMainPaneVisibility(
+        bool settingsOpen,
+        bool relayTreeShown,
+        bool publishingExpanded)
+    {
+        var listVisible = !settingsOpen && !relayTreeShown && !publishingExpanded;
+        var detailsVisible = !settingsOpen && !relayTreeShown;
+        return (listVisible, detailsVisible, listVisible);
+    }
 
     internal static (int RecordLeft, int StopLeft, int CopyLeft, int TextWidth) ResolveDetailsActions(int width)
     {

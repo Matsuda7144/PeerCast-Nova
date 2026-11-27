@@ -62,6 +62,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         void IGenesisGuiNextShellHost.ResetDetailsUpdates() => _detailsUpdates.Reset();
         void IGenesisGuiNextShellHost.ResetFavoriteUpdates() => _favoriteUpdates.Reset();
         void IGenesisGuiNextShellHost.SynchronizeNativeSelection() => SynchronizeNativeSelection();
+        void IGenesisGuiNextShellHost.SynchronizeMainPaneVisibility() => SynchronizeMainPaneVisibility();
         void IGenesisGuiNextShellHost.UpdatePaneSplitterVisibility() => UpdatePaneSplitterVisibility();
         void IGenesisGuiNextShellHost.ProcessCommand(nuint wParam, nint lParam) => ProcessCommand(wParam, lParam);
         nint IGenesisGuiNextShellHost.PrepareStaticControl(nuint deviceContext, nint pane) => PrepareStaticControl(deviceContext, pane);

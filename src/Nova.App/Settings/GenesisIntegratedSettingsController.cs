@@ -199,10 +199,8 @@ internal sealed partial class GenesisIntegratedSettingsController
             ShowSettingsCategory();
         }
 
-        _ = ShowWindow(_host.ListView, ShowWindowHide);
-        _ = ShowWindow(_host.DetailsPane, ShowWindowHide);
         _ = ShowWindow(_settingsPane, ShowWindowShowNoActivate);
-        _host.UpdatePaneSplitterVisibility();
+        _host.SynchronizeMainPaneVisibility();
         Refresh();
         _host.ResetFavoriteUpdates();
         _host.SynchronizeNativeSelection();
@@ -216,7 +214,7 @@ internal sealed partial class GenesisIntegratedSettingsController
         return true;
     }
 
-    internal void Close()
+    internal void Close(bool synchronizeVisibility = true)
     {
         if (!IsOpen)
         {
@@ -229,11 +227,12 @@ internal sealed partial class GenesisIntegratedSettingsController
         _settingsCategoryRevision++;
         _settingsCategory = null; // 画面を閉じると未保存下書きのみ破棄し、即時反映済みの通知設定は保持する。
         _ = ShowWindow(_settingsPane, ShowWindowHide);
-        _ = ShowWindow(_host.ListView, ShowWindowShowNoActivate);
-        _ = ShowWindow(_host.DetailsPane, ShowWindowShowNoActivate);
-        _host.UpdatePaneSplitterVisibility();
-        _host.ResetFavoriteUpdates();
-        _host.SynchronizeNativeSelection();
+        if (synchronizeVisibility)
+        {
+            _host.SynchronizeMainPaneVisibility();
+            _host.ResetFavoriteUpdates();
+            _host.SynchronizeNativeSelection();
+        }
     }
 
     internal bool ProcessCommand(int id, nint control)

@@ -35,12 +35,24 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 state.RelayTree.ProcessCommand((int)(wParam & 0xffff), lParam, (int)((wParam >> 16) & 0xffff))) return 0;
             if (message == WindowMessageDrawItem && state.RelayTree.DrawControl(lParam)) return 1;
             if (message == WindowMessageNotify && state.RelayTree.HandleNotify(lParam)) return 1;
+            if (state.ListHeaderWindow != 0 && window == state.ListHeaderWindow && message == 0x0014 &&
+                state.HeaderBrush != 0 && GetClientRect(window, out var headerRect))
+            {
+                _ = FillRect((nint)wParam, ref headerRect, state.HeaderBrush);
+                return 1;
+            }
             if (window == state.ListWindow)
             {
+                if (message == 0x0014 && state.ListBrush != 0 && GetClientRect(window, out var listRect))
+                {
+                    _ = FillRect((nint)wParam, ref listRect, state.ListBrush);
+                    return 1;
+                }
                 var result = DefSubclassProc(window, message, wParam, lParam);
                 if (message is WindowMessagePaint or 0x0085) state.PaintModernListFrame();
                 return result;
             }
+            if (message == 0x0014 && state.IsOwnerDrawVisualButton(window)) return 1;
             if (message == WindowMessageNotify && state.HandleListViewCustomDraw(lParam, out var drawResult))
                 return drawResult;
             if (state.PaintTopStatus(window, message)) return message == 0x0014 ? 1 : 0;
@@ -61,19 +73,17 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             if (message is 0x0007 or 0x0008) state.RefreshRecordingFocus(window);
             if (state.PaintChannelCardText(window, message)) return message == 0x0014 ? 1 : 0;
             if (message is 0x0200 or 0x02A3) state.TrackControlHover(window, message);
-            if (window == GetParent(state.ListWindow))
+            if ((window == GetParent(state.ListWindow) || window == (nint)owner) &&
+                message == 0x0014 && GetClientRect(window, out var rectangle))
             {
-                if (message == 0x0014 && GetClientRect(window, out var rectangle))
-                {
-                    _ = FillRect((nint)wParam, ref rectangle, state.MainBrush);
-                    return 1;
-                }
-                if (message == WindowMessageControlColorStatic)
-                {
-                    _ = SetBkColor((nint)wParam, GenesisGuiNextDesign.Background);
-                    _ = SetTextColor((nint)wParam, GenesisGuiNextDesign.SecondaryText);
-                    return state.MainBrush;
-                }
+                _ = FillRect((nint)wParam, ref rectangle, state.MainBrush);
+                return 1;
+            }
+            if (window == GetParent(state.ListWindow) && message == WindowMessageControlColorStatic)
+            {
+                _ = SetBkColor((nint)wParam, GenesisGuiNextDesign.Background);
+                _ = SetTextColor((nint)wParam, GenesisGuiNextDesign.SecondaryText);
+                return state.MainBrush;
             }
         }
         return DefSubclassProc(window, message, wParam, lParam);
@@ -81,11 +91,16 @@ internal sealed partial class GenesisGuiNextAppShellBridge
 
     private sealed partial class AppShellState
     {
-        private nint _mainBrush, _sidebarBrush, _topBrush, _inputBrush;
+        private nint _mainBrush, _sidebarBrush, _topBrush, _inputBrush, _listBrush, _headerBrush, _listHeader;
         private readonly bool _modernAppearance;
         internal bool IsModern => _modernAppearance;
         internal nint ListWindow => _listView;
+        internal nint ListHeaderWindow => _listHeader;
         internal nint MainBrush => _mainBrush;
+        internal nint ListBrush => _listBrush;
+        internal nint HeaderBrush => _headerBrush;
+        internal bool IsOwnerDrawVisualButton(nint window) =>
+            VisualButtons.Contains(window) || CardButtons.Contains(window) || RecordingToolbarControls.Contains(window);
         private nint _hoverControl;
         private int _hoverRow = -1, _paintSelectedRow = -1;
         private nint _rowImages, _originalImages;
@@ -106,10 +121,16 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             _sidebarBrush = CreateSolidBrush(GenesisGuiNextDesign.Sidebar);
             _topBrush = CreateSolidBrush(GenesisGuiNextDesign.Panel);
             _inputBrush = CreateSolidBrush(GenesisGuiNextDesign.Input);
+            _listBrush = CreateSolidBrush(GenesisGuiNextDesign.List);
+            _headerBrush = CreateSolidBrush(GenesisGuiNextDesign.Header);
             foreach (var control in VisualSubclassControls)
                 _ = SetWindowSubclass(control, VisualProcedure, VisualSubclassId, (nuint)_owner);
-            var header = SendMessageW(_listView, 0x101F, 0, 0);
-            _ = SetWindowTheme(header, " ", " ");
+            _listHeader = SendMessageW(_listView, 0x101F, 0, 0);
+            if (_listHeader != 0)
+            {
+                _ = SetWindowTheme(_listHeader, " ", " ");
+                _ = SetWindowSubclass(_listHeader, VisualProcedure, VisualSubclassId, (nuint)_owner);
+            }
             _windowChrome = GenesisGuiNextWindowChrome.TryCreate(_owner, IsModern);
         }
 
@@ -117,6 +138,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         {
             if (!IsModern || Interlocked.Exchange(ref _visualsDetached, 1) != 0) return;
             _windowChrome?.Dispose(); _windowChrome = null;
+            if (_listHeader != 0 && IsWindow(_listHeader)) _ = RemoveWindowSubclass(_listHeader, VisualProcedure, VisualSubclassId);
+            _listHeader = 0;
             foreach (var control in VisualSubclassControls)
                 if (IsWindow(control)) _ = RemoveWindowSubclass(control, VisualProcedure, VisualSubclassId);
             foreach (var (control, font) in _originalFonts)
@@ -134,9 +157,9 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 _ = ImageList_Destroy(_rowImages);
                 _rowImages = 0;
             }
-            foreach (var brush in new[] { _mainBrush, _sidebarBrush, _topBrush, _inputBrush })
+            foreach (var brush in new[] { _mainBrush, _sidebarBrush, _topBrush, _inputBrush, _listBrush, _headerBrush })
                 if (brush != 0) _ = DeleteObject(brush);
-            _mainBrush = _sidebarBrush = _topBrush = _inputBrush = 0;
+            _mainBrush = _sidebarBrush = _topBrush = _inputBrush = _listBrush = _headerBrush = 0;
         }
 
         private void UpdateVisualDpi(uint dpi)

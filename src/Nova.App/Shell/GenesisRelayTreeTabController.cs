@@ -164,10 +164,8 @@ internal sealed class GenesisRelayTreeTabController
 
         if (shown || (_treeListHidden && !_host.IsSettingsPageOpen))
         {
-            _ = _host.PresentVisible(_host.ListView, shown ? ShowWindowHide : ShowWindowShowNoActivate);
-            _ = _host.PresentVisible(_host.DetailsPane, shown ? ShowWindowHide : ShowWindowShowNoActivate);
             _treeListHidden = shown;
-            _host.UpdatePaneSplitterVisibility();
+            _host.SynchronizeMainPaneVisibility();
         }
 
         return shown;

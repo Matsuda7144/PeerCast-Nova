@@ -77,6 +77,33 @@ public sealed class GenesisShellControllerDecouplingTests
         publishing.Detach();
     }
 
+    [Theory]
+    [InlineData(false, false, false, true, true, true)]
+    [InlineData(false, false, true, false, true, false)]
+    [InlineData(false, true, false, false, false, false)]
+    [InlineData(true, false, false, false, false, false)]
+    [InlineData(true, true, false, false, false, false)]
+    [InlineData(true, false, true, false, false, false)]
+    [InlineData(false, true, true, false, false, false)]
+    [InlineData(true, true, true, false, false, false)]
+    public void ResolveMainPaneVisibilityCombinesAllPaneStatesWithoutTransientListShow(
+        bool settingsOpen,
+        bool relayTreeShown,
+        bool publishingExpanded,
+        bool expectedListVisible,
+        bool expectedDetailsVisible,
+        bool expectedSplitterVisible)
+    {
+        var actual = GenesisGuiNextAppShellBridge.ResolveMainPaneVisibility(
+            settingsOpen,
+            relayTreeShown,
+            publishingExpanded);
+
+        Assert.Equal(expectedListVisible, actual.ListVisible);
+        Assert.Equal(expectedDetailsVisible, actual.DetailsVisible);
+        Assert.Equal(expectedSplitterVisible, actual.SplitterVisible);
+    }
+
     private static string FindRepositoryRoot()
     {
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
@@ -136,6 +163,7 @@ public sealed class GenesisShellControllerDecouplingTests
         public void ResetDetailsUpdates() { }
         public void ResetFavoriteUpdates() { }
         public void SynchronizeNativeSelection() { }
+        public void SynchronizeMainPaneVisibility() { }
         public void UpdatePaneSplitterVisibility() { }
         public void ProcessCommand(nuint wParam, nint lParam) { }
         public nint PrepareStaticControl(nuint deviceContext, nint pane) => 0;
