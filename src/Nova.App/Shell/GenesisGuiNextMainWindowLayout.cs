@@ -110,7 +110,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             switch (message)
             {
                 case 0x0020: // WM_SETCURSOR
-                    _ = SetSplitterCursor(LoadCursorW(0, (nint)32645)); // IDC_SIZENS
+                    _ = SetCursor(LoadCursorW(0, (nint)32645)); // IDC_SIZENS
                     result = 1;
                     return true;
                 case 0x0014: // WM_ERASEBKGND
@@ -120,19 +120,19 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                     PaintPaneSplitter(window);
                     return true;
                 case 0x0201: // WM_LBUTTONDOWN
-                    if (GetSplitterCursorPos(out var downPoint) && GetClientRect(_detailsPane, out var currentDetails))
+                    if (GetCursorPos(out var downPoint) && GetClientRect(_detailsPane, out var currentDetails))
                     {
                         _splitterDragging = true;
                         _splitterDragStartScreenY = downPoint.Y;
                         _splitterDragStartHeight = Math.Max(
                             GenesisGuiNextAppShellPlacement.MinimumDetailsHeight,
                             LogicalWidth(currentDetails.Bottom));
-                        _ = SetSplitterCapture(window);
+                        _ = SetCapture(window);
                         _ = InvalidateRect(window, 0, false);
                     }
                     return true;
                 case 0x0200: // WM_MOUSEMOVE
-                    if (_splitterDragging && GetSplitterCursorPos(out var movePoint))
+                    if (_splitterDragging && GetCursorPos(out var movePoint))
                     {
                         var deltaLogical = LogicalWidth(movePoint.Y - _splitterDragStartScreenY);
                         _detailsHeight = Math.Max(
@@ -144,13 +144,13 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                     else if (!_splitterHover)
                     {
                         _splitterHover = true;
-                        var track = new SplitterTrackMouse
+                        var track = new Win32TrackMouseEvent
                         {
-                            Size = (uint)Marshal.SizeOf<SplitterTrackMouse>(),
+                            Size = (uint)Marshal.SizeOf<Win32TrackMouseEvent>(),
                             Flags = 0x00000002u,
                             Window = window,
                         };
-                        _ = TrackSplitterMouseEvent(ref track);
+                        _ = TrackMouseEvent(ref track);
                         _ = InvalidateRect(window, 0, false);
                     }
                     return true;
@@ -165,7 +165,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                         _splitterDragging = false;
                         if (message == 0x0202)
                         {
-                            _ = ReleaseSplitterCapture();
+                            _ = ReleaseCapture();
                         }
 
                         if (GetClientRect(_detailsPane, out var settledDetails))
@@ -198,7 +198,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
 
         private void PaintPaneSplitter(nint window)
         {
-            var dc = BeginSplitterPaint(window, out var paint);
+            var dc = BeginPaint(window, out var paint);
             if (dc == 0)
             {
                 return;
@@ -215,7 +215,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 var bgBrush = CreateSolidBrush(background);
                 if (bgBrush != 0)
                 {
-                    try { _ = FillSplitterRect(dc, ref area, bgBrush); }
+                    try { _ = FillRect(dc, ref area, bgBrush); }
                     finally { _ = DeleteObject(bgBrush); }
                 }
 
@@ -223,7 +223,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 var gripHeight = Math.Max(2, Scale(2));
                 var gripLeft = area.Left + (area.Right - area.Left - gripWidth) / 2;
                 var gripTop = area.Top + (area.Bottom - area.Top - gripHeight) / 2;
-                var gripRect = new Rectangle
+                var gripRect = new Win32Rect
                 {
                     Left = gripLeft,
                     Top = gripTop,
@@ -236,13 +236,13 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 var gripBrush = CreateSolidBrush(gripColor);
                 if (gripBrush != 0)
                 {
-                    try { _ = FillSplitterRect(dc, ref gripRect, gripBrush); }
+                    try { _ = FillRect(dc, ref gripRect, gripBrush); }
                     finally { _ = DeleteObject(gripBrush); }
                 }
             }
             finally
             {
-                _ = EndSplitterPaint(window, ref paint);
+                _ = EndPaint(window, ref paint);
             }
         }
 
@@ -337,54 +337,6 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             finally { LayoutInProgress = false; }
         }
     }
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool RedrawWindow(nint window, nint rectangle, nint region, uint flags);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct SplitterPoint { public int X, Y; }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct SplitterTrackMouse { public uint Size, Flags; public nint Window; public uint HoverTime; }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct SplitterPaint
-    {
-        public nint Dc;
-        [MarshalAs(UnmanagedType.Bool)] public bool Erase;
-        public Rectangle PaintRectangle;
-        [MarshalAs(UnmanagedType.Bool)] public bool Restore, IncUpdate;
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 32)] public byte[] Reserved;
-    }
-
-    [DllImport("user32.dll", EntryPoint = "SetCursor")]
-    private static extern nint SetSplitterCursor(nint cursor);
-
-    [DllImport("user32.dll", EntryPoint = "SetCapture")]
-    private static extern nint SetSplitterCapture(nint window);
-
-    [DllImport("user32.dll", EntryPoint = "ReleaseCapture")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool ReleaseSplitterCapture();
-
-    [DllImport("user32.dll", EntryPoint = "GetCursorPos")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetSplitterCursorPos(out SplitterPoint point);
-
-    [DllImport("user32.dll", EntryPoint = "TrackMouseEvent")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool TrackSplitterMouseEvent(ref SplitterTrackMouse request);
-
-    [DllImport("user32.dll", EntryPoint = "BeginPaint")]
-    private static extern nint BeginSplitterPaint(nint window, out SplitterPaint paint);
-
-    [DllImport("user32.dll", EntryPoint = "EndPaint")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool EndSplitterPaint(nint window, ref SplitterPaint paint);
-
-    [DllImport("user32.dll", EntryPoint = "FillRect")]
-    private static extern int FillSplitterRect(nint dc, ref Rectangle rectangle, nint brush);
 
     private static int RecordingToolbarLeft(int slot) => 12 + slot * (RecordingModeButtonWidth + RecordingModeButtonGap);
 

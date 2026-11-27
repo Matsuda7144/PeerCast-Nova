@@ -2,7 +2,7 @@ using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 
 using static PeerCast.Nova.App.Win32NativeMethods;
-using NotifyIconData = PeerCast.Nova.App.SystemGenesisChannelNotificationPresenter.NotifyIconData;
+using NotifyIconData = PeerCast.Nova.App.Win32NativeMethods.Win32NotifyIconData;
 
 namespace PeerCast.Nova.App;
 
@@ -348,26 +348,4 @@ internal sealed class GenesisSystemTrayBridge : IAsyncDisposable
             _ = DestroyMenu(menu);
         }
     }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct Point
-    {
-        public int X;
-        public int Y;
-    }
-
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool Shell_NotifyIconW(uint message, ref NotifyIconData data);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern uint RegisterWindowMessageW(string messageName);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool IsIconic(nint window);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetCursorPos(out Point point);
 }

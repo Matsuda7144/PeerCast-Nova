@@ -64,7 +64,7 @@ internal static class GenesisSourceUrlPlaybackDialog
     private static readonly ConcurrentDictionary<nint, DialogState> StatesByWindow = new();
     private static readonly ConcurrentDictionary<nint, DialogState> StatesByOwner = new();
     private static readonly object RegistrationSync = new();
-    private static readonly WindowProcedure WindowProcedureDelegate = ProcessWindowMessage;
+    private static readonly Win32WindowProcedure WindowProcedureDelegate = ProcessWindowMessage;
     private static readonly Win32SubclassProcedure KeyboardSubclassProcedureDelegate =
         ProcessKeyboardMessage;
     private static nint _instance;
@@ -97,7 +97,7 @@ internal static class GenesisSourceUrlPlaybackDialog
         var dpi = GenesisMainWindowResizeGuard.GetDpi(owner);
         var scaledWidth = GenesisMainWindowLayout.Scale(DialogWidth, dpi);
         var scaledHeight = GenesisMainWindowLayout.Scale(DialogHeight, dpi);
-        var rectangle = new WindowRectangle();
+        var rectangle = new Win32Rect();
         var x = UseDefaultPosition;
         var y = UseDefaultPosition;
         if (GetWindowRect(owner, out rectangle))
@@ -189,9 +189,9 @@ internal static class GenesisSourceUrlPlaybackDialog
                 return false;
             }
 
-            var windowClass = new WindowClassEx
+            var windowClass = new Win32WindowClassEx
             {
-                Size = (uint)Marshal.SizeOf<WindowClassEx>(),
+                Size = (uint)Marshal.SizeOf<Win32WindowClassEx>(),
                 WindowProcedure = Marshal.GetFunctionPointerForDelegate(
                     WindowProcedureDelegate),
                 Instance = instance,
@@ -584,7 +584,7 @@ internal static class GenesisSourceUrlPlaybackDialog
                 return false;
             }
 
-            var drawItem = Marshal.PtrToStructure<DrawItem>(drawItemPointer);
+            var drawItem = Marshal.PtrToStructure<Win32DrawItem>(drawItemPointer);
             if (drawItem.ControlType != DrawItemTypeButton ||
                 drawItem.ControlId is not (PlayControlId or CancelControlId))
             {
@@ -695,7 +695,7 @@ internal static class GenesisSourceUrlPlaybackDialog
         }
     }
 
-    private static void FillRectangle(nint deviceContext, Rectangle rectangle, int color)
+    private static void FillRectangle(nint deviceContext, Win32Rect rectangle, int color)
     {
         var brush = CreateSolidBrush((uint)color);
         if (brush != 0)
@@ -728,84 +728,4 @@ internal static class GenesisSourceUrlPlaybackDialog
         public nint PlayButton;
         public nint CancelButton;
     }
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct WindowClassEx
-    {
-        public uint Size;
-        public uint Style;
-        public nint WindowProcedure;
-        public int ClassExtra;
-        public int WindowExtra;
-        public nint Instance;
-        public nint Icon;
-        public nint Cursor;
-        public nint BackgroundBrush;
-        [MarshalAs(UnmanagedType.LPWStr)]
-        public string? MenuName;
-        [MarshalAs(UnmanagedType.LPWStr)]
-        public string? ClassName;
-        public nint SmallIcon;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct Rectangle
-    {
-        public int Left;
-        public int Top;
-        public int Right;
-        public int Bottom;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct WindowRectangle
-    {
-        public int Left;
-        public int Top;
-        public int Right;
-        public int Bottom;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct DrawItem
-    {
-        public uint ControlType;
-        public uint ControlId;
-        public uint ItemId;
-        public uint ItemAction;
-        public uint ItemState;
-        public nint ControlWindow;
-        public nint DeviceContext;
-        public Rectangle ItemRectangle;
-        public nuint ItemData;
-    }
-
-    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
-    private delegate nint WindowProcedure(nint window, uint message, nuint wParam, nint lParam);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern ushort RegisterClassExW(ref WindowClassEx windowClass);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetWindowRect(nint window, out WindowRectangle rectangle);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern int GetWindowTextW(nint window, nint text, int maximumCharacters);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern int DrawTextW(
-        nint deviceContext,
-        [MarshalAs(UnmanagedType.LPWStr)] string text,
-        int characterCount,
-        ref Rectangle rectangle,
-        uint format);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool DrawFocusRect(nint deviceContext, ref Rectangle rectangle);
-
-    [DllImport("user32.dll")]
-    private static extern int FillRect(nint deviceContext, ref Rectangle rectangle, nint brush);
-
 }

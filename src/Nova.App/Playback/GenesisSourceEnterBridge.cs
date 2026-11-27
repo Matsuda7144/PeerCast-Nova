@@ -265,11 +265,4 @@ internal sealed class GenesisSourceEnterBridge : IAsyncDisposable
             }
         }
     }
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern int GetWindowTextW(
-        nint window,
-        nint text,
-        int maximumCharacters);
-
 }

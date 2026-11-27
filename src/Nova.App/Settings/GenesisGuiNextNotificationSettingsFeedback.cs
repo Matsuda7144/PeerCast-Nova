@@ -1,5 +1,3 @@
-using System.Runtime.InteropServices;
-
 using static PeerCast.Nova.App.Win32NativeMethods;
 
 namespace PeerCast.Nova.App;
@@ -76,8 +74,4 @@ internal static class SystemGenesisGuiNextNotificationSettingsFeedback
             presentation.Caption,
             MessageBoxOk | MessageBoxIconWarning);
     }
-
-    [DllImport("user32.dll")]
-    private static extern nint GetForegroundWindow();
-
 }

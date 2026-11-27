@@ -1,5 +1,7 @@
 using System.Runtime.InteropServices;
 
+using static PeerCast.Nova.App.Win32NativeMethods;
+
 namespace PeerCast.Nova.App;
 
 // Public DWM attributes only. Native caption buttons, hit testing and scrollbars stay owned by Windows.
@@ -72,13 +74,7 @@ internal sealed class GenesisGuiNextWindowChrome : IDisposable
     }
     private static bool? ReadHighContrast()
     {
-        var state = new HighContrast { Size = (uint)Marshal.SizeOf<HighContrast>() };
+        var state = new Win32HighContrast { Size = (uint)Marshal.SizeOf<Win32HighContrast>() };
         return SystemParametersInfoW(0x0042, state.Size, ref state, 0) ? (state.Flags & 1) != 0 : null;
     }
-    [StructLayout(LayoutKind.Sequential)]
-    private struct HighContrast { public uint Size, Flags; public nint DefaultScheme; }
-    [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(nint window, int attribute, out int value, int size);
-    [DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(nint window, int attribute, ref int value, int size);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    [return: MarshalAs(UnmanagedType.Bool)] private static extern bool SystemParametersInfoW(uint action, uint parameter, ref HighContrast state, uint flags);
 }

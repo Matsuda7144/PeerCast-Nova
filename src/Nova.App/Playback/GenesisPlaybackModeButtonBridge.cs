@@ -43,8 +43,8 @@ internal sealed class GenesisPlaybackModeButtonPlacement
             return null;
         }
 
-        var topLeft = new WindowPoint(rectangle.Left, rectangle.Top);
-        var bottomRight = new WindowPoint(rectangle.Right, rectangle.Bottom);
+        var topLeft = new Win32Point(rectangle.Left, rectangle.Top);
+        var bottomRight = new Win32Point(rectangle.Right, rectangle.Bottom);
         if (!ScreenToClient(parent, ref topLeft) ||
             !ScreenToClient(parent, ref bottomRight))
         {
@@ -113,28 +113,6 @@ internal sealed class GenesisPlaybackModeButtonPlacement
         int Top,
         int Right,
         int Bottom);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct WindowPoint
-    {
-        public WindowPoint(int x, int y)
-        {
-            X = x;
-            Y = y;
-        }
-
-        public int X;
-        public int Y;
-    }
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetWindowRect(nint window, out WindowRectangle rectangle);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool ScreenToClient(nint window, ref WindowPoint point);
-
 }
 
 internal sealed class GenesisPlaybackModeButtonBridge : IAsyncDisposable
@@ -170,7 +148,7 @@ internal sealed class GenesisPlaybackModeButtonBridge : IAsyncDisposable
     private const int VideoOnlyWidth = 88;
     private const int ButtonGap = 6;
     private static readonly ConcurrentDictionary<nint, ModeState> StatesByContainer = new();
-    private static readonly WindowProcedure WindowProcedureDelegate = ProcessWindowMessage;
+    private static readonly Win32WindowProcedure WindowProcedureDelegate = ProcessWindowMessage;
     private readonly nint _status;
     private readonly GenesisPlaybackModeButtonPlacement.WindowRectangle _statusRectangle;
     private readonly nint _container;
@@ -210,9 +188,9 @@ internal sealed class GenesisPlaybackModeButtonBridge : IAsyncDisposable
         }
 
         var className = $"PeerCastNovaGenesisPlaybackModes-{Guid.NewGuid():N}";
-        var windowClass = new WindowClassEx
+        var windowClass = new Win32WindowClassEx
         {
-            Size = (uint)Marshal.SizeOf<WindowClassEx>(),
+            Size = (uint)Marshal.SizeOf<Win32WindowClassEx>(),
             WindowProcedure = Marshal.GetFunctionPointerForDelegate(WindowProcedureDelegate),
             Instance = instance,
             ClassName = className,
@@ -503,34 +481,4 @@ internal sealed class GenesisPlaybackModeButtonBridge : IAsyncDisposable
             }
         }
     }
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct WindowClassEx
-    {
-        public uint Size;
-        public uint Style;
-        public nint WindowProcedure;
-        public int ClassExtraBytes;
-        public int WindowExtraBytes;
-        public nint Instance;
-        public nint Icon;
-        public nint Cursor;
-        public nint BackgroundBrush;
-        [MarshalAs(UnmanagedType.LPWStr)]
-        public string? MenuName;
-        [MarshalAs(UnmanagedType.LPWStr)]
-        public string? ClassName;
-        public nint SmallIcon;
-    }
-
-    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
-    private delegate nint WindowProcedure(
-        nint window,
-        uint message,
-        nuint wParam,
-        nint lParam);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern ushort RegisterClassExW(ref WindowClassEx windowClass);
-
 }

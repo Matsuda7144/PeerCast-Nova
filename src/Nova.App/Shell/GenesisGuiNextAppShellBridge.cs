@@ -124,7 +124,9 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
     private const uint DrawTextNoPrefix = 0x0800;
     private const uint DrawItemDisabled = 0x0004;
     private const uint DrawItemFocused = 0x0010;
+    private const uint DrawItemTypeButton = 4;
     private const uint DrawItemTypeStatic = 5; // ODT_STATIC in WinUser.h (ODT_LISTBOX is 2).
+    private const nuint ListViewSubclassIdentifier = 0x7144231;
     private const int AccentWidth = 5;
     private const int PlaybackAccentColor = 0x00B87832;
     private const int StopAccentColor = 0x003C43D8;
@@ -132,7 +134,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
     private const int WarningTextColor = 0x000055FF;
     private static readonly ConcurrentDictionary<nint, AppShellState> StatesByContainer = new();
     private static readonly ConcurrentDictionary<nint, AppShellState> StatesByListView = new();
-    private static readonly WindowProcedure WindowProcedureDelegate = ProcessWindowMessage;
+    private static readonly Win32WindowProcedure WindowProcedureDelegate = ProcessWindowMessage;
     private static readonly Win32SubclassProcedure ListViewSubclassProcedureDelegate =
         ProcessListViewMessage;
     private readonly nint _listView;
@@ -318,9 +320,9 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             return null;
         }
 
-        var windowClass = new WindowClassEx
+        var windowClass = new Win32WindowClassEx
         {
-            Size = (uint)Marshal.SizeOf<WindowClassEx>(),
+            Size = (uint)Marshal.SizeOf<Win32WindowClassEx>(),
             WindowProcedure = Marshal.GetFunctionPointerForDelegate(WindowProcedureDelegate),
             Instance = instance,
             BackgroundBrush = backgroundBrush,
@@ -1619,7 +1621,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 return false;
             }
 
-            var drawItem = Marshal.PtrToStructure<DrawItem>(drawItemPointer);
+            var drawItem = Marshal.PtrToStructure<Win32DrawItem>(drawItemPointer);
             using var fontSelection = GenesisWindowUiFont.SelectForDrawing(
                 drawItem.DeviceContext,
                 drawItem.ControlWindow);
@@ -1782,7 +1784,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
         }
 
         private static bool DrawRecordingModeButton(
-            DrawItem drawItem,
+            Win32DrawItem drawItem,
             string label,
             bool selected,
             bool dangerous = false)
@@ -1816,7 +1818,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             return true;
         }
 
-        private static bool DrawDetailsCopyButton(DrawItem drawItem)
+        private static bool DrawDetailsCopyButton(Win32DrawItem drawItem)
         {
             var pressed = (drawItem.ItemState & 0x0001) != 0;
             var disabled = (drawItem.ItemState & DrawItemDisabled) != 0;
@@ -1851,7 +1853,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             return true;
         }
 
-        private bool DrawManualRecordingButton(DrawItem drawItem)
+        private bool DrawManualRecordingButton(Win32DrawItem drawItem)
         {
             var isRecord = drawItem.ControlId == DetailsRecordControlId;
             var pressed = (drawItem.ItemState & 0x0001) != 0;
@@ -1887,7 +1889,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             return true;
         }
 
-        private bool DrawManualRecordingStatus(DrawItem drawItem)
+        private bool DrawManualRecordingStatus(Win32DrawItem drawItem)
         {
             if (_tabs.IsRecordingHistoryPage)
             {
@@ -1938,7 +1940,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             return true;
         }
 
-        private static bool DrawPlaybackButton(DrawItem drawItem)
+        private static bool DrawPlaybackButton(Win32DrawItem drawItem)
         {
             var isPlay = drawItem.ControlId == PlayControlId;
             var pressed = (drawItem.ItemState & 0x0001) != 0;
@@ -1988,14 +1990,14 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 return false;
             }
 
-            var header = Marshal.PtrToStructure<NotifyHeader>(notificationPointer);
+            var header = Marshal.PtrToStructure<Win32NotifyHeader>(notificationPointer);
             if (header.WindowFrom != _listView || header.Code != NotifyCustomDraw)
             {
                 return false;
             }
 
             if (DrawChannelListCell(notificationPointer, out result)) return true;
-            var draw = Marshal.PtrToStructure<CustomDraw>(notificationPointer);
+            var draw = Marshal.PtrToStructure<Win32CustomDraw>(notificationPointer);
             if (draw.DrawStage == CustomDrawStagePrePaint)
             {
                 _paintSelectedRow = SendMessageW(_listView, ListViewMessageGetNextItem, nuint.MaxValue,
@@ -2008,10 +2010,10 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             {
                 var selected = draw.ItemSpec == (nuint)_paintSelectedRow;
                 Marshal.WriteInt32(notificationPointer,
-                    Marshal.OffsetOf<ListViewCustomDraw>(nameof(ListViewCustomDraw.TextColor)).ToInt32(),
+                    Marshal.OffsetOf<Win32ListViewCustomDraw>(nameof(Win32ListViewCustomDraw.TextColor)).ToInt32(),
                     GenesisGuiNextDesign.Text);
                 Marshal.WriteInt32(notificationPointer,
-                    Marshal.OffsetOf<ListViewCustomDraw>(nameof(ListViewCustomDraw.TextBackgroundColor)).ToInt32(),
+                    Marshal.OffsetOf<Win32ListViewCustomDraw>(nameof(Win32ListViewCustomDraw.TextBackgroundColor)).ToInt32(),
                     GenesisGuiNextDesign.RowBackground(selected, draw.ItemSpec == (nuint)_hoverRow));
                 // Suppress only native selection painting, never the actual list selection.
                 draw.ItemState &= ~(CustomDrawStateSelected | 0x0010u);
@@ -2022,8 +2024,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
 
             if (draw.DrawStage == CustomDrawStageItemPostPaint)
             {
-                var bounds = new Rectangle();
-                if (SendHeaderRectangle(_listView, ListViewMessageGetItemRectangle, draw.ItemSpec, ref bounds) != 0)
+                var bounds = new Win32Rect();
+                if (SendMessageW(_listView, ListViewMessageGetItemRectangle, draw.ItemSpec, ref bounds) != 0)
                     draw.ItemRectangle = bounds;
                 if (GetClientRect(_listView, out var client))
                 {
@@ -2869,10 +2871,10 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 return;
             }
 
-            var rectanglePointer = Marshal.AllocHGlobal(Marshal.SizeOf<Rectangle>());
+            var rectanglePointer = Marshal.AllocHGlobal(Marshal.SizeOf<Win32Rect>());
             try
             {
-                Marshal.StructureToPtr(new Rectangle(), rectanglePointer, fDeleteOld: false);
+                Marshal.StructureToPtr(new Win32Rect(), rectanglePointer, fDeleteOld: false);
                 var rectangleRead = SendMessageW(
                     _listView,
                     ListViewMessageGetItemRectangle,
@@ -2883,7 +2885,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                     return;
                 }
 
-                var itemRectangle = Marshal.PtrToStructure<Rectangle>(rectanglePointer);
+                var itemRectangle = Marshal.PtrToStructure<Win32Rect>(rectanglePointer);
                 if (!TryResolveSelectedRowAccent(
                     selected: true,
                     itemRectangle.Left,
@@ -2902,7 +2904,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                     {
                         FillRectangle(
                             deviceContext,
-                            new Rectangle
+                            new Win32Rect
                             {
                                 Left = accent.Left,
                                 Top = accent.Top,
@@ -2988,7 +2990,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
 
     private static void FillRectangle(
         nint deviceContext,
-        Rectangle rectangle,
+        Win32Rect rectangle,
         int color)
     {
         var brush = CreateSolidBrush((uint)color);

@@ -238,7 +238,7 @@ internal static class GenesisWindowUiFont
 
 internal sealed class SystemUiFontNativeApi : IGenesisUiFontNativeApi
 {
-    internal static int MetricsSize => Marshal.SizeOf<NonClientMetrics>();
+    internal static int MetricsSize => Marshal.SizeOf<Win32NonClientMetrics>();
 
     internal const string JapaneseSample = "ABCチャンネル一覧配信開始終了中断設定ログについて検索新着お気入り視聴録画更新警告情報種類日時内容情報をコピー保存参照録画保存先絶対パス実行ファイル既定に戻す未設定閉じる空欄では既存のを使います。保存した設定は次のPlayから反映されます。設定を保存できませんでした。保存場所を確認してください。絶対パスを入力してください。ファイル名はにしてください。指定した実行ファイルが見つかりません。フォルダーではなく実行ファイルを指定してください。実行ファイルを確認できません。アクセス権を確認してください。パスを確認してください。PCRPlayer設定は未設定です。次の再生では環境変数またはPATHを使います。既に保存されています。未設定に戻しました。PCRPlayer設定を保存しました。次の再生から使用します。新規編集有効化削除上へ下へ一部の保存先またはファイルを確認できません。詳細録画停止外規起効今細削止自手集除象上停動別編面有抑カけこタブへムやよラリ、回同選択ポト番号～整合計レ毎（制限無）値読み込待ち受・帯域御適後続応めと置換え処理接う最大半角状態不わ—ず世代作備切利取失完敗替流消済準·エ分由専操要求キ正常界メディ候全前可安成明果結能補許証識：あ付件功性拠期条立等＝→もサバ初在度機現異示表隠／ジ概者ビッワ［固］ソ形式申際送速元　掲載…白文字ユザ含列改以本端強公競放ドモ任働到意稼達観シ追加ノ体測↑↓解マ割当出範囲物ヤ量ツ非直◆▲▼■◇関係継通得秒親子▣●満員○影経響？維持プ「内蔵プレイヤー」用に別途用意即ペニュ印右央履左引歴登矢絞調領高";
     private const uint SpiGetNonClientMetrics = 0x0029;
@@ -246,7 +246,7 @@ internal sealed class SystemUiFontNativeApi : IGenesisUiFontNativeApi
 
     public bool TryGetMessageFont(uint dpi, out GenesisUiLogFont font)
     {
-        var metrics = new NonClientMetrics { Size = (uint)Marshal.SizeOf<NonClientMetrics>() };
+        var metrics = new Win32NonClientMetrics { Size = (uint)Marshal.SizeOf<Win32NonClientMetrics>() };
         if (TryGetMessageMetricsForDpi(ref metrics, dpi))
         {
             font = metrics.MessageFont;
@@ -256,13 +256,13 @@ internal sealed class SystemUiFontNativeApi : IGenesisUiFontNativeApi
         // SystemParametersInfoForDpi was added in Windows 10 version 1607.
         // Use the older system API when it is unavailable, then scale the LOGFONT
         // from system DPI to the owning window's DPI.
-        metrics = new NonClientMetrics { Size = (uint)Marshal.SizeOf<NonClientMetrics>() };
+        metrics = new Win32NonClientMetrics { Size = (uint)Marshal.SizeOf<Win32NonClientMetrics>() };
         var success = SystemParametersInfoW(SpiGetNonClientMetrics, metrics.Size, ref metrics, 0);
         if (!success)
         {
             // Before Windows Vista, NONCLIENTMETRICS did not include the final
             // padded-border field. The preceding layout is otherwise identical.
-            metrics = new NonClientMetrics { Size = (uint)(Marshal.SizeOf<NonClientMetrics>() - sizeof(int)) };
+            metrics = new Win32NonClientMetrics { Size = (uint)(Marshal.SizeOf<Win32NonClientMetrics>() - sizeof(int)) };
             success = SystemParametersInfoW(SpiGetNonClientMetrics, metrics.Size, ref metrics, 0);
         }
 
@@ -294,7 +294,7 @@ internal sealed class SystemUiFontNativeApi : IGenesisUiFontNativeApi
         }
     }
 
-    private static bool TryGetMessageMetricsForDpi(ref NonClientMetrics metrics, uint dpi)
+    private static bool TryGetMessageMetricsForDpi(ref Win32NonClientMetrics metrics, uint dpi)
     {
         try
         {
@@ -365,32 +365,6 @@ internal sealed class SystemUiFontNativeApi : IGenesisUiFontNativeApi
             _ = DeleteDC(dc);
         }
     }
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct NonClientMetrics
-    {
-        public uint Size;
-        public int BorderWidth, ScrollWidth, ScrollHeight, CaptionWidth, CaptionHeight;
-        public GenesisUiLogFont CaptionFont;
-        public int SmallCaptionWidth, SmallCaptionHeight;
-        public GenesisUiLogFont SmallCaptionFont;
-        public int MenuWidth, MenuHeight;
-        public GenesisUiLogFont MenuFont, StatusFont, MessageFont;
-        public int PaddedBorderWidth;
-    }
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SystemParametersInfoForDpi(uint action, uint parameter, ref NonClientMetrics metrics, uint flags, uint dpi);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SystemParametersInfoW(uint action, uint parameter, ref NonClientMetrics metrics, uint flags);
-    [DllImport("gdi32.dll")]
-    private static extern int GetDeviceCaps(nint dc, int index);
-    [DllImport("gdi32.dll", CharSet = CharSet.Unicode)]
-    private static extern nint CreateFontIndirectW(ref GenesisUiLogFont font);
-    [DllImport("gdi32.dll", CharSet = CharSet.Unicode)]
-    private static extern uint GetGlyphIndicesW(nint dc, string text, int count, [Out] ushort[] indices, uint flags);
 }
 
 // Managed lifetime/rotation policy, independent of HWND creation. Native teardown

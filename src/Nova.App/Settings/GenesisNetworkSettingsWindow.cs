@@ -72,7 +72,7 @@ internal sealed partial class GenesisNetworkSettingsWindow : IAsyncDisposable
     private const int WindowWidth = 570;
     private const int WindowHeight = 390;
     private const int CloseControlId = 2001;
-    private static readonly WindowProcedure WindowProcedureDelegate = ProcessWindowMessage;
+    private static readonly Win32WindowProcedure WindowProcedureDelegate = ProcessWindowMessage;
     private static readonly Win32SubclassProcedure CloseButtonSubclassProcedureDelegate =
         ProcessCloseButtonMessage;
 
@@ -113,9 +113,9 @@ internal sealed partial class GenesisNetworkSettingsWindow : IAsyncDisposable
         }
 
         var className = $"PeerCastNovaNetworkRelay-{Guid.NewGuid():N}";
-        var windowClass = new WindowClassEx
+        var windowClass = new Win32WindowClassEx
         {
-            Size = (uint)Marshal.SizeOf<WindowClassEx>(),
+            Size = (uint)Marshal.SizeOf<Win32WindowClassEx>(),
             WindowProcedure = Marshal.GetFunctionPointerForDelegate(WindowProcedureDelegate),
             Instance = instance,
             Cursor = LoadCursorW(0, (nint)ArrowCursor),
@@ -401,34 +401,4 @@ internal sealed partial class GenesisNetworkSettingsWindow : IAsyncDisposable
 
         return DefWindowProcW(window, message, wParam, lParam);
     }
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct WindowClassEx
-    {
-        public uint Size;
-        public uint Style;
-        public nint WindowProcedure;
-        public int ClassExtraBytes;
-        public int WindowExtraBytes;
-        public nint Instance;
-        public nint Icon;
-        public nint Cursor;
-        public nint BackgroundBrush;
-        [MarshalAs(UnmanagedType.LPWStr)]
-        public string? MenuName;
-        [MarshalAs(UnmanagedType.LPWStr)]
-        public string? ClassName;
-        public nint SmallIcon;
-    }
-
-    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
-    private delegate nint WindowProcedure(
-        nint window,
-        uint message,
-        nuint wParam,
-        nint lParam);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern ushort RegisterClassExW(ref WindowClassEx windowClass);
-
 }

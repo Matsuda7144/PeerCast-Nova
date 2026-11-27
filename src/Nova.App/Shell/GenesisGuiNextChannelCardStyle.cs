@@ -1,5 +1,3 @@
-using System.Runtime.InteropServices;
-
 using static PeerCast.Nova.App.Win32NativeMethods;
 
 namespace PeerCast.Nova.App;
@@ -64,7 +62,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             if (!UsesChannelCard || !CardTexts.Contains(control)) return false;
             if (message == 0x0014) return true;
             if (message != WindowMessagePaint) return false;
-            var dc = BeginCardPaint(control, out var paint);
+            var dc = BeginPaint(control, out var paint);
             try
             {
                 if (dc == 0 || !GetClientRect(control, out var bounds)) return true;
@@ -81,10 +79,10 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                     control, wrap ? 0x0010u | 0x8000 : DrawTextSingleLine | 0x8000);
                 return true;
             }
-            finally { _ = EndCardPaint(control, ref paint); }
+            finally { _ = EndPaint(control, ref paint); }
         }
 
-        private bool DrawChannelCardItem(DrawItem draw)
+        private bool DrawChannelCardItem(Win32DrawItem draw)
         {
             if (!UsesChannelCard) return false;
             if ((draw.ControlWindow == _playButton || draw.ControlWindow == _stopButton) &&
@@ -155,7 +153,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             return new string(buffer, 0, Math.Max(0, length));
         }
 
-        private static void DrawCardLabel(nint dc, Rectangle bounds, string text, int color, nint font, nint control, uint flags)
+        private static void DrawCardLabel(nint dc, Win32Rect bounds, string text, int color, nint font, nint control, uint flags)
         {
             using var inheritedFont = GenesisWindowUiFont.SelectForDrawing(dc, control);
             var previous = font == 0 ? 0 : SelectObject(dc, font);
@@ -168,19 +166,4 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             finally { if (previous != 0) _ = SelectObject(dc, previous); }
         }
     }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct CardPaint
-    {
-        public nint Dc;
-        public int Erase;
-        public Rectangle Bounds;
-        public int Restore, Incremental;
-        public uint Reserved1, Reserved2, Reserved3, Reserved4, Reserved5, Reserved6, Reserved7, Reserved8;
-    }
-    [DllImport("user32.dll", EntryPoint = "BeginPaint")]
-    private static extern nint BeginCardPaint(nint window, out CardPaint paint);
-    [DllImport("user32.dll", EntryPoint = "EndPaint")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool EndCardPaint(nint window, ref CardPaint paint);
 }

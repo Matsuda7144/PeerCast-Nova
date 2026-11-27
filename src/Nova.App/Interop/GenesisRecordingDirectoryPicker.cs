@@ -1,5 +1,7 @@
 using System.Runtime.InteropServices;
 
+using static PeerCast.Nova.App.Win32NativeMethods;
+
 namespace PeerCast.Nova.App;
 
 /// <summary>
@@ -18,7 +20,7 @@ internal static class GenesisRecordingDirectoryPicker
         try
         {
             displayName = Marshal.AllocCoTaskMem(260 * sizeof(char));
-            var info = new BrowseInfo
+            var info = new Win32BrowseInfo
             {
                 Owner = owner,
                 DisplayName = displayName,
@@ -45,24 +47,4 @@ internal static class GenesisRecordingDirectoryPicker
             if (displayName != 0) Marshal.FreeCoTaskMem(displayName);
         }
     }
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct BrowseInfo
-    {
-        public nint Owner;
-        public nint Root;
-        public nint DisplayName;
-        [MarshalAs(UnmanagedType.LPWStr)] public string? Title;
-        public uint Flags;
-        public nint Callback;
-        public nint Data;
-        public int Image;
-    }
-
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
-    private static extern nint SHBrowseForFolderW(ref BrowseInfo info);
-
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SHGetPathFromIDListEx(nint pidl, [Out] char[] path, uint length, uint flags);
 }

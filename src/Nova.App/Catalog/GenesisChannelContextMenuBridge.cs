@@ -170,7 +170,7 @@ internal sealed class GenesisChannelContextMenuBridge : IAsyncDisposable
     private const ushort VirtualKeyC = 0x43;
     private const ushort VirtualKeyF5 = 0x74;
     private static readonly ConcurrentDictionary<nint, ContextState> StatesByContainer = new();
-    private static readonly WindowProcedure WindowProcedureDelegate = ProcessWindowMessage;
+    private static readonly Win32WindowProcedure WindowProcedureDelegate = ProcessWindowMessage;
     private readonly nint _listView;
     private readonly nint _notificationTarget;
     private readonly WindowRectangle _originalRectangle;
@@ -214,8 +214,8 @@ internal sealed class GenesisChannelContextMenuBridge : IAsyncDisposable
             return null;
         }
 
-        var topLeft = new WindowPoint(screenRectangle.Left, screenRectangle.Top);
-        var bottomRight = new WindowPoint(screenRectangle.Right, screenRectangle.Bottom);
+        var topLeft = new Win32Point(screenRectangle.Left, screenRectangle.Top);
+        var bottomRight = new Win32Point(screenRectangle.Right, screenRectangle.Bottom);
         if (!ScreenToClient(notificationTarget, ref topLeft) ||
             !ScreenToClient(notificationTarget, ref bottomRight))
         {
@@ -236,9 +236,9 @@ internal sealed class GenesisChannelContextMenuBridge : IAsyncDisposable
         }
 
         var className = $"PeerCastNovaGenesisChannelContext-{Guid.NewGuid():N}";
-        var windowClass = new WindowClassEx
+        var windowClass = new Win32WindowClassEx
         {
-            Size = (uint)Marshal.SizeOf<WindowClassEx>(),
+            Size = (uint)Marshal.SizeOf<Win32WindowClassEx>(),
             WindowProcedure = Marshal.GetFunctionPointerForDelegate(WindowProcedureDelegate),
             Instance = instance,
             ClassName = className,
@@ -405,7 +405,7 @@ internal sealed class GenesisChannelContextMenuBridge : IAsyncDisposable
                 return;
             }
 
-            var header = Marshal.PtrToStructure<NotifyHeader>(lParam);
+            var header = Marshal.PtrToStructure<Win32NotifyHeader>(lParam);
             if (header.WindowFrom != _listView)
             {
                 return;
@@ -414,7 +414,7 @@ internal sealed class GenesisChannelContextMenuBridge : IAsyncDisposable
             var code = unchecked((int)header.Code);
             if (code == ListViewNotifyKeyDown)
             {
-                var keyDown = Marshal.PtrToStructure<ListViewKeyDown>(lParam);
+                var keyDown = Marshal.PtrToStructure<Win32ListViewKeyDown>(lParam);
                 ProcessKey(keyDown.VirtualKey);
                 return;
             }
@@ -704,77 +704,11 @@ internal sealed class GenesisChannelContextMenuBridge : IAsyncDisposable
         }
     }
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct WindowClassEx
-    {
-        public uint Size;
-        public uint Style;
-        public nint WindowProcedure;
-        public int ClassExtraBytes;
-        public int WindowExtraBytes;
-        public nint Instance;
-        public nint Icon;
-        public nint Cursor;
-        public nint BackgroundBrush;
-        [MarshalAs(UnmanagedType.LPWStr)]
-        public string? MenuName;
-        [MarshalAs(UnmanagedType.LPWStr)]
-        public string? ClassName;
-        public nint SmallIcon;
-    }
-
     [StructLayout(LayoutKind.Sequential)]
     private readonly record struct WindowRectangle(
         int Left,
         int Top,
         int Right,
         int Bottom);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct WindowPoint
-    {
-        public WindowPoint(int x, int y)
-        {
-            X = x;
-            Y = y;
-        }
-
-        public int X;
-        public int Y;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct NotifyHeader
-    {
-        public nint WindowFrom;
-        public nuint IdFrom;
-        public uint Code;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct ListViewKeyDown
-    {
-        public NotifyHeader Header;
-        public ushort VirtualKey;
-        public uint Flags;
-    }
-
-    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
-    private delegate nint WindowProcedure(
-        nint window,
-        uint message,
-        nuint wParam,
-        nint lParam);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern ushort RegisterClassExW(ref WindowClassEx windowClass);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetWindowRect(nint window, out WindowRectangle rectangle);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool ScreenToClient(nint window, ref WindowPoint point);
 
 }

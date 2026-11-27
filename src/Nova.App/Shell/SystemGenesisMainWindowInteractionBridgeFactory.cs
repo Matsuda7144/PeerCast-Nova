@@ -26,7 +26,7 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
     private const uint ListViewMessageGetNextItem = ListViewMessageFirst + 12;
     private const int ListViewNextItemSelected = 0x0002;
     private static readonly ConcurrentDictionary<nint, BridgeState> StatesByContainer = new();
-    private static readonly WindowProcedure WindowProcedureDelegate = ProcessWindowMessage;
+    private static readonly Win32WindowProcedure WindowProcedureDelegate = ProcessWindowMessage;
     private const nuint OwnerSubclassIdentifier = 0x7144336;
     private static readonly Win32SubclassProcedure OwnerProcedure = ProcessOwnerMessage;
     private static nint ProcessOwnerMessage(nint window, uint message, nuint wParam, nint lParam, nuint id, nuint data)
@@ -178,9 +178,9 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
         }
 
         var className = $"PeerCastNovaGenesisMessage-{Guid.NewGuid():N}";
-        var windowClass = new WindowClassEx
+        var windowClass = new Win32WindowClassEx
         {
-            Size = (uint)Marshal.SizeOf<WindowClassEx>(),
+            Size = (uint)Marshal.SizeOf<Win32WindowClassEx>(),
             WindowProcedure = Marshal.GetFunctionPointerForDelegate(WindowProcedureDelegate),
             Instance = instance,
             BackgroundBrush = GenesisNativeWindowClassPresentation.WindowBackgroundBrush,
@@ -491,7 +491,7 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
                 return;
             }
 
-            var header = Marshal.PtrToStructure<NotifyHeader>(lParam);
+            var header = Marshal.PtrToStructure<Win32NotifyHeader>(lParam);
             if (header.WindowFrom != _channelList)
             {
                 return;
@@ -505,7 +505,7 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
                         GenesisGuiNextTab.New or
                         GenesisGuiNextTab.Favorites)
                 {
-                    var notification = Marshal.PtrToStructure<ListViewNotify>(lParam);
+                    var notification = Marshal.PtrToStructure<Win32ListViewNotify>(lParam);
                     _ = _interaction.SortChannelColumn(notification.SubItem);
                 }
 
@@ -530,7 +530,7 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
 
             // NMITEMACTIVATE shares this prefix with NMLISTVIEW. iItem is the
             // actual double-click hit (-1 for blank space), not the selected row.
-            var activation = Marshal.PtrToStructure<ListViewNotify>(lParam);
+            var activation = Marshal.PtrToStructure<Win32ListViewNotify>(lParam);
             _pendingCommand = ObserveActivationAsync(GenesisChannelListActivation.ActivateAsync(
                 code, activation.Item, _renderedRows, _interaction,
                 _pendingCommand.IsCompleted && Volatile.Read(ref _selectionChangesSuppressed) == 0));
@@ -920,81 +920,4 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
             return ValueTask.CompletedTask;
         }
     }
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct WindowClassEx
-    {
-        public uint Size;
-        public uint Style;
-        public nint WindowProcedure;
-        public int ClassExtraBytes;
-        public int WindowExtraBytes;
-        public nint Instance;
-        public nint Icon;
-        public nint Cursor;
-        public nint BackgroundBrush;
-        [MarshalAs(UnmanagedType.LPWStr)]
-        public string? MenuName;
-        [MarshalAs(UnmanagedType.LPWStr)]
-        public string? ClassName;
-        public nint SmallIcon;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct WindowRectangle
-    {
-        public int Left;
-        public int Top;
-        public int Right;
-        public int Bottom;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct NotifyHeader
-    {
-        public nint WindowFrom;
-        public nuint IdFrom;
-        public uint Code;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct ListViewNotify
-    {
-        public NotifyHeader Header;
-        public int Item;
-        public int SubItem;
-        public uint NewState;
-        public uint OldState;
-        public uint Changed;
-        public WindowPoint Action;
-        public nint Parameter;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct WindowPoint
-    {
-        public int X;
-        public int Y;
-    }
-
-    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
-    private delegate nint WindowProcedure(
-        nint window,
-        uint message,
-        nuint wParam,
-        nint lParam);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern ushort RegisterClassExW(ref WindowClassEx windowClass);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetClientRect(nint window, out WindowRectangle rectangle);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern int GetWindowTextW(
-        nint window,
-        nint text,
-        int maximumCharacters);
-
 }

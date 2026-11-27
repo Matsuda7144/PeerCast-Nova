@@ -112,9 +112,9 @@ internal sealed class GenesisMainWindowNativeSurface : IAsyncDisposable
             return null;
         }
 
-        var commonControls = new InitCommonControls
+        var commonControls = new Win32InitCommonControlsEx
         {
-            Size = (uint)Marshal.SizeOf<InitCommonControls>(),
+            Size = (uint)Marshal.SizeOf<Win32InitCommonControlsEx>(),
             Classes = CommonControlsListViewClasses,
         };
         if (!InitCommonControlsEx(ref commonControls))
@@ -470,7 +470,7 @@ internal sealed class GenesisMainWindowNativeSurface : IAsyncDisposable
             var text = Marshal.StringToHGlobalUni(column.Header);
             try
             {
-                var nativeColumn = new ListViewColumn
+                var nativeColumn = new Win32ListViewTextPointerColumn
                 {
                     Mask = ListViewColumnMaskFormat |
                         ListViewColumnMaskWidth |
@@ -509,7 +509,7 @@ internal sealed class GenesisMainWindowNativeSurface : IAsyncDisposable
             var text = Marshal.StringToHGlobalUni(column.Header);
             try
             {
-                var nativeColumn = new ListViewColumn
+                var nativeColumn = new Win32ListViewTextPointerColumn
                 {
                     Mask = ListViewColumnMaskFormat |
                         ListViewColumnMaskWidth |
@@ -593,7 +593,7 @@ internal sealed class GenesisMainWindowNativeSurface : IAsyncDisposable
         var text = Marshal.StringToHGlobalUni(value);
         try
         {
-            var item = new ListViewItem
+            var item = new Win32ListViewTextPointerItem
             {
                 Mask = ListViewItemMaskText,
                 Item = row,
@@ -621,7 +621,7 @@ internal sealed class GenesisMainWindowNativeSurface : IAsyncDisposable
         var text = Marshal.StringToHGlobalUni(value);
         try
         {
-            var item = new ListViewItem
+            var item = new Win32ListViewTextPointerItem
             {
                 SubItem = column,
                 Text = text,
@@ -655,79 +655,5 @@ internal sealed class GenesisMainWindowNativeSurface : IAsyncDisposable
                 _ = PostMessageW(control, WindowMessageClose, 0, 0);
             }
         }
-    }
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct ListViewColumn
-    {
-        public uint Mask;
-        public int Format;
-        public int Width;
-        public nint Text;
-        public int MaximumTextCharacters;
-        public int SubItem;
-        public int Image;
-        public int Order;
-        public int MinimumWidth;
-        public int DefaultWidth;
-        public int IdealWidth;
-    }
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct ListViewItem
-    {
-        public uint Mask;
-        public int Item;
-        public int SubItem;
-        public uint State;
-        public uint StateMask;
-        public nint Text;
-        public int MaximumTextCharacters;
-        public int Image;
-        public nint Parameter;
-        public int Indent;
-        public int GroupId;
-        public uint Columns;
-        public nint ColumnIndices;
-        public nint ColumnFormats;
-        public int Group;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct InitCommonControls
-    {
-        public uint Size;
-        public uint Classes;
-    }
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetClientRect(nint window, out WindowRectangle rectangle);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "SendMessageW")]
-    private static extern int SendMessageColumn(
-        nint window,
-        uint message,
-        nuint wParam,
-        ref ListViewColumn column);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "SendMessageW")]
-    private static extern int SendMessageItem(
-        nint window,
-        uint message,
-        nuint wParam,
-        ref ListViewItem item);
-
-    [DllImport("comctl32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool InitCommonControlsEx(ref InitCommonControls controls);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct WindowRectangle
-    {
-        public int Left;
-        public int Top;
-        public int Right;
-        public int Bottom;
     }
 }

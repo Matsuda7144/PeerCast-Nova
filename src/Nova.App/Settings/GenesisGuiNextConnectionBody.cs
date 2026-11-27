@@ -68,7 +68,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                     using var font = GenesisWindowUiFont.SelectForDrawing(dc, _connectionNotice);
                     int TextHeight(nint control, int w)
                     {
-                        var box = new Rectangle { Right = Scale(w) };
+                        var box = new Win32Rect { Right = Scale(w) };
                         var height = DrawTextW(dc, ReadCardControlText(control), -1, ref box, 0x0010 | 0x0400 | 0x8000);
                         return Math.Max(20, LogicalWidth(height) + 4);
                     }
@@ -97,15 +97,15 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 }
                 finally { _ = ReleaseDC(_connectionBody, dc); }
                 _connectionScroll = GenesisConnectionBodyLayout.Clamp(_connectionScroll, page, _connectionContentHeight);
-                var scroll = new PublishingEditScrollInfo
+                var scroll = new Win32ScrollInfo
                 {
-                    Size = (uint)Marshal.SizeOf<PublishingEditScrollInfo>(),
+                    Size = (uint)Marshal.SizeOf<Win32ScrollInfo>(),
                     Mask = 7,
                     Maximum = _connectionContentHeight - 1,
                     Page = (uint)Math.Max(1, page),
                     Position = _connectionScroll
                 };
-                _ = SetPublishingEditScroll(_connectionBody, 1, ref scroll, true);
+                _ = SetScrollInfo(_connectionBody, 1, ref scroll, true);
                 foreach (var (control, box) in placements)
                     _ = MoveWindow(control, Scale(box.Left), Scale(box.Top - _connectionScroll), Scale(box.Width), Scale(box.Height), true);
                 _ = RedrawWindow(_connectionBody, 0, 0, 0x0001 | 0x0004 | 0x0080);
@@ -117,15 +117,15 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         {
             if (!ConnectionCategory || !GetClientRect(_connectionBody, out var area)) return;
             var page = LogicalWidth(area.Bottom);
-            var info = new PublishingEditScrollInfo { Size = (uint)Marshal.SizeOf<PublishingEditScrollInfo>(), Mask = 0x10 };
-            _ = GetPublishingEditScroll(_connectionBody, 1, ref info);
+            var info = new Win32ScrollInfo { Size = (uint)Marshal.SizeOf<Win32ScrollInfo>(), Mask = 0x10 };
+            _ = GetScrollInfo(_connectionBody, 1, ref info);
             _connectionScroll = message == 0x020A ? _connectionScroll - (short)(value >> 16) * 48 / 120 : (int)(value & 0xffff) switch
             {
                 0 => _connectionScroll - 24,
                 1 => _connectionScroll + 24,
                 2 => _connectionScroll - page,
                 3 => _connectionScroll + page,
-                4 or 5 => info.Track,
+                4 or 5 => info.TrackPosition,
                 6 => 0,
                 7 => _connectionContentHeight,
                 _ => _connectionScroll,
@@ -139,7 +139,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             if (message == 0x020A) { ScrollConnectionBody(message, value); return true; }
             if (message == 0x0007 && GetWindowRect(window, out var box) && GetClientRect(_connectionBody, out var area))
             {
-                var point = new Point { X = box.Left, Y = box.Top };
+                var point = new Win32Point { X = box.Left, Y = box.Top };
                 _ = ScreenToClient(_connectionBody, ref point);
                 var top = LogicalWidth(point.Y) + _connectionScroll;
                 _connectionScroll = GenesisConnectionBodyLayout.Reveal(_connectionScroll, LogicalWidth(area.Bottom),
@@ -151,7 +151,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
 
         internal void PaintConnectionBody()
         {
-            var dc = BeginCardPaint(_connectionBody, out var paint);
+            var dc = BeginPaint(_connectionBody, out var paint);
             try
             {
                 if (dc == 0 || !GetClientRect(_connectionBody, out var area)) return;
@@ -159,16 +159,14 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 foreach (var input in _connectionInputs)
                 {
                     if (!GetWindowRect(input, out var box)) continue;
-                    var point = new Point { X = box.Left, Y = box.Top }; _ = ScreenToClient(_connectionBody, ref point);
+                    var point = new Win32Point { X = box.Left, Y = box.Top }; _ = ScreenToClient(_connectionBody, ref point);
                     using var pen = new VisualPen(dc, Scale(1), GetFocus() == input ? GenesisGuiNextDesign.Accent : GenesisGuiNextDesign.Border);
                     _ = GdiRectangle(dc, point.X - 1, point.Y - 1, point.X + box.Right - box.Left + 1, point.Y + box.Bottom - box.Top + 1);
                 }
             }
-            finally { _ = EndCardPaint(_connectionBody, ref paint); }
+            finally { _ = EndPaint(_connectionBody, ref paint); }
         }
     }
-
-    [DllImport("user32.dll", EntryPoint = "SetParent")] private static extern nint SetConnectionParent(nint window, nint parent);
 }
 
 internal static class GenesisConnectionBodyLayout

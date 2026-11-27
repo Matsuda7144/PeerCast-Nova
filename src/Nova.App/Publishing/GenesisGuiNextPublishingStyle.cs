@@ -1,5 +1,3 @@
-using System.Runtime.InteropServices;
-
 using static PeerCast.Nova.App.Win32NativeMethods;
 
 namespace PeerCast.Nova.App;
@@ -56,13 +54,13 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             var layout = new GenesisGuiNextPublishingModernLayout(LogicalWidth(client.Right), LogicalWidth(client.Bottom), _publishingAdvancedExpanded, _publishingEditor?.Editing == true && !_publishingEditAdvanced);
             foreach (var card in new[] { layout.StatusCard, layout.ObsCard, layout.BasicCard, layout.OptionsCard })
             {
-                var box = new Rectangle { Left = Scale(card.Left), Top = Scale(card.Top), Right = Scale(card.Right), Bottom = Scale(card.Bottom) };
+                var box = new Win32Rect { Left = Scale(card.Left), Top = Scale(card.Top), Right = Scale(card.Right), Bottom = Scale(card.Bottom) };
                 DrawModernSurface(dc, box, GenesisGuiNextDesign.Panel, GenesisGuiNextDesign.Border, Scale(12));
             }
             foreach (var area in new[] { (layout.Instructions, _publishingInstructions), (layout.Basic, _publishingBasic),
                 (layout.AdvancedViewport, _publishingOptions), (layout.Feedback, _publishingDiagnostic) })
             {
-                if (!PublishingIsWindowVisible(area.Item2)) continue;
+                if (!IsWindowVisible(area.Item2)) continue;
                 using var focus = new VisualPen(dc, Scale(1), GetFocus() == area.Item2 ? GenesisGuiNextDesign.Accent : GenesisGuiNextDesign.Border);
                 _ = GdiRectangle(dc, Scale(area.Item1.Left) - 1, Scale(area.Item1.Top) - 1, Scale(area.Item1.Right) + 1, Scale(area.Item1.Bottom) + 1);
             }
@@ -74,7 +72,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             if (!UsesPublishingPanel || !PublishingTexts.Contains(control)) return false;
             if (message == 0x0014) return true;
             if (message != WindowMessagePaint) return false;
-            var dc = BeginCardPaint(control, out var paint);
+            var dc = BeginPaint(control, out var paint);
             try
             {
                 if (dc == 0 || !GetClientRect(control, out var box)) return true;
@@ -88,7 +86,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 }
                 if (control == _detailsTitle)
                 {
-                    DrawNavigationIcon(dc, 6, new Rectangle { Left = 0, Top = 0, Right = Scale(24), Bottom = Scale(24) }, false);
+                    DrawNavigationIcon(dc, 6, new Win32Rect { Left = 0, Top = 0, Right = Scale(24), Bottom = Scale(24) }, false);
                     box.Left += Scale(34);
                 }
                 var title = control == _detailsTitle || PublishingPageTitles.Contains(control) && control != _publishingSubtitle;
@@ -99,10 +97,10 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                     feedback || control == _publishingEditNote || control == _publishingAdvancedHint ? GenesisGuiNextPublishingModernLayout.FeedbackFlags : GenesisGuiNextPublishingModernLayout.SingleLineFlags);
                 return true;
             }
-            finally { _ = EndCardPaint(control, ref paint); }
+            finally { _ = EndPaint(control, ref paint); }
         }
 
-        private bool DrawPublishingPanelItem(DrawItem draw)
+        private bool DrawPublishingPanelItem(Win32DrawItem draw)
         {
             if (!UsesPublishingPanel) return false;
             if (IsOwnerDrawButton(draw.ControlType) && PublishingButtons.Contains(draw.ControlWindow))
@@ -138,21 +136,14 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 draw.ControlWindow, GenesisGuiNextPublishingModernLayout.SingleLineFlags);
             return true;
         }
-        private void DrawModernSurface(nint dc, Rectangle box, int background, int border, int radius)
+        private void DrawModernSurface(nint dc, Win32Rect box, int background, int border, int radius)
         {
             using var pen = new VisualPen(dc, Scale(1), border);
             var brush = CreateSolidBrush((uint)background);
             if (brush == 0) return;
             var previous = SelectObject(dc, brush);
-            try { _ = PublishingRoundRect(dc, box.Left, box.Top, box.Right, box.Bottom, radius, radius); }
+            try { _ = RoundRect(dc, box.Left, box.Top, box.Right, box.Bottom, radius, radius); }
             finally { _ = SelectObject(dc, previous); _ = DeleteObject(brush); }
         }
     }
-
-    [DllImport("user32.dll", EntryPoint = "IsWindowVisible")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool PublishingIsWindowVisible(nint window);
-
-    [DllImport("gdi32.dll", EntryPoint = "RoundRect")]
-    private static extern bool PublishingRoundRect(nint dc, int left, int top, int right, int bottom, int ellipseWidth, int ellipseHeight);
 }

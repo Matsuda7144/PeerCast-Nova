@@ -5,24 +5,8 @@ namespace PeerCast.Nova.App;
 /// <summary>
 /// Nova.App 内で複数ウィンドウから重複宣言されていた基本的な Win32 P/Invoke を集約する共通モジュール。
 /// </summary>
-internal static class Win32NativeMethods
+internal static partial class Win32NativeMethods
 {
-    [StructLayout(LayoutKind.Sequential)]
-    internal struct Win32Point
-    {
-        public int X;
-        public int Y;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    internal struct Win32Rect
-    {
-        public int Left;
-        public int Top;
-        public int Right;
-        public int Bottom;
-    }
-
     [UnmanagedFunctionPointer(CallingConvention.Winapi)]
     internal delegate nint Win32SubclassProcedure(
         nint window,

@@ -15,7 +15,7 @@ internal sealed class GenesisGuiNextPublishingSettingsWindow : IGenesisPublishin
     private const uint Background = 0x00412917, EditBackground = 0x00503927, TextColor = 0x00F7F4F2;
     internal static readonly string[] FieldLabels = ["チャンネル名", "ジャンル", "概要", "配信者コメント", "コンタクトURL", "ビットレート (kbps)"];
     private static readonly ConcurrentDictionary<nint, WindowState> States = new();
-    private static readonly WindowProcedure Procedure = ProcessMessage;
+    private static readonly Win32WindowProcedure Procedure = ProcessMessage;
     private static readonly Win32SubclassProcedure ControlProcedure = ProcessControl;
     private static readonly Lazy<bool> Registered = new(Register);
     private static long _nextToken;
@@ -30,7 +30,7 @@ internal sealed class GenesisGuiNextPublishingSettingsWindow : IGenesisPublishin
             GetWindowThreadProcessId(owner, out _) != GetCurrentThreadId() || !Registered.Value) return null;
         var dpi = GetDpiForWindow(owner);
         if (dpi == 0) dpi = 96;
-        var monitor = new MonitorInfo { Size = (uint)Marshal.SizeOf<MonitorInfo>() };
+        var monitor = new Win32MonitorInfo { Size = (uint)Marshal.SizeOf<Win32MonitorInfo>() };
         if (!GetMonitorInfoW(MonitorFromWindow(owner, 2), ref monitor)) return null;
         var work = monitor.Work;
         var width = Math.Min(Scale(700, dpi), work.Right - work.Left - 24);
@@ -61,11 +61,11 @@ internal sealed class GenesisGuiNextPublishingSettingsWindow : IGenesisPublishin
     private static bool Register()
     {
         // One process-lifetime class, with no class-owned GDI resources.
-        var wc = new WindowClass
+        var wc = new Win32WindowClassEx
         {
-            Size = (uint)Marshal.SizeOf<WindowClass>(),
+            Size = (uint)Marshal.SizeOf<Win32WindowClassEx>(),
             Instance = GetModuleHandleW(null),
-            Procedure = Marshal.GetFunctionPointerForDelegate(Procedure),
+            WindowProcedure = Marshal.GetFunctionPointerForDelegate(Procedure),
             Cursor = LoadCursorW(0, (nint)32512),
             ClassName = ClassName,
         };
@@ -101,14 +101,14 @@ internal sealed class GenesisGuiNextPublishingSettingsWindow : IGenesisPublishin
                 case 0x002B: WindowState.DrawButton(lParam); return 1;
                 case 0x02E0:
                     state.Dpi = (uint)(wParam & 0xffff);
-                    var bounds = Marshal.PtrToStructure<Rectangle>(lParam);
+                    var bounds = Marshal.PtrToStructure<Win32Rect>(lParam);
                     _ = SetWindowPos(window, 0, bounds.Left, bounds.Top, bounds.Right - bounds.Left, bounds.Bottom - bounds.Top, 0x0014);
                     state.ApplyLayout();
                     return 0;
                 case 0x0024:
-                    var limits = Marshal.PtrToStructure<MinMaxInfo>(lParam);
-                    limits.MinWidth = Scale(460, state.Dpi);
-                    limits.MinHeight = Scale(280, state.Dpi);
+                    var limits = Marshal.PtrToStructure<Win32MinMaxInfo>(lParam);
+                    limits.MinTrackSize.X = Scale(460, state.Dpi);
+                    limits.MinTrackSize.Y = Scale(280, state.Dpi);
                     Marshal.StructureToPtr(limits, lParam, false);
                     return 0;
             }
@@ -374,9 +374,9 @@ internal sealed class GenesisGuiNextPublishingSettingsWindow : IGenesisPublishin
             if (Closed || !GetClientRect(window, out var area)) return;
             _page = area.Bottom;
             _scroll = PublishingSettingsWindowLayout.ClampScroll(_scroll, _page, Dpi);
-            var info = new ScrollInfo
+            var info = new Win32ScrollInfo
             {
-                Size = (uint)Marshal.SizeOf<ScrollInfo>(),
+                Size = (uint)Marshal.SizeOf<Win32ScrollInfo>(),
                 Mask = 7,
                 Maximum = Scale(PublishingSettingsWindowLayout.ContentHeight, Dpi) - 1,
                 Page = (uint)Math.Max(1, _page),
@@ -394,7 +394,7 @@ internal sealed class GenesisGuiNextPublishingSettingsWindow : IGenesisPublishin
         internal void ScrollBy(int change) { _scroll += change; ApplyLayout(); }
         internal void Scroll(int code)
         {
-            var info = new ScrollInfo { Size = (uint)Marshal.SizeOf<ScrollInfo>(), Mask = 0x10 };
+            var info = new Win32ScrollInfo { Size = (uint)Marshal.SizeOf<Win32ScrollInfo>(), Mask = 0x10 };
             _ = GetScrollInfo(window, 1, ref info);
             ScrollBy(code switch
             {
@@ -427,17 +427,17 @@ internal sealed class GenesisGuiNextPublishingSettingsWindow : IGenesisPublishin
         }
         internal static void DrawButton(nint parameter)
         {
-            var item = Marshal.PtrToStructure<DrawItem>(parameter);
+            var item = Marshal.PtrToStructure<Win32DrawItem>(parameter);
             if (item.ControlId is not (SaveId or CancelId)) return;
-            var brush = CreateSolidBrush((item.State & 4) != 0 ? EditBackground : 0x00995D25);
-            try { _ = FillRect(item.Dc, ref item.Bounds, brush); }
+            var brush = CreateSolidBrush((item.ItemState & 4) != 0 ? EditBackground : 0x00995D25);
+            try { _ = FillRect(item.DeviceContext, ref item.ItemRectangle, brush); }
             finally { if (brush != 0) _ = DeleteObject(brush); }
-            _ = SetBkMode(item.Dc, 1);
-            _ = SetTextColor(item.Dc, TextColor);
-            var previousFont = SelectObject(item.Dc, SendMessageW(item.Window, 0x0031, 0, 0));
-            _ = DrawTextW(item.Dc, item.ControlId == SaveId ? "保存" : "キャンセル", -1, ref item.Bounds, 0x0825);
-            if (previousFont != 0 && previousFont != -1) _ = SelectObject(item.Dc, previousFont);
-            if ((item.State & 0x10) != 0) _ = DrawFocusRect(item.Dc, ref item.Bounds);
+            _ = SetBkMode(item.DeviceContext, 1);
+            _ = SetTextColor(item.DeviceContext, TextColor);
+            var previousFont = SelectObject(item.DeviceContext, SendMessageW(item.ControlWindow, 0x0031, 0, 0));
+            _ = DrawTextW(item.DeviceContext, item.ControlId == SaveId ? "保存" : "キャンセル", -1, ref item.ItemRectangle, 0x0825);
+            if (previousFont != 0 && previousFont != -1) _ = SelectObject(item.DeviceContext, previousFont);
+            if ((item.ItemState & 0x10) != 0) _ = DrawFocusRect(item.DeviceContext, ref item.ItemRectangle);
         }
         internal void ShowFailure() { if (!Closed) { _statusColor = 0x006078FF; SetText(StatusId, "操作を完了できませんでした。入力内容を確認してください。"); } }
         internal void CloseNative(bool restoreFocus)
@@ -469,29 +469,6 @@ internal sealed class GenesisGuiNextPublishingSettingsWindow : IGenesisPublishin
             return new string(buffer, 0, GetWindowTextW(control, buffer, buffer.Length));
         }
     }
-
-    [StructLayout(LayoutKind.Sequential)] private struct Rectangle { public int Left, Top, Right, Bottom; }
-    [StructLayout(LayoutKind.Sequential)] private struct MonitorInfo { public uint Size; public Rectangle Monitor, Work; public uint Flags; }
-    [StructLayout(LayoutKind.Sequential)] private struct MinMaxInfo { public int ReservedX, ReservedY, MaxWidth, MaxHeight, MaxX, MaxY, MinWidth, MinHeight, MaxTrackWidth, MaxTrackHeight; }
-    [StructLayout(LayoutKind.Sequential)] private struct ScrollInfo { public uint Size, Mask; public int Minimum, Maximum; public uint Page; public int Position, TrackPosition; }
-    [StructLayout(LayoutKind.Sequential)] private struct DrawItem { public uint Type, ControlId, ItemId, Action, State; public nint Window, Dc; public Rectangle Bounds; public nuint Data; }
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct WindowClass
-    {
-        public uint Size, Style; public nint Procedure; public int ClassExtra, WindowExtra;
-        public nint Instance, Icon, Cursor, Background, Menu;
-        [MarshalAs(UnmanagedType.LPWStr)] public string ClassName;
-        public nint SmallIcon;
-    }
-    [UnmanagedFunctionPointer(CallingConvention.Winapi)] private delegate nint WindowProcedure(nint window, uint message, nuint wParam, nint lParam);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern ushort RegisterClassExW(ref WindowClass wc);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)][return: MarshalAs(UnmanagedType.Bool)] private static extern bool GetMonitorInfoW(nint monitor, ref MonitorInfo info);
-    [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool GetClientRect(nint window, out Rectangle rectangle);
-    [DllImport("user32.dll")] private static extern int SetScrollInfo(nint window, int bar, ref ScrollInfo info, [MarshalAs(UnmanagedType.Bool)] bool redraw);
-    [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool GetScrollInfo(nint window, int bar, ref ScrollInfo info);
-    [DllImport("user32.dll")] private static extern int FillRect(nint dc, ref Rectangle rectangle, nint brush);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int DrawTextW(nint dc, string text, int length, ref Rectangle rectangle, uint format);
-    [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool DrawFocusRect(nint dc, ref Rectangle rectangle);
 }
 
 internal static class PublishingSettingsWindowLayout

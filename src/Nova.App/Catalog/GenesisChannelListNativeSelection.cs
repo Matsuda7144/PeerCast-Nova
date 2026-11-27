@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Runtime.InteropServices;
 
 using static PeerCast.Nova.App.Win32NativeMethods;
 
@@ -319,7 +318,7 @@ internal static class GenesisChannelListNativeSelection
     private static bool SetSelectedState(nint listView, int row)
     {
         var selectedState = ListViewItemStateFocused | ListViewItemStateSelected;
-        var item = new ListViewItem
+        var item = new Win32ListViewTextPointerItem
         {
             State = selectedState,
             StateMask = selectedState,
@@ -334,7 +333,7 @@ internal static class GenesisChannelListNativeSelection
     private static bool ClearSelectedState(nint listView, int row)
     {
         var selectedState = ListViewItemStateFocused | ListViewItemStateSelected;
-        var item = new ListViewItem
+        var item = new Win32ListViewTextPointerItem
         {
             State = 0,
             StateMask = selectedState,
@@ -352,31 +351,4 @@ internal static class GenesisChannelListNativeSelection
             ListViewMessageEnsureVisible,
             (nuint)row,
             0) != 0;
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct ListViewItem
-    {
-        public uint Mask;
-        public int Item;
-        public int SubItem;
-        public uint State;
-        public uint StateMask;
-        public nint Text;
-        public int MaximumTextCharacters;
-        public int Image;
-        public nint Parameter;
-        public int Indent;
-        public int GroupId;
-        public uint Columns;
-        public nint ColumnIndices;
-        public nint ColumnFormats;
-        public int Group;
-    }
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "SendMessageW")]
-    private static extern int SendMessageItem(
-        nint window,
-        uint message,
-        nuint wParam,
-        ref ListViewItem item);
 }

@@ -135,7 +135,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 _ = PresentInvalidation(control, 0, true);
         }
 
-        private bool DrawPublishingGuide(DrawItem drawItem)
+        private bool DrawPublishingGuide(Win32DrawItem drawItem)
         {
             if (IsOwnerDrawButton(drawItem.ControlType) && drawItem.ControlId is
                 PublishingServerCopyControlId or PublishingKeyCopyControlId or PublishingKeyRevealControlId or PublishingSettingsControlId)
