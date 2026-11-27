@@ -41,8 +41,8 @@ public sealed class GenesisSharedPcpPlaybackRuntimeTests
             () => Interlocked.Increment(ref connectionCount),
             releaseSource.Task,
             timeout.Token);
-        var composition = new PcpRecordingRuntimeComposition(
-            Path.Combine(Path.GetTempPath(), "PeerCastNova-shared-owner-tests"));
+        using var tempDirectory = new TemporaryTestDirectory("shared-owner");
+        var composition = new PcpRecordingRuntimeComposition(tempDirectory.Path);
         var runtime = new GenesisSharedPcpPlaybackRuntime(composition);
         var source = new DailyPcpPlaybackSource(
             IPAddress.Loopback.ToString(),
@@ -97,8 +97,8 @@ public sealed class GenesisSharedPcpPlaybackRuntimeTests
             static () => { },
             releaseSource.Task,
             timeout.Token);
-        var composition = new PcpRecordingRuntimeComposition(
-            Path.Combine(Path.GetTempPath(), "PeerCastNova-completed-owner-retirement-tests"));
+        using var tempDirectory = new TemporaryTestDirectory("completed-owner-retirement");
+        var composition = new PcpRecordingRuntimeComposition(tempDirectory.Path);
         var runtime = new GenesisSharedPcpPlaybackRuntime(composition);
         GenesisSharedPcpPlaybackAttachment? attachment = null;
 
@@ -138,8 +138,8 @@ public sealed class GenesisSharedPcpPlaybackRuntimeTests
     public async Task SequentialDistinctChannelsDoNotAccumulateCompletedOwners()
     {
         using var timeout = new CancellationTokenSource(TestTimeout);
-        var composition = new PcpRecordingRuntimeComposition(
-            Path.Combine(Path.GetTempPath(), "PeerCastNova-distinct-owner-retirement-tests"));
+        using var tempDirectory = new TemporaryTestDirectory("distinct-owner-retirement");
+        var composition = new PcpRecordingRuntimeComposition(tempDirectory.Path);
         var runtime = new GenesisSharedPcpPlaybackRuntime(composition);
         Guid[] channelGuids =
         [
@@ -225,8 +225,8 @@ public sealed class GenesisSharedPcpPlaybackRuntimeTests
             () => Interlocked.Increment(ref acceptedCount),
             releaseFirst.Task,
             timeout.Token);
-        var composition = new PcpRecordingRuntimeComposition(
-            Path.Combine(Path.GetTempPath(), "PeerCastNova-owner-reattach-race-tests"));
+        using var tempDirectory = new TemporaryTestDirectory("owner-reattach-race");
+        var composition = new PcpRecordingRuntimeComposition(tempDirectory.Path);
         var runtime = new GenesisSharedPcpPlaybackRuntime(composition);
         GenesisSharedPcpPlaybackAttachment? first = null;
         GenesisSharedPcpPlaybackAttachment? second = null;
@@ -332,14 +332,14 @@ public sealed class GenesisSharedPcpPlaybackRuntimeTests
     public async Task TerminalUpstreamFailureRetiresTheCompletedOwner()
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
-        var unavailablePortProbe = new System.Net.Sockets.TcpListener(
+        using var unavailablePortProbe = new System.Net.Sockets.TcpListener(
             IPAddress.Loopback,
             0);
         unavailablePortProbe.Start();
         var unavailablePort = ((IPEndPoint)unavailablePortProbe.LocalEndpoint).Port;
         unavailablePortProbe.Stop();
-        var composition = new PcpRecordingRuntimeComposition(
-            Path.Combine(Path.GetTempPath(), "PeerCastNova-failed-owner-retirement-tests"));
+        using var tempDirectory = new TemporaryTestDirectory("failed-owner-retirement");
+        var composition = new PcpRecordingRuntimeComposition(tempDirectory.Path);
         var runtime = new GenesisSharedPcpPlaybackRuntime(composition);
 
         GenesisSharedPcpPlaybackAttachment? attachment = null;
@@ -391,8 +391,8 @@ public sealed class GenesisSharedPcpPlaybackRuntimeTests
             static () => { },
             releaseSource.Task,
             timeout.Token);
-        var composition = new PcpRecordingRuntimeComposition(
-            Path.Combine(Path.GetTempPath(), "PeerCastNova-shutdown-race-tests"));
+        using var tempDirectory = new TemporaryTestDirectory("shutdown-race");
+        var composition = new PcpRecordingRuntimeComposition(tempDirectory.Path);
         var runtime = new GenesisSharedPcpPlaybackRuntime(composition);
         GenesisSharedPcpPlaybackAttachment? attachment = null;
 
@@ -449,8 +449,8 @@ public sealed class GenesisSharedPcpPlaybackRuntimeTests
             releaseHead.Task,
             releaseSource.Task,
             timeout.Token);
-        var composition = new PcpRecordingRuntimeComposition(
-            Path.Combine(Path.GetTempPath(), "PeerCastNova-playback-bootstrap-tests"));
+        using var tempDirectory = new TemporaryTestDirectory("playback-bootstrap");
+        var composition = new PcpRecordingRuntimeComposition(tempDirectory.Path);
         var runtime = new GenesisSharedPcpPlaybackRuntime(composition);
         var streamUrlReady = new TaskCompletionSource<string>(
             TaskCreationOptions.RunContinuationsAsynchronously);
@@ -530,8 +530,8 @@ public sealed class GenesisSharedPcpPlaybackRuntimeTests
         var releaseSource = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var server = RunPlaybackBootstrapUpstreamAsync(
             listener, accepted, releaseHead.Task, releaseSource.Task, timeout.Token);
-        var composition = new PcpRecordingRuntimeComposition(
-            Path.Combine(Path.GetTempPath(), "PeerCastNova-daily-player-tests"));
+        using var tempDirectory = new TemporaryTestDirectory("daily-player");
+        var composition = new PcpRecordingRuntimeComposition(tempDirectory.Path);
         var launcher = new RecordingPlayerLauncher();
         var changedLauncher = new RecordingPlayerLauncher();
         var selectedLauncher = launcher;
@@ -616,8 +616,8 @@ public sealed class GenesisSharedPcpPlaybackRuntimeTests
             () => Interlocked.Increment(ref connectionCount),
             releaseSource.Task,
             timeout.Token);
-        var composition = new PcpRecordingRuntimeComposition(
-            Path.Combine(Path.GetTempPath(), "PeerCastNova-recording-owner-tests"));
+        using var tempDirectory = new TemporaryTestDirectory("recording-owner");
+        var composition = new PcpRecordingRuntimeComposition(tempDirectory.Path);
         var runtime = new GenesisSharedPcpPlaybackRuntime(composition);
         var source = new DailyPcpPlaybackSource(
             IPAddress.Loopback.ToString(),
@@ -690,10 +690,8 @@ public sealed class GenesisSharedPcpPlaybackRuntimeTests
             () => Interlocked.Increment(ref connectionCount),
             releaseSource.Task,
             timeout.Token);
-        var recordingDirectory = Path.Combine(
-            Path.GetTempPath(),
-            "PeerCastNova-gui-manual-recording-shared-owner-tests",
-            Guid.NewGuid().ToString("N"));
+        using var tempDirectory = new TemporaryTestDirectory("gui-manual-recording-shared-owner");
+        var recordingDirectory = tempDirectory.Path;
         var composition = new PcpRecordingRuntimeComposition(recordingDirectory);
         var sharedRuntime = new GenesisSharedPcpPlaybackRuntime(composition);
         var dailyController = new NovaDailyHttpFlvPlaybackController(
@@ -822,10 +820,8 @@ public sealed class GenesisSharedPcpPlaybackRuntimeTests
             () => Interlocked.Increment(ref connectionCount),
             releaseSource.Task,
             timeout.Token);
-        var recordingDirectory = Path.Combine(
-            Path.GetTempPath(),
-            "PeerCastNova-gui-automatic-recording-shared-owner-tests",
-            Guid.NewGuid().ToString("N"));
+        using var tempDirectory = new TemporaryTestDirectory("gui-automatic-recording-shared-owner");
+        var recordingDirectory = tempDirectory.Path;
         var composition = new PcpRecordingRuntimeComposition(recordingDirectory);
         var sharedRuntime = new GenesisSharedPcpPlaybackRuntime(composition);
         var channelId = new ChannelId(ChannelGuid);
@@ -1002,8 +998,8 @@ public sealed class GenesisSharedPcpPlaybackRuntimeTests
     [Fact]
     public async Task CanceledAttachDoesNotCreateAnUpstreamOwner()
     {
-        var composition = new PcpRecordingRuntimeComposition(
-            Path.Combine(Path.GetTempPath(), "PeerCastNova-canceled-owner-tests"));
+        using var tempDirectory = new TemporaryTestDirectory("canceled-owner");
+        var composition = new PcpRecordingRuntimeComposition(tempDirectory.Path);
         var runtime = new GenesisSharedPcpPlaybackRuntime(composition);
         using var canceled = new CancellationTokenSource();
         canceled.Cancel();
@@ -1353,8 +1349,8 @@ public sealed class GenesisSharedPcpPlaybackRuntimeTests
         await using var provider = new TestSharedPublicRelayProvider(natManager);
         publicChannels.ConfigurePublic(wanSettings, provider);
 
-        var composition = new PcpRecordingRuntimeComposition(
-            Path.Combine(Path.GetTempPath(), "PeerCastNova-unified-wan-route-tests"));
+        using var tempDirectory = new TemporaryTestDirectory("unified-wan-route");
+        var composition = new PcpRecordingRuntimeComposition(tempDirectory.Path);
         await using var runtime = new GenesisSharedPcpPlaybackRuntime(composition, publicChannels);
         var source = new DailyPcpPlaybackSource(
             IPAddress.Loopback.ToString(),
@@ -1446,8 +1442,8 @@ public sealed class GenesisSharedPcpPlaybackRuntimeTests
         await using var provider = new TestSharedPublicRelayProvider(natManager);
         publicChannels.ConfigurePublic(wanSettings, provider);
 
-        var composition = new PcpRecordingRuntimeComposition(
-            Path.Combine(Path.GetTempPath(), "PeerCastNova-unified-downstream-retention-tests"));
+        using var tempDirectory = new TemporaryTestDirectory("unified-downstream-retention");
+        var composition = new PcpRecordingRuntimeComposition(tempDirectory.Path);
         var runtime = new GenesisSharedPcpPlaybackRuntime(composition, publicChannels);
         var source = new DailyPcpPlaybackSource(
             IPAddress.Loopback.ToString(),
@@ -1544,8 +1540,8 @@ public sealed class GenesisSharedPcpPlaybackRuntimeTests
         // プロバイダ未設定で WAN 公開が失敗する状態
         publicChannels.ConfigurePublic(wanSettings, provider: null);
 
-        var composition = new PcpRecordingRuntimeComposition(
-            Path.Combine(Path.GetTempPath(), "PeerCastNova-unified-wan-fallback-tests"));
+        using var tempDirectory = new TemporaryTestDirectory("unified-wan-fallback");
+        var composition = new PcpRecordingRuntimeComposition(tempDirectory.Path);
         await using var runtime = new GenesisSharedPcpPlaybackRuntime(composition, publicChannels);
         var source = new DailyPcpPlaybackSource(
             IPAddress.Loopback.ToString(),
@@ -1769,8 +1765,8 @@ public sealed class GenesisSharedPcpPlaybackRuntimeTests
             WanRelayEnabled = false,
         }, provider);
 
-        var composition = new PcpRecordingRuntimeComposition(
-            Path.Combine(Path.GetTempPath(), "PeerCastNova-live-wan-toggle-tests"));
+        using var tempDirectory = new TemporaryTestDirectory("live-wan-toggle");
+        var composition = new PcpRecordingRuntimeComposition(tempDirectory.Path);
         await using var runtime = new GenesisSharedPcpPlaybackRuntime(composition, publicChannels);
         var source = new DailyPcpPlaybackSource(
             IPAddress.Loopback.ToString(),
@@ -1880,8 +1876,8 @@ public sealed class GenesisSharedPcpPlaybackRuntimeTests
             WanRelayEnabled = true,
         }, provider);
 
-        var composition = new PcpRecordingRuntimeComposition(
-            Path.Combine(Path.GetTempPath(), "PeerCastNova-helo-oleh-tests"));
+        using var tempDirectory = new TemporaryTestDirectory("helo-oleh");
+        var composition = new PcpRecordingRuntimeComposition(tempDirectory.Path);
         await using var runtime = new GenesisSharedPcpPlaybackRuntime(composition, publicChannels);
         var source = new DailyPcpPlaybackSource(
             IPAddress.Loopback.ToString(),
@@ -1923,6 +1919,30 @@ public sealed class GenesisSharedPcpPlaybackRuntimeTests
             await upstreamTask.WaitAsync(timeout.Token);
             registry.Dispose();
             await composition.DisposeAsync();
+        }
+    }
+
+    /// <summary>
+    /// テストごとの一意な一時ディレクトリを確保し、終了時に削除する。
+    /// </summary>
+    private sealed class TemporaryTestDirectory : IDisposable
+    {
+        public string Path { get; }
+
+        public TemporaryTestDirectory(string prefix)
+        {
+            Path = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                $"PeerCastNova-{prefix}-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(Path);
+        }
+
+        public void Dispose()
+        {
+            if (Directory.Exists(Path))
+            {
+                Directory.Delete(Path, recursive: true);
+            }
         }
     }
 }

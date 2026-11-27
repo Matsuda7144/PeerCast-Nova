@@ -38,7 +38,7 @@ GitHub Actions は main push と Pull Request で自動実行されます。Circ
 - 実装を変更する場合は、影響する動作を自動テストで確認し、必要な文書も同じ変更に含める。
 - 文書のみの変更は、リンク、コマンド、差分が実装と矛盾しないことを確認する。
 - 公開 API、protocol compatibility、lifecycle／ownership など長期的な境界判断は ADR に記録する。PeerCastStation wire behavior を変更・拡張する提案では、互換性と negotiation 方法を RFC として説明する。
-- 新しい最新 ADR／PCN の組を追加する変更では、README、ROADMAP、CHANGELOG、NAVIGATION の最新案内を同期し、NAVIGATION のリンクを更新する。Repository documentation checks が番号とリンクを確認します。
+- ADR 等のドキュメントを追加・更新した場合は、ファイル名と見出し番号（`ADR-xxxx` / `PCN-xxxx`）および関連 Markdown リンクの整合性を確認する。Repository documentation checks が番号形式とリンク先を確認します。
 
 ## Definition of Done
 
