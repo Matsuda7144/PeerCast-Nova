@@ -58,9 +58,6 @@ internal static class RepositorySourceTestHelper
         throw new FileNotFoundException($"Repository file was not found: {Path.Combine(relativeParts)}", path);
     }
 
-    public static string ReadAppSource(string fileName) =>
-        File.ReadAllText(FindRepositoryFile("src", "Nova.App", fileName));
-
     public static XDocument LoadProjectDocument(params string[] relativeParts) =>
         XDocument.Load(FindRepositoryFile(relativeParts));
 }

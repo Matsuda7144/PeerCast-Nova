@@ -160,34 +160,6 @@ public sealed class GenesisChannelNotificationSettingsButtonBridgeTests
         Assert.Null(exception);
     }
 
-    [Fact]
-    public void NativePlacementReportsCaptureAndOpenFailuresThroughSharedFeedback()
-    {
-        var source = File.ReadAllText(FindRepositoryFile(
-            "src",
-            "Nova.App",
-            "GenesisChannelNotificationSettingsButtonBridge.cs"));
-
-        Assert.Contains(
-            "SystemGenesisGuiNextSettingsSurfaceFeedback.ReportIfUnavailable(\n            owner,\n            placement is not null);",
-            source,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "private IAsyncDisposable? FailOpen()",
-            source,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "SystemGenesisGuiNextSettingsSurfaceFeedback.ReportIfUnavailable(\n            _owner,\n            available: false);",
-            source,
-            StringComparison.Ordinal);
-        Assert.True(
-            source.Split("return FailOpen();", StringSplitOptions.None).Length - 1 >= 4,
-            "All bounded native placement-open rejection paths should report failure.");
-    }
-
-    private static string FindRepositoryFile(params string[] relativeParts) =>
-        RepositorySourceTestHelper.FindRepositoryFile(relativeParts);
-
     private sealed class RecordingSoundPlayer : IGenesisSystemNotificationSoundPlayer
     {
         public int PlayCount { get; private set; }

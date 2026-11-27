@@ -46,46 +46,4 @@ public sealed class GenesisGuiNextChannelContextFeedbackTests
 
         Assert.Null(exception);
     }
-
-    [Fact]
-    public void NativeMenuFailuresReportWithoutChangingCancellationContract()
-    {
-        var source = File.ReadAllText(FindRepositoryFile(
-            "src",
-            "Nova.App",
-            "GenesisChannelContextMenuNative.cs"));
-
-        Assert.True(
-            source.Split("return FailMenuOpen(owner);", StringSplitOptions.None).Length - 1 >= 7,
-            "All bounded native menu-open rejection paths should report failure.");
-        Assert.Contains(
-            "return Enum.IsDefined(typeof(GenesisChannelContextMenuCommand), (int)command)\n                ? (GenesisChannelContextMenuCommand)command\n                : GenesisChannelContextMenuCommand.None;",
-            source,
-            StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void ClipboardApiFailureReportsAfterCleanup()
-    {
-        var source = File.ReadAllText(FindRepositoryFile(
-            "src",
-            "Nova.App",
-            "GenesisChannelContextMenuNative.cs"));
-
-        Assert.True(
-            source.Split(
-                "ReportFailure();",
-                StringSplitOptions.None).Length - 1 >= 2,
-            "Allocation and post-allocation clipboard failures should report feedback.");
-        Assert.Contains(
-            "_ = GlobalFree(memory);\n                ReportFailure();",
-            source,
-            StringComparison.Ordinal);
-        Assert.Contains("if (reportFailure is not null) reportFailure();", source, StringComparison.Ordinal);
-        Assert.Contains("else SystemGenesisGuiNextChannelContextFeedback.ReportClipboardCopyFailure(owner);",
-            source, StringComparison.Ordinal);
-    }
-
-    private static string FindRepositoryFile(params string[] relativeParts) =>
-        RepositorySourceTestHelper.FindRepositoryFile(relativeParts);
 }

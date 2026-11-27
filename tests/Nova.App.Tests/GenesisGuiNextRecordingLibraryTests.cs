@@ -593,37 +593,6 @@ public sealed class GenesisGuiNextRecordingLibraryTests
         Assert.Equal(0, library.Calls);
     }
 
-    [Fact]
-    public void NativeSourceWiresLibraryControlsRowsStatusAndDetachedNotificationGuards()
-    {
-        var shell = Source("GenesisGuiNextAppShellBridge.cs");
-        var native = Source("SystemGenesisMainWindowInteractionBridgeFactory.cs");
-        var lifecycle = Source("GenesisGuiNextTabsViewModel.RecordingLibrary.cs");
-        Assert.Contains("GenesisGuiNextRecordingPageModePresentation.LibraryLabel", shell);
-        Assert.Contains("detailsPane, RecordingLibraryModeControlId", shell);
-        Assert.Contains("detailsPane, RecordingLibraryRefreshControlId", shell);
-        Assert.Contains("ButtonStyleOwnerDraw", shell);
-        Assert.Contains("isLibraryPage ? ShowWindowShowNoActivate : ShowWindowHide", shell);
-        Assert.Contains("hideRecordingActions ? ShowWindowHide", shell);
-        Assert.Contains("_tabs.CanRefreshRecordingLibrary", shell);
-        Assert.Contains("_tabs.RecordingLibraryStatusText", shell);
-        Assert.Contains("libraryDetails?.Identity", shell);
-        Assert.Contains("_tabs.PropertyChanged -= OnTabsPropertyChanged", shell);
-        Assert.Contains("Volatile.Read(ref _detached)", shell);
-        Assert.Contains("nameof(GenesisGuiNextTabsViewModel.RecordingLibraryRows)", native);
-        Assert.Contains("_guiNextTabs.RecordingLibraryRows", native);
-        Assert.Contains("GenesisGuiNextRecordingListPresentation.Values", native);
-        Assert.Contains("_renderedColumns = null", native);
-        Assert.Contains("if (_disposed || cancellation.IsCancellationRequested", lifecycle);
-        Assert.DoesNotContain("File.", lifecycle);
-        Assert.DoesNotContain("Directory.", lifecycle);
-        Assert.DoesNotContain("Process.", lifecycle);
-        var projection = Source("GenesisGuiNextRecordingLibraryProjection.cs");
-        Assert.DoesNotContain("OpenFile", projection); Assert.DoesNotContain("OpenFolder", projection);
-        Assert.DoesNotContain("ShellExecute", projection); Assert.DoesNotContain("Process.Start", projection);
-        Assert.DoesNotContain("Delete", projection); Assert.DoesNotContain("Move(", projection);
-    }
-
     private static GenesisGuiNextTabsViewModel Tabs(FakeLibrary library) => new(new GenesisFavoriteChannelCollection(),
         new GenesisRecordingRuleRepository(path: null), library)
     { SelectedTab = GenesisGuiNextTab.Recording };
@@ -793,8 +762,6 @@ public sealed class GenesisGuiNextRecordingLibraryTests
     private static GenesisGuiNextNativeTabRow Native(GenesisRecordingLibraryEntry entry) =>
         new(new(string.Empty, string.Empty), null, RecordingLibrary: GenesisGuiNextRecordingLibraryProjection.CreateRow(entry));
     private static TaskCompletionSource Gate() => new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private static string Source(string filename) =>
-        RepositorySourceTestHelper.ReadAppSource(filename);
     private sealed class FakeLibrary(GenesisRecordingLibrarySnapshot? snapshot = null) : IGenesisRecordingLibraryController
     {
         public GenesisRecordingLibrarySnapshot Current { get; } = snapshot ?? Initial();

@@ -1,3 +1,5 @@
+using PeerCast.Nova.Foundation.Logging;
+
 namespace PeerCast.Nova.App;
 
 internal sealed record GenesisChannelCatalogRefreshDiagnostics(
@@ -197,10 +199,10 @@ internal sealed class GenesisChannelCatalogSession : IAsyncDisposable
         {
             _lifetimeCancellation.Cancel();
         }
-        catch
+        catch (Exception exception)
         {
-            // Cancellation callbacks belong to catalog implementations. A callback
-            // failure must not prevent the session from draining finite refresh work.
+            // カタログ実装側のキャンセルコールバック失敗でもドレインを続行する。
+            FileNovaLogger.Default.Log(LogLevel.Warning, "Catalog lifetime cancellation callback failed.", exception);
         }
 
         Task tail;
@@ -215,10 +217,14 @@ internal sealed class GenesisChannelCatalogSession : IAsyncDisposable
         {
             await Task.WhenAll(tail, autoRefreshTask).ConfigureAwait(false);
         }
-        catch
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception exception)
         {
             // Coordinator converts expected catalog failures to bounded results and
             // the automatic loop treats lifetime cancellation as normal shutdown.
+            FileNovaLogger.Default.Log(LogLevel.Warning, "Catalog refresh drain ended with an unexpected exception.", exception);
         }
         finally
         {
@@ -322,9 +328,13 @@ internal sealed class GenesisChannelCatalogSession : IAsyncDisposable
             {
                 await predecessor.ConfigureAwait(false);
             }
-            catch
+            catch (OperationCanceledException)
             {
-                // A prior refresh cannot prevent a later bounded refresh attempt.
+            }
+            catch (Exception exception)
+            {
+                // 前回の更新失敗が後続の更新を妨げないようにする。
+                FileNovaLogger.Default.Log(LogLevel.Warning, "Previous catalog refresh task faulted.", exception);
             }
 
             if (Volatile.Read(ref _disposed) != 0 ||
@@ -366,11 +376,13 @@ internal sealed class GenesisChannelCatalogSession : IAsyncDisposable
                                     refreshCancellation.Token)
                                 .ConfigureAwait(false);
                         }
-                        catch
+                        catch (OperationCanceledException) when (refreshCancellation.IsCancellationRequested)
                         {
-                            // Automatic recording is auxiliary to catalog display.
-                            // Its failure must not turn a successful refresh into a
-                            // failed channel-list update.
+                        }
+                        catch (Exception exception)
+                        {
+                            // 自動録画観測の失敗でチャンネル一覧更新全体を失敗扱いにしない。
+                            FileNovaLogger.Default.Log(LogLevel.Warning, "Automatic recording catalog observation failed.", exception);
                         }
                     }
 
@@ -380,9 +392,13 @@ internal sealed class GenesisChannelCatalogSession : IAsyncDisposable
                                 refreshCancellation.Token)
                             .ConfigureAwait(false);
                     }
-                    catch
+                    catch (OperationCanceledException) when (refreshCancellation.IsCancellationRequested)
                     {
-                        // Recording projection is auxiliary to catalog display.
+                    }
+                    catch (Exception exception)
+                    {
+                        // 録画一覧投影の失敗でカタログ表示を失敗扱いにしない。
+                        FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to refresh active recordings during catalog refresh.", exception);
                     }
                 }
             }
@@ -390,16 +406,18 @@ internal sealed class GenesisChannelCatalogSession : IAsyncDisposable
             {
                 result = GenesisChannelCatalogRefreshResult.Cancelled;
             }
-            catch
+            catch (Exception exception)
             {
+                FileNovaLogger.Default.Log(LogLevel.Warning, "Channel catalog refresh faulted.", exception);
                 result = GenesisChannelCatalogRefreshResult.Faulted;
             }
 
             RecordResult(result, DateTimeOffset.UtcNow);
             completion.TrySetResult(result);
         }
-        catch
+        catch (Exception exception)
         {
+            FileNovaLogger.Default.Log(LogLevel.Warning, "Channel catalog refresh outer task faulted.", exception);
             completion.TrySetResult(GenesisChannelCatalogRefreshResult.Faulted);
         }
     }
@@ -440,10 +458,11 @@ internal sealed class GenesisChannelCatalogSession : IAsyncDisposable
         {
             GuiNextTabs?.UpdatePlayback(_viewModel.PlaybackSnapshot);
         }
-        catch
+        catch (Exception exception)
         {
             // Playing-tab observers are auxiliary GUI surfaces and must not turn
             // a playback state transition into a playback command failure.
+            FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to update GuiNext playback tab projection.", exception);
         }
     }
 
@@ -456,9 +475,10 @@ internal sealed class GenesisChannelCatalogSession : IAsyncDisposable
                 _viewModel.ActiveRecordings,
                 _viewModel.ActiveRecordingSnapshotAvailable);
         }
-        catch
+        catch (Exception exception)
         {
             // Recording-page projection is auxiliary and cannot affect Core state.
+            FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to update GuiNext active recordings projection.", exception);
         }
     }
 
@@ -507,10 +527,11 @@ internal sealed class GenesisChannelCatalogSession : IAsyncDisposable
             {
                 handler(this, EventArgs.Empty);
             }
-            catch
+            catch (Exception exception)
             {
                 // Diagnostics observers are auxiliary GUI surfaces and must not
                 // turn a bounded catalog refresh into a refresh failure.
+                FileNovaLogger.Default.Log(LogLevel.Warning, "Catalog diagnostics observer failed.", exception);
             }
         }
     }

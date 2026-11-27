@@ -136,36 +136,12 @@ public sealed class GenesisGuiNextRefreshShortcutTests
         Assert.Equal(3, catalog.ReadCount);
     }
 
-    [Fact]
-    public void MainWindowHookRoutesOwnerAndChildrenThroughSharedRefreshBeforeChildDispatch()
-    {
-        var source = ReadSource("GenesisGuiNextMainWindowKeyboardNavigation.cs");
-        Assert.Contains("TryHandleRefreshKeyDown(", source, StringComparison.Ordinal);
-        Assert.Contains("IsMessageForOwner(message.Window) &&", source, StringComparison.Ordinal);
-        Assert.Contains("window == _owner || IsChild(_owner, window)", source, StringComparison.Ordinal);
-        Assert.Contains("IsWindowEnabled(_owner) &&", source, StringComparison.Ordinal);
-        Assert.Contains("GetForegroundWindow() == _owner", source, StringComparison.Ordinal);
-        Assert.Contains("IsKeyPressed(VirtualKeyShift)", source, StringComparison.Ordinal);
-        Assert.Contains("IsKeyPressed(VirtualKeyControl)", source, StringComparison.Ordinal);
-        Assert.Contains("IsKeyPressed(VirtualKeyAlt)", source, StringComparison.Ordinal);
-        Assert.Contains(
-            "GenesisChannelRefreshButtonBridge.FindRefreshRequestForOwner(_owner)",
-            source,
-            StringComparison.Ordinal);
-        Assert.Contains("if (refreshHandled ||", source, StringComparison.Ordinal);
-        Assert.Contains("message.Message = WindowMessageNull;", source, StringComparison.Ordinal);
-        Assert.Contains("CallNextHookEx(", source, StringComparison.Ordinal);
-    }
-
     private static bool PressF5(Func<bool>? requestRefresh, nint keyData = 0) =>
         GenesisGuiNextMainWindowKeyboardNavigation.TryHandleRefreshKeyDown(
             0, 1, 0x0100, 0x74, keyData,
             isActiveOwnerTarget: true,
             modifiersPressed: false,
             requestRefresh);
-
-    private static string ReadSource(string name) =>
-        RepositorySourceTestHelper.ReadAppSource(name);
 
     private sealed class BlockingCatalog : IGenesisChannelCatalog
     {

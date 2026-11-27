@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
+using PeerCast.Nova.Foundation.Logging;
 using static PeerCast.Nova.App.Win32NativeMethods;
 
 namespace PeerCast.Nova.App;
@@ -2498,9 +2499,12 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             {
                 await _tabs.SelectRecordingPageModeAsync(mode).ConfigureAwait(false);
             }
-            catch
+            catch (OperationCanceledException)
             {
-                // Repository failures are represented as a bounded page state.
+            }
+            catch (Exception exception)
+            {
+                FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to switch recording page mode.", exception);
             }
         }
 
@@ -2600,9 +2604,12 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                         selectedRow)
                     .ConfigureAwait(false);
             }
-            catch
+            catch (OperationCanceledException)
             {
-                // The existing playback interaction reports bounded failures.
+            }
+            catch (Exception exception)
+            {
+                FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to activate selected channel playback.", exception);
             }
             finally
             {
@@ -2725,9 +2732,12 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                         .ConfigureAwait(false);
                 }
             }
-            catch
+            catch (OperationCanceledException)
             {
-                // Recording failures are translated at the application boundary.
+            }
+            catch (Exception exception)
+            {
+                FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to execute manual recording command.", exception);
             }
             finally
             {
@@ -2748,9 +2758,12 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                     .StopRecordingRowAsync(_viewModel, selectedRow)
                     .ConfigureAwait(false);
             }
-            catch
+            catch (OperationCanceledException)
             {
-                // Recording failures are translated at the application boundary.
+            }
+            catch (Exception exception)
+            {
+                FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to stop active recording row.", exception);
             }
             finally
             {
@@ -2772,7 +2785,11 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
         private async Task ObserveAllowAutomaticAsync(GenesisGuiNextNativeTabRow row)
         {
             try { await GenesisGuiNextRecordingCommandDispatch.AllowRecordingRowAsync(_viewModel, row).ConfigureAwait(false); }
-            catch { /* Application commands expose bounded state. */ }
+            catch (OperationCanceledException) { }
+            catch (Exception exception)
+            {
+                FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to re-allow automatic recording.", exception);
+            }
             finally
             {
                 if (Volatile.Read(ref _detached) == 0)
@@ -2787,9 +2804,12 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 await _viewModel.RefreshActiveRecordingsAsync()
                     .ConfigureAwait(false);
             }
-            catch
+            catch (OperationCanceledException)
             {
-                // Page activation refresh is best-effort and remains fail-closed.
+            }
+            catch (Exception exception)
+            {
+                FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to refresh active recordings.", exception);
             }
         }
 
@@ -2814,9 +2834,12 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                     .StopAsync(_viewModel, _interaction)
                     .ConfigureAwait(false);
             }
-            catch
+            catch (OperationCanceledException)
             {
-                // The existing playback interaction reports bounded failures.
+            }
+            catch (Exception exception)
+            {
+                FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to stop playback.", exception);
             }
             finally
             {

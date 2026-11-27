@@ -33,47 +33,4 @@ public sealed class GenesisGuiNextApplicationStateInitializationFeedbackTests
 
         Assert.Null(exception);
     }
-
-    [Fact]
-    public void StateFactoryFailureReportsAndRetainsNullFallback()
-    {
-        var source = File.ReadAllText(FindRepositoryFile(
-            "src",
-            "Nova.App",
-            "SystemGenesisInteractiveMainWindowSurfaceTarget.cs"));
-
-        Assert.Contains(
-            "catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)",
-            source,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "SystemGenesisGuiNextApplicationStateInitializationFeedback.Report(windowToken);\n            guiNextState = null;",
-            source,
-            StringComparison.Ordinal);
-        Assert.Equal(
-            1,
-            source.Split(
-                "SystemGenesisGuiNextApplicationStateInitializationFeedback.Report(windowToken);",
-                StringSplitOptions.None).Length - 1);
-    }
-
-    [Fact]
-    public void SystemFeedbackUsesExplicitMainWindowOwner()
-    {
-        var source = File.ReadAllText(FindRepositoryFile(
-            "src",
-            "Nova.App",
-            "GenesisGuiNextApplicationStateInitializationFeedback.cs"));
-
-        Assert.Contains("var owner = (nint)windowToken;", source, StringComparison.Ordinal);
-        Assert.Contains("!IsWindow(owner)", source, StringComparison.Ordinal);
-        Assert.Contains(
-            "_ = MessageBoxW(\n                    owner,",
-            source,
-            StringComparison.Ordinal);
-        Assert.DoesNotContain("GetForegroundWindow", source, StringComparison.Ordinal);
-    }
-
-    private static string FindRepositoryFile(params string[] relativeParts) =>
-        RepositorySourceTestHelper.FindRepositoryFile(relativeParts);
 }

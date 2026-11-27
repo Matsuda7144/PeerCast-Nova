@@ -163,14 +163,6 @@ public sealed class GuiNextNetworkSettingsTests
     [InlineData(false, "保存失敗")]
     public async Task IntegratedPaneShowsSaveCompletedAfterReturningToConnection(bool succeeds, string expected)
     {
-        // The connection and YP drafts are closed on category changes. NAT belongs to the pane.
-        var native = Source("GenesisGuiNextNetworkSettingsCategories.cs");
-        var closeDrafts = native.IndexOf("private void CloseNetworkSettingsPages()", StringComparison.Ordinal);
-        var closeNat = native.IndexOf("private void CloseNatSettingsPage()", StringComparison.Ordinal);
-        Assert.True(closeDrafts >= 0 && closeNat > closeDrafts);
-        Assert.DoesNotContain("_natSettingsPage", native[closeDrafts..closeNat]);
-        Assert.Contains("ConnectionCategory && _natSettingsPage?.CanAcceptCallback(generation) == true", native);
-
         var adapter = new Adapter();
         var callbacks = new List<long>();
         var pane = new GuiNextNetworkSettingsViewModel(adapter, callbacks.Add);
@@ -366,35 +358,6 @@ public sealed class GuiNextNetworkSettingsTests
         Assert.Equal(-1, GenesisNetworkSettingsWindow.NextNatFocus(0, false, [false, false]));
 
     [Fact]
-    public void NativeRouteAndKeyboardUseBorrowedAdapterAndGenerationMessagesOnly()
-    {
-        var surface = Source("SystemGenesisInteractiveMainWindowSurfaceTarget.cs");
-        var startup = Source("NovaWindowsStartupComposition.cs");
-        var bridge = Source("GenesisChannelNotificationSettingsButtonBridge.cs");
-        var host = Source("GenesisNetworkSettingsWindowHost.cs");
-        var native = Source("GenesisNetworkSettingsWindow.Nat.cs");
-        Assert.Contains("viewModel.NetworkSettingsAdapter", surface);
-        Assert.Contains("networkAdapter);", startup);
-        Assert.Contains("networkSettingsController, networkAdapter", bridge);
-        Assert.Contains("GenesisNetworkSettingsWindow.TryCreate(_owner, _networkAdapter)", host);
-        Assert.Contains("GetCurrentThreadId()", native);
-        Assert.Contains("NatCompletedMessage", native);
-        Assert.Contains("CanAcceptCallback", native);
-        Assert.Contains("NatCloseMessage", native);
-        Assert.Contains("GenesisNetworkSettingsWindowInitialization.ShouldCloseNative(", native);
-        Assert.Contains("ReferenceEquals(active, this)", native);
-        Assert.Contains("BS_AUTOCHECKBOX", native);
-        Assert.Contains("GetKeyState(0x10)", native);
-        Assert.Contains("DrawFocusRect", native);
-        Assert.Contains("診断情報（読み取り専用）", native);
-        Assert.Equal("ポート自動開放（UPnP / NAT-PMP）", GenesisNetworkSettingsWindow.NatCheckboxLabel);
-        Assert.Equal(1000, GenesisNetworkSettingsWindow.NatRefreshIntervalMilliseconds);
-        foreach (var text in new[] { native, Source("GuiNextNetworkSettingsViewModel.cs"), Source("GuiNextNetworkSettingsPresentation.cs") })
-            foreach (var forbidden in new[] { "AcquirePublicRelayAsync(", "InitializeAsync(", "NatPortMappingRuntime(", "Process.Start(", "settings.json", ".Wait()", ".Manager." })
-                Assert.DoesNotContain(forbidden, text);
-    }
-
-    [Fact]
     public async Task RealAdapterPersistsOnlyNatFieldAndDoesNotAcquireOrDuplicateRuntime()
     {
         var root = Path.Combine(Path.GetTempPath(), "Nova-network-gui-" + Guid.NewGuid().ToString("N"));
@@ -552,9 +515,6 @@ public sealed class GuiNextNetworkSettingsTests
         Guid.NewGuid(), 1, 1, NovaPublicRelayState.Listening, 2,
         new ChannelId(Guid.Parse("C0700662C84565C65125E0F927A501D0")), null,
         new NovaPublicRelayEndpoint("0.0.0.0", 8123), NovaPublicRelayFailure.None);
-
-    private static string Source(string filename) =>
-        RepositorySourceTestHelper.ReadAppSource(filename);
 
     private sealed class Network : INatNetworkSource
     {

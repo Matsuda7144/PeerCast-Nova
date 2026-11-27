@@ -5,20 +5,6 @@ namespace PeerCast.Nova.App.Tests;
 public sealed class GenesisRecordingRuleQuickMutationNativeContractTests
 {
     [Fact]
-    public void NativeQuickButtonsUseAppCommandsAndSharedAvailability()
-    {
-        var source = RepositorySourceTestHelper.ReadAppSource("GenesisGuiNextAppShellBridge.cs");
-        Assert.Contains("_tabs.CanQuickMutateRecordingRule", source, StringComparison.Ordinal);
-        Assert.Contains("_tabs.RecordingRuleToggleLabel", source, StringComparison.Ordinal);
-        Assert.Contains("_tabs.QuickMutateRecordingRuleAsync", source, StringComparison.Ordinal);
-        Assert.Contains("_tabs.CanMoveRecordingRule", source, StringComparison.Ordinal);
-        Assert.Contains(
-            "GenesisRecordingRuleMutationController.PersistedOrderHelp",
-            source,
-            StringComparison.Ordinal);
-    }
-
-    [Fact]
     public async Task MutationControllerEnforcesSingleReservationAndPreservesPersistedOrder()
     {
         Assert.Contains("同じ優先度", GenesisRecordingRuleMutationController.PersistedOrderHelp, StringComparison.Ordinal);

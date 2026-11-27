@@ -1,3 +1,5 @@
+using PeerCast.Nova.Foundation.Logging;
+
 namespace PeerCast.Nova.App;
 
 internal interface IGenesisMainWindowInteractionBridgeFactory
@@ -291,10 +293,11 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
                 .ConfigureAwait(false);
             throw;
         }
-        catch
+        catch (Exception exception)
         {
             // User-state persistence is auxiliary. A load/path failure must not
             // reject an otherwise valid Genesis main-window surface.
+            FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to initialize GUI Next application state.", exception);
             SystemGenesisGuiNextApplicationStateInitializationFeedback.Report(windowToken);
             guiNextState = null;
         }
@@ -322,10 +325,11 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
             {
                 yellowPageRouter.Bind(guiNextState.YellowPages);
             }
-            catch
+            catch (Exception exception)
             {
                 // Shared Yellow Page binding is auxiliary. The router retains its
                 // startup fallback so an otherwise valid GUI can still refresh.
+                FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to bind Yellow Page router to GUI Next state.", exception);
             }
         }
 
@@ -337,10 +341,11 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
                 notificationSettingsPlacement =
                     _notificationSettingsPlacementFactory(windowToken);
             }
-            catch
+            catch (Exception exception)
             {
                 // Settings presentation is auxiliary. Native capture failures must
                 // never reject an otherwise valid Genesis main-window surface.
+                FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to capture notification settings placement.", exception);
             }
         }
 
@@ -352,10 +357,11 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
                     guiNextState) ??
                 GenesisChannelNotificationRuntime.Empty;
         }
-        catch
+        catch (Exception exception)
         {
             // Notifications are auxiliary. Native notification initialization must
             // never reject an otherwise valid Genesis main-window surface.
+            FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to initialize notification runtime.", exception);
             notificationRuntime = GenesisChannelNotificationRuntime.Empty;
         }
 
@@ -440,10 +446,11 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
                         guiNextState.Connection,
                         showButton: false);
             }
-            catch
+            catch (Exception exception)
             {
                 // Settings presentation is optional and cannot fault catalog refresh
                 // or reject the established main GUI lifetime.
+                FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to open notification settings placement.", exception);
             }
         }
 
@@ -508,9 +515,10 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
         {
             await surfaceLifetime.DisposeAsync().ConfigureAwait(false);
         }
-        catch
+        catch (Exception exception)
         {
             // Best-effort GUI cleanup must not replace the original rejection.
+            FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to dispose rejected surface lifetime.", exception);
         }
     }
 
@@ -523,9 +531,10 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
         {
             await resizeGuard.DisposeAsync().ConfigureAwait(false);
         }
-        catch
+        catch (Exception exception)
         {
             // Restoring optional window chrome is best-effort during rejection.
+            FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to dispose rejected resize guard.", exception);
         }
     }
 
@@ -540,19 +549,21 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
         {
             await catalogSession.DisposeAsync().ConfigureAwait(false);
         }
-        catch
+        catch (Exception exception)
         {
             // A rejected open is already bounded by its original result. Cleanup
             // failures must not replace that result or a bridge creation failure.
+            FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to dispose rejected catalog session.", exception);
         }
 
         try
         {
             await notificationLifetime.DisposeAsync().ConfigureAwait(false);
         }
-        catch
+        catch (Exception exception)
         {
             // Auxiliary notification cleanup cannot reject GUI shutdown.
+            FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to dispose rejected notification lifetime.", exception);
         }
 
         if (guiNextState is not null)
@@ -561,9 +572,10 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
             {
                 await guiNextState.DisposeAsync().ConfigureAwait(false);
             }
-            catch
+            catch (Exception exception)
             {
                 // User-state persistence cannot reject GUI shutdown.
+                FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to dispose rejected GUI Next state.", exception);
             }
         }
 
@@ -619,9 +631,10 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
                 {
                     await notificationSettingsLifetime.DisposeAsync().ConfigureAwait(false);
                 }
-                catch
+                catch (Exception exception)
                 {
                     // Settings presentation is auxiliary and cannot block cleanup.
+                    FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to dispose notification settings lifetime.", exception);
                 }
             }
 
@@ -629,9 +642,10 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
             {
                 await notificationLifetime.DisposeAsync().ConfigureAwait(false);
             }
-            catch
+            catch (Exception exception)
             {
                 // Notifications are auxiliary and cannot block main GUI cleanup.
+                FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to dispose notification runtime lifetime.", exception);
             }
 
             if (guiNextState is not null)
@@ -640,9 +654,10 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
                 {
                     await guiNextState.DisposeAsync().ConfigureAwait(false);
                 }
-                catch
+                catch (Exception exception)
                 {
                     // User-state persistence cannot block main GUI cleanup.
+                    FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to dispose GUI Next state.", exception);
                 }
             }
 
@@ -720,9 +735,10 @@ internal sealed class SystemGenesisInteractiveMainWindowSurfaceTarget :
                 {
                     await _resizeGuard.DisposeAsync().ConfigureAwait(false);
                 }
-                catch
+                catch (Exception exception)
                 {
                     // Window chrome restoration must not replace GUI cleanup failures.
+                    FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to dispose main window resize guard.", exception);
                 }
             }
         }

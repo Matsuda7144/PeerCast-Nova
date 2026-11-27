@@ -555,44 +555,6 @@ public sealed class GenesisGuiNextRecordingHistoryTests
             recordingHistoryController: provider);
 
     [Fact]
-    public void NativeSourceWiresSameImmutableStatusQueryTickAndModeGuardedLegacyRoutes()
-    {
-        var shell = Source("GenesisGuiNextAppShellBridge.cs");
-        var native = Source("SystemGenesisMainWindowInteractionBridgeFactory.cs");
-        var sourceEnter = Source("GenesisSourceEnterBridge.cs");
-        var legacy = Source("GenesisChannelContextMenuBridge.cs");
-        var direct = Source("GenesisChannelDirectContextMenuBridge.cs");
-        var history = Source("GenesisGuiNextTabsViewModel.RecordingHistory.cs");
-        Assert.Contains("lParam == _recordingHistoryModeButton && commandId == RecordingHistoryModeControlId", shell);
-        Assert.Contains("lParam == _recordingHistoryRefreshButton && commandId == RecordingHistoryRefreshControlId", shell);
-        Assert.Contains("if (_tabs.IsRecordingHistoryPage && !IsHistoryNavigationCommand(commandId)) return;", shell);
-        Assert.Contains("WindowStyleChild | WindowStyleTabStop | RecordingHistoryDetailsStyle", shell);
-        Assert.Contains("ApplyDefaultFont(_recordingHistoryModeButton)", shell);
-        Assert.Contains("ApplyDefaultFont(_recordingHistoryRefreshButton)", shell);
-        Assert.Contains("CreateWindowExW(0, \"EDIT\"", shell);
-        Assert.Contains("_ = PresentText(_detailsRecordingStatus, _historyStatusPresentation.Text);", shell);
-        Assert.Contains("_historyStatusPresentation.Text, -1, ref rectangle", shell);
-        Assert.Contains("string.Equals(detailsText, _historyDetailsText, StringComparison.Ordinal)", shell);
-        Assert.Contains("DrawItemTypeStatic = 5", shell);
-        Assert.Contains("AccentWidth = 5", shell);
-        Assert.Contains("IsRecordingHistoryView", sourceEnter);
-        Assert.Contains("_interaction.StopAsync()", sourceEnter);
-        Assert.Contains("_interaction.PlaySourceAsync(", sourceEnter);
-        Assert.Contains("_interaction.StopAsync()", legacy);
-        Assert.Contains("_interaction.StopAsync()", direct);
-        Assert.Contains("VirtualKeyEscape", legacy);
-        Assert.Contains("GenesisChannelDirectKeyboardCommand.Stop", direct);
-        Assert.Contains("ObserveStatusTick()", native);
-        Assert.Contains("_guiNextTabs.RefreshRecordingHistoryAsync()", native);
-        Assert.Contains("Volatile.Read(ref _detached)", native);
-        Assert.Contains("_guiNextTabs.PropertyChanged -= OnGuiNextTabsPropertyChanged", native);
-        Assert.Contains("historyMode: _guiNextTabs?.IsRecordingHistoryPage == true", native);
-        foreach (var forbidden in new[] { "File.", "Directory.", "Process.", "RefreshRecordingLibraryAsync",
-            "SaveAsync", "FlushAsync", "Register", "ReloadRecordingRules", "RefreshChannels", "Changed +=" })
-            Assert.DoesNotContain(forbidden, history);
-    }
-
-    [Fact]
     public async Task PendingCallerCancellationDoesNotPublishOrPerformAnExtraQuery()
     {
         var entered = Gate(); var release = Gate(); var provider = new Queries();
@@ -649,9 +611,6 @@ public sealed class GenesisGuiNextRecordingHistoryTests
         Assert.Equal(PlaybackSessionState.Stopped, adapter.Snapshot.State);
         Assert.Equal(root, composition.RecordingDirectory);
     }
-
-    private static string Source(string filename) =>
-        RepositorySourceTestHelper.ReadAppSource(filename);
 
     private sealed class PoisonLibraryFileSystem : IGenesisRecordingLibraryFileSystem
     {

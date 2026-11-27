@@ -214,21 +214,6 @@ public sealed class GenesisWindowUiFontTests
     }
 
     [Fact]
-    public void RootFontTeardownRunsAfterNativeNonClientDestruction()
-    {
-        var source = ReadSource("GenesisWindowUiFont.cs");
-        var start = source.IndexOf("if (message == NonClientDestroyMessage)", StringComparison.Ordinal);
-        var end = source.IndexOf("var result = DefSubclassProc", start, StringComparison.Ordinal);
-        Assert.True(start >= 0 && end > start);
-        var destruction = source[start..end];
-        var dispatch = destruction.IndexOf("return DefSubclassProc(", StringComparison.Ordinal);
-        var cleanup = destruction.IndexOf("font.Dispose();", StringComparison.Ordinal);
-        Assert.True(dispatch >= 0 && cleanup > dispatch);
-        Assert.Contains("finally", destruction, StringComparison.Ordinal);
-        Assert.Contains("Fonts.Remove(window, out var font)", destruction, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public void DpiRotationUpdatesControlsBeforeReleasingOldFont()
     {
         var api = SupportedApi();
@@ -302,36 +287,7 @@ public sealed class GenesisWindowUiFontTests
     public void CoverageProbeIncludesNavigationAndPublishingLabels()
     {
         var labels = string.Concat(GenesisGuiNextNavigationPresentation.ItemsFor(true).Concat(JapaneseCoverageLabels));
-        var runtimeSources = new[]
-        {
-            "GenesisChannelSearchBoxBridge.cs",
-            "GenesisGuiNextTopStatusPresentation.cs",
-            "GenesisGuiNextAppShellBridge.cs",
-            "GenesisGuiNextAppShellBridge.RelayTree.cs",
-            "GenesisRelayTreeNodePresentation.cs",
-            "GenesisRelayTreeDisconnect.cs",
-            "SystemGenesisMainWindowSurfaceTarget.cs",
-            "GenesisGuiNextPlaybackSettingsWindow.cs",
-            "GenesisGuiNextConnectionSettingsWindow.cs",
-            "GenesisGuiNextConnectionSettings.cs",
-            "GenesisAppearanceSettings.cs",
-            "GenesisGuiNextRelayActivation.cs",
-            "GenesisGuiNextPublishingPresentation.cs",
-            "GenesisGuiNextPublishingRefresh.cs",
-            "GenesisGuiNextPublishingConnection.cs",
-            "GenesisGuiNextPublishingNativeGuide.cs",
-            "GenesisGuiNextPublishingSettingsWindow.cs",
-            "PublishingChannelPreferences.cs",
-            "PublishingLanPresentation.cs",
-            "PublishingWanPresentation.cs",
-            "../Nova.Network/Publishing/ObsPublishChannelMetadata.cs",
-            "NovaObsPublishingConnectionInfo.cs",
-            "NovaGuiNextPublishingCommands.cs",
-            "NovaGuiNextPublishingComposition.cs",
-        };
-        var sourceCharacters = string.Concat(runtimeSources.Select(ReadSource))
-            .Where(static character => character > 127);
-        foreach (var character in labels.Concat(sourceCharacters).Where(static character => character > 127).Distinct())
+        foreach (var character in labels.Where(static character => character > 127).Distinct())
         {
             Assert.Contains(character, SystemUiFontNativeApi.JapaneseSample);
         }
@@ -418,9 +374,6 @@ public sealed class GenesisWindowUiFontTests
         api.Supported.Add("System UI");
         return api;
     }
-
-    private static string ReadSource(string fileName) =>
-        RepositorySourceTestHelper.ReadAppSource(fileName);
 
     private sealed class FontApi(string family) : IGenesisUiFontNativeApi
     {

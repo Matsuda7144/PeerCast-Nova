@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using PeerCast.Nova.Core.Channels;
 using PeerCast.Nova.Core.Recording;
+using PeerCast.Nova.Foundation.Logging;
 
 namespace PeerCast.Nova.App;
 
@@ -248,8 +249,9 @@ public sealed partial class GenesisMainViewModel : INotifyPropertyChanged
         {
             snapshot = _recordingController.GetSnapshot(channel);
         }
-        catch
+        catch (Exception exception)
         {
+            FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to read manual recording snapshot for channel.", exception);
             return GenesisManualRecordingPresentation.Unavailable;
         }
 
@@ -334,8 +336,9 @@ public sealed partial class GenesisMainViewModel : INotifyPropertyChanged
         {
             snapshot = _recordingController.GetSnapshot(recording.ChannelId);
         }
-        catch
+        catch (Exception exception)
         {
+            FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to read manual recording snapshot for channel.", exception);
             return GenesisManualRecordingPresentation.Unavailable;
         }
 
@@ -401,8 +404,14 @@ public sealed partial class GenesisMainViewModel : INotifyPropertyChanged
                 .GetActiveRecordingSessionsAsync(cancellationToken)
                 .ConfigureAwait(false);
         }
-        catch
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            MarkActiveRecordingsUnavailable(sequence);
+            return;
+        }
+        catch (Exception exception)
+        {
+            FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to refresh active recording sessions.", exception);
             MarkActiveRecordingsUnavailable(sequence);
             return;
         }
@@ -489,8 +498,9 @@ public sealed partial class GenesisMainViewModel : INotifyPropertyChanged
         {
             _recordingErrors.TryRemove(channelId, out _);
         }
-        catch
+        catch (Exception exception)
         {
+            FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to start manual recording.", exception);
             _recordingErrors[channelId] = new(
                 "録画を開始できませんでした。",
                 SessionId: null);
@@ -579,8 +589,9 @@ public sealed partial class GenesisMainViewModel : INotifyPropertyChanged
         {
             _recordingErrors.TryRemove(channelId, out _);
         }
-        catch
+        catch (Exception exception)
         {
+            FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to stop manual recording.", exception);
             _recordingErrors[channelId] = new(
                 "録画を停止できませんでした。",
                 expectedSessionId);
@@ -709,8 +720,9 @@ public sealed partial class GenesisMainViewModel : INotifyPropertyChanged
                 SetError(null);
             }
         }
-        catch
+        catch (Exception exception)
         {
+            FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to start playback.", exception);
             if (preservePlaying)
             {
                 SetError("Playback failed.", clearsOnSourceChange: true);
@@ -774,8 +786,9 @@ public sealed partial class GenesisMainViewModel : INotifyPropertyChanged
             SetSnapshot(_controller.Snapshot);
             SetError(null);
         }
-        catch
+        catch (Exception exception)
         {
+            FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to stop playback.", exception);
             SetSnapshot(_snapshot with
             {
                 State = PlaybackSessionState.Faulted,
@@ -1051,8 +1064,9 @@ public sealed partial class GenesisMainViewModel : INotifyPropertyChanged
                 snapshot.SessionId == expectedSessionId &&
                 _recordingController.IsKnownManualSession(channelId, expectedSessionId);
         }
-        catch
+        catch (Exception exception)
         {
+            FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to check manual recording session.", exception);
             return false;
         }
     }

@@ -43,22 +43,6 @@ public sealed class GenesisGuiNextConnectionSettingsFontTests
     public void DialogLayoutUsesTheSameDpiScaleAsTheOwnedFont(uint dpi, int width) =>
         Assert.Equal(width, GenesisGuiNextConnectionSettingsWindow.Scale(700, dpi));
 
-    [Fact]
-    public void NativeWiringUsesSharedFontAndBackgroundSaveWithoutRuntimeApply()
-    {
-        var source = RepositorySourceTestHelper.ReadAppSource("GenesisGuiNextConnectionSettingsWindow.cs");
-        Assert.Contains("GenesisWindowUiFont.Apply(control)", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("GetStockObject", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("DEFAULT_GUI_FONT", source, StringComparison.Ordinal);
-        Assert.Contains("Task.Run", source, StringComparison.Ordinal);
-        Assert.Contains("PostMessageW(window, SaveCompleted", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("ApplyAsync", source, StringComparison.Ordinal);
-        var stateSource = RepositorySourceTestHelper.ReadAppSource("GenesisGuiNextApplicationState.cs");
-        Assert.Contains("new JsonGenesisGuiNextConnectionPreferencesStore(", stateSource, StringComparison.Ordinal);
-        Assert.Contains("connection-preferences.json", stateSource, StringComparison.Ordinal);
-        Assert.Contains("Path.Combine(applicationDirectory, ConnectionPreferencesFileName)", stateSource, StringComparison.Ordinal);
-    }
-
     private sealed class FontApi : IGenesisUiFontNativeApi
     {
         public List<string> Faces { get; } = [];

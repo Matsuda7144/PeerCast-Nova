@@ -56,8 +56,8 @@ public sealed class NovaAppPackagingContractTests
         Assert.Equal("false", Property(profile, "PublishSingleFile"));
         Assert.Equal("false", Property(profile, "PublishTrimmed"));
         Assert.Equal("false", Property(profile, "PublishReadyToRun"));
-        Assert.Equal("none", Property(profile, "DebugType"));
-        Assert.Equal("false", Property(profile, "DebugSymbols"));
+        Assert.Equal("portable", Property(profile, "DebugType"));
+        Assert.Equal("true", Property(profile, "DebugSymbols"));
     }
 
     [Fact]
@@ -156,12 +156,8 @@ public sealed class NovaAppPackagingContractTests
         Assert.DoesNotContain(@"FFmpeg\**\*", projectText, StringComparison.Ordinal);
         Assert.DoesNotContain("RuntimePack", projectText, StringComparison.Ordinal);
         Assert.DoesNotContain("PackageReference", projectText, StringComparison.Ordinal);
-        Assert.Contains(
+        Assert.DoesNotContain(
             "RemoveWindowsPortableDebugSymbols",
-            projectText,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "$(PublishDir)**\\*.pdb",
             projectText,
             StringComparison.Ordinal);
     }

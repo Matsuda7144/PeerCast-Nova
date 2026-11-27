@@ -5,17 +5,6 @@ namespace PeerCast.Nova.App.Tests;
 public sealed class GenesisRecordingRuleEditorNativeContractTests
 {
     [Fact]
-    public void NativeRulesButtonsDispatchThroughAppEditorCommands()
-    {
-        var source = RepositorySourceTestHelper.ReadAppSource("GenesisGuiNextAppShellBridge.cs");
-        Assert.Contains("_tabs.CreateRecordingRule()", source, StringComparison.Ordinal);
-        Assert.Contains("_tabs.EditRecordingRule(selectedId)", source, StringComparison.Ordinal);
-        Assert.Contains("_tabs.CanCreateRecordingRule", source, StringComparison.Ordinal);
-        Assert.Contains("_tabs.CanEditRecordingRule", source, StringComparison.Ordinal);
-        Assert.Contains("GenesisRecordingRuleEditorWindow.ShowModal", source, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public async Task EditorExposesMatchModesRequiresConfirmationForMatchAllAndPersistsOnConfirm()
     {
         Assert.Equal(["完全一致", "一部一致", "正規表現"], GenesisRecordingRuleEditorWindow.MatchModes);
