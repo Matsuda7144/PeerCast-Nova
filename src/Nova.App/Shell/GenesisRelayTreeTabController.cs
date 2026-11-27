@@ -12,6 +12,10 @@ namespace PeerCast.Nova.App;
 /// </summary>
 internal sealed class GenesisRelayTreeTabController
 {
+    private const uint CustomDrawStagePrePaint = 0x00000001;
+    private const uint CustomDrawStageItemPrePaint = 0x00010001;
+    private const int CustomDrawNotifyItemDraw = 0x0020;
+
     private readonly IGenesisGuiNextShellHost _host;
     private nint _relayTreeBody;
     private nint _relayTreeTitle;
@@ -23,13 +27,16 @@ internal sealed class GenesisRelayTreeTabController
     private bool _treeUpdating;
     private bool _treeListHidden;
     private bool _maskTreeAddresses = true;
-    private GenesisChannelItem[] _treeChannels = [];
+    private GenesisRelayTreeChannelOption[] _treeChannels = [];
     private ChannelId? _treeChannelId;
     private GenesisRelayTreeSnapshot _treeSnapshot = GenesisRelayTreeSnapshot.Empty();
     private GenesisRelayTreeSelectionKey? _treeSelected;
     private Task? _treeDisconnectTask;
     private TreeDisconnectStatus? _treeDisconnectStatus;
     private readonly Dictionary<GenesisRelayTreeSelectionKey, (nint Handle, string Text, string? Parent)> _treeItems = new();
+    private readonly Dictionary<nint, int> _itemColors = new();
+    private nint _unattachedGroupHandle;
+    private string _unattachedGroupText = "";
     private (ChannelId?, ChannelSessionId?) _treeDisplayKey;
 
     private sealed record TreeDisconnectStatus(GenesisRelayTreeSelectionKey Key, PcpDownstreamDisconnectOutcome? Outcome);
@@ -129,14 +136,19 @@ internal sealed class GenesisRelayTreeTabController
             return false;
         }
 
-        if (id == RelayTreeChannelsControlId && control == _relayTreeChannels && notification == 1)
+        if (id == RelayTreeChannelsControlId && control == _relayTreeChannels)
         {
-            var index = SendMessageW(control, 0x0147, 0, 0).ToInt32();
-            _treeChannelId = index >= 0 &&
-                index < _treeChannels.Length &&
-                GenesisGuiNextRelayActivation.TryResolve(_treeChannels[index], out var channel)
-                ? channel
-                : null;
+            if (notification == 1)
+            {
+                var index = SendMessageW(control, 0x0147, 0, 0).ToInt32();
+                _treeChannelId = index >= 0 && index < _treeChannels.Length
+                    ? _treeChannels[index].ChannelId
+                    : null;
+            }
+            else if (notification != 8)
+            {
+                return false;
+            }
         }
         else if (id == RelayTreeMaskControlId && control == _relayTreeMask && notification == 0)
         {
@@ -196,28 +208,31 @@ internal sealed class GenesisRelayTreeTabController
             draw.ControlWindow == _relayTreeMask && !_maskTreeAddresses);
     }
 
-    private GenesisChannelItem? SynchronizeChannels()
+    private ChannelId? SynchronizeChannels()
     {
-        var channels = _host.Tabs.Channels
-            .Where(c => GenesisGuiNextRelayActivation.TryResolve(c, out _))
-            .DistinctBy(c =>
-            {
-                GenesisGuiNextRelayActivation.TryResolve(c, out var id);
-                return id;
-            })
-            .ToArray();
-        if (!_treeChannels.SequenceEqual(channels))
+        // ドロップダウン展開中にリセット・選択上書きを行うとユーザーのスクロール位置が強制的に戻るため保護する。
+        if (_relayTreeChannels != 0 && SendMessageW(_relayTreeChannels, 0x0157, 0, 0) != 0)
+        {
+            return _treeChannelId;
+        }
+
+        var options = GenesisRelayTreeNodePresentation.BuildActiveChannelOptions(
+            _host.ViewModel.ActiveRelayChannelIds(),
+            _host.Tabs.Channels,
+            _host.Tabs.Playing,
+            _host.Tabs.ActiveRecordings);
+        if (!_treeChannels.SequenceEqual(options))
         {
             _treeUpdating = true;
             try
             {
                 _ = SendMessageW(_relayTreeChannels, 0x014B, 0, 0);
-                foreach (var channel in channels)
+                foreach (var option in options)
                 {
-                    _ = SendMessageTextW(_relayTreeChannels, 0x0143, 0, channel.Name);
+                    _ = SendMessageTextW(_relayTreeChannels, 0x0143, 0, option.DisplayName);
                 }
 
-                _treeChannels = channels;
+                _treeChannels = options;
             }
             finally
             {
@@ -225,22 +240,26 @@ internal sealed class GenesisRelayTreeTabController
             }
         }
 
-        var selected = Array.FindIndex(
-            channels,
-            c => GenesisGuiNextRelayActivation.TryResolve(c, out var id) && id == _treeChannelId);
-        if (selected < 0 && channels.Length > 0)
+        var selected = Array.FindIndex(options, o => o.ChannelId == _treeChannelId);
+        if (selected < 0 && options.Length > 0)
         {
             selected = 0;
         }
 
-        _treeUpdating = true;
-        try
+        var currentIndex = _relayTreeChannels != 0
+            ? SendMessageW(_relayTreeChannels, 0x0147, 0, 0).ToInt32()
+            : -1;
+        if (_relayTreeChannels != 0 && currentIndex != selected)
         {
-            _ = SendMessageW(_relayTreeChannels, 0x014E, (nuint)selected, 0);
-        }
-        finally
-        {
-            _treeUpdating = false;
+            _treeUpdating = true;
+            try
+            {
+                _ = SendMessageW(_relayTreeChannels, 0x014E, unchecked((nuint)selected), 0);
+            }
+            finally
+            {
+                _treeUpdating = false;
+            }
         }
 
         if (selected < 0)
@@ -249,8 +268,8 @@ internal sealed class GenesisRelayTreeTabController
             return null;
         }
 
-        GenesisGuiNextRelayActivation.TryResolve(channels[selected], out _treeChannelId);
-        return channels[selected];
+        _treeChannelId = options[selected].ChannelId;
+        return _treeChannelId;
     }
 
     private void PlacePage()
@@ -286,26 +305,45 @@ internal sealed class GenesisRelayTreeTabController
 
     internal void Present()
     {
-        var snapshot = _host.ViewModel.ReadRelayTree(SynchronizeChannels());
+        var snapshot = _host.ViewModel.ReadRelayTreeById(SynchronizeChannels());
         _treeSnapshot = snapshot;
         var scope = (snapshot.ChannelId, snapshot.OwnerId);
         _treeUpdating = true;
+        var redrawPaused = false;
         try
         {
             var nodes = snapshot.Nodes.Take(GenesisRelayTreeTopology.MaximumNodes).ToArray();
+            var (unattachedRoots, unattachedNodeIds) = GenesisRelayTreeNodePresentation.PartitionUnattachedReportedPeers(nodes);
+            string? EffectiveParent(GenesisRelayTreeNode n) => unattachedRoots.Contains(n.Id)
+                ? GenesisRelayTreeNodePresentation.UnattachedGroupParentKey
+                : n.ParentId;
+
             var desired = nodes.Select(n => GenesisRelayTreeSelection.Key(snapshot, n)).ToHashSet();
             var sameScope = scope == _treeDisplayKey;
+            var hadGroup = _unattachedGroupHandle != 0;
+            var needsGroup = unattachedNodeIds.Count > 0;
             var expanded = _treeItems.ToDictionary(
                 p => p.Key,
                 p => (SendMessageW(_relayTreeBody, 0x1127, (nuint)p.Value.Handle, 0x20).ToInt64() & 0x20) != 0);
+            var groupWasExpanded = _unattachedGroupHandle != 0 &&
+                (SendMessageW(_relayTreeBody, 0x1127, (nuint)_unattachedGroupHandle, 0x20).ToInt64() & 0x20) != 0;
             var firstHandle = SendMessageW(_relayTreeBody, 0x110A, 5, 0);
             var firstKey = _treeItems.Where(p => p.Value.Handle == firstHandle).Select(p => p.Key).FirstOrDefault();
-            var rebuild = !sameScope || !_treeItems.Keys.ToHashSet().SetEquals(desired) ||
-                nodes.Any(n => _treeItems.TryGetValue(GenesisRelayTreeSelection.Key(snapshot, n), out var item) && item.Parent != n.ParentId);
+            var rebuild = !sameScope || hadGroup != needsGroup || !_treeItems.Keys.ToHashSet().SetEquals(desired) ||
+                nodes.Any(n => _treeItems.TryGetValue(GenesisRelayTreeSelection.Key(snapshot, n), out var item) && item.Parent != EffectiveParent(n));
             if (rebuild)
             {
+                if (_relayTreeBody != 0)
+                {
+                    _ = SendMessageW(_relayTreeBody, 0x000B, 0, 0); // WM_SETREDRAW(FALSE)
+                    redrawPaused = true;
+                }
+
                 _ = SendMessageW(_relayTreeBody, 0x1101, 0, (nint)(-65536)); // TVI_ROOT
                 _treeItems.Clear();
+                _itemColors.Clear();
+                _unattachedGroupHandle = 0;
+                _unattachedGroupText = "";
                 if (!sameScope)
                 {
                     _treeSelected = null;
@@ -314,28 +352,93 @@ internal sealed class GenesisRelayTreeTabController
                 _treeDisplayKey = scope;
             }
 
-            // レート・状態更新時も既存ノードのハンドルを維持し、展開状態・キャレット・スクロール位置を保つ。
-            foreach (var node in nodes)
+            var colorsChanged = false;
+            void UpsertNode(GenesisRelayTreeNode node, nint explicitParentHandle)
             {
                 var key = GenesisRelayTreeSelection.Key(snapshot, node);
                 var text = GenesisRelayTreeNodePresentation.Row(_treeSnapshot, node, _maskTreeAddresses);
+                var effectiveParent = EffectiveParent(node);
+                nint handle;
                 if (!_treeItems.TryGetValue(key, out var old))
                 {
-                    var parent = node.ParentId is { } pid ? nodes.FirstOrDefault(n => n.Id == pid) : null;
-                    var parentHandle = parent is not null &&
-                        _treeItems.TryGetValue(GenesisRelayTreeSelection.Key(snapshot, parent), out var p)
-                        ? p.Handle
-                        : (nint)(-65536);
-                    var handle = WriteTreeItem(0, parentHandle, text);
+                    nint parentHandle;
+                    if (explicitParentHandle != 0)
+                    {
+                        parentHandle = explicitParentHandle;
+                    }
+                    else
+                    {
+                        var parent = node.ParentId is { } pid ? nodes.FirstOrDefault(n => n.Id == pid) : null;
+                        parentHandle = parent is not null &&
+                            _treeItems.TryGetValue(GenesisRelayTreeSelection.Key(snapshot, parent), out var p)
+                            ? p.Handle
+                            : (nint)(-65536);
+                    }
+
+                    handle = WriteTreeItem(0, parentHandle, text);
                     if (handle != 0)
                     {
-                        _treeItems[key] = (handle, text, node.ParentId);
+                        _treeItems[key] = (handle, text, effectiveParent);
                     }
                 }
-                else if (old.Text != text)
+                else
                 {
-                    _ = WriteTreeItem(old.Handle, 0, text);
-                    _treeItems[key] = (old.Handle, text, node.ParentId);
+                    handle = old.Handle;
+                    if (old.Text != text)
+                    {
+                        _ = WriteTreeItem(old.Handle, 0, text);
+                        _treeItems[key] = (old.Handle, text, effectiveParent);
+                    }
+                }
+
+                if (handle != 0)
+                {
+                    var color = GenesisRelayTreeNodePresentation.NodeTextColor(_treeSnapshot, node);
+                    if (!_itemColors.TryGetValue(handle, out var prevColor) || prevColor != color)
+                    {
+                        _itemColors[handle] = color;
+                        colorsChanged = true;
+                    }
+                }
+            }
+
+            // レート・状態更新時も既存ノードのハンドルを維持し、展開状態・キャレット・スクロール位置を保つ。
+            foreach (var node in nodes)
+            {
+                if (!unattachedNodeIds.Contains(node.Id))
+                {
+                    UpsertNode(node, 0);
+                }
+            }
+
+            if (needsGroup)
+            {
+                var groupText = GenesisRelayTreeNodePresentation.UnattachedGroupLabel(unattachedNodeIds.Count);
+                if (_unattachedGroupHandle == 0)
+                {
+                    _unattachedGroupHandle = WriteTreeItem(0, (nint)(-65536), groupText);
+                    if (_unattachedGroupHandle != 0)
+                    {
+                        _unattachedGroupText = groupText;
+                        _itemColors[_unattachedGroupHandle] = GenesisGuiNextDesign.SecondaryText;
+                        colorsChanged = true;
+                    }
+                }
+                else if (_unattachedGroupText != groupText)
+                {
+                    _ = WriteTreeItem(_unattachedGroupHandle, 0, groupText);
+                    _unattachedGroupText = groupText;
+                }
+
+                foreach (var node in nodes)
+                {
+                    if (unattachedNodeIds.Contains(node.Id))
+                    {
+                        var parentHandle = unattachedRoots.Contains(node.Id) && _unattachedGroupHandle != 0
+                            ? _unattachedGroupHandle
+                            : 0;
+                        UpsertNode(node, parentHandle);
+                    }
                 }
             }
 
@@ -354,6 +457,11 @@ internal sealed class GenesisRelayTreeTabController
                     }
                 }
 
+                if (_unattachedGroupHandle != 0 && (!sameScope || !hadGroup || groupWasExpanded))
+                {
+                    _ = SendMessageW(_relayTreeBody, 0x1102, 2, _unattachedGroupHandle);
+                }
+
                 if (_treeSelected is { } selected && _treeItems.TryGetValue(selected, out var caret))
                 {
                     _ = SendMessageW(_relayTreeBody, 0x110B, 9, caret.Handle);
@@ -364,9 +472,19 @@ internal sealed class GenesisRelayTreeTabController
                     _ = SendMessageW(_relayTreeBody, 0x110B, 5, first.Handle);
                 }
             }
+            else if (colorsChanged && _relayTreeBody != 0)
+            {
+                _ = InvalidateRect(_relayTreeBody, 0, false);
+            }
         }
         finally
         {
+            if (redrawPaused)
+            {
+                _ = SendMessageW(_relayTreeBody, 0x000B, 1, 0); // WM_SETREDRAW(TRUE)
+                _ = RedrawWindow(_relayTreeBody, 0, 0, 0x0001 | 0x0004 | 0x0100);
+            }
+
             _treeUpdating = false;
         }
 
@@ -386,9 +504,10 @@ internal sealed class GenesisRelayTreeTabController
             GenesisRelayTreeSelection.Resolve(_treeSnapshot, _treeSelected),
             _maskTreeAddresses));
 
-    internal bool HandleNotify(nint notification)
+    internal bool HandleNotify(nint notification, out nint result)
     {
-        if (notification == 0 || _treeUpdating)
+        result = 0;
+        if (notification == 0)
         {
             return false;
         }
@@ -399,10 +518,54 @@ internal sealed class GenesisRelayTreeTabController
             return false;
         }
 
+        if (header.Code == NotifyCustomDraw)
+        {
+            var customDraw = Marshal.PtrToStructure<Win32TreeViewCustomDraw>(notification);
+            if (customDraw.Draw.DrawStage == CustomDrawStagePrePaint)
+            {
+                result = CustomDrawNotifyItemDraw;
+                return true;
+            }
+
+            if (customDraw.Draw.DrawStage == CustomDrawStageItemPrePaint)
+            {
+                var selected = (customDraw.Draw.ItemState & 0x0001) != 0;
+                if (selected)
+                {
+                    customDraw.TextColor = GenesisGuiNextDesign.Text;
+                    customDraw.TextBackgroundColor = GenesisGuiNextDesign.Selected;
+                }
+                else
+                {
+                    customDraw.TextColor = _itemColors.TryGetValue((nint)customDraw.Draw.ItemSpec, out var color)
+                        ? color
+                        : GenesisGuiNextDesign.Text;
+                    customDraw.TextBackgroundColor = GenesisGuiNextDesign.Background;
+                }
+
+                Marshal.StructureToPtr(customDraw, notification, false);
+                result = 0; // CDRF_DODEFAULT
+                return true;
+            }
+
+            return false;
+        }
+
+        if (_treeUpdating)
+        {
+            return false;
+        }
+
         // TreeView は親へ NM_RCLICK を送るため、HitTest ベースの独自メニュー表示後に既定処理を抑止する。
         if (header.Code == -5 && GetCursorPos(out var cursor))
         {
-            return HandleContextMenu(_relayTreeBody, 0x007B, (nint)((cursor.Y << 16) | (cursor.X & 0xffff)));
+            if (HandleContextMenu(_relayTreeBody, 0x007B, (nint)((cursor.Y << 16) | (cursor.X & 0xffff))))
+            {
+                result = 1;
+                return true;
+            }
+
+            return false;
         }
 
         if (header.Code != -451) // TVN_SELCHANGEDW
@@ -413,6 +576,7 @@ internal sealed class GenesisRelayTreeTabController
         var caret = SendMessageW(_relayTreeBody, 0x110A, 9, 0);
         _treeSelected = _treeItems.Where(p => p.Value.Handle == caret).Select(p => p.Key).FirstOrDefault();
         _host.SynchronizeNativeSelection();
+        result = 1;
         return true;
     }
 

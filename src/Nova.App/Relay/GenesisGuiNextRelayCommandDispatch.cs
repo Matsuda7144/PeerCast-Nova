@@ -1,3 +1,5 @@
+using PeerCast.Nova.Core.Channels;
+
 namespace PeerCast.Nova.App;
 
 public sealed partial class GenesisMainViewModel
@@ -6,6 +8,18 @@ public sealed partial class GenesisMainViewModel
         GenesisGuiNextRelayActivation.TryResolve(channel, out var id) && id is not null
             ? _relayActivation?.ReadRelayTree(id) ?? GenesisRelayTreeSnapshot.Empty(id)
             : GenesisRelayTreeSnapshot.Empty();
+
+    internal GenesisRelayTreeSnapshot ReadRelayTreeById(ChannelId? channelId) =>
+        channelId is not null
+            ? _relayActivation?.ReadRelayTree(channelId)
+                ?? PublicChannels?.Registry.ReadRelayTree(channelId)
+                ?? GenesisRelayTreeSnapshot.Empty(channelId)
+            : GenesisRelayTreeSnapshot.Empty();
+
+    internal IReadOnlyList<ChannelId> ActiveRelayChannelIds() =>
+        _relayActivation?.ActiveChannelIds()
+        ?? PublicChannels?.Registry.ActiveChannelIds()
+        ?? [];
 
     private GenesisGuiNextRelayActivation? _relayActivation;
     internal GenesisGuiNextRelayActivation? RelayActivation

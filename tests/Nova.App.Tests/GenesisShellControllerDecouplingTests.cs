@@ -44,7 +44,7 @@ public sealed class GenesisShellControllerDecouplingTests
         Assert.False(relayTree.ProcessCommand(9999, 0, 0));
         Assert.False(relayTree.HandleContextMenu(0, 0, 0));
         Assert.False(relayTree.DrawControl(0));
-        Assert.False(relayTree.HandleNotify(0));
+        Assert.False(relayTree.HandleNotify(0, out _));
         Assert.False(relayTree.IsTreeControl(123));
 
         // 統合設定コントローラーの初期状態と未生成時の安全な早期リターン
