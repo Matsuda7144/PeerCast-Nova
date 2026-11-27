@@ -64,6 +64,12 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 state.PaintTopInputFrame(window);
                 return result;
             }
+            if (message == 0x000C && state.IsCustomPaintedStatic(window))
+            {
+                var setResult = DefSubclassProc(window, message, wParam, lParam);
+                _ = RedrawWindow(window, 0, 0, 0x0001 | 0x0100);
+                return setResult;
+            }
             state.Settings.RefreshOnActivation(window, message, wParam);
             if (message is 0x0007 or 0x0008) state.Settings.RefreshPathFocus(window);
             if (state.Settings.PaintText(window, message)) return message == 0x0014 ? 1 : 0;
@@ -101,6 +107,9 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         internal nint HeaderBrush => _headerBrush;
         internal bool IsOwnerDrawVisualButton(nint window) =>
             VisualButtons.Contains(window) || CardButtons.Contains(window) || RecordingToolbarControls.Contains(window);
+        internal bool IsCustomPaintedStatic(nint window) =>
+            PaintTopStatus(window, 0x0014) || _settings.PaintText(window, 0x0014) ||
+            _publishing.PaintText(window, 0x0014) || PaintRecordingText(window, 0x0014) || PaintChannelCardText(window, 0x0014);
         private nint _hoverControl;
         private int _hoverRow = -1, _paintSelectedRow = -1;
         private nint _rowImages, _originalImages;

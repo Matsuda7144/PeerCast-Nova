@@ -104,6 +104,29 @@ public sealed class GenesisShellControllerDecouplingTests
         Assert.Equal(expectedSplitterVisible, actual.SplitterVisible);
     }
 
+    [Theory]
+    [InlineData(false, false, false, false, false)]
+    [InlineData(false, true, false, false, false)]
+    [InlineData(true, false, false, false, false)]
+    [InlineData(true, true, false, false, true)]
+    [InlineData(true, false, true, false, true)]
+    [InlineData(true, false, false, true, true)]
+    public void UsesModernDetailsStaticPanelBrushRequiresModernAndActivePanel(
+        bool isModern,
+        bool usesChannelCard,
+        bool usesRecordingPanel,
+        bool usesPublishingPanel,
+        bool expected)
+    {
+        var actual = GenesisGuiNextAppShellBridge.UsesModernDetailsStaticPanelBrush(
+            isModern,
+            usesChannelCard,
+            usesRecordingPanel,
+            usesPublishingPanel);
+
+        Assert.Equal(expected, actual);
+    }
+
     private static string FindRepositoryRoot()
     {
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)

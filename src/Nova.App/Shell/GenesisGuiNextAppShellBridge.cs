@@ -156,6 +156,13 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
     internal static bool IsOwnerDrawStatic(uint controlType) =>
         controlType == DrawItemTypeStatic;
 
+    internal static bool UsesModernDetailsStaticPanelBrush(
+        bool isModern,
+        bool usesChannelCard,
+        bool usesRecordingPanel,
+        bool usesPublishingPanel) =>
+        isModern && (usesChannelCard || usesRecordingPanel || usesPublishingPanel);
+
     internal static bool IsRecordingStatusDraw(uint controlType, uint controlId) =>
         IsOwnerDrawStatic(controlType) && controlId == DetailsRecordingStatusControlId;
 
@@ -2093,7 +2100,11 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 return _topBrush;
             }
             _ = SetTextColor((nint)deviceContext, IsModern && pane == _statusBar ? GenesisGuiNextDesign.SecondaryText : TextColor);
-            if ((UsesRecordingPanel || _publishing.UsesPanel) && pane == _detailsPane) return _topBrush;
+            if (pane == _detailsPane && UsesModernDetailsStaticPanelBrush(IsModern, UsesChannelCard, UsesRecordingPanel, _publishing.UsesPanel))
+            {
+                _ = SetBkColor((nint)deviceContext, GenesisGuiNextDesign.Panel);
+                return _topBrush;
+            }
             return IsModern && pane == _statusBar ? _topBrush : _backgroundBrush;
         }
 
@@ -2215,7 +2226,18 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 (_tabs.SelectedTab, _tabs.RecordingPageMode, _viewModel.RelaySnapshot,
                     GetCurrentRecordingPresentation(), _tabs.RecordingHistoryStatus,
                     _tabs.PublishingConnection.StateText, _tabs.PublishingConnection.Tone, _tabs.PublishingKeyRevealed),
-                control => { if (IsWindow(control)) _ = InvalidateRect(control, 0, true); });
+                control =>
+                {
+                    if (!IsWindow(control)) return;
+                    if (control == _detailsPane && IsModern)
+                    {
+                        _ = RedrawWindow(control, 0, 0, 0x0001 | 0x0004 | 0x0080);
+                    }
+                    else
+                    {
+                        _ = InvalidateRect(control, 0, true);
+                    }
+                });
             var relayControls = GenesisGuiNextRelayControlsPresentation.Resolve(IsModern, _tabs.SelectedTab,
                 _viewModel.RelaySnapshot, _viewModel.RelayActivation?.CanStop == true);
             _ = PresentVisible(_relayStart, relayControls.Start ? ShowWindowShowNoActivate : ShowWindowHide);
