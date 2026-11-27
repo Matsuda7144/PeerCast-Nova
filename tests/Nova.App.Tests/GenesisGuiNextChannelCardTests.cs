@@ -192,4 +192,65 @@ public sealed class GenesisGuiNextChannelCardTests
         Assert.Equal(GenesisGuiNextDesign.Hover, GenesisGuiNextDesign.CardButtonColors(false, true, false, true, false).Background);
         Assert.Equal(GenesisGuiNextDesign.Selected, GenesisGuiNextDesign.CardButtonColors(false, true, false, true, true).Background);
     }
+
+    [Theory]
+    [InlineData(96u)]
+    [InlineData(144u)]
+    [InlineData(192u)]
+    public void CardAndLogLayoutsFitInsideResizedDetailsPaneWithoutOverlap(uint dpi)
+    {
+        int Scale(int value) => GenesisMainWindowLayout.Scale(value, dpi);
+        foreach (var width in new[] { GenesisMainWindowLayout.MinimumContentWidth, 1200 })
+        {
+            foreach (var height in new[] { 140, 160, 180, 224, 320, 440 })
+            {
+                var layout = new GenesisGuiNextChannelCardLayout(width, height);
+                Assert.True(layout.DividerTop >= 7);
+                Assert.True(layout.DividerBottom <= height - 7);
+                Assert.True(layout.DividerTop < layout.DividerBottom);
+                Assert.True(layout.Title.Right < layout.DividerLeft && layout.Metadata.Left > layout.DividerLeft);
+
+                var regions = new[]
+                {
+                    layout.Title, layout.Description, layout.Metadata, layout.Identity,
+                    layout.RecordingStatus, layout.RelayStatus,
+                    layout.RecordButton, layout.StopButton, layout.RelayStopButton,
+                };
+                foreach (var bounds in regions)
+                {
+                    Assert.InRange(bounds.Left, 7, width - 7);
+                    Assert.InRange(bounds.Right, bounds.Left + 1, width - 7);
+                    Assert.InRange(bounds.Top, 7, height - 7);
+                    Assert.InRange(bounds.Bottom, bounds.Top + 1, height - 7);
+                    Assert.True(Scale(bounds.Height) > 0);
+                }
+                for (var i = 0; i < regions.Length; i++)
+                {
+                    for (var j = i + 1; j < regions.Length; j++)
+                    {
+                        var disjoint = Scale(regions[i].Left) + Scale(regions[i].Width) <= Scale(regions[j].Left) ||
+                            Scale(regions[j].Left) + Scale(regions[j].Width) <= Scale(regions[i].Left) ||
+                            Scale(regions[i].Top) + Scale(regions[i].Height) <= Scale(regions[j].Top) ||
+                            Scale(regions[j].Top) + Scale(regions[j].Height) <= Scale(regions[i].Top);
+                        Assert.True(disjoint, $"Overlap at {width}x{height}@{dpi}: {i}, {j}");
+                    }
+                }
+
+                var logRegions = new[]
+                {
+                    layout.LogTitle, layout.LogDescription, layout.LogScope,
+                    layout.RecordButton, layout.LogRelayStatus,
+                };
+                var previousBottom = Scale(6);
+                foreach (var bounds in logRegions)
+                {
+                    Assert.True(Scale(bounds.Top) >= previousBottom);
+                    Assert.True(Scale(bounds.Left) > Scale(6));
+                    Assert.True(Scale(bounds.Left) + Scale(bounds.Width) < Scale(width - 6));
+                    previousBottom = Scale(bounds.Top) + Scale(bounds.Height);
+                }
+                Assert.True(previousBottom < Scale(height - 6));
+            }
+        }
+    }
 }

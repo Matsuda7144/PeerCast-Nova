@@ -8,7 +8,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
     {
         private nint _publishingSubtitle, _publishingObsTitle, _publishingBasicTitle, _publishingOptionsTitle;
         private nint _publishingBasic, _publishingOptions, _publishingDiagnostic;
-        private (bool Expanded, int Width, int Height, uint Dpi)? _publishingPanePlacement;
+        private (bool Expanded, int Width, int Height, uint Dpi, GenesisGuiNextAppShellPlacement.WindowRectangle Bounds)? _publishingPanePlacement;
         private (bool Expanded, bool Settings)? _publishingPaneVisibility;
         private nint[] PublishingPageTitles => IsModern ? [_publishingSubtitle, _publishingObsTitle, _publishingBasicTitle, _publishingOptionsTitle] : [];
         private nint[] PublishingPageValues => IsModern ? [_publishingBasic, _publishingOptions, _publishingDiagnostic] : [];
@@ -34,13 +34,13 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private void SynchronizePublishingPageBounds()
         {
             if (!IsModern || !GetClientRect(_owner, out var client) ||
-                !GenesisMainWindowLayout.TryResolve(client.Right, client.Bottom, _layoutDpi, out _, out _, out var list, out var details)) return;
+                !GenesisMainWindowLayout.TryResolve(client.Right, client.Bottom, _layoutDpi, out _, out _, out var list, out var details, _detailsHeight)) return;
             var expanded = UsesPublishingPanel;
-            var placement = (expanded, client.Right, client.Bottom, _layoutDpi);
+            var bounds = GenesisMainWindowLayout.ResolveDetailsPaneBounds(expanded, list, details);
+            var placement = (expanded, client.Right, client.Bottom, _layoutDpi, bounds);
             if (_publishingPanePlacement != placement)
             {
                 _publishingPanePlacement = placement;
-                var bounds = expanded ? new GenesisGuiNextAppShellPlacement.WindowRectangle(list.Left, list.Top, list.Right, details.Bottom) : details;
                 var wasInProgress = LayoutInProgress;
                 LayoutInProgress = true;
                 try

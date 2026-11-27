@@ -22,23 +22,23 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private void PlaceRecordingPanel()
         {
             if (!GetClientRect(_detailsPane, out var client)) return;
-            var layout = new GenesisGuiNextRecordingLayout(LogicalWidth(client.Right), _tabs.RecordingPageMode);
+            var layout = new GenesisGuiNextRecordingLayout(LogicalWidth(client.Right), _tabs.RecordingPageMode, LogicalWidth(client.Bottom));
             void Place(nint control, GenesisGuiNextAppShellPlacement.WindowRectangle box) =>
                 _ = PresentBounds(control, box.Left, box.Top, box.Width, box.Height, true);
             ReadOnlySpan<int> slots = [0, 1, 2, 3, 4, 4, 4, 5, 6, 7, 8, 9];
             var controls = RecordingToolbarControls;
-            for (var i = 0; i < controls.Length; i++) Place(controls[i], GenesisGuiNextRecordingLayout.Toolbar(slots[i]));
+            for (var i = 0; i < controls.Length; i++) Place(controls[i], layout.ToolbarButton(slots[i]));
             Place(_detailsTitle, layout.Title);
             Place(_detailsDescription, layout.Description);
             Place(_detailsMetadata, layout.Metadata);
             Place(_detailsIdentity, layout.Identity);
             Place(_detailsRecordingStatus, layout.Status);
             Place(_recordingHistoryDetails, layout.History);
-            Place(_detailsRecordButton, GenesisGuiNextRecordingLayout.Record(_allowAutomaticShown));
-            Place(_detailsStopRecordingButton, GenesisGuiNextRecordingLayout.Stop);
-            Place(_detailsCopyButton, GenesisGuiNextRecordingLayout.Copy);
-            Place(_relayStart, GenesisGuiNextRecordingLayout.RelayStart);
-            Place(_relayStop, GenesisGuiNextRecordingLayout.RelayStop);
+            Place(_detailsRecordButton, layout.RecordButton(_allowAutomaticShown));
+            Place(_detailsStopRecordingButton, layout.StopButton);
+            Place(_detailsCopyButton, layout.CopyButton);
+            Place(_relayStart, layout.RelayStartButton);
+            Place(_relayStop, layout.RelayStopButton);
             Place(_relayStatus, layout.RelayStatus);
         }
 
@@ -49,13 +49,14 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             var panel = client;
             panel.Left += Scale(6); panel.Top += Scale(6); panel.Right -= Scale(6); panel.Bottom -= Scale(6);
             _ = FillRect(dc, ref panel, _topBrush);
+            var layout = new GenesisGuiNextRecordingLayout(LogicalWidth(client.Right), _tabs.RecordingPageMode, LogicalWidth(client.Bottom));
             using var pen = new VisualPen(dc, Scale(1), GenesisGuiNextDesign.Border);
             _ = GdiRectangle(dc, panel.Left, panel.Top, panel.Right, panel.Bottom);
-            Line(dc, Scale(16), Scale(46), client.Right - Scale(16), Scale(46));
-            Line(dc, Scale(16), Scale(182), client.Right - Scale(16), Scale(182));
+            Line(dc, Scale(16), Scale(layout.TopDividerY), client.Right - Scale(16), Scale(layout.TopDividerY));
+            Line(dc, Scale(16), Scale(layout.BottomDividerY), client.Right - Scale(16), Scale(layout.BottomDividerY));
             if (_tabs.IsRecordingHistoryPage)
             {
-                var area = new GenesisGuiNextRecordingLayout(LogicalWidth(client.Right), _tabs.RecordingPageMode).History;
+                var area = layout.History;
                 using var focus = new VisualPen(dc, Scale(1), GetFocus() == _recordingHistoryDetails ? GenesisGuiNextDesign.Accent : GenesisGuiNextDesign.Border);
                 _ = GdiRectangle(dc, Scale(area.Left) - 1, Scale(area.Top) - 1, Scale(area.Right) + 1, Scale(area.Bottom) + 1);
             }

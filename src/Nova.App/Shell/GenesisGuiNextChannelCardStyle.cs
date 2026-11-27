@@ -19,7 +19,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private void PlaceChannelCard()
         {
             if (!GetClientRect(_detailsPane, out var client)) return;
-            var layout = new GenesisGuiNextChannelCardLayout(LogicalWidth(client.Right));
+            var layout = new GenesisGuiNextChannelCardLayout(LogicalWidth(client.Right), LogicalWidth(client.Bottom));
             void Place(nint control, GenesisGuiNextAppShellPlacement.WindowRectangle bounds) =>
                 _ = PresentBounds(control, bounds.Left, bounds.Top, bounds.Width, bounds.Height, true);
             if (_tabs.SelectedTab == GenesisGuiNextTab.Logs)
@@ -27,7 +27,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 Place(_detailsTitle, layout.LogTitle);
                 Place(_detailsDescription, layout.LogDescription);
                 Place(_detailsMetadata, layout.LogScope);
-                Place(_relayStop, GenesisGuiNextChannelCardLayout.Record);
+                Place(_relayStop, layout.RecordButton);
                 Place(_relayStatus, layout.LogRelayStatus);
                 return;
             }
@@ -36,9 +36,9 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             Place(_detailsMetadata, layout.Metadata);
             Place(_detailsIdentity, layout.Identity);
             Place(_detailsRecordingStatus, layout.RecordingStatus);
-            Place(_detailsRecordButton, GenesisGuiNextChannelCardLayout.Record);
-            Place(_detailsStopRecordingButton, GenesisGuiNextChannelCardLayout.Stop);
-            Place(_relayStop, GenesisGuiNextChannelCardLayout.RelayStop);
+            Place(_detailsRecordButton, layout.RecordButton);
+            Place(_detailsStopRecordingButton, layout.StopButton);
+            Place(_relayStop, layout.RelayStopButton);
             Place(_relayStatus, layout.RelayStatus);
         }
 
@@ -52,8 +52,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             DrawModernSurface(dc, card, GenesisGuiNextDesign.Panel, GenesisGuiNextDesign.Border, Scale(12));
             if (_tabs.SelectedTab == GenesisGuiNextTab.Logs) return true;
             using var border = new VisualPen(dc, Scale(1), GenesisGuiNextDesign.Border);
-            var layout = new GenesisGuiNextChannelCardLayout(LogicalWidth(client.Right));
-            Line(dc, Scale(layout.DividerLeft), Scale(18), Scale(layout.DividerLeft), Scale(124));
+            var layout = new GenesisGuiNextChannelCardLayout(LogicalWidth(client.Right), LogicalWidth(client.Bottom));
+            Line(dc, Scale(layout.DividerLeft), Scale(layout.DividerTop), Scale(layout.DividerLeft), Scale(layout.DividerBottom));
             return true;
         }
 

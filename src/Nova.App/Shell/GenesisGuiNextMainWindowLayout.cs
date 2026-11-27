@@ -62,7 +62,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 0,
                 "STATIC",
                 string.Empty,
-                WindowStyleChild | WindowStyleVisible | 0x0100u,
+                WindowStyleChild | WindowStyleVisible | 0x0100u | WindowStyleClipSiblings,
                 0,
                 0,
                 1,
@@ -100,7 +100,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         {
             if (_paneSplitter != 0 && IsWindow(_paneSplitter))
             {
-                _ = ShowWindow(_paneSplitter, !SettingsPageOpen && !UsesPublishingPanel ? ShowWindowShowNoActivate : ShowWindowHide);
+                _ = ShowWindow(_paneSplitter, !SettingsPageOpen && !UsesPublishingPanel && !TreePageShown ? ShowWindowShowNoActivate : ShowWindowHide);
             }
         }
 
@@ -139,6 +139,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                             GenesisGuiNextAppShellPlacement.MinimumDetailsHeight,
                             _splitterDragStartHeight - deltaLogical);
                         ApplyClientLayout(force: true);
+                        _ = RedrawWindow(_owner, 0, 0, 0x0100); // ドラッグ中の再描画を即時反映し残像を防ぐ
                     }
                     else if (!_splitterHover)
                     {
@@ -288,7 +289,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 Pane(_sidebar, sidebar);
                 Pane(_statusBar, status);
                 Pane(_listView, list);
-                Pane(_detailsPane, details);
+                Pane(_detailsPane, GenesisMainWindowLayout.ResolveDetailsPaneBounds(UsesPublishingPanel, list, details));
                 if (_paneSplitter != 0)
                 {
                     Pane(_paneSplitter, new(list.Left, list.Bottom, list.Right, details.Top));
@@ -330,8 +331,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 _detailsUpdates.Reset();
                 SynchronizeNativeSelection();
                 _clientLayout = (client.Right, client.Bottom, dpi);
-                // Coalesce repaint for the newly exposed client area and retained children.
-                _ = RedrawWindow(_owner, 0, 0, 0x0001 | 0x0004 | 0x0080);
+                // 新規露出領域と子コントロール・枠の再描画をまとめる。
+                _ = RedrawWindow(_owner, 0, 0, 0x0001 | 0x0004 | 0x0080 | 0x0400);
             }
             finally { LayoutInProgress = false; }
         }

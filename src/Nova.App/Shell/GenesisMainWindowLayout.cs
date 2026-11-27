@@ -19,6 +19,14 @@ internal static class GenesisMainWindowLayout
     internal static int Scale(int value, uint dpi) => (int)Math.Ceiling(value * (double)NormalizeDpi(dpi) / 96);
     internal static int Logical(int value, uint dpi) => (int)(value * 96L / NormalizeDpi(dpi));
 
+    internal static GenesisGuiNextAppShellPlacement.WindowRectangle ResolveDetailsPaneBounds(
+        bool expandedToFullContent,
+        GenesisGuiNextAppShellPlacement.WindowRectangle list,
+        GenesisGuiNextAppShellPlacement.WindowRectangle details) =>
+        expandedToFullContent
+            ? new(list.Left, list.Top, list.Right, details.Bottom)
+            : details;
+
     internal static bool TryResolve(int width, int height, uint dpi,
         out GenesisGuiNextAppShellPlacement.WindowRectangle sidebar,
         out GenesisGuiNextAppShellPlacement.WindowRectangle status,

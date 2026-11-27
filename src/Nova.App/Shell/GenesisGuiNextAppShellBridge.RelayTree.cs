@@ -90,6 +90,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 _ = PresentVisible(_listView, shown ? ShowWindowHide : ShowWindowShowNoActivate);
                 _ = PresentVisible(_detailsPane, shown ? ShowWindowHide : ShowWindowShowNoActivate);
                 _treeListHidden = shown;
+                UpdatePaneSplitterVisibility();
             }
             return shown;
         }
