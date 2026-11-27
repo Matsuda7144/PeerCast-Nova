@@ -113,12 +113,15 @@ internal sealed class GenesisGuiNextAppShellPlacement
         return bridge;
     }
 
+    private static bool HasVisibleStyle(nint window) =>
+        window != 0 && (GetWindowLongW(window, -16) & 0x10000000) != 0;
+
     private GenesisGuiNextAppShellBridge.LegacyControlVisibility[] CaptureLegacyControls() =>
     [
-        new(_sourceLabel, IsWindowVisible(_sourceLabel)),
-        new(_sourceEdit, IsWindowVisible(_sourceEdit)),
-        new(_legacyPlayButton, IsWindowVisible(_legacyPlayButton)),
-        new(_legacyStopButton, IsWindowVisible(_legacyStopButton)),
+        new(_sourceLabel, HasVisibleStyle(_sourceLabel)),
+        new(_sourceEdit, HasVisibleStyle(_sourceEdit)),
+        new(_legacyPlayButton, HasVisibleStyle(_legacyPlayButton)),
+        new(_legacyStopButton, HasVisibleStyle(_legacyStopButton)),
     ];
 
     internal static bool TryResolveLayout(

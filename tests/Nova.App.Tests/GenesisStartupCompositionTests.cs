@@ -63,6 +63,32 @@ public sealed class GenesisStartupCompositionTests
             events);
     }
 
+    [Fact]
+    public async Task StartupDefersInitialShowOnlyWhenGenesisSurfaceIsProjected()
+    {
+        var genesisEvents = new List<string>();
+        var genesisFactory = new GenesisHostFactory(new GenesisHost(genesisEvents), genesisEvents);
+        var genesisComposition = new NovaWindowsStartupComposition(new(), genesisFactory);
+
+        Assert.Equal(
+            NovaWindowsStartupResult.Completed,
+            await genesisComposition.RunGenesisAsync(new GenesisSurfaceTarget(genesisEvents), new FakePlaybackSessionController()));
+        Assert.True(genesisFactory.LastOptions?.DeferInitialShow);
+
+        var headlessEvents = new List<string>();
+        var headlessFactory = new GenesisHostFactory(new GenesisHost(headlessEvents), headlessEvents);
+        var headlessComposition = new NovaWindowsStartupComposition(new(), headlessFactory);
+
+        Assert.Equal(NovaWindowsStartupResult.Completed, await headlessComposition.RunAsync());
+        Assert.False(headlessFactory.LastOptions?.DeferInitialShow ?? true);
+    }
+
+    [Fact]
+    public void RevealWindowZeroTokenIsSafeWithoutWindowsHost()
+    {
+        GenesisMainWindowResizeGuard.RevealWindow(0);
+    }
+
     private sealed class GenesisHostFactory : INovaWindowsStartupHostFactory
     {
         private readonly GenesisHost _host;
@@ -74,11 +100,14 @@ public sealed class GenesisStartupCompositionTests
             _events = events;
         }
 
+        public PlaybackWindowsPhysicalRunnerOptions? LastOptions { get; private set; }
+
         public INovaWindowsStartupHost Create(PlaybackWindowsPhysicalRunnerOptions options)
         {
             Assert.Equal("PeerCast Nova", options.Title);
             Assert.Equal(1_120, options.ClientWidth);
             Assert.Equal(620, options.ClientHeight);
+            LastOptions = options;
             _events.Add("Create");
             return _host;
         }

@@ -12,6 +12,7 @@ internal sealed class GenesisMainWindowResizeGuard : IAsyncDisposable
     private const int WindowStyleIndex = -16;
     private const uint WindowMessageDestroyOrNcDestroy = 0x0082;
     private const uint WindowMessageExitSizeMove = 0x0232;
+    private const uint SwHide = 0;
     private const uint SwShowNormal = 1;
     private const uint SwShowMaximized = 3;
     private const uint MonitorDefaultToNearest = 2;
@@ -23,6 +24,7 @@ internal sealed class GenesisMainWindowResizeGuard : IAsyncDisposable
     private const nuint SubclassId = 0x4E52535A; // NRSZ; main surface only.
     private static readonly Win32SubclassProcedure Procedure = ProcessMessage;
     private static readonly ConcurrentDictionary<nint, GenesisMainWindowPlacementStore> PlacementStores = new();
+    private static readonly ConcurrentDictionary<nint, int> PendingShowCommands = new();
     private static readonly GenesisMainWindowPlacementStore DefaultPlacementStore = new();
     private readonly nint _window;
     private readonly int _originalStyle;
@@ -120,6 +122,32 @@ internal sealed class GenesisMainWindowResizeGuard : IAsyncDisposable
         }
     }
 
+    internal static void RevealWindow(nint window)
+    {
+        if (window == 0 || !OperatingSystem.IsWindows())
+        {
+            _ = PendingShowCommands.TryRemove(window, out _);
+            return;
+        }
+
+        var showCommand = PendingShowCommands.TryRemove(window, out var pending)
+            ? pending
+            : (int)SwShowNormal;
+        if (!IsWindow(window) || IsWindowVisible(window))
+        {
+            return;
+        }
+
+        _ = ShowWindow(window, showCommand);
+        _ = RedrawWindow(window, 0, 0, 0x0001 | 0x0004 | 0x0080 | 0x0100);
+        if (GenesisMainWindowControlRegistry.TryResolve(window, out var handles) &&
+            handles.ChannelList != 0 &&
+            IsWindow(handles.ChannelList))
+        {
+            _ = SetFocus(handles.ChannelList);
+        }
+    }
+
     private static void RestorePlacement(nint window, GenesisMainWindowPlacement saved)
     {
         var rect = new Win32Rect
@@ -158,10 +186,17 @@ internal sealed class GenesisMainWindowResizeGuard : IAsyncDisposable
             monitorInfo.Work.Bottom,
             minWidth,
             minHeight);
+        var isVisible = IsWindowVisible(window);
+        var targetShowCmd = clamped.Maximized ? SwShowMaximized : SwShowNormal;
+        if (!isVisible)
+        {
+            PendingShowCommands[window] = (int)targetShowCmd;
+        }
+
         var placement = new Win32WindowPlacement
         {
             Length = (uint)Marshal.SizeOf<Win32WindowPlacement>(),
-            ShowCmd = clamped.Maximized ? SwShowMaximized : SwShowNormal,
+            ShowCmd = isVisible ? targetShowCmd : SwHide,
             NormalPosition = new Win32Rect
             {
                 Left = clamped.Left,
@@ -170,7 +205,20 @@ internal sealed class GenesisMainWindowResizeGuard : IAsyncDisposable
                 Bottom = clamped.Top + clamped.Height,
             },
         };
-        if (SetWindowPlacement(window, ref placement))
+        var applied = SetWindowPlacement(window, ref placement);
+        if (!isVisible)
+        {
+            _ = SetWindowPos(
+                window,
+                0,
+                clamped.Left,
+                clamped.Top,
+                clamped.Width,
+                clamped.Height,
+                SetWindowPositionNoZOrder | SetWindowPositionNoActivate);
+        }
+
+        if (applied || !isVisible)
         {
             GenesisGuiNextAppShellBridge.ResizeForOwner(window);
         }
@@ -210,6 +258,7 @@ internal sealed class GenesisMainWindowResizeGuard : IAsyncDisposable
     {
         if (message == WindowMessageDestroyOrNcDestroy) // WM_NCDESTROY
         {
+            _ = PendingShowCommands.TryRemove(window, out _);
             if (PlacementStores.TryRemove(window, out var store))
             {
                 SaveCurrentPlacement(window, store);
@@ -259,6 +308,7 @@ internal sealed class GenesisMainWindowResizeGuard : IAsyncDisposable
     {
         if (Interlocked.Exchange(ref _disposed, 1) == 0)
         {
+            _ = PendingShowCommands.TryRemove(_window, out _);
             if (_trayBridge is not null)
             {
                 await _trayBridge.DisposeAsync().ConfigureAwait(false);
