@@ -36,7 +36,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private nint[] TopVisualControls => [TopStatusWindow, _searchBox.LabelWindow, _searchBox.EditWindow, _searchBox.FilterWindow];
         internal bool IsTopFilter(nint window) => window == _searchBox.FilterWindow;
         internal bool IsTopInput(nint window) => IsModern && Volatile.Read(ref _detached) == 0 &&
-            (window == _searchBox.EditWindow || IsTopFilter(window) || window == _relayTreeChannels && window != 0);
+            (window == _searchBox.EditWindow || IsTopFilter(window) || window == _relayTree.ChannelsComboWindow && window != 0);
 
         internal bool PaintTopStatus(nint control, uint message)
         {
@@ -51,7 +51,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 _ = FillRect(dc, ref bounds, _topBrush);
                 if (control == _searchBox.LabelWindow)
                 {
-                    using var pen = new VisualPen(dc, Scale(1), GenesisGuiNextDesign.SecondaryText);
+                    using var pen = new GenesisVisualPen(dc, Scale(1), GenesisGuiNextDesign.SecondaryText);
                     var x = Scale(3); var y = (bounds.Bottom - Scale(14)) / 2;
                     _ = Ellipse(dc, x, y, x + Scale(11), y + Scale(11));
                     Line(dc, x + Scale(10), y + Scale(10), x + Scale(15), y + Scale(15));
@@ -76,7 +76,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                     DrawCardLabel(dc, box, GenesisGuiNextTopStatusPresentation.Display(value, width < GenesisGuiNextTopBarLayout.FullStatusWidth),
                         value.Color, 0, control, DrawTextSingleLine | DrawTextVerticalCenter | 0x8000);
                     if (i == 4) continue;
-                    using var divider = new VisualPen(dc, Scale(1), GenesisGuiNextDesign.Separator);
+                    using var divider = new GenesisVisualPen(dc, Scale(1), GenesisGuiNextDesign.Separator);
                     var x = Scale(cell.Left + cell.Width - 1);
                     Line(dc, x, Scale(7), x, bounds.Bottom - Scale(7));
                 }
@@ -87,7 +87,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
 
         internal void PaintTopInputFrame(nint window)
         {
-            if (!(IsTopInput(window) || IsPublishingAdvancedCombo(window)) || !GetWindowRect(window, out var windowBounds)) return;
+            if (!(IsTopInput(window) || _publishing.IsAdvancedCombo(window)) || !GetWindowRect(window, out var windowBounds)) return;
             var dc = GetWindowDC(window);
             if (dc == 0) return;
             try
@@ -97,8 +97,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 var focused = focus == window || (focus != 0 && GetParent(focus) == window);
                 var color = !IsWindowEnabled(window) ? GenesisGuiNextDesign.Separator :
                     focused || _hoverControl == window ? GenesisGuiNextDesign.Accent : GenesisGuiNextDesign.Border;
-                using var pen = new VisualPen(dc, Scale(1), color);
-                if (IsTopFilter(window) || IsPublishingAdvancedCombo(window) || window == _relayTreeChannels)
+                using var pen = new GenesisVisualPen(dc, Scale(1), color);
+                if (IsTopFilter(window) || _publishing.IsAdvancedCombo(window) || window == _relayTree.ChannelsComboWindow)
                 {
                     // Cover only the native recessed edge, keeping the native
                     // field, popup, selection and keyboard behavior intact.
@@ -115,7 +115,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                     FillRectangle(dc, arrow, GenesisGuiNextDesign.Input);
                     var x = (arrow.Left + arrow.Right) / 2; var y = (arrow.Top + arrow.Bottom) / 2;
                     // Draw after the native paint and background fills, independently of the frame's state color.
-                    using var arrowPen = new VisualPen(dc, Scale(1), GenesisGuiNextDesign.SecondaryText);
+                    using var arrowPen = new GenesisVisualPen(dc, Scale(1), GenesisGuiNextDesign.SecondaryText);
                     Line(dc, x - Scale(4), y - Scale(2), x, y + Scale(2));
                     Line(dc, x, y + Scale(2), x + Scale(4), y - Scale(2));
                 }

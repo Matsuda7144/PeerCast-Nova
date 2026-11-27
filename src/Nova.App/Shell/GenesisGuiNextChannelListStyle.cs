@@ -71,7 +71,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 // Repaint only the existing CLIENTEDGE; keep client bounds, native scrollbars and hit testing.
                 for (var inset = 0; inset < Scale(2); inset++)
                 {
-                    using var pen = new VisualPen(dc, 1, inset == 0 ? GenesisGuiNextDesign.Border : GenesisGuiNextDesign.Panel);
+                    using var pen = new GenesisVisualPen(dc, 1, inset == 0 ? GenesisGuiNextDesign.Border : GenesisGuiNextDesign.Panel);
                     _ = GdiRectangle(dc, inset, inset, bounds.Right - bounds.Left - inset, bounds.Bottom - bounds.Top - inset);
                 }
             }

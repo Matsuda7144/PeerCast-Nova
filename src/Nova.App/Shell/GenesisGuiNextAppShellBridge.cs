@@ -50,15 +50,15 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
     internal static int RelayStatusWidth(int paneWidth) => Math.Max(1, paneWidth - 24);
     internal const uint RecordingHistoryDetailsStyle = 0x0800 | 0x0004 | 0x0040 | 0x0080 | 0x00200000 | 0x00100000;
     internal static (int Top, int Height) HistoryDetailsLayout => (40, 70);
-    private const int DetailsCopyButtonWidth = 112;
-    private const int DetailsCopyButtonHeight = 28;
-    private const int DetailsRecordButtonWidth = 68;
-    private const int DetailsStopRecordingButtonWidth = 82;
-    private const int DetailsRecordingButtonGap = 6;
+    internal const int DetailsCopyButtonWidth = 112;
+    internal const int DetailsCopyButtonHeight = 28;
+    internal const int DetailsRecordButtonWidth = 68;
+    internal const int DetailsStopRecordingButtonWidth = 82;
+    internal const int DetailsRecordingButtonGap = 6;
     private const int RecordingModeButtonWidth = 78;
     private const int RecordingModeButtonGap = 6;
-    private const int ShowWindowHide = 0;
-    private const int ShowWindowShowNoActivate = 4;
+    internal const int ShowWindowHide = 0;
+    internal const int ShowWindowShowNoActivate = 4;
     private const int NavigationItemTop = 8;
     private const int NavigationItemHeight = 36;
     private const int NavigationItemCount = 10;
@@ -69,28 +69,28 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
     private const int MinimumPlaybackButtonTop =
         NavigationItemTop + (NavigationItemCount * NavigationItemHeight) + 8;
     internal const int MinimumSidebarHeight = MinimumPlaybackButtonTop + PlaybackButtonHeight + PlaybackButtonBottomInset;
-    private const int ButtonStyleOwnerDraw = 0x0000000B;
-    private const uint WindowStyleChild = 0x40000000;
-    private const uint WindowStyleVisible = 0x10000000;
-    private const uint WindowStyleTabStop = 0x00010000;
-    private const uint WindowStyleClipSiblings = 0x04000000;
-    private const uint WindowStyleClipChildren = 0x02000000;
-    private const uint StaticStyleNoPrefix = 0x00000080;
-    private const uint StaticStyleOwnerDraw = 0x0000000D;
-    private const uint WindowMessageCommand = 0x0111;
-    private const uint WindowMessageNcDestroy = 0x0082;
-    private const uint WindowMessagePaint = 0x000F;
-    private const uint WindowMessageDrawItem = 0x002B;
-    private const uint WindowMessageNotify = 0x004E;
-    private const uint WindowMessageControlColorEdit = 0x0133;
-    private const uint WindowMessageControlColorListBox = 0x0134;
-    private const uint WindowMessageControlColorStatic = 0x0138;
+    internal const int ButtonStyleOwnerDraw = 0x0000000B;
+    internal const uint WindowStyleChild = 0x40000000;
+    internal const uint WindowStyleVisible = 0x10000000;
+    internal const uint WindowStyleTabStop = 0x00010000;
+    internal const uint WindowStyleClipSiblings = 0x04000000;
+    internal const uint WindowStyleClipChildren = 0x02000000;
+    internal const uint StaticStyleNoPrefix = 0x00000080;
+    internal const uint StaticStyleOwnerDraw = 0x0000000D;
+    internal const uint WindowMessageCommand = 0x0111;
+    internal const uint WindowMessageNcDestroy = 0x0082;
+    internal const uint WindowMessagePaint = 0x000F;
+    internal const uint WindowMessageDrawItem = 0x002B;
+    internal const uint WindowMessageNotify = 0x004E;
+    internal const uint WindowMessageControlColorEdit = 0x0133;
+    internal const uint WindowMessageControlColorListBox = 0x0134;
+    internal const uint WindowMessageControlColorStatic = 0x0138;
     private const uint WindowMessageApplication = 0x8000;
     private const uint WindowMessageSynchronizeSelection = WindowMessageApplication + 0x716;
     private const uint WindowMessagePublishingDispatch = WindowMessageApplication + 0x717;
     internal const uint WindowMessageSynchronizeYellowPageFilter = WindowMessageApplication + 0x719;
-    private const int ButtonNotificationClicked = 0;
-    private const int NotifyCustomDraw = -12;
+    internal const int ButtonNotificationClicked = 0;
+    internal const int NotifyCustomDraw = -12;
     private const uint CustomDrawStagePrePaint = 0x00000001;
     private const uint CustomDrawStageItemPrePaint = 0x00010001;
     private const uint CustomDrawStageItemPostPaint = 0x00010002;
@@ -99,11 +99,11 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
     private const int CustomDrawNotifyItemDraw = 0x0020;
     private const uint ListViewMessageFirst = 0x1000;
     private const uint ListViewMessageSetBackgroundColor = ListViewMessageFirst + 1;
-    private const uint ListViewMessageGetNextItem = ListViewMessageFirst + 12;
+    internal const uint ListViewMessageGetNextItem = ListViewMessageFirst + 12;
     private const uint ListViewMessageGetItemRectangle = ListViewMessageFirst + 14;
     private const uint ListViewMessageSetTextColor = ListViewMessageFirst + 36;
     private const uint ListViewMessageSetTextBackgroundColor = ListViewMessageFirst + 38;
-    private const int ListViewNextItemSelected = 0x0002;
+    internal const int ListViewNextItemSelected = 0x0002;
     private const uint WindowMessageLeftButtonDown = 0x0201;
     private const uint WindowMessageLeftButtonUp = 0x0202;
     private const uint WindowMessageRightButtonDown = 0x0204;
@@ -112,18 +112,18 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
     private const uint WindowMessageKeyUp = 0x0101;
     private const uint WindowMessageListViewSetItemState = ListViewMessageFirst + 43;
     // Win32 COLORREF stores channels in BGR order.
-    private const int BackgroundColor = 0x00412917;
-    private const int UnselectedColor = 0x00412917;
-    private const int SelectedColor = 0x006A4629;
-    private const int AccentColor = 0xFF8C3A;
-    private const int TextColor = 0x00F7F4F2;
-    private const int DisabledTextColor = 0x009D9188;
-    private const int TransparentBackgroundMode = 1;
-    private const uint DrawTextSingleLine = 0x0020;
-    private const uint DrawTextVerticalCenter = 0x0004;
-    private const uint DrawTextNoPrefix = 0x0800;
-    private const uint DrawItemDisabled = 0x0004;
-    private const uint DrawItemFocused = 0x0010;
+    internal const int BackgroundColor = 0x00412917;
+    internal const int UnselectedColor = 0x00412917;
+    internal const int SelectedColor = 0x006A4629;
+    internal const int AccentColor = 0xFF8C3A;
+    internal const int TextColor = 0x00F7F4F2;
+    internal const int DisabledTextColor = 0x009D9188;
+    internal const int TransparentBackgroundMode = 1;
+    internal const uint DrawTextSingleLine = 0x0020;
+    internal const uint DrawTextVerticalCenter = 0x0004;
+    internal const uint DrawTextNoPrefix = 0x0800;
+    internal const uint DrawItemDisabled = 0x0004;
+    internal const uint DrawItemFocused = 0x0010;
     private const uint DrawItemTypeButton = 4;
     private const uint DrawItemTypeStatic = 5; // ODT_STATIC in WinUser.h (ODT_LISTBOX is 2).
     private const nuint ListViewSubclassIdentifier = 0x7144231;
@@ -131,7 +131,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
     private const int PlaybackAccentColor = 0x00B87832;
     private const int StopAccentColor = 0x003C43D8;
     private const int RecordingAccentColor = 0x000030E0;
-    private const int WarningTextColor = 0x000055FF;
+    internal const int WarningTextColor = 0x000055FF;
     private static readonly ConcurrentDictionary<nint, AppShellState> StatesByContainer = new();
     private static readonly ConcurrentDictionary<nint, AppShellState> StatesByListView = new();
     private static readonly Win32WindowProcedure WindowProcedureDelegate = ProcessWindowMessage;
@@ -679,7 +679,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             interaction,
             backgroundBrush);
         state.CreatePaneSplitter(instance);
-        state.CreateIntegratedSettings(className, instance);
+        state.Settings.Create(className, instance);
         if (!state.RuleButtonsAvailable || !StatesByContainer.TryAdd(sidebar, state) ||
             !StatesByContainer.TryAdd(statusBar, state) ||
             !StatesByContainer.TryAdd(detailsPane, state) ||
@@ -691,7 +691,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 0))
         {
             state.DestroyPaneSplitter();
-            state.DestroyIntegratedSettings();
+            state.Settings.Destroy();
             _ = StatesByContainer.TryRemove(sidebar, out _);
             _ = StatesByContainer.TryRemove(statusBar, out _);
             _ = StatesByContainer.TryRemove(detailsPane, out _);
@@ -759,7 +759,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             if (StatesByContainer.TryRemove(_sidebar, out var state))
             {
                 state.Detach();
-                state.DestroyIntegratedSettings();
+                state.Settings.Destroy();
                 await state.DrainAutomaticCommandsAsync().ConfigureAwait(false);
             }
 
@@ -876,7 +876,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
         message == WindowMessageKeyUp ||
         message == WindowMessageListViewSetItemState;
 
-    private static void ApplyDefaultFont(nint control) => _ = GenesisWindowUiFont.Apply(control);
+    internal static void ApplyDefaultFont(nint control) => _ = GenesisWindowUiFont.Apply(control);
 
     private static nint CreatePlaybackButton(
         string label,
@@ -929,7 +929,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             instance,
             0);
 
-    private static nint CreateRecordingModeButton(
+    internal static nint CreateRecordingModeButton(
         string text,
         nint parent,
         int controlId,
@@ -975,22 +975,22 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
 
         if (message == NetworkSettingsSaveCompleted)
         {
-            state.CompleteNetworkSettingsSave(wParam);
+            state.Settings.CompleteNetworkSave(wParam);
             return 0;
         }
         if (message == NatSettingsSaveCompleted)
         {
-            state.CompleteNatSettingsSave(wParam, (long)lParam);
+            state.Settings.CompleteNatSave(wParam, (long)lParam);
             return 0;
         }
         if (message == LivePublicSettingsApplied)
         {
-            state.CompleteLivePublicSettingsApply(wParam);
+            state.Settings.CompleteLivePublicApply(wParam);
             return 0;
         }
         if (message == PublishingExternalProbeCompleted)
         {
-            state.CompletePublishingExternalProbe(wParam);
+            state.Publishing.CompleteExternalProbe(wParam);
             return 0;
         }
         if (message == WindowMessageCommand)
@@ -1011,13 +1011,13 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
         {
             return customDrawResult;
         }
-        else if (message == 0x0135 && state.IsSettingsPane(window)) // WM_CTLCOLORBTN for native notification checkboxes.
+        else if (message == 0x0135 && state.Settings.IsPane(window)) // WM_CTLCOLORBTN for native notification checkboxes.
         {
             return state.PrepareStaticControl(wParam, window);
         }
         else if (message == WindowMessageControlColorStatic)
         {
-            if (state.IsRelayTreeControl(lParam)) return state.PrepareRelayTreeControl(wParam);
+            if (state.RelayTree.IsTreeControl(lParam)) return state.RelayTree.PrepareControl(wParam);
             // Win32 read-only EDIT controls send WM_CTLCOLORSTATIC too. Their
             // text and scroll repaints need the same opaque fill as other edits.
             if (state.IsReadOnlyDetailsEdit(window, lParam)) return state.PrepareDarkControl(wParam, window);
@@ -1099,7 +1099,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
         return result;
     }
 
-    private static void DestroyWindowIfPresent(nint window)
+    internal static void DestroyWindowIfPresent(nint window)
     {
         if (window != 0 && IsWindow(window))
         {
@@ -1160,6 +1160,12 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
         private readonly GenesisMainWindowInteraction _interaction;
         private readonly nint _backgroundBrush;
         private readonly GenesisGuiNextUtilityNavigationSelection _utilityNavigationSelection = new();
+        private readonly GenesisRelayTreeTabController _relayTree;
+        internal GenesisRelayTreeTabController RelayTree => _relayTree;
+        private readonly GenesisIntegratedSettingsController _settings;
+        internal GenesisIntegratedSettingsController Settings => _settings;
+        private readonly GenesisPublishingTabController _publishing;
+        internal GenesisPublishingTabController Publishing => _publishing;
         private int _playCommandInFlight;
         private int _stopCommandInFlight;
         private int _detached;
@@ -1269,7 +1275,6 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             _ = ShowWindow(_publishingInterruptButton, ShowWindowHide);
             _ = EnableWindow(_publishingStartButton, false);
             _ = EnableWindow(_publishingInterruptButton, false);
-            CreatePublishingGuide(GetModuleHandleW(null));
             _listView = listView;
             _ = PeerCast.Nova.Windows.Win32AccessibilityAnnotation.SetName(_listView, "チャンネル一覧");
             _tabs = tabs;
@@ -1286,18 +1291,22 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             ApplyDefaultFont(_relayStart);
             ApplyDefaultFont(_relayStop);
             ApplyDefaultFont(_relayStatus);
-            CreateRelayTree();
+            _settings = new(this);
+            _publishing = new(this);
+            _publishing.CreateGuide(GetModuleHandleW(null));
+            _relayTree = new(this);
+            _relayTree.Create();
         }
 
         public void Attach()
         {
-            if (IsModern && _tabs.PublishingSettings is { } settings) _publishingEditor = new(settings);
+            _publishing.AttachEditor();
             _tabs.SetPublishingDispatcher(PostPublishingUi);
             _tabs.PropertyChanged += OnTabsPropertyChanged;
             _viewModel.PropertyChanged += OnViewModelPropertyChanged;
         }
 
-        public bool RuleButtonsAvailable => PublishingGuideAvailable && _publishingStartButton != 0 && _publishingInterruptButton != 0 && _publishingFinishButton != 0 && _relayStart != 0 && _relayStop != 0 && _relayStatus != 0 && _recordingHistoryDetails != 0 && _recordingHistoryModeButton != 0 && _recordingHistoryRefreshButton != 0 && _createRuleButton != 0 && _editRuleButton != 0 &&
+        public bool RuleButtonsAvailable => _publishing.IsGuideAvailable && _publishingStartButton != 0 && _publishingInterruptButton != 0 && _publishingFinishButton != 0 && _relayStart != 0 && _relayStop != 0 && _relayStatus != 0 && _recordingHistoryDetails != 0 && _recordingHistoryModeButton != 0 && _recordingHistoryRefreshButton != 0 && _createRuleButton != 0 && _editRuleButton != 0 &&
             _toggleRuleButton != 0 && _deleteRuleButton != 0 && _moveRuleUpButton != 0 && _moveRuleDownButton != 0;
 
         public void Detach()
@@ -1311,24 +1320,15 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
 
                 _ = PeerCast.Nova.Windows.Win32AccessibilityAnnotation.Clear(_listView);
                 _ = PeerCast.Nova.Windows.Win32AccessibilityAnnotation.Clear(_recordingHistoryDetails);
-                _ = PeerCast.Nova.Windows.Win32AccessibilityAnnotation.Clear(_relayTreeChannels);
-                _ = PeerCast.Nova.Windows.Win32AccessibilityAnnotation.Clear(_relayTreeBody);
+                _relayTree.Detach();
                 DestroyPaneSplitter();
                 _ = StatesByOwner.TryRemove(_owner, out _);
-                _publishingEditor?.Dispose();
-                if (IsWindow(_publishingEditPane)) _ = RemoveWindowSubclass(_publishingEditPane, PublishingEditorProcedure, PublishingEditorSubclassId);
-                if (IsWindow(_publishingAdvancedPane)) _ = RemoveWindowSubclass(_publishingAdvancedPane, PublishingEditorProcedure, PublishingEditorSubclassId);
+                _publishing.Detach();
                 DetachVisuals();
-                _generalSettings?.Release();
-                _pathSettings?.Release();
-                CloseNatSettingsPage();
-                CloseNetworkSettingsPages();
-                _settingsCategory = null;
+                _settings.Detach();
                 _detailsUpdates.Close();
                 _favoriteUpdates.Close();
                 _tabs.SetPublishingDispatcher(null);
-                _publishingSettingsWindow?.Dispose();
-                _publishingSettingsWindow = null;
                 while (_publishingUi.TryDequeue(out _)) { }
                 _tabs.PropertyChanged -= OnTabsPropertyChanged;
                 _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
@@ -1366,19 +1366,17 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             _searchBox.ProcessCommand(wParam, lParam);
             var commandId = (int)(wParam & 0xffff);
             var notificationCode = (int)((wParam >> 16) & 0xffff);
-            if (Volatile.Read(ref _detached) == 0 && ProcessRelayTreeCommand(commandId, lParam, notificationCode)) return;
-            if (Volatile.Read(ref _detached) == 0 && ProcessPublishingAdvancedInput(commandId, notificationCode, lParam)) return;
-            if (Volatile.Read(ref _detached) == 0 && ProcessPublishingInlineInput(commandId, notificationCode, lParam)) return;
-            if (Volatile.Read(ref _detached) == 0 && ProcessSettingsPathInput(commandId, notificationCode, lParam)) return;
-            if (Volatile.Read(ref _detached) == 0 && ProcessNetworkSettingsInput(commandId, notificationCode, lParam)) return;
+            if (Volatile.Read(ref _detached) == 0 && _relayTree.ProcessCommand(commandId, lParam, notificationCode)) return;
+            if (Volatile.Read(ref _detached) == 0 && _publishing.ProcessInput(commandId, notificationCode, lParam)) return;
+            if (Volatile.Read(ref _detached) == 0 && _settings.ProcessInput(commandId, notificationCode, lParam)) return;
             if (notificationCode != ButtonNotificationClicked ||
                 Volatile.Read(ref _detached) != 0)
             {
                 return;
             }
 
-            if (ProcessIntegratedSettingsCommand(commandId, lParam)) return;
-            if (SettingsPageOpen && commandId == FavoriteControlId) return;
+            if (_settings.ProcessCommand(commandId, lParam)) return;
+            if (_settings.IsOpen && commandId == FavoriteControlId) return;
             if (_tabs.SelectedTab == GenesisGuiNextTab.Publishing &&
                 lParam == _publishingStartButton && commandId == PublishingStartControlId)
             {
@@ -1397,7 +1395,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 _ = _tabs.RequestPublishingFinishAsync();
                 return;
             }
-            if (ProcessPublishingGuideCommand(commandId, lParam)) return;
+            if (_publishing.ProcessGuideCommand(commandId, lParam)) return;
             if (_tabs.SelectedTab == GenesisGuiNextTab.Publishing &&
                 !IsPublishingNavigationCommand(commandId)) return;
             if (lParam == _relayStop && commandId == RelayStopControlId)
@@ -1560,13 +1558,13 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             if (itemIndex == (int)GenesisGuiNextTab.RelayTree && !IsModern) return;
             if (itemIndex >= 0 && itemIndex < _navigationButtons.Length &&
                 !(GenesisGuiNextNavigationPresentation.TryResolveExistingView(itemIndex, out var targetTab) && targetTab == GenesisGuiNextTab.Publishing) &&
-                !CanLeavePublishingEditor()) return;
+                !_publishing.CanLeaveEditor()) return;
             if (GenesisGuiNextNavigationPresentation.TryResolveExistingView(
                     itemIndex,
                     out var selectedTab))
             {
-                CloseIntegratedSettings();
-                if (selectedTab == GenesisGuiNextTab.RelayTree) CaptureTreeChannel();
+                _settings.Close();
+                if (selectedTab == GenesisGuiNextTab.RelayTree) _relayTree.CaptureSelectedChannel();
                 _utilityNavigationSelection.SelectView(_tabs, selectedTab);
                 _ = InvalidateRect(_sidebar, 0, true);
                 if (selectedTab == GenesisGuiNextTab.Recording)
@@ -1588,7 +1586,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             {
                 if (primaryCommand == GenesisGuiNextPrimaryCommand.Search)
                 {
-                    CloseIntegratedSettings();
+                    _settings.Close();
                     _ = _utilityNavigationSelection.ActivateSearch(
                         _tabs,
                         _searchBox.Focus);
@@ -1596,12 +1594,12 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 }
                 else
                 {
-                    if (primaryCommand != GenesisGuiNextPrimaryCommand.Settings) CloseIntegratedSettings();
+                    if (primaryCommand != GenesisGuiNextPrimaryCommand.Settings) _settings.Close();
                     _utilityNavigationSelection.SelectUtility(itemIndex);
                     _ = InvalidateRect(_sidebar, 0, true);
                     if (primaryCommand == GenesisGuiNextPrimaryCommand.Settings)
                     {
-                        if (!OpenIntegratedSettings())
+                        if (!_settings.Open())
                             _ = GenesisChannelNotificationSettingsButtonBridge.TryOpenForOwner(
                                 _owner,
                                 _navigationButtons[itemIndex]);
@@ -1625,9 +1623,9 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             using var fontSelection = GenesisWindowUiFont.SelectForDrawing(
                 drawItem.DeviceContext,
                 drawItem.ControlWindow);
-            if (DrawSettingsYpList(drawItem)) return true;
-            if (DrawSettingsButton(drawItem)) return true;
-            if (DrawPublishingPanelItem(drawItem)) return true;
+            if (_settings.DrawYpList(drawItem)) return true;
+            if (_settings.DrawButton(drawItem)) return true;
+            if (_publishing.DrawPanelItem(drawItem)) return true;
             if (DrawRecordingPanelItem(drawItem)) return true;
             if (DrawChannelCardItem(drawItem)) return true;
             if (IsModern && drawItem.ControlType == 3 && _searchBox.IsYellowPageFilter(drawItem.ControlWindow))
@@ -1712,7 +1710,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                         ? GenesisGuiNextPublishingPresentation.FinishLabel : GenesisGuiNextPublishingPresentation.InterruptLabel,
                     false, drawItem.ControlId == PublishingInterruptControlId);
 
-            if (DrawPublishingGuide(drawItem)) return true;
+            if (_publishing.DrawGuide(drawItem)) return true;
             if (IsOwnerDrawButton(drawItem.ControlType) && drawItem.ControlId is RelayStartControlId or RelayStopControlId)
                 return DrawRecordingModeButton(drawItem, drawItem.ControlId == RelayStartControlId ? "Relay開始" : "Relay停止", false);
             if (IsOwnerDrawStatic(drawItem.ControlType) && drawItem.ControlId == RelayStatusControlId)
@@ -2062,33 +2060,32 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
         internal bool IsReadOnlyDetailsEdit(nint pane, nint control) =>
             pane == _detailsPane && control != 0 &&
             ((UsesRecordingPanel && control == _recordingHistoryDetails) ||
-             (UsesPublishingPanel && (control == _publishingInstructions || control == _publishingBasic ||
-                control == _publishingOptions || control == _publishingDiagnostic)));
+             _publishing.IsDarkReadOnlyControl(control));
 
         public nint PrepareStaticControl(nuint deviceContext, nint pane)
         {
             _ = SetBkMode((nint)deviceContext, TransparentBackgroundMode);
-            if (IsSettingsPane(pane))
+            if (_settings.IsPane(pane))
             {
                 _ = SetBkColor((nint)deviceContext, GenesisGuiNextDesign.Panel);
                 _ = SetTextColor((nint)deviceContext, GenesisGuiNextDesign.Text);
                 return _topBrush;
             }
             _ = SetTextColor((nint)deviceContext, IsModern && pane == _statusBar ? GenesisGuiNextDesign.SecondaryText : TextColor);
-            if ((UsesRecordingPanel || UsesPublishingPanel) && pane == _detailsPane) return _topBrush;
+            if ((UsesRecordingPanel || _publishing.UsesPanel) && pane == _detailsPane) return _topBrush;
             return IsModern && pane == _statusBar ? _topBrush : _backgroundBrush;
         }
 
         public nint PrepareDarkControl(nuint deviceContext, nint pane)
         {
             _ = SetBkMode((nint)deviceContext, 2);
-            if (IsSettingsPane(pane) || (pane == _publishingEditPane || pane == _publishingAdvancedPane) && IsModern)
+            if (_settings.IsPane(pane) || _publishing.IsEditorPane(pane))
             {
                 _ = SetBkColor((nint)deviceContext, GenesisGuiNextDesign.Input);
                 _ = SetTextColor((nint)deviceContext, GenesisGuiNextDesign.Text);
                 return _inputBrush;
             }
-            if ((UsesRecordingPanel || UsesPublishingPanel) && pane == _detailsPane)
+            if ((UsesRecordingPanel || _publishing.UsesPanel) && pane == _detailsPane)
             {
                 _ = SetBkColor((nint)deviceContext, GenesisGuiNextDesign.Input);
                 _ = SetTextColor((nint)deviceContext, GenesisGuiNextDesign.Text);
@@ -2125,7 +2122,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 }
             }
 
-            SynchronizePublishingPageBounds();
+            _publishing.SynchronizePageBounds();
             SynchronizeChannelListStyle();
             SynchronizeFavoriteButtonPresentation();
             SynchronizePlaybackButtonPresentation();
@@ -2141,7 +2138,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 return false;
             }
 
-            CloseIntegratedSettings();
+            _settings.Close();
             var focused = _utilityNavigationSelection.ActivateSearch(_tabs, _searchBox.Focus);
             _ = InvalidateRect(_sidebar, 0, true);
             return focused;
@@ -2168,7 +2165,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             var presentation = GenesisGuiNextFavoriteButtonPresentationResolver.Resolve(
                 _tabs,
                 renderedRow, IsModern);
-            var favoriteEnabled = presentation.IsEnabled && !SettingsPageOpen;
+            var favoriteEnabled = presentation.IsEnabled && !_settings.IsOpen;
             using (var update = _favoriteUpdates.Begin(0, _ => { }))
             {
                 _favoriteUpdates.Set(_favoriteButton, "text", presentation.Label,
@@ -2207,8 +2204,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             if (GetClientRect(_detailsPane, out var relayPane))
                 _ = PresentBounds(_relayStatus, 12, RelayStatusTop, RelayStatusWidth(LogicalWidth(relayPane.Right - relayPane.Left)), 40, true);
             _ = PresentInvalidation(_relayStatus, 0, true);
-            var treeShown = SynchronizeRelayTree();
-            if (treeShown) { PresentRelayTree(); return; }
+            var treeShown = _relayTree.SynchronizeVisibility();
+            if (treeShown) { _relayTree.Present(); return; }
 
             var isRecordingPage = _tabs.SelectedTab == GenesisGuiNextTab.Recording;
             var isRulesPage = IsRulesPageActive();
@@ -2286,11 +2283,11 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
                 _detailsRecordingStatus,
                 !isLogPage && !isPublishingPage && IsRecordingStatusVisible(isRulesPage) ? ShowWindowShowNoActivate : ShowWindowHide);
 
-            SynchronizePublishingGuide(isPublishingPage);
+            _publishing.SynchronizeGuide(isPublishingPage);
             if (isPublishingPage)
             {
                 var publishing = row?.Publishing ?? (_tabs.PublishingRows.Count > 0 ? _tabs.PublishingRows[0] : null);
-                _ = PresentText(_detailsTitle, UsesPublishingPanel ? "配信" : "OBS 接続設定");
+                _ = PresentText(_detailsTitle, _publishing.UsesPanel ? "配信" : "OBS 接続設定");
                 _ = PresentText(_detailsDescription, publishing is null ? "配信状態を確認できません。" :
                     publishing.StateText + (string.IsNullOrEmpty(publishing.DiagnosticText) ? string.Empty : " · " + publishing.DiagnosticText));
                 _ = PresentText(_detailsMetadata, NovaObsPublishingConnectionPresentation.Instructions);
@@ -2436,7 +2433,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
 
         private void MoveDetailsTextControls(bool recordingPage, bool libraryPage)
         {
-            if (UsesPublishingPanel) return; // SynchronizePublishingGuide places these shared controls.
+            if (_publishing.UsesPanel) return; // SynchronizePublishingGuide places these shared controls.
             if (UsesRecordingPanel)
             {
                 PlaceRecordingPanel();
@@ -2934,7 +2931,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             {
                 if (eventArgs.PropertyName == nameof(GenesisGuiNextTabsViewModel.SelectedTab))
                 {
-                    CloseIntegratedSettings();
+                    _settings.Close();
                     _utilityNavigationSelection.OnSelectedTabChanged();
                     _ = InvalidateRect(_sidebar, 0, true);
                 }
