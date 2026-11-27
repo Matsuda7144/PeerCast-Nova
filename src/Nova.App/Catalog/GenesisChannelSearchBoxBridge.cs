@@ -612,15 +612,4 @@ internal sealed class GenesisChannelSearchBoxBridge : IAsyncDisposable
             }
         }
     }
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern nuint SetTimer(nint window, nuint eventId, uint elapsedMilliseconds, nint timerProcedure);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool KillTimer(nint window, nuint eventId);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern int GetWindowTextW(nint window, nint text, int maximumCharacters);
-
 }

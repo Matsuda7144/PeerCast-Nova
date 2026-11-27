@@ -68,7 +68,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             if (!UsesRecordingPanel || !CardTexts.Contains(control)) return false;
             if (message == 0x0014) return true;
             if (message != WindowMessagePaint) return false;
-            var dc = BeginCardPaint(control, out var paint);
+            var dc = BeginPaint(control, out var paint);
             try
             {
                 if (dc == 0 || !GetClientRect(control, out var box)) return true;
@@ -80,10 +80,10 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                     wrap ? 0x0010u | 0x8000 : DrawTextSingleLine | 0x8000);
                 return true;
             }
-            finally { _ = EndCardPaint(control, ref paint); }
+            finally { _ = EndPaint(control, ref paint); }
         }
 
-        private bool DrawRecordingPanelItem(DrawItem draw)
+        private bool DrawRecordingPanelItem(Win32DrawItem draw)
         {
             if (!UsesRecordingPanel) return false;
             if (IsOwnerDrawButton(draw.ControlType) &&

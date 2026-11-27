@@ -90,7 +90,7 @@ internal sealed class GenesisPlaybackWindowNativeSurface :
     private static readonly object WindowClassSync = new();
     private static readonly ConcurrentDictionary<nint, GenesisPlaybackWindowNativeSurface>
         SurfacesByWindow = new();
-    private static readonly WindowProcedure WindowProcedureDelegate = ProcessWindowMessage;
+    private static readonly Win32WindowProcedure WindowProcedureDelegate = ProcessWindowMessage;
     private static bool _windowClassRegistered;
     private static nint _windowClassInstance;
     private readonly nint _window;
@@ -215,9 +215,9 @@ internal sealed class GenesisPlaybackWindowNativeSurface :
                 return false;
             }
 
-            var windowClass = new WindowClassEx
+            var windowClass = new Win32WindowClassEx
             {
-                Size = (uint)Marshal.SizeOf<WindowClassEx>(),
+                Size = (uint)Marshal.SizeOf<Win32WindowClassEx>(),
                 WindowProcedure = Marshal.GetFunctionPointerForDelegate(WindowProcedureDelegate),
                 Instance = instance,
                 BackgroundBrush = GetStockObject(BlackBrush),
@@ -243,9 +243,9 @@ internal sealed class GenesisPlaybackWindowNativeSurface :
             return null;
         }
 
-        var monitorInfo = new MonitorInfo
+        var monitorInfo = new Win32MonitorInfo
         {
-            Size = (uint)Marshal.SizeOf<MonitorInfo>(),
+            Size = (uint)Marshal.SizeOf<Win32MonitorInfo>(),
         };
         if (!GetMonitorInfoW(monitor, ref monitorInfo))
         {
@@ -320,63 +320,4 @@ internal sealed class GenesisPlaybackWindowNativeSurface :
         int Y,
         int Width,
         int Height);
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct WindowClassEx
-    {
-        public uint Size;
-        public uint Style;
-        public nint WindowProcedure;
-        public int ClassExtraBytes;
-        public int WindowExtraBytes;
-        public nint Instance;
-        public nint Icon;
-        public nint Cursor;
-        public nint BackgroundBrush;
-        [MarshalAs(UnmanagedType.LPWStr)]
-        public string? MenuName;
-        [MarshalAs(UnmanagedType.LPWStr)]
-        public string? ClassName;
-        public nint SmallIcon;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct MonitorInfo
-    {
-        public uint Size;
-        public WindowRectangle Monitor;
-        public WindowRectangle Work;
-        public uint Flags;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct WindowRectangle
-    {
-        public int Left;
-        public int Top;
-        public int Right;
-        public int Bottom;
-    }
-
-    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
-    private delegate nint WindowProcedure(
-        nint window,
-        uint message,
-        nuint wParam,
-        nint lParam);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern ushort RegisterClassExW(ref WindowClassEx windowClass);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool UpdateWindow(nint window);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetMonitorInfoW(nint monitor, ref MonitorInfo monitorInfo);
-
-    [DllImport("user32.dll")]
-    private static extern int GetSystemMetrics(int index);
-
 }

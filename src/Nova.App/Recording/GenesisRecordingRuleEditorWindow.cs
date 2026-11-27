@@ -13,16 +13,16 @@ internal static class GenesisRecordingRuleEditorWindow
     internal static readonly string[] MatchModes = ["完全一致", "一部一致", "正規表現"];
     private const uint CompletedMessage = 0x8000 + 0x731;
     private static readonly ConcurrentDictionary<nint, State> States = new();
-    private static readonly WindowProcedure Procedure = WindowProc;
+    private static readonly Win32WindowProcedure Procedure = WindowProc;
 
     public static bool ShowModal(nint owner, GenesisRecordingRuleEditor editor, GenesisRecordingRuleDraft draft)
     {
         if (!OperatingSystem.IsWindows() || owner == 0 || !IsWindow(owner)) { editor.Cancel(); return false; }
         var instance = GetModuleHandleW(null);
         var className = $"PeerCastNovaRecordingRuleEditor-{Guid.NewGuid():N}";
-        var windowClass = new WindowClassEx
+        var windowClass = new Win32WindowClassEx
         {
-            Size = (uint)Marshal.SizeOf<WindowClassEx>(),
+            Size = (uint)Marshal.SizeOf<Win32WindowClassEx>(),
             WindowProcedure = Marshal.GetFunctionPointerForDelegate(Procedure),
             Instance = instance,
             Cursor = LoadCursorW(0, (nint)32512),
@@ -220,35 +220,4 @@ internal static class GenesisRecordingRuleEditorWindow
             return count > 0 ? new string(buffer, 0, count) : "";
         }
     }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct Message { public nint Window; public uint Id; public nuint WParam; public nint LParam; public uint Time; public int X; public int Y; public uint Private; }
-    [DllImport("user32.dll")] private static extern int GetMessageW(out Message message, nint window, uint minimum, uint maximum);
-    [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool TranslateMessage(ref Message message);
-    [DllImport("user32.dll")] private static extern nint DispatchMessageW(ref Message message);
-    [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool IsDialogMessageW(nint window, ref Message message);
-    [DllImport("user32.dll")] private static extern void PostQuitMessage(int code);
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct WindowClassEx
-    {
-        public uint Size;
-        public uint Style;
-        public nint WindowProcedure;
-        public int ClassExtraBytes;
-        public int WindowExtraBytes;
-        public nint Instance;
-        public nint Icon;
-        public nint Cursor;
-        public nint BackgroundBrush;
-        public nint MenuName;
-        [MarshalAs(UnmanagedType.LPWStr)] public string ClassName;
-        public nint SmallIcon;
-    }
-
-    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
-    private delegate nint WindowProcedure(nint window, uint message, nuint wParam, nint lParam);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern ushort RegisterClassExW(ref WindowClassEx windowClass);
-
 }

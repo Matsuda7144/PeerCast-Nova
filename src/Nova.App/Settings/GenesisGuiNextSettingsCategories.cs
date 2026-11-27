@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using PeerCast.Nova.Windows;
 
 using static PeerCast.Nova.App.Win32NativeMethods;
@@ -56,7 +55,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             _ = Win32AccessibilityAnnotation.SetName(_externalPlayerArgs, "外部プレイヤー起動引数");
             _ = Win32AccessibilityAnnotation.SetName(_settingsPath, "プレイヤーまたは libmpv のパス");
             _ = SendMessageW(_externalPlayerArgs, 0x00C5, 1024, 0); // EM_SETLIMITTEXT
-            _ = SendCueBannerMessage(_externalPlayerArgs, 0x1501, 1, "{url} {title} {contact}（空欄で既定）");
+            _ = SendMessageTextW(_externalPlayerArgs, 0x1501, 1, "{url} {title} {contact}（空欄で既定）");
             _settingsReset = Button("未設定に戻す", SettingsResetId);
             _setupLibMpv = Button("公式 libmpv を自動導入", SetupLibMpvId);
             _testSound = Button("通知音テスト", TestSoundId);
@@ -128,7 +127,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private bool ReadSettingsTextBox(nint control, int maxLength, out string text)
         {
             text = string.Empty;
-            var length = GetSettingsTextLength(control);
+            var length = GetWindowTextLengthW(control);
             if (length < 0 || length >= maxLength)
             { _pathSettings!.ReportInputError("入力が長すぎます。保存値は変更していません。"); return false; }
             var buffer = new char[length + 1];
@@ -284,10 +283,10 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 _updatingSettingsPath = true;
                 try
                 {
-                    if (GetSettingsTextLength(_settingsPath) != page.Draft.Length || !ReadSettingsPath(out var existing) || existing != page.Draft)
+                    if (GetWindowTextLengthW(_settingsPath) != page.Draft.Length || !ReadSettingsPath(out var existing) || existing != page.Draft)
                         _ = SetWindowTextW(_settingsPath, page.Draft);
                     if (PlaybackCategory &&
-                        (GetSettingsTextLength(_externalPlayerArgs) != page.ExternalPlayerArguments.Length ||
+                        (GetWindowTextLengthW(_externalPlayerArgs) != page.ExternalPlayerArguments.Length ||
                         !ReadExternalPlayerArguments(out var existingArgs) ||
                         existingArgs != page.ExternalPlayerArguments))
                         _ = SetWindowTextW(_externalPlayerArgs, page.ExternalPlayerArguments);
@@ -453,7 +452,4 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         try { await settings.TestSoundAsync().ConfigureAwait(false); }
         catch { /* Existing notification feedback owns errors; no late callback to a closed settings page. */ }
     }
-
-    [DllImport("user32.dll", EntryPoint = "GetWindowTextLengthW")] private static extern int GetSettingsTextLength(nint window);
-    [DllImport("user32.dll", EntryPoint = "SendMessageW", CharSet = CharSet.Unicode)] private static extern nint SendCueBannerMessage(nint window, uint message, nuint wParam, string text);
 }

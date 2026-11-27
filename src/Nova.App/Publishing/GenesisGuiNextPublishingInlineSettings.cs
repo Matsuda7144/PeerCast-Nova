@@ -76,7 +76,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 var values = new string[6];
                 for (var i = 0; i < values.Length; i++)
                 {
-                    var length = GetSettingsTextLength(_publishingInputs[i]);
+                    var length = GetWindowTextLengthW(_publishingInputs[i]);
                     if (length is < 0 or > 8192) return true;
                     var buffer = new char[length + 1];
                     if (GetWindowTextW(_publishingInputs[i], buffer, buffer.Length) != length) return true;
@@ -195,15 +195,15 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             {
                 var height = LogicalWidth(area.Bottom);
                 _publishingEditScroll = GenesisPublishingBasicLayout.Clamp(_publishingEditScroll, height);
-                var scroll = new PublishingEditScrollInfo
+                var scroll = new Win32ScrollInfo
                 {
-                    Size = (uint)Marshal.SizeOf<PublishingEditScrollInfo>(),
+                    Size = (uint)Marshal.SizeOf<Win32ScrollInfo>(),
                     Mask = 7,
                     Maximum = GenesisPublishingBasicLayout.ContentHeight - 1,
                     Page = (uint)Math.Max(1, height),
                     Position = _publishingEditScroll
                 };
-                _ = SetPublishingEditScroll(_publishingEditPane, 1, ref scroll, true);
+                _ = SetScrollInfo(_publishingEditPane, 1, ref scroll, true);
                 _ = GetClientRect(_publishingEditPane, out area);
                 var layout = new GenesisPublishingBasicLayout(LogicalWidth(area.Right), height, _publishingEditScroll);
                 for (var i = 0; i < 6; i++)
@@ -228,15 +228,15 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             if (message == 0x020A) _publishingEditScroll -= (short)(value >> 16) * 48 / 120;
             else
             {
-                var info = new PublishingEditScrollInfo { Size = (uint)Marshal.SizeOf<PublishingEditScrollInfo>(), Mask = 0x10 };
-                _ = GetPublishingEditScroll(_publishingEditPane, 1, ref info);
+                var info = new Win32ScrollInfo { Size = (uint)Marshal.SizeOf<Win32ScrollInfo>(), Mask = 0x10 };
+                _ = GetScrollInfo(_publishingEditPane, 1, ref info);
                 _publishingEditScroll = (int)(value & 0xffff) switch
                 {
                     0 => _publishingEditScroll - GenesisPublishingBasicLayout.RowHeight,
                     1 => _publishingEditScroll + GenesisPublishingBasicLayout.RowHeight,
                     2 => _publishingEditScroll - page,
                     3 => _publishingEditScroll + page,
-                    4 or 5 => info.Track,
+                    4 or 5 => info.TrackPosition,
                     6 => 0,
                     7 => GenesisPublishingBasicLayout.ContentHeight,
                     _ => _publishingEditScroll,
@@ -293,11 +293,6 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             return false;
         }
     }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct PublishingEditScrollInfo { public uint Size, Mask; public int Minimum, Maximum; public uint Page; public int Position, Track; }
-    [DllImport("user32.dll", EntryPoint = "SetScrollInfo")] private static extern int SetPublishingEditScroll(nint window, int bar, ref PublishingEditScrollInfo info, bool redraw);
-    [DllImport("user32.dll", EntryPoint = "GetScrollInfo")] private static extern bool GetPublishingEditScroll(nint window, int bar, ref PublishingEditScrollInfo info);
 }
 
 internal readonly record struct GenesisPublishingBasicLayout(int Width, int Height, int Scroll)

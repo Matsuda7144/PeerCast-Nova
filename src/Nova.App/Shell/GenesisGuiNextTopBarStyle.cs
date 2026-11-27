@@ -1,5 +1,3 @@
-using System.Runtime.InteropServices;
-
 using static PeerCast.Nova.App.Win32NativeMethods;
 
 namespace PeerCast.Nova.App;
@@ -46,7 +44,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 (control != TopStatusWindow && control != _searchBox.LabelWindow)) return false;
             if (message == 0x0014) return true;
             if (message != WindowMessagePaint) return false;
-            var dc = BeginCardPaint(control, out var paint);
+            var dc = BeginPaint(control, out var paint);
             try
             {
                 if (dc == 0 || !GetClientRect(control, out var bounds)) return true;
@@ -69,7 +67,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                     box.Left = Scale(cell.Left + 6); box.Right = Scale(cell.Left + cell.Width - 4);
                     var label = GenesisGuiNextTopStatusPresentation.Label(i, width < GenesisGuiNextTopBarLayout.FullStatusWidth);
                     using var font = GenesisWindowUiFont.SelectForDrawing(dc, control);
-                    var measured = new Rectangle();
+                    var measured = new Win32Rect();
                     _ = DrawTextW(dc, label, -1, ref measured, DrawTextSingleLine | DrawTextNoPrefix | 0x0400); // DT_CALCRECT
                     DrawCardLabel(dc, box, label, GenesisGuiNextDesign.SecondaryText, 0, control,
                         DrawTextSingleLine | DrawTextVerticalCenter);
@@ -84,7 +82,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 }
                 return true;
             }
-            finally { _ = EndCardPaint(control, ref paint); }
+            finally { _ = EndPaint(control, ref paint); }
         }
 
         internal void PaintTopInputFrame(nint window)
@@ -94,10 +92,10 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             if (dc == 0) return;
             try
             {
-                var bounds = new Rectangle { Right = windowBounds.Right - windowBounds.Left, Bottom = windowBounds.Bottom - windowBounds.Top };
+                var bounds = new Win32Rect { Right = windowBounds.Right - windowBounds.Left, Bottom = windowBounds.Bottom - windowBounds.Top };
                 var focus = GetFocus();
                 var focused = focus == window || (focus != 0 && GetParent(focus) == window);
-                var color = !IsTopControlEnabled(window) ? GenesisGuiNextDesign.Separator :
+                var color = !IsWindowEnabled(window) ? GenesisGuiNextDesign.Separator :
                     focused || _hoverControl == window ? GenesisGuiNextDesign.Accent : GenesisGuiNextDesign.Border;
                 using var pen = new VisualPen(dc, Scale(1), color);
                 if (IsTopFilter(window) || IsPublishingAdvancedCombo(window) || window == _relayTreeChannels)
@@ -126,8 +124,4 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             finally { _ = ReleaseDC(window, dc); }
         }
     }
-
-    [DllImport("user32.dll")] private static extern nint GetWindowDC(nint window);
-    [DllImport("user32.dll", EntryPoint = "IsWindowEnabled")]
-    [return: MarshalAs(UnmanagedType.Bool)] private static extern bool IsTopControlEnabled(nint window);
 }

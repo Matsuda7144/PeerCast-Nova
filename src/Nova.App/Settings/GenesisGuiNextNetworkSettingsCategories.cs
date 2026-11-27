@@ -1,5 +1,3 @@
-using System.Runtime.InteropServices;
-
 using static PeerCast.Nova.App.Win32NativeMethods;
 
 namespace PeerCast.Nova.App;
@@ -50,10 +48,10 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             CreateConnectionBody(instance);
             _connectionIpv6 = Check("IPv6を使う（未対応）", ConnectionIpv6Id);
             _connectionWan = Check("WAN Relayを公開", ConnectionWanId);
-            _ = SetConnectionParent(_connectionWan, _connectionBody);
+            _ = SetParent(_connectionWan, _connectionBody);
             _connectionAutoMapping = Check(GenesisNetworkSettingsWindow.NatCheckboxLabel, ConnectionAutoMappingId);
             _natSettingsStatus = Control("STATIC", string.Empty, 0, 0);
-            _ = SetConnectionParent(_natSettingsStatus, _connectionBody);
+            _ = SetParent(_natSettingsStatus, _connectionBody);
             _ypEnabled = Check("有効（保存時に反映）", YpEnabledId);
             _ypNew = Button("新規", YpNewId); _ypRemove = Button("削除…", YpRemoveId); _ypToggle = Button("有効 / 無効", YpToggleId);
             _ypList = Control("LISTBOX", "登録YP", YpListId, WindowStyleTabStop | 0x00200000 | 0x0010 | 0x0040 | 1); // native fixed owner draw, no sorting
@@ -66,8 +64,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 _connectionLabels[i] = Control("STATIC", connectionLabels[i], 0, 0);
                 _connectionInputs[i] = Control("EDIT", "", ConnectionInputId + i, WindowStyleTabStop | 0x80);
                 _ = PeerCast.Nova.Windows.Win32AccessibilityAnnotation.SetName(_connectionInputs[i], connectionLabels[i]);
-                _ = SetConnectionParent(_connectionLabels[i], _connectionBody);
-                _ = SetConnectionParent(_connectionInputs[i], _connectionBody);
+                _ = SetParent(_connectionLabels[i], _connectionBody);
+                _ = SetParent(_connectionInputs[i], _connectionBody);
                 _ = SendMessageW(_connectionInputs[i], 0x00C5, 32, 0);
             }
             for (var i = 0; i < _ypInputs.Length; i++)
@@ -132,7 +130,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
 
         private string ReadNetworkInput(nint control)
         {
-            var length = GetSettingsTextLength(control);
+            var length = GetWindowTextLengthW(control);
             if (length is < 0 or > 32767) throw new InvalidOperationException();
             var buffer = new char[length + 1];
             if (GetWindowTextW(control, buffer, buffer.Length) != length) throw new InvalidOperationException();
@@ -234,7 +232,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private void RefreshNetworkSettings()
         {
             void Text(nint h, string value) => _ = SetWindowTextW(h, value);
-            void Input(nint h, string value) { if (GetSettingsTextLength(h) != value.Length || ReadNetworkInput(h) != value) Text(h, value); }
+            void Input(nint h, string value) { if (GetWindowTextLengthW(h) != value.Length || ReadNetworkInput(h) != value) Text(h, value); }
             _updatingNetworkSettings = true;
             try
             {
@@ -270,7 +268,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                     {
                         _ypShown = entries;
                         _ = SendMessageW(_ypList, 0x0184, 0, 0); // LB_RESETCONTENT
-                        foreach (var entry in entries) _ = SendSettingsListText(_ypList, 0x0180, 0, YpListLabel(entry));
+                        foreach (var entry in entries) _ = SendMessageTextW(_ypList, 0x0180, 0, YpListLabel(entry));
                     }
                     var index = entries.ToList().FindIndex(e => e.Id == page.SelectedId);
                     _ = SendMessageW(_ypList, 0x0186, unchecked((nuint)index), 0);
@@ -322,12 +320,12 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             foreach (var h in ConnectionCategory ? _connectionInputs : _ypInputs)
             {
                 if (!GetWindowRect(h, out var b)) continue;
-                var point = new Point { X = b.Left, Y = b.Top }; _ = ScreenToClient(_settingsPane, ref point);
+                var point = new Win32Point { X = b.Left, Y = b.Top }; _ = ScreenToClient(_settingsPane, ref point);
                 using var pen = new VisualPen(dc, Scale(1), GetFocus() == h ? GenesisGuiNextDesign.Accent : GenesisGuiNextDesign.Border);
                 _ = GdiRectangle(dc, point.X - 1, point.Y - 1, point.X + b.Right - b.Left + 1, point.Y + b.Bottom - b.Top + 1);
             }
         }
-        private bool DrawSettingsYpList(DrawItem draw)
+        private bool DrawSettingsYpList(Win32DrawItem draw)
         {
             if (!IsModern || draw.ControlWindow != _ypList) return false;
             var selected = (draw.ItemState & 1) != 0;
@@ -342,5 +340,4 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             return true;
         }
     }
-    [DllImport("user32.dll", EntryPoint = "SendMessageW", CharSet = CharSet.Unicode)] private static extern nint SendSettingsListText(nint window, uint message, nuint value, string text);
 }

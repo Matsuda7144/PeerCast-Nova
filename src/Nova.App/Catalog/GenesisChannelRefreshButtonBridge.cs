@@ -37,8 +37,8 @@ internal sealed class GenesisChannelRefreshButtonPlacement
             return null;
         }
 
-        var topLeft = new WindowPoint(rectangle.Left, rectangle.Top);
-        var bottomRight = new WindowPoint(rectangle.Right, rectangle.Bottom);
+        var topLeft = new Win32Point(rectangle.Left, rectangle.Top);
+        var bottomRight = new Win32Point(rectangle.Right, rectangle.Bottom);
         if (!ScreenToClient(parent, ref topLeft) ||
             !ScreenToClient(parent, ref bottomRight))
         {
@@ -132,28 +132,6 @@ internal sealed class GenesisChannelRefreshButtonPlacement
         int Top,
         int Right,
         int Bottom);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct WindowPoint
-    {
-        public WindowPoint(int x, int y)
-        {
-            X = x;
-            Y = y;
-        }
-
-        public int X;
-        public int Y;
-    }
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetWindowRect(nint window, out WindowRectangle rectangle);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool ScreenToClient(nint window, ref WindowPoint point);
-
 }
 
 internal sealed class GenesisChannelRefreshButtonBridge : IAsyncDisposable
@@ -167,7 +145,7 @@ internal sealed class GenesisChannelRefreshButtonBridge : IAsyncDisposable
     private const int ButtonNotificationClicked = 0;
     private const int DefaultGuiFont = 17;
     private static readonly ConcurrentDictionary<nint, RefreshState> StatesByContainer = new();
-    private static readonly WindowProcedure WindowProcedureDelegate = ProcessWindowMessage;
+    private static readonly Win32WindowProcedure WindowProcedureDelegate = ProcessWindowMessage;
     private readonly nint _sourceEdit;
     private readonly GenesisChannelRefreshButtonPlacement.WindowRectangle _sourceRectangle;
     private readonly nint _container;
@@ -209,9 +187,9 @@ internal sealed class GenesisChannelRefreshButtonBridge : IAsyncDisposable
         }
 
         var className = $"PeerCastNovaGenesisRefresh-{Guid.NewGuid():N}";
-        var windowClass = new WindowClassEx
+        var windowClass = new Win32WindowClassEx
         {
-            Size = (uint)Marshal.SizeOf<WindowClassEx>(),
+            Size = (uint)Marshal.SizeOf<Win32WindowClassEx>(),
             WindowProcedure = Marshal.GetFunctionPointerForDelegate(WindowProcedureDelegate),
             Instance = instance,
             BackgroundBrush = GenesisNativeWindowClassPresentation.WindowBackgroundBrush,
@@ -421,34 +399,4 @@ internal sealed class GenesisChannelRefreshButtonBridge : IAsyncDisposable
             }
         }
     }
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct WindowClassEx
-    {
-        public uint Size;
-        public uint Style;
-        public nint WindowProcedure;
-        public int ClassExtraBytes;
-        public int WindowExtraBytes;
-        public nint Instance;
-        public nint Icon;
-        public nint Cursor;
-        public nint BackgroundBrush;
-        [MarshalAs(UnmanagedType.LPWStr)]
-        public string? MenuName;
-        [MarshalAs(UnmanagedType.LPWStr)]
-        public string? ClassName;
-        public nint SmallIcon;
-    }
-
-    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
-    private delegate nint WindowProcedure(
-        nint window,
-        uint message,
-        nuint wParam,
-        nint lParam);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern ushort RegisterClassExW(ref WindowClassEx windowClass);
-
 }

@@ -122,7 +122,7 @@ internal sealed class GenesisMainWindowResizeGuard : IAsyncDisposable
 
     private static void RestorePlacement(nint window, GenesisMainWindowPlacement saved)
     {
-        var rect = new Rectangle
+        var rect = new Win32Rect
         {
             Left = saved.Left,
             Top = saved.Top,
@@ -130,14 +130,14 @@ internal sealed class GenesisMainWindowResizeGuard : IAsyncDisposable
             Bottom = saved.Top + saved.Height,
         };
         var monitor = MonitorFromRect(ref rect, MonitorDefaultToNearest);
-        var monitorInfo = new MonitorInfo { Size = (uint)Marshal.SizeOf<MonitorInfo>() };
+        var monitorInfo = new Win32MonitorInfo { Size = (uint)Marshal.SizeOf<Win32MonitorInfo>() };
         if (monitor == 0 || !GetMonitorInfoW(monitor, ref monitorInfo))
         {
             return;
         }
 
         var dpi = GetDpi(window);
-        var minOuter = new Rectangle
+        var minOuter = new Win32Rect
         {
             Right = GenesisMainWindowLayout.Scale(GenesisMainWindowLayout.MinimumClientWidth, dpi),
             Bottom = GenesisMainWindowLayout.Scale(GenesisMainWindowLayout.MinimumClientHeight, dpi),
@@ -158,11 +158,11 @@ internal sealed class GenesisMainWindowResizeGuard : IAsyncDisposable
             monitorInfo.Work.Bottom,
             minWidth,
             minHeight);
-        var placement = new WindowPlacement
+        var placement = new Win32WindowPlacement
         {
-            Length = (uint)Marshal.SizeOf<WindowPlacement>(),
+            Length = (uint)Marshal.SizeOf<Win32WindowPlacement>(),
             ShowCmd = clamped.Maximized ? SwShowMaximized : SwShowNormal,
-            NormalPosition = new Rectangle
+            NormalPosition = new Win32Rect
             {
                 Left = clamped.Left,
                 Top = clamped.Top,
@@ -178,9 +178,9 @@ internal sealed class GenesisMainWindowResizeGuard : IAsyncDisposable
 
     private static void SaveCurrentPlacement(nint window, GenesisMainWindowPlacementStore store, int? explicitDetailsHeight = null)
     {
-        var placement = new WindowPlacement
+        var placement = new Win32WindowPlacement
         {
-            Length = (uint)Marshal.SizeOf<WindowPlacement>(),
+            Length = (uint)Marshal.SizeOf<Win32WindowPlacement>(),
         };
         if (!GetWindowPlacement(window, ref placement))
         {
@@ -226,7 +226,7 @@ internal sealed class GenesisMainWindowResizeGuard : IAsyncDisposable
         else if (message == 0x0024 && lParam != 0) // WM_GETMINMAXINFO
         {
             var dpi = GetDpi(window);
-            var rectangle = new Rectangle
+            var rectangle = new Win32Rect
             {
                 Right = GenesisMainWindowLayout.Scale(GenesisMainWindowLayout.MinimumClientWidth, dpi),
                 Bottom = GenesisMainWindowLayout.Scale(GenesisMainWindowLayout.MinimumClientHeight, dpi),
@@ -234,7 +234,7 @@ internal sealed class GenesisMainWindowResizeGuard : IAsyncDisposable
             if (AdjustWindowRectExForDpi(ref rectangle, (uint)GetWindowLongW(window, WindowStyleIndex),
                     false, (uint)GetWindowLongW(window, -20), dpi))
             {
-                var limits = Marshal.PtrToStructure<MinMaxInfo>(lParam);
+                var limits = Marshal.PtrToStructure<Win32MinMaxInfo>(lParam);
                 limits.MinTrackSize.X = rectangle.Right - rectangle.Left;
                 limits.MinTrackSize.Y = rectangle.Bottom - rectangle.Top;
                 Marshal.StructureToPtr(limits, lParam, false);
@@ -242,7 +242,7 @@ internal sealed class GenesisMainWindowResizeGuard : IAsyncDisposable
         }
         else if (message == 0x02E0 && lParam != 0) // WM_DPICHANGED: use Windows' suggested monitor bounds.
         {
-            var rectangle = Marshal.PtrToStructure<Rectangle>(lParam);
+            var rectangle = Marshal.PtrToStructure<Win32Rect>(lParam);
             _ = SetWindowPos(window, 0, rectangle.Left, rectangle.Top,
                 rectangle.Right - rectangle.Left, rectangle.Bottom - rectangle.Top,
                 SetWindowPositionNoZOrder | SetWindowPositionNoActivate);
@@ -298,65 +298,6 @@ internal sealed class GenesisMainWindowResizeGuard : IAsyncDisposable
                 SetWindowPositionNoZOrder |
                 SetWindowPositionNoActivate |
                 SetWindowPositionFrameChanged);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern int GetWindowLongW(nint window, int index);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern int SetWindowLongW(nint window, int index, int newLong);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetWindowPos(
-        nint window,
-        nint insertAfter,
-        int x,
-        int y,
-        int width,
-        int height,
-        uint flags);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct Point { public int X; public int Y; }
-    [StructLayout(LayoutKind.Sequential)]
-    private struct Rectangle { public int Left; public int Top; public int Right; public int Bottom; }
-    [StructLayout(LayoutKind.Sequential)]
-    private struct MinMaxInfo
-    {
-        public Point Reserved, MaxSize, MaxPosition, MinTrackSize, MaxTrackSize;
-    }
-    [StructLayout(LayoutKind.Sequential)]
-    private struct WindowPlacement
-    {
-        public uint Length;
-        public uint Flags;
-        public uint ShowCmd;
-        public Point MinPosition;
-        public Point MaxPosition;
-        public Rectangle NormalPosition;
-    }
-    [StructLayout(LayoutKind.Sequential)]
-    private struct MonitorInfo
-    {
-        public uint Size;
-        public Rectangle Monitor;
-        public Rectangle Work;
-        public uint Flags;
-    }
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool AdjustWindowRectExForDpi(ref Rectangle rectangle, uint style, bool menu, uint exStyle, uint dpi);
-    [DllImport("user32.dll")]
-    private static extern nint MonitorFromRect(ref Rectangle rect, uint flags);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetMonitorInfoW(nint monitor, ref MonitorInfo info);
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetWindowPlacement(nint window, ref WindowPlacement placement);
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetWindowPlacement(nint window, [In] ref WindowPlacement placement);
 
     private sealed class NoopLifetime : IAsyncDisposable
     {

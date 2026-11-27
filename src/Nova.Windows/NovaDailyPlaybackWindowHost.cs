@@ -605,10 +605,4 @@ public sealed class NovaDailyPlaybackWindowHost : IAsyncDisposable
 
         _started.TrySetResult(result);
     }
-
-    [DllImport("user32.dll", EntryPoint = "GetDlgItem")]
-    private static extern nint GetDlgItem(nint dialog, int controlId);
-
-    [DllImport("user32.dll", EntryPoint = "MessageBoxW", CharSet = CharSet.Unicode)]
-    private static extern int MessageBoxW(nint window, string text, string caption, uint type);
 }

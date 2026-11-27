@@ -143,7 +143,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             {
                 string Read(int i)
                 {
-                    var length = GetSettingsTextLength(_publishingAdvancedFields[i]);
+                    var length = GetWindowTextLengthW(_publishingAdvancedFields[i]);
                     if (length is < 0 or > 8192) throw new InvalidOperationException("Draft is too long.");
                     var buffer = new char[length + 1];
                     if (GetWindowTextW(_publishingAdvancedFields[i], buffer, buffer.Length) != length) throw new InvalidOperationException("Cannot read draft.");
@@ -276,15 +276,15 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             {
                 var rows = GenesisPublishingAdvancedLayout.Rows(input); var page = LogicalWidth(area.Bottom);
                 _publishingAdvancedScroll = GenesisPublishingAdvancedLayout.Clamp(_publishingAdvancedScroll, page, rows.Length);
-                var scroll = new PublishingEditScrollInfo
+                var scroll = new Win32ScrollInfo
                 {
-                    Size = (uint)Marshal.SizeOf<PublishingEditScrollInfo>(),
+                    Size = (uint)Marshal.SizeOf<Win32ScrollInfo>(),
                     Mask = 7,
                     Maximum = GenesisPublishingAdvancedLayout.ContentHeight(rows.Length) - 1,
                     Page = (uint)Math.Max(1, page),
                     Position = _publishingAdvancedScroll
                 };
-                _ = SetPublishingEditScroll(_publishingAdvancedPane, 1, ref scroll, true);
+                _ = SetScrollInfo(_publishingAdvancedPane, 1, ref scroll, true);
                 _ = GetClientRect(_publishingAdvancedPane, out area);
                 var width = LogicalWidth(area.Right);
                 for (var row = 0; row < rows.Length; row++)
@@ -312,15 +312,15 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             if (message == 0x020A) _publishingAdvancedScroll -= (short)(value >> 16) * 48 / 120;
             else
             {
-                var info = new PublishingEditScrollInfo { Size = (uint)Marshal.SizeOf<PublishingEditScrollInfo>(), Mask = 0x10 };
-                _ = GetPublishingEditScroll(_publishingAdvancedPane, 1, ref info);
+                var info = new Win32ScrollInfo { Size = (uint)Marshal.SizeOf<Win32ScrollInfo>(), Mask = 0x10 };
+                _ = GetScrollInfo(_publishingAdvancedPane, 1, ref info);
                 _publishingAdvancedScroll = (int)(value & 0xffff) switch
                 {
                     0 => _publishingAdvancedScroll - GenesisPublishingAdvancedLayout.RowHeight,
                     1 => _publishingAdvancedScroll + GenesisPublishingAdvancedLayout.RowHeight,
                     2 => _publishingAdvancedScroll - page,
                     3 => _publishingAdvancedScroll + page,
-                    4 or 5 => info.Track,
+                    4 or 5 => info.TrackPosition,
                     6 => 0,
                     7 => GenesisPublishingAdvancedLayout.ContentHeight(GenesisPublishingAdvancedLayout.Rows(input).Length),
                     _ => _publishingAdvancedScroll

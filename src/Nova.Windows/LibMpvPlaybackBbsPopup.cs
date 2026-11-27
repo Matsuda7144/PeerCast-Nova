@@ -357,8 +357,4 @@ internal sealed class LibMpvPlaybackBbsPopup : IDisposable
             brush = 0;
         }
     }
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetLayeredWindowAttributes(nint window, uint colorKey, byte alpha, uint flags);
 }

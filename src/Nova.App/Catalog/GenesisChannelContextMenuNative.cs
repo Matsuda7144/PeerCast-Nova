@@ -61,11 +61,11 @@ internal static class GenesisChannelContextMenuNative
             return -1;
         }
 
-        var hit = new ListViewHitTestInfo
+        var hit = new Win32ListViewHitTest
         {
             Point = clientPoint,
         };
-        var buffer = Marshal.AllocHGlobal(Marshal.SizeOf<ListViewHitTestInfo>());
+        var buffer = Marshal.AllocHGlobal(Marshal.SizeOf<Win32ListViewHitTest>());
         try
         {
             Marshal.StructureToPtr(hit, buffer, fDeleteOld: false);
@@ -78,7 +78,7 @@ internal static class GenesisChannelContextMenuNative
                 return -1;
             }
 
-            hit = Marshal.PtrToStructure<ListViewHitTestInfo>(buffer);
+            hit = Marshal.PtrToStructure<Win32ListViewHitTest>(buffer);
             GenesisChannelContextMenuDiagnostics.Write(
                 "hit-test",
                 $"row={hit.Item} sub={hit.SubItem} flags=0x{hit.Flags:X} x={clientPoint.X} y={clientPoint.Y}");
@@ -247,11 +247,11 @@ internal static class GenesisChannelContextMenuNative
         return ShowAt(owner, anchor, canPlay, favoriteText, actions);
     }
 
-    private static bool TryGetRowAnchor(nint listView, int row, out WindowPoint anchor)
+    private static bool TryGetRowAnchor(nint listView, int row, out Win32Point anchor)
     {
         anchor = default;
-        var rectangle = new WindowRectangle();
-        var buffer = Marshal.AllocHGlobal(Marshal.SizeOf<WindowRectangle>());
+        var rectangle = new Win32Rect();
+        var buffer = Marshal.AllocHGlobal(Marshal.SizeOf<Win32Rect>());
         try
         {
             Marshal.StructureToPtr(rectangle, buffer, fDeleteOld: false);
@@ -264,14 +264,14 @@ internal static class GenesisChannelContextMenuNative
                 return false;
             }
 
-            rectangle = Marshal.PtrToStructure<WindowRectangle>(buffer);
+            rectangle = Marshal.PtrToStructure<Win32Rect>(buffer);
         }
         finally
         {
             Marshal.FreeHGlobal(buffer);
         }
 
-        anchor = new WindowPoint
+        anchor = new Win32Point
         {
             X = rectangle.Left,
             Y = rectangle.Bottom,
@@ -379,7 +379,7 @@ internal static class GenesisChannelContextMenuNative
 
     private static GenesisRecordingFileContextCommand ShowRecordingFileAt(
         nint owner,
-        WindowPoint anchor,
+        Win32Point anchor,
         bool fileExists)
     {
         var menu = CreatePopupMenu();
@@ -435,7 +435,7 @@ internal static class GenesisChannelContextMenuNative
 
     private static GenesisChannelContextMenuCommand ShowAt(
         nint owner,
-        WindowPoint anchor,
+        Win32Point anchor,
         bool canPlay,
         string? favoriteText,
         GenesisChannelContextTarget? actions)
@@ -555,79 +555,4 @@ internal static class GenesisChannelContextMenuNative
         SystemGenesisGuiNextChannelContextFeedback.ReportMenuOpenFailure(owner);
         return GenesisChannelContextMenuCommand.None;
     }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct WindowPoint
-    {
-        public int X;
-        public int Y;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct WindowRectangle
-    {
-        public int Left;
-        public int Top;
-        public int Right;
-        public int Bottom;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct ListViewHitTestInfo
-    {
-        public WindowPoint Point;
-        public uint Flags;
-        public int Item;
-        public int SubItem;
-        public int Group;
-    }
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetCursorPos(out WindowPoint point);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool ScreenToClient(nint window, ref WindowPoint point);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool ClientToScreen(nint window, ref WindowPoint point);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern uint TrackPopupMenuEx(
-        nint menu,
-        uint flags,
-        int x,
-        int y,
-        nint owner,
-        nint parameters);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool OpenClipboard(nint owner);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool EmptyClipboard();
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern nint SetClipboardData(uint format, nint memory);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool CloseClipboard();
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern nint GlobalAlloc(uint flags, nuint bytes);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern nint GlobalLock(nint memory);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GlobalUnlock(nint memory);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern nint GlobalFree(nint memory);
 }

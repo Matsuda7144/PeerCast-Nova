@@ -231,7 +231,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             if (!IsModern || pane != _settingsPane || !GetClientRect(pane, out var client)) return false;
             _ = FillRect(dc, ref client, _mainBrush);
             var card = new GenesisGuiNextSettingsLayout(LogicalWidth(client.Right), LogicalWidth(client.Bottom)).Card;
-            var box = new Rectangle { Left = Scale(card.Left), Top = Scale(card.Top), Right = Scale(card.Right), Bottom = Scale(card.Bottom) };
+            var box = new Win32Rect { Left = Scale(card.Left), Top = Scale(card.Top), Right = Scale(card.Right), Bottom = Scale(card.Bottom) };
             _ = FillRect(dc, ref box, _topBrush);
             using var pen = new VisualPen(dc, Scale(1), GenesisGuiNextDesign.Border);
             _ = GdiRectangle(dc, box.Left, box.Top, box.Right, box.Bottom);
@@ -257,7 +257,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             if (!IsModern || !(SettingsTexts.Contains(control) || NetworkSettingsTexts.Contains(control))) return false;
             if (message == 0x0014) return true;
             if (message != WindowMessagePaint) return false;
-            var dc = BeginCardPaint(control, out var paint);
+            var dc = BeginPaint(control, out var paint);
             try
             {
                 if (dc == 0 || !GetClientRect(control, out var box)) return true;
@@ -272,10 +272,10 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                     control == _generalNotice || control == _generalStatus || control == _updateStatus || control == _natSettingsStatus || ConnectionCategory && ConnectionBodyTexts.Contains(control) ? 0x0010u | 0x8000 : DrawTextSingleLine | DrawTextVerticalCenter | 0x8000);
                 return true;
             }
-            finally { _ = EndCardPaint(control, ref paint); }
+            finally { _ = EndPaint(control, ref paint); }
         }
 
-        private bool DrawSettingsButton(DrawItem draw)
+        private bool DrawSettingsButton(Win32DrawItem draw)
         {
             if (!IsModern || !IsOwnerDrawButton(draw.ControlType) || !SettingsButtons.Contains(draw.ControlWindow)) return false;
             var selected = draw.ControlId == GeneralCategoryId && _settingsCategory == GenesisIntegratedSettingsCategory.General ||

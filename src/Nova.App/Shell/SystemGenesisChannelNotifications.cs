@@ -184,13 +184,13 @@ internal sealed class SystemGenesisChannelNotificationPresenter :
         return Truncate(text, MaximumInfoCharacters);
     }
 
-    internal static NotifyIconData CreateNotificationData(
+    internal static Win32NotifyIconData CreateNotificationData(
         nint window,
         nint icon,
         GenesisChannelNotification notification) =>
         new()
         {
-            Size = (uint)Marshal.SizeOf<NotifyIconData>(),
+            Size = (uint)Marshal.SizeOf<Win32NotifyIconData>(),
             Window = window,
             Id = NotificationIconId,
             Flags = NotifyIconFlagIcon | NotifyIconFlagTip | NotifyIconFlagInfo,
@@ -234,9 +234,9 @@ internal sealed class SystemGenesisChannelNotificationPresenter :
             return;
         }
 
-        var data = new NotifyIconData
+        var data = new Win32NotifyIconData
         {
-            Size = (uint)Marshal.SizeOf<NotifyIconData>(),
+            Size = (uint)Marshal.SizeOf<Win32NotifyIconData>(),
             Window = _window,
             Id = NotificationIconId,
         };
@@ -248,44 +248,6 @@ internal sealed class SystemGenesisChannelNotificationPresenter :
         value.Length <= maximumCharacters
             ? value
             : value[..maximumCharacters];
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    internal struct NotifyIconData
-    {
-        public uint Size;
-        public nint Window;
-        public uint Id;
-        public uint Flags;
-        public uint CallbackMessage;
-        public nint Icon;
-
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
-        public string ToolTip;
-
-        public uint State;
-        public uint StateMask;
-
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)]
-        public string Info;
-
-        public uint TimeoutOrVersion;
-
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 64)]
-        public string InfoTitle;
-
-        public uint InfoFlags;
-        public Guid ItemGuid;
-        public nint BalloonIcon;
-    }
-
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool Shell_NotifyIconW(
-        uint message,
-        ref NotifyIconData data);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern nint LoadIconW(nint instance, nint iconName);
 }
 
 internal sealed class SystemGenesisSystemNotificationSoundPlayer :
@@ -320,11 +282,4 @@ internal sealed class SystemGenesisSystemNotificationSoundPlayer :
 
         return ValueTask.CompletedTask;
     }
-
-    [DllImport("winmm.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool PlaySoundW(
-        string sound,
-        nint module,
-        uint flags);
 }

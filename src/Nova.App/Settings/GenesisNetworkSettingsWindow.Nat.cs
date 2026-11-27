@@ -30,9 +30,9 @@ internal sealed partial class GenesisNetworkSettingsWindow
         var brush = CreateSolidBrush(NatBackground);
         if (brush == 0) return null;
         var className = $"PeerCastNovaNetworkNat-{Guid.NewGuid():N}";
-        var windowClass = new WindowClassEx
+        var windowClass = new Win32WindowClassEx
         {
-            Size = (uint)Marshal.SizeOf<WindowClassEx>(),
+            Size = (uint)Marshal.SizeOf<Win32WindowClassEx>(),
             WindowProcedure = Marshal.GetFunctionPointerForDelegate(WindowProcedureDelegate),
             Instance = instance,
             Cursor = LoadCursorW(0, (nint)ArrowCursor),
@@ -245,15 +245,15 @@ internal sealed partial class GenesisNetworkSettingsWindow
 
         public static bool DrawClose(nint parameter)
         {
-            var item = Marshal.PtrToStructure<NatDrawItem>(parameter);
+            var item = Marshal.PtrToStructure<Win32DrawItem>(parameter);
             if (item.ControlId != CloseControlId) return false;
             var fill = CreateSolidBrush(0x00B87832);
-            try { _ = FillRect(item.Dc, ref item.Rectangle, fill); }
+            try { _ = FillRect(item.DeviceContext, ref item.ItemRectangle, fill); }
             finally { if (fill != 0) _ = DeleteObject(fill); }
-            _ = SetTextColor(item.Dc, NatText);
-            _ = SetBkMode(item.Dc, 1);
-            _ = DrawTextW(item.Dc, "閉じる", -1, ref item.Rectangle, 0x0001 | 0x0004 | 0x0020);
-            if ((item.State & 0x0010) != 0) _ = DrawFocusRect(item.Dc, ref item.Rectangle);
+            _ = SetTextColor(item.DeviceContext, NatText);
+            _ = SetBkMode(item.DeviceContext, 1);
+            _ = DrawTextW(item.DeviceContext, "閉じる", -1, ref item.ItemRectangle, 0x0001 | 0x0004 | 0x0020);
+            if ((item.ItemState & 0x0010) != 0) _ = DrawFocusRect(item.DeviceContext, ref item.ItemRectangle);
             return true;
         }
 
@@ -326,20 +326,4 @@ internal sealed partial class GenesisNetworkSettingsWindow
         GuiNextNetworkTone.Purple => 0x00E2AFCB,
         _ => NatText,
     };
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct NatRectangle { public int Left, Top, Right, Bottom; }
-    [StructLayout(LayoutKind.Sequential)]
-    private struct NatDrawItem
-    {
-        public uint ControlType, ControlId, ItemId, Action, State;
-        public nint Window, Dc;
-        public NatRectangle Rectangle;
-        public nuint Data;
-    }
-    [DllImport("user32.dll")] private static extern nuint SetTimer(nint window, nuint id, uint interval, nint callback);
-    [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool KillTimer(nint window, nuint id);
-    [DllImport("user32.dll")] private static extern int FillRect(nint dc, ref NatRectangle rectangle, nint brush);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int DrawTextW(nint dc, string text, int length, ref NatRectangle rectangle, uint format);
-    [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool DrawFocusRect(nint dc, ref NatRectangle rectangle);
 }

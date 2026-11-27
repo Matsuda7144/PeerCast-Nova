@@ -32,8 +32,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private void CreateRelayTree()
         {
             if (!IsModern) return;
-            var init = new TreeInit { Size = 8, Classes = 2 };
-            _ = TreeInitialize(ref init);
+            var init = new Win32InitCommonControlsEx { Size = 8, Classes = 2 };
+            _ = InitCommonControlsEx(ref init);
             var instance = GetModuleHandleW(null);
             nint Create(string type, string text, uint style, int id) => CreateWindowExW(0, type, text,
                 WindowStyleChild | style, 0, 0, 1, 1, GetParent(_listView), (nint)id, instance, 0);
@@ -98,7 +98,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         public bool DrawRelayTreeControl(nint pointer)
         {
             if (!TreePageShown || pointer == 0) return false;
-            var draw = Marshal.PtrToStructure<DrawItem>(pointer);
+            var draw = Marshal.PtrToStructure<Win32DrawItem>(pointer);
             using var font = GenesisWindowUiFont.SelectForDrawing(draw.DeviceContext, draw.ControlWindow);
             if (draw.ControlWindow == _relayTreeChannels && draw.ControlType == 3) return DrawYellowPageItem(draw);
             if (draw.ControlWindow != _relayTreeRefresh && draw.ControlWindow != _relayTreeMask) return false;
@@ -133,8 +133,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge
 
         private void PlaceTreePage()
         {
-            if (!GetWindowRect(_listView, out Rectangle list) || !GetWindowRect(_detailsPane, out Rectangle details)) return;
-            var point = new Point { X = list.Left, Y = list.Top };
+            if (!GetWindowRect(_listView, out Win32Rect list) || !GetWindowRect(_detailsPane, out Win32Rect details)) return;
+            var point = new Win32Point { X = list.Left, Y = list.Top };
             if (!ScreenToClient(GetParent(_listView), ref point)) return;
             var x = LogicalWidth(point.X); var y = LogicalWidth(point.Y);
             var width = LogicalWidth(list.Right - list.Left); var height = LogicalWidth(details.Bottom - list.Top);
@@ -228,11 +228,11 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         public bool HandleRelayTreeNotify(nint notification)
         {
             if (notification == 0 || _treeUpdating) return false;
-            var header = Marshal.PtrToStructure<TreeHeader>(notification);
-            if (header.Window != _relayTreeBody) return false;
+            var header = Marshal.PtrToStructure<Win32NotifyHeader>(notification);
+            if (header.WindowFrom != _relayTreeBody) return false;
             // TreeView reports NM_RCLICK to its actual parent. Suppress its default
             // processing after opening our HitTest-based menu.
-            if (header.Code == -5 && TreeGetCursor(out var cursor))
+            if (header.Code == -5 && GetCursorPos(out var cursor))
                 return RelayTreeContext(_relayTreeBody, 0x007B, (nint)((cursor.Y << 16) | (cursor.X & 0xffff)));
             if (header.Code != -451) return false; // TVN_SELCHANGEDW
             var caret = SendMessageW(_relayTreeBody, 0x110A, 9, 0);
@@ -247,23 +247,23 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             var x = (short)((long)position & 0xffff); var y = (short)(((long)position >> 16) & 0xffff);
             var keyboard = x == -1 && y == -1;
             nint item;
-            var point = new Point { X = x, Y = y };
+            var point = new Win32Point { X = x, Y = y };
             if (keyboard)
             {
                 item = SendMessageW(window, 0x110A, 9, 0);
-                _ = GetWindowRect(window, out Rectangle rect); x = (short)(rect.Left + 24); y = (short)(rect.Top + 24);
+                _ = GetWindowRect(window, out Win32Rect rect); x = (short)(rect.Left + 24); y = (short)(rect.Top + 24);
             }
             else
             {
                 if (!ScreenToClient(window, ref point)) return true;
-                var hit = new TreeHit { X = point.X, Y = point.Y };
-                var memory = Marshal.AllocHGlobal(Marshal.SizeOf<TreeHit>());
+                var hit = new Win32TreeHit { X = point.X, Y = point.Y };
+                var memory = Marshal.AllocHGlobal(Marshal.SizeOf<Win32TreeHit>());
                 try
                 {
                     Marshal.StructureToPtr(hit, memory, false);
                     item = SendMessageW(window, 0x1111, 0, memory);
                     // A row's indent/right-hand whitespace is not a node hit.
-                    if ((Marshal.PtrToStructure<TreeHit>(memory).Flags & 0x46) == 0) item = 0;
+                    if ((Marshal.PtrToStructure<Win32TreeHit>(memory).Flags & 0x46) == 0) item = 0;
                 }
                 finally { Marshal.FreeHGlobal(memory); }
             }
@@ -280,7 +280,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 _ = AppendMenuW(menu, 0, 2, "表示IDをコピー");
                 if (_treeDisconnectTask?.IsCompleted != false && GenesisRelayTreeSelection.HasDownstreamIdentity(_treeSnapshot, key))
                     _ = AppendMenuW(menu, 0, 3, "下流を切断...");
-                var command = TreeTrackMenu(menu, 0x0100 | 0x0002, x, y, 0, _owner, 0);
+                var command = TrackPopupMenu(menu, 0x0100 | 0x0002, x, y, 0, _owner, 0);
                 // Resolve against a fresh observation after the modal menu.
                 SynchronizeNativeSelection();
                 var node = TreePageShown ? GenesisRelayTreeSelection.Resolve(_treeSnapshot, key) : null;
@@ -332,13 +332,13 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         private nint WriteTreeItem(nint handle, nint parent, string text)
         {
             var label = Marshal.StringToHGlobalUni(text);
-            var memory = Marshal.AllocHGlobal(Marshal.SizeOf<TreeInsert>());
+            var memory = Marshal.AllocHGlobal(Marshal.SizeOf<Win32TreeInsert>());
             try
             {
-                var value = new TreeItem { Mask = 1, Handle = handle, Text = label };
+                var value = new Win32TreeItem { Mask = 1, Handle = handle, Text = label };
                 if (handle == 0)
                 {
-                    Marshal.StructureToPtr(new TreeInsert { Parent = parent, After = (nint)(-65534), Item = value }, memory, false);
+                    Marshal.StructureToPtr(new Win32TreeInsert { Parent = parent, After = (nint)(-65534), Item = value }, memory, false);
                     return SendMessageW(_relayTreeBody, 0x1132, 0, memory);
                 }
                 Marshal.StructureToPtr(value, memory, false);
@@ -350,15 +350,4 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         public bool IsRelayTreeControl(nint control) => control != 0 && control == _relayTreeBody;
         public nint PrepareRelayTreeControl(nuint context) => _topBrush;
     }
-
-    [StructLayout(LayoutKind.Sequential)] private struct TreeInit { public int Size, Classes; }
-    [StructLayout(LayoutKind.Sequential)] private struct TreeHeader { public nint Window; public nuint Id; public int Code; }
-    [StructLayout(LayoutKind.Sequential)] private struct TreeHit { public int X, Y; public uint Flags; public nint Item; }
-    [StructLayout(LayoutKind.Sequential)]
-    private struct TreeItem
-    { public uint Mask; public nint Handle; public uint State, StateMask; public nint Text; public int TextMax, Image, SelectedImage, Children; public nint Data; }
-    [StructLayout(LayoutKind.Sequential)] private struct TreeInsert { public nint Parent, After; public TreeItem Item; }
-    [DllImport("comctl32.dll", EntryPoint = "InitCommonControlsEx")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool TreeInitialize(ref TreeInit init);
-    [DllImport("user32.dll", EntryPoint = "TrackPopupMenu")] private static extern int TreeTrackMenu(nint menu, uint flags, int x, int y, int reserved, nint owner, nint rect);
-    [DllImport("user32.dll", EntryPoint = "GetCursorPos")][return: MarshalAs(UnmanagedType.Bool)] private static extern bool TreeGetCursor(out Point point);
 }

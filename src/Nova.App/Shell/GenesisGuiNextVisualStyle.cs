@@ -212,8 +212,11 @@ internal sealed partial class GenesisGuiNextAppShellBridge
 
         internal void TrackListHover(uint message, nint lParam)
         {
-            var hit = new VisualHit { X = (short)((long)lParam & 0xffff), Y = (short)(((long)lParam >> 16) & 0xffff) };
-            var next = message == 0x02A3 ? -1 : SendHitTest(_listView, 0x1012, 0, ref hit).ToInt32();
+            var hit = new Win32ListViewHitTest
+            {
+                Point = new Win32Point((short)((long)lParam & 0xffff), (short)(((long)lParam >> 16) & 0xffff)),
+            };
+            var next = message == 0x02A3 ? -1 : SendMessageW(_listView, 0x1012, 0, ref hit).ToInt32();
             if (next == _hoverRow) return;
             if (_hoverRow >= 0) _ = SendMessageW(_listView, 0x1015, (nuint)_hoverRow, _hoverRow);
             _hoverRow = next;
@@ -221,7 +224,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             if (message != 0x02A3) RequestMouseLeave(_listView);
         }
 
-        private void PaintRowSeparator(CustomDraw draw)
+        private void PaintRowSeparator(Win32CustomDraw draw)
         {
             var line = draw.ItemRectangle;
             if (GetClientRect(_listView, out var client)) line.Right = client.Right;
@@ -229,7 +232,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             FillRectangle(draw.DeviceContext, line, GenesisGuiNextDesign.Separator);
         }
 
-        private bool DrawTopButton(DrawItem draw)
+        private bool DrawTopButton(Win32DrawItem draw)
         {
             var disabled = (draw.ItemState & DrawItemDisabled) != 0;
             var active = (draw.ItemState & 0x0001) != 0;
@@ -249,7 +252,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             return true;
         }
 
-        private bool DrawYellowPageItem(DrawItem draw)
+        private bool DrawYellowPageItem(Win32DrawItem draw)
         {
             var selected = (draw.ItemState & 1) != 0;
             FillRectangle(draw.DeviceContext, draw.ItemRectangle,
@@ -258,7 +261,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             var length = SendMessageW(draw.ControlWindow, 0x0149, draw.ItemId, 0).ToInt32();
             if (length is < 0 or > 4096) return true;
             var text = new char[length + 1];
-            _ = SendComboText(draw.ControlWindow, 0x0148, draw.ItemId, text);
+            _ = SendMessageW(draw.ControlWindow, 0x0148, draw.ItemId, text);
             _ = SetTextColor(draw.DeviceContext, (draw.ItemState & DrawItemDisabled) != 0 ? GenesisGuiNextDesign.DisabledText : GenesisGuiNextDesign.Text);
             _ = SetBkMode(draw.DeviceContext, TransparentBackgroundMode);
             var bounds = draw.ItemRectangle;
@@ -273,10 +276,10 @@ internal sealed partial class GenesisGuiNextAppShellBridge
         {
             result = 0;
             if (!IsModern || pointer == 0 || Volatile.Read(ref _detached) != 0) return false;
-            var notification = Marshal.PtrToStructure<NotifyHeader>(pointer);
+            var notification = Marshal.PtrToStructure<Win32NotifyHeader>(pointer);
             var header = SendMessageW(_listView, 0x101F, 0, 0);
             if (notification.WindowFrom != header || notification.Code != NotifyCustomDraw) return false;
-            var draw = Marshal.PtrToStructure<CustomDraw>(pointer);
+            var draw = Marshal.PtrToStructure<Win32CustomDraw>(pointer);
             if (draw.DrawStage == CustomDrawStagePrePaint)
             {
                 result = CustomDrawNotifyItemDraw | CustomDrawNotifyPostPaint;
@@ -289,8 +292,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 {
                     for (var i = 0; i < count; i++)
                     {
-                        var item = new Rectangle();
-                        if (SendHeaderRectangle(header, 0x1207, (nuint)i, ref item) != 0)
+                        var item = new Win32Rect();
+                        if (SendMessageW(header, 0x1207, (nuint)i, ref item) != 0)
                             client.Left = Math.Max(client.Left, item.Right);
                     }
                     if (client.Left < client.Right) FillRectangle(draw.DeviceContext, client, GenesisGuiNextDesign.Header);
@@ -301,8 +304,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             var buffer = Marshal.AllocHGlobal(512);
             try
             {
-                var item = new VisualHeaderItem { Mask = 0x0002 | 0x0004, Text = buffer, TextCharacters = 256 };
-                if (SendHeaderItem(header, 0x120B, draw.ItemSpec, ref item) == 0) return false;
+                var item = new Win32HeaderItem { Mask = 0x0002 | 0x0004, Text = buffer, TextCharacters = 256 };
+                if (SendMessageW(header, 0x120B, draw.ItemSpec, ref item) == 0) return false;
                 var text = UsesStyledChannelColumns && ReferenceEquals(_paintColumns, SelectedListColumns) && draw.ItemSpec == 1
                     ? "詳細" : Marshal.PtrToStringUni(buffer) ?? string.Empty;
                 FillRectangle(draw.DeviceContext, draw.ItemRectangle, GenesisGuiNextDesign.Header);
@@ -331,7 +334,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             finally { Marshal.FreeHGlobal(buffer); }
         }
 
-        private void DrawNavigationIcon(nint dc, int index, Rectangle bounds, bool disabled)
+        private void DrawNavigationIcon(nint dc, int index, Win32Rect bounds, bool disabled)
         {
             using var pen = new VisualPen(dc, Scale(1), disabled ? GenesisGuiNextDesign.SecondaryText : GenesisGuiNextDesign.Text);
             var left = bounds.Left + Scale(12);
@@ -352,7 +355,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                     {
                         var angle = -Math.PI / 2 + i * Math.PI / 5;
                         var radius = i % 2 == 0 ? 9 : 4;
-                        return new VisualPoint(X(9 + (int)Math.Round(Math.Cos(angle) * radius)),
+                        return new Win32Point(X(9 + (int)Math.Round(Math.Cos(angle) * radius)),
                             Y(9 + (int)Math.Round(Math.Sin(angle) * radius)));
                     }).ToArray();
                     _ = Polyline(dc, points, points.Length);
@@ -401,31 +404,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
     }
     private static void RequestMouseLeave(nint window)
     {
-        var request = new VisualMouseTracking { Size = (uint)Marshal.SizeOf<VisualMouseTracking>(), Flags = 2, Window = window };
+        var request = new Win32TrackMouseEvent { Size = (uint)Marshal.SizeOf<Win32TrackMouseEvent>(), Flags = 2, Window = window };
         _ = TrackMouseEvent(ref request);
     }
-    [StructLayout(LayoutKind.Sequential)]
-    private struct VisualMouseTracking { public uint Size, Flags; public nint Window; public uint HoverTime; }
-    [StructLayout(LayoutKind.Sequential)]
-    private struct VisualHit { public int X, Y; public uint Flags; public int Item, SubItem, Group; }
-    [StructLayout(LayoutKind.Sequential)]
-    private readonly record struct VisualPoint(int X, int Y);
-    [StructLayout(LayoutKind.Sequential)]
-    private struct VisualHeaderItem
-    {
-        public uint Mask; public int Width; public nint Text, Bitmap; public int TextCharacters, Format;
-        public nint Parameter; public int Image, Order; public uint Type; public nint Filter; public uint State;
-    }
-    [DllImport("user32.dll", EntryPoint = "SendMessageW", CharSet = CharSet.Unicode)] private static extern nint SendComboText(nint window, uint message, nuint index, [Out] char[] text);
-    [DllImport("user32.dll")] private static extern bool TrackMouseEvent(ref VisualMouseTracking request);
-    [DllImport("user32.dll", EntryPoint = "SendMessageW")] private static extern nint SendHitTest(nint window, uint message, nuint wParam, ref VisualHit hit);
-    [DllImport("user32.dll", EntryPoint = "SendMessageW")] private static extern nint SendHeaderItem(nint window, uint message, nuint wParam, ref VisualHeaderItem item);
-    [DllImport("user32.dll", EntryPoint = "SendMessageW")] private static extern nint SendHeaderRectangle(nint window, uint message, nuint wParam, ref Rectangle rectangle);
-    [DllImport("comctl32.dll")] private static extern nint ImageList_Create(int width, int height, uint flags, int initial, int grow);
-    [DllImport("comctl32.dll")] private static extern bool ImageList_Destroy(nint images);
-    [DllImport("gdi32.dll")] private static extern bool MoveToEx(nint dc, int x, int y, nint previous);
-    [DllImport("gdi32.dll")] private static extern bool LineTo(nint dc, int x, int y);
-    [DllImport("gdi32.dll", EntryPoint = "Rectangle")] private static extern bool GdiRectangle(nint dc, int left, int top, int right, int bottom);
-    [DllImport("gdi32.dll")] private static extern bool Ellipse(nint dc, int left, int top, int right, int bottom);
-    [DllImport("gdi32.dll")] private static extern bool Polyline(nint dc, [In] VisualPoint[] points, int count);
 }

@@ -96,13 +96,13 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             result = 0;
             if (!UsesChannelListStyle || _paintColumns is not { } columns ||
                 !ReferenceEquals(columns, SelectedListColumns)) return false;
-            var draw = Marshal.PtrToStructure<ListViewCustomDraw>(pointer);
+            var draw = Marshal.PtrToStructure<Win32ListViewCustomDraw>(pointer);
             if (draw.Draw.DrawStage != 0x00030001 || draw.Draw.ItemSpec >= (nuint)_paintValues.Count ||
                 (uint)draw.SubItem >= (uint)columns.Count) return false;
             var values = _paintValues[(int)draw.Draw.ItemSpec];
             if (values.Length != columns.Count) return false;
-            var box = new Rectangle { Top = draw.SubItem, Left = 0 };
-            if (SendHeaderRectangle(_listView, 0x1038, draw.Draw.ItemSpec, ref box) == 0) return false;
+            var box = new Win32Rect { Top = draw.SubItem, Left = 0 };
+            if (SendMessageW(_listView, 0x1038, draw.Draw.ItemSpec, ref box) == 0) return false;
             // Subitem zero's BOUNDS covers the whole row; restrict it to the first column.
             if (draw.SubItem == 0) box.Right = box.Left + (int)SendMessageW(_listView, 0x101D, 0, 0);
             var selected = (int)draw.Draw.ItemSpec == _paintSelectedRow;

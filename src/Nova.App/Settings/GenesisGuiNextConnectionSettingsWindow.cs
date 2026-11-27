@@ -17,7 +17,7 @@ internal sealed class GenesisGuiNextConnectionSettingsWindow : IGenesisGuiNextCo
     private const int Ipv6Id = 1010, WanId = 1011, SaveId = 1020, CloseId = 1021, RuntimeId = 1022, StatusId = 1023, StartupId = 1024;
     private const uint ChildVisible = 0x50000000, TabStop = 0x00010000;
     private static readonly ConcurrentDictionary<nint, WindowState> States = new();
-    private static readonly WindowProcedure Procedure = ProcessMessage;
+    private static readonly Win32WindowProcedure Procedure = ProcessMessage;
     private static readonly Win32SubclassProcedure ControlProcedure = ProcessControlMessage;
     private static int _nextCompletionToken;
     private readonly nint _window;
@@ -40,13 +40,13 @@ internal sealed class GenesisGuiNextConnectionSettingsWindow : IGenesisGuiNextCo
         var instance = GetModuleHandleW(null);
         if (instance == 0) return null;
         var className = $"PeerCastNovaConnectionSettings-{Guid.NewGuid():N}";
-        var wc = new WindowClassEx
+        var wc = new Win32WindowClassEx
         {
-            Size = (uint)Marshal.SizeOf<WindowClassEx>(),
-            Procedure = Marshal.GetFunctionPointerForDelegate(Procedure),
+            Size = (uint)Marshal.SizeOf<Win32WindowClassEx>(),
+            WindowProcedure = Marshal.GetFunctionPointerForDelegate(Procedure),
             Instance = instance,
             Cursor = LoadCursorW(0, (nint)32512),
-            Background = (nint)6,
+            BackgroundBrush = (nint)6,
             ClassName = className,
         };
         // Stock COLOR_WINDOW brush is borrowed; there is no caller-owned brush to delete.
@@ -131,7 +131,7 @@ internal sealed class GenesisGuiNextConnectionSettingsWindow : IGenesisGuiNextCo
             if (message == SaveCompleted) state.CompleteSave(wParam);
             if (message == DpiChanged)
             {
-                var rectangle = Marshal.PtrToStructure<NativeRectangle>(lParam);
+                var rectangle = Marshal.PtrToStructure<Win32Rect>(lParam);
                 _ = SetWindowPos(window, 0, rectangle.Left, rectangle.Top,
                     rectangle.Right - rectangle.Left, rectangle.Bottom - rectangle.Top, 0x0014);
                 state.ApplyLayout((uint)(wParam & 0xffff));
@@ -321,20 +321,4 @@ internal sealed class GenesisGuiNextConnectionSettingsWindow : IGenesisGuiNextCo
             return new string(buffer, 0, length);
         }
     }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct NativeRectangle { public int Left, Top, Right, Bottom; }
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct WindowClassEx
-    {
-        public uint Size, Style;
-        public nint Procedure;
-        public int ClassExtra, WindowExtra;
-        public nint Instance, Icon, Cursor, Background, Menu;
-        [MarshalAs(UnmanagedType.LPWStr)] public string ClassName;
-        public nint SmallIcon;
-    }
-    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
-    private delegate nint WindowProcedure(nint window, uint message, nuint wParam, nint lParam);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern ushort RegisterClassExW(ref WindowClassEx wc);
 }

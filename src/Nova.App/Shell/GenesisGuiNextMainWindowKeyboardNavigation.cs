@@ -20,7 +20,7 @@ internal sealed class GenesisGuiNextMainWindowKeyboardNavigation : IDisposable
     private const int WindowLongStyle = -16;
     private const uint WindowStyleTabStop = 0x00010000;
     private readonly nint _owner;
-    private readonly HookProcedure _hookProcedure;
+    private readonly Win32HookProcedure _hookProcedure;
     private nint _hook;
     private int _disposed;
 
@@ -243,7 +243,7 @@ internal sealed class GenesisGuiNextMainWindowKeyboardNavigation : IDisposable
         {
             if (code >= 0 && Volatile.Read(ref _disposed) == 0 && messagePointer != 0)
             {
-                var message = Marshal.PtrToStructure<NativeMessage>(messagePointer);
+                var message = Marshal.PtrToStructure<Win32WindowMessage>(messagePointer);
                 var refreshHandled = false;
                 if (message.Message == WindowMessageKeyDown && message.WParam == VirtualKeyF5)
                 {
@@ -381,7 +381,7 @@ internal sealed class GenesisGuiNextMainWindowKeyboardNavigation : IDisposable
             }
         }
 
-        var origin = default(NativePoint);
+        var origin = default(Win32Point);
         _ = ClientToScreen(_owner, ref origin);
         _ = GetClientRect(_owner, out var ownerClient);
         var dpi = GenesisMainWindowResizeGuard.GetDpi(_owner);
@@ -427,7 +427,7 @@ internal sealed class GenesisGuiNextMainWindowKeyboardNavigation : IDisposable
     private List<TabStopWindow> CaptureTabStops()
     {
         var tabStops = new List<TabStopWindow>();
-        EnumWindowsProcedure callback = (window, _) =>
+        Win32EnumWindowsProcedure callback = (window, _) =>
         {
             var style = unchecked((uint)GetWindowLongW(window, WindowLongStyle));
             if ((style & WindowStyleTabStop) != 0 &&
@@ -444,7 +444,7 @@ internal sealed class GenesisGuiNextMainWindowKeyboardNavigation : IDisposable
         _ = EnumChildWindows(_owner, callback, 0);
         GC.KeepAlive(callback);
 
-        var origin = default(NativePoint);
+        var origin = default(Win32Point);
         _ = ClientToScreen(_owner, ref origin);
         var dpi = GenesisMainWindowResizeGuard.GetDpi(_owner);
         var sidebarSplitPixels = GenesisMainWindowLayout.Scale(
@@ -468,7 +468,7 @@ internal sealed class GenesisGuiNextMainWindowKeyboardNavigation : IDisposable
             var entry = bounds[i];
             tabStops[i] = new(
                 entry.Window,
-                new NativeRectangle
+                new Win32Rect
                 {
                     Left = entry.Left,
                     Top = entry.Top,
@@ -531,77 +531,5 @@ internal sealed class GenesisGuiNextMainWindowKeyboardNavigation : IDisposable
 
     private readonly record struct TabStopWindow(
         nint Window,
-        NativeRectangle Rectangle);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct NativeMessage
-    {
-        public nint Window;
-        public uint Message;
-        public nuint WParam;
-        public nint LParam;
-        public uint Time;
-        public NativePoint Point;
-        public uint Private;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct NativePoint
-    {
-        public int X;
-        public int Y;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct NativeRectangle
-    {
-        public int Left;
-        public int Top;
-        public int Right;
-        public int Bottom;
-    }
-
-    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
-    private delegate nint HookProcedure(int code, nuint wParam, nint lParam);
-
-    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private delegate bool EnumWindowsProcedure(nint window, nint lParam);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern nint SetWindowsHookExW(
-        int hookId,
-        HookProcedure hookProcedure,
-        nint module,
-        uint threadId);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool UnhookWindowsHookEx(nint hook);
-
-    [DllImport("user32.dll")]
-    private static extern nint CallNextHookEx(
-        nint hook,
-        int code,
-        nuint wParam,
-        nint lParam);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool EnumChildWindows(
-        nint parent,
-        EnumWindowsProcedure callback,
-        nint lParam);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool IsChild(nint parent, nint window);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetWindowRect(nint window, out NativeRectangle rectangle);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool ClientToScreen(nint window, ref NativePoint point);
+        Win32Rect Rectangle);
 }

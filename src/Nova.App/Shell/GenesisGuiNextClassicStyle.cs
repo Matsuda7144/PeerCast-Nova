@@ -9,7 +9,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
     // PR #340 rendering. Only drawing is separated; input and data remain shared.
     private sealed partial class AppShellState
     {
-        private bool DrawClassicNavigation(DrawItem drawItem, int itemIndex)
+        private bool DrawClassicNavigation(Win32DrawItem drawItem, int itemIndex)
         {
             var selected = _utilityNavigationSelection.IsSelected(itemIndex, _tabs.SelectedTab);
             var disabled = (drawItem.ItemState & DrawItemDisabled) != 0;
@@ -47,7 +47,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
             return true;
         }
 
-        private static bool DrawClassicRefreshButton(DrawItem drawItem)
+        private static bool DrawClassicRefreshButton(Win32DrawItem drawItem)
         {
             var pressed = (drawItem.ItemState & 0x0001) != 0;
             var disabled = (drawItem.ItemState & DrawItemDisabled) != 0;
@@ -89,13 +89,13 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 return false;
             }
 
-            var header = Marshal.PtrToStructure<NotifyHeader>(notificationPointer);
+            var header = Marshal.PtrToStructure<Win32NotifyHeader>(notificationPointer);
             if (header.WindowFrom != _listView || header.Code != NotifyCustomDraw)
             {
                 return false;
             }
 
-            var draw = Marshal.PtrToStructure<CustomDraw>(notificationPointer);
+            var draw = Marshal.PtrToStructure<Win32CustomDraw>(notificationPointer);
             if (draw.DrawStage == CustomDrawStagePrePaint)
             {
                 result = (nint)CustomDrawNotifyItemDraw;
@@ -107,7 +107,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge
                 if (_tabs.SelectedTab == GenesisGuiNextTab.Logs && draw.ItemSpec <= int.MaxValue &&
                     GenesisChannelListRenderedChannels.FindRow(_listView, (int)draw.ItemSpec)?.Log is { } log)
                 {
-                    var colorOffset = Marshal.OffsetOf<ListViewCustomDraw>(nameof(ListViewCustomDraw.TextColor)).ToInt32();
+                    var colorOffset = Marshal.OffsetOf<Win32ListViewCustomDraw>(nameof(Win32ListViewCustomDraw.TextColor)).ToInt32();
                     Marshal.WriteInt32(notificationPointer, colorOffset, GenesisGuiNextLogProjection.TextColor(log.Kind));
                     result = (nint)0x00000002; // CDRF_NEWFONT, apply row COLORREF.
                 }

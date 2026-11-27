@@ -241,8 +241,8 @@ internal sealed class GenesisGuiNextAppShellPlacement
             return false;
         }
 
-        var topLeft = new WindowPoint(screenRectangle.Left, screenRectangle.Top);
-        var bottomRight = new WindowPoint(screenRectangle.Right, screenRectangle.Bottom);
+        var topLeft = new Win32Point(screenRectangle.Left, screenRectangle.Top);
+        var bottomRight = new Win32Point(screenRectangle.Right, screenRectangle.Bottom);
         if (!ScreenToClient(parent, ref topLeft) ||
             !ScreenToClient(parent, ref bottomRight))
         {
@@ -279,26 +279,4 @@ internal sealed class GenesisGuiNextAppShellPlacement
 
         public int Height => Math.Max(0, Bottom - Top);
     }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct WindowPoint
-    {
-        public WindowPoint(int x, int y)
-        {
-            X = x;
-            Y = y;
-        }
-
-        public int X;
-        public int Y;
-    }
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetWindowRect(nint window, out WindowRectangle rectangle);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool ScreenToClient(nint window, ref WindowPoint point);
-
 }
