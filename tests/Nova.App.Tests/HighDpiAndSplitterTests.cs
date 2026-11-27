@@ -117,6 +117,31 @@ public sealed class HighDpiAndSplitterTests
         }
     }
 
+    [Theory]
+    [InlineData(96u)]
+    [InlineData(144u)]
+    [InlineData(192u)]
+    public void ResolveDetailsPaneBoundsTracksCustomDetailsHeightAndExpandsOnlyForPublishing(uint dpi)
+    {
+        var width = GenesisMainWindowLayout.Scale(1280, dpi);
+        var height = GenesisMainWindowLayout.Scale(900, dpi);
+
+        foreach (var preferredHeight in new[] { 140, 160, 224, 300, 420 })
+        {
+            Assert.True(GenesisMainWindowLayout.TryResolve(
+                width, height, dpi, out _, out _, out var list, out var details, preferredHeight));
+            Assert.Equal(preferredHeight, details.Height);
+
+            var standardPane = GenesisMainWindowLayout.ResolveDetailsPaneBounds(false, list, details);
+            Assert.Equal(details, standardPane);
+            Assert.Equal(list.Bottom + GenesisGuiNextAppShellPlacement.DetailsGap, standardPane.Top);
+            Assert.True(list.Bottom < standardPane.Top);
+
+            var publishingPane = GenesisMainWindowLayout.ResolveDetailsPaneBounds(true, list, details);
+            Assert.Equal(new GenesisGuiNextAppShellPlacement.WindowRectangle(list.Left, list.Top, list.Right, details.Bottom), publishingPane);
+        }
+    }
+
     private static string FindRepositoryFile(params string[] segments) =>
         RepositorySourceTestHelper.FindRepositoryFile(segments);
 

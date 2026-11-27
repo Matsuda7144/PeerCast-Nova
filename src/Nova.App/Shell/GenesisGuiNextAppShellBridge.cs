@@ -72,6 +72,8 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
     private const uint WindowStyleChild = 0x40000000;
     private const uint WindowStyleVisible = 0x10000000;
     private const uint WindowStyleTabStop = 0x00010000;
+    private const uint WindowStyleClipSiblings = 0x04000000;
+    private const uint WindowStyleClipChildren = 0x02000000;
     private const uint StaticStyleNoPrefix = 0x00000080;
     private const uint StaticStyleOwnerDraw = 0x0000000D;
     private const uint WindowMessageCommand = 0x0111;
@@ -333,7 +335,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             0,
             className,
             string.Empty,
-            WindowStyleChild | WindowStyleVisible,
+            WindowStyleChild | WindowStyleVisible | WindowStyleClipChildren | WindowStyleClipSiblings,
             sidebarRectangle.Left,
             sidebarRectangle.Top,
             sidebarRectangle.Width,
@@ -346,7 +348,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             0,
             className,
             string.Empty,
-            WindowStyleChild | WindowStyleVisible,
+            WindowStyleChild | WindowStyleVisible | WindowStyleClipChildren | WindowStyleClipSiblings,
             statusRectangle.Left,
             statusRectangle.Top,
             statusRectangle.Width,
@@ -359,7 +361,7 @@ internal sealed partial class GenesisGuiNextAppShellBridge : IAsyncDisposable
             0,
             className,
             string.Empty,
-            WindowStyleChild | WindowStyleVisible,
+            WindowStyleChild | WindowStyleVisible | WindowStyleClipChildren | WindowStyleClipSiblings,
             detailsRectangle.Left,
             detailsRectangle.Top,
             detailsRectangle.Width,

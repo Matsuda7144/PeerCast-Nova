@@ -11,6 +11,7 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
 {
     private const uint WindowStyleChild = 0x40000000;
     private const uint WindowStyleVisible = 0x10000000;
+    private const uint WindowStyleClipChildren = 0x02000000;
     private const uint WindowMessageNotify = 0x004E;
     private const uint WindowMessageCommand = 0x0111;
     private const uint WindowMessageNcDestroy = 0x0082;
@@ -194,7 +195,7 @@ internal sealed class SystemGenesisMainWindowInteractionBridgeFactory :
             0,
             className,
             string.Empty,
-            WindowStyleChild | WindowStyleVisible,
+            WindowStyleChild | WindowStyleVisible | WindowStyleClipChildren,
             0,
             0,
             Math.Max(1, clientRectangle.Right - clientRectangle.Left),

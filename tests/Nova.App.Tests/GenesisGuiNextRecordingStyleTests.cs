@@ -96,4 +96,68 @@ public sealed class GenesisGuiNextRecordingStyleTests
     {
         Assert.Equal(expected, GenesisGuiNextDesign.RecordingStatusColor(failed, active, transitioning));
     }
+
+    [Theory]
+    [InlineData(0, 96u)]
+    [InlineData(1, 96u)]
+    [InlineData(2, 96u)]
+    [InlineData(3, 96u)]
+    [InlineData(0, 144u)]
+    [InlineData(1, 144u)]
+    [InlineData(2, 144u)]
+    [InlineData(3, 144u)]
+    [InlineData(0, 192u)]
+    [InlineData(1, 192u)]
+    [InlineData(2, 192u)]
+    [InlineData(3, 192u)]
+    public void ModesFitResizedDetailsPaneWithoutOverlap(int modeValue, uint dpi)
+    {
+        var mode = (GenesisGuiNextRecordingPageMode)modeValue;
+        int S(int value) => GenesisMainWindowLayout.Scale(value, dpi);
+        foreach (var width in new[] { GenesisMainWindowLayout.MinimumContentWidth, 1724 })
+        {
+            foreach (var height in new[] { 140, 180, 224, 340 })
+            {
+                var layout = new GenesisGuiNextRecordingLayout(width, mode, height);
+                var toolbar = Enumerable.Range(0, 10).Select(layout.ToolbarButton).ToArray();
+                for (var i = 0; i < toolbar.Length; i++)
+                {
+                    Assert.InRange(toolbar[i].Left, 12, width - 16);
+                    Assert.True(S(toolbar[i].Right) <= S(width - 16));
+                    Assert.True(S(toolbar[i].Top) >= S(6));
+                    Assert.True(S(toolbar[i].Top) + S(toolbar[i].Height) < S(layout.TopDividerY));
+                    if (i > 0) Assert.True(S(toolbar[i - 1].Left) + S(toolbar[i - 1].Width) < S(toolbar[i].Left));
+                }
+
+                GenesisGuiNextAppShellPlacement.WindowRectangle[] blocks = mode switch
+                {
+                    GenesisGuiNextRecordingPageMode.History => [layout.History, layout.Status],
+                    GenesisGuiNextRecordingPageMode.Rules => [layout.Title, layout.Description, layout.Metadata, layout.Identity],
+                    _ => [layout.Title, layout.Description, layout.Metadata, layout.Identity, layout.Status],
+                };
+                var bottom = S(layout.TopDividerY);
+                foreach (var block in blocks)
+                {
+                    Assert.True(S(block.Top) >= bottom);
+                    Assert.True(S(block.Right) <= S(width - 16));
+                    Assert.True(S(block.Top) + S(block.Height) <= S(layout.BottomDividerY));
+                    bottom = S(block.Top) + S(block.Height);
+                }
+
+                var actions = mode == GenesisGuiNextRecordingPageMode.ActiveRecordings
+                    ? new[] { layout.RecordButton(false), layout.StopButton, layout.CopyButton, layout.RelayStartButton, layout.RelayStopButton, layout.RelayStatus }
+                    : new[] { layout.RelayStartButton, layout.RelayStopButton, layout.RelayStatus };
+                foreach (var action in actions)
+                {
+                    Assert.True(S(action.Top) >= S(layout.BottomDividerY));
+                    Assert.True(S(action.Top) + S(action.Height) <= S(height - 6));
+                    Assert.True(S(action.Right) <= S(width - 16));
+                }
+                Assert.True(S(layout.RecordButton(true).Left) + S(layout.RecordButton(true).Width) < S(layout.CopyButton.Left));
+                Assert.True(S(layout.CopyButton.Left) + S(layout.CopyButton.Width) < S(layout.RelayStartButton.Left));
+                Assert.True(S(layout.RelayStartButton.Left) + S(layout.RelayStartButton.Width) < S(layout.RelayStopButton.Left));
+                Assert.True(S(layout.RelayStopButton.Left) + S(layout.RelayStopButton.Width) < S(layout.RelayStatus.Left));
+            }
+        }
+    }
 }
