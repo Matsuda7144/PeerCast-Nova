@@ -67,19 +67,9 @@ dotnet run --project src/Nova.App
 - **.NET 10 SDK**
 - **Windows**（`Nova.App` GUI の実行・発行時。コアライブラリとクロスプラットフォームテストは Linux でも実行可能）
 
-### アプリ本体向け軽量ソリューション（推奨）
+### ソリューション構成とビルド・テスト
 
-デスクトップアプリ本体と中核ライブラリ・テストのみを素早くビルド・テストする場合は [PeerCast-Nova.App.sln](PeerCast-Nova.App.sln) を使用できます。
-
-```powershell
-dotnet restore PeerCast-Nova.App.sln
-dotnet build PeerCast-Nova.App.sln -c Release --no-restore
-dotnet test PeerCast-Nova.App.sln -c Release --no-build --no-restore
-```
-
-### フルソリューション（CLI・旧再生サブシステム含む）
-
-CI と同様に全プロジェクトを対象とする場合は [PeerCast-Nova.sln](PeerCast-Nova.sln) を使用します。
+デスクトップアプリ本体およびコアライブラリ・テストを含む構成は [PeerCast-Nova.sln](PeerCast-Nova.sln)（または同一構成の [PeerCast-Nova.App.sln](PeerCast-Nova.App.sln)）でビルド・検証できます。
 
 ```powershell
 dotnet restore PeerCast-Nova.sln
@@ -94,7 +84,7 @@ dotnet format PeerCast-Nova.sln --verify-no-changes --no-restore
 
 Windows x64 向けに 2 種類の発行プロファイルを用意しています。
 
-- **Portable（.NET 10 ランタイム別途必要・PDB 除外）**: [WindowsPortable.pubxml](src/Nova.App/Properties/PublishProfiles/WindowsPortable.pubxml)
+- **Portable（.NET 10 ランタイム別途必要・診断用 PDB 同梱）**: [WindowsPortable.pubxml](src/Nova.App/Properties/PublishProfiles/WindowsPortable.pubxml)
 - **Self-Contained（ランタイム同梱・診断用 PDB 別パッケージ化対応）**: [WindowsSelfContained.pubxml](src/Nova.App/Properties/PublishProfiles/WindowsSelfContained.pubxml)
 
 ```powershell

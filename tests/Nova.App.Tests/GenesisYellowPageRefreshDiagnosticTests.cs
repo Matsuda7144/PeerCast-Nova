@@ -905,7 +905,7 @@ public sealed class GenesisYellowPageRefreshDiagnosticTests
     [Fact]
     public async Task SystemHttpDiagnosticsClassifyConnectionFailureAndCancellation()
     {
-        var closedPort = new TcpListener(IPAddress.Loopback, 0);
+        using var closedPort = new TcpListener(IPAddress.Loopback, 0);
         closedPort.Start();
         var port = ((IPEndPoint)closedPort.LocalEndpoint).Port;
         closedPort.Stop();
@@ -915,7 +915,7 @@ public sealed class GenesisYellowPageRefreshDiagnosticTests
 
         using var serverCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         using var clientCancellation = new CancellationTokenSource();
-        var listener = new TcpListener(IPAddress.Loopback, 0);
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
         var accepted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var server = Task.Run(async () =>

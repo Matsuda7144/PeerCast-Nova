@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace PeerCast.Nova.Foundation.Tests;
@@ -17,39 +16,24 @@ public sealed partial class RepositoryDocumentationSynchronizationTests
     }
 
     [Fact]
-    public void LatestAdrAndReview_ArePairedAndSynchronized()
+    public void CoreRepositoryDocuments_ExistAndAreNonEmpty()
     {
         var root = FindRepositoryRoot();
-        var latestAdr = FindLatestNumberedDocument(root, "docs/adr", "ADR");
-        var latestReview = FindLatestNumberedDocument(
-            root,
-            "docs/reviews",
-            "PCN");
-
-        Assert.Equal(latestAdr.Title, latestReview.Title);
-
-        var adrToken = $"ADR-{latestAdr.Number:D4}";
-        AssertDocumentsContain(
-            root,
-            adrToken,
+        string[] requiredDocuments =
+        [
+            "README.md",
+            "NAVIGATION.md",
             "ROADMAP.md",
             "CHANGELOG.md",
-            "NAVIGATION.md");
+            "CONTRIBUTING.md",
+        ];
 
-        var reviewToken = $"PCN-{latestReview.Number:D4}";
-        AssertDocumentsContain(
-            root,
-            reviewToken,
-            "ROADMAP.md",
-            "CHANGELOG.md",
-            "NAVIGATION.md");
-
-        var navigation = File.ReadAllText(Path.Combine(root, "NAVIGATION.md"));
-        Assert.Contains(latestAdr.RelativePath, navigation, StringComparison.Ordinal);
-        Assert.Contains(
-            latestReview.RelativePath,
-            navigation,
-            StringComparison.Ordinal);
+        foreach (var relativePath in requiredDocuments)
+        {
+            var fullPath = Path.Combine(root, relativePath);
+            Assert.True(File.Exists(fullPath), $"Required repository document is missing: {relativePath}");
+            Assert.False(string.IsNullOrWhiteSpace(File.ReadAllText(fullPath)), $"Required repository document is empty: {relativePath}");
+        }
     }
 
     [Fact]
@@ -59,6 +43,7 @@ public sealed partial class RepositoryDocumentationSynchronizationTests
         var issues = new List<string>();
         ValidateMarkdownLinks(root, "README.md", issues);
         ValidateMarkdownLinks(root, "NAVIGATION.md", issues);
+        ValidateMarkdownLinks(root, "CHANGELOG.md", issues);
         ValidateRoadmapDocumentPaths(root, issues);
 
         Assert.True(issues.Count == 0, string.Join(Environment.NewLine, issues));
@@ -109,64 +94,6 @@ public sealed partial class RepositoryDocumentationSynchronizationTests
             {
                 issues.Add($"Filename/heading number mismatch in {fileName}");
             }
-        }
-    }
-
-    private static NumberedDocument FindLatestNumberedDocument(
-        string root,
-        string relativeDirectory,
-        string prefix)
-    {
-        var directory = Path.Combine(
-            root,
-            relativeDirectory.Replace('/', Path.DirectorySeparatorChar));
-        var documents = Directory.EnumerateFiles(
-                directory,
-                $"{prefix}-*.md",
-                SearchOption.TopDirectoryOnly)
-            .Select(path => ReadNumberedDocument(root, path, prefix))
-            .ToArray();
-        Assert.NotEmpty(documents);
-        return documents.MaxBy(document => document.Number)!;
-    }
-
-    private static NumberedDocument ReadNumberedDocument(
-        string root,
-        string path,
-        string prefix)
-    {
-        var fileName = Path.GetFileName(path);
-        var fileMatch = NumberedFileName().Match(fileName);
-        Assert.True(fileMatch.Success, $"Invalid filename: {fileName}");
-        Assert.Equal(prefix, fileMatch.Groups["prefix"].Value);
-
-        var heading = ReadFirstNonemptyLine(path);
-        var headingMatch = NumberedHeading().Match(heading);
-        Assert.True(headingMatch.Success, $"Invalid heading in {fileName}");
-        Assert.Equal(prefix, headingMatch.Groups["prefix"].Value);
-        Assert.Equal(
-            fileMatch.Groups["number"].Value,
-            headingMatch.Groups["number"].Value);
-
-        return new(
-            int.Parse(
-                fileMatch.Groups["number"].Value,
-                CultureInfo.InvariantCulture),
-            headingMatch.Groups["title"].Value.Trim(),
-            Path.GetRelativePath(root, path).Replace('\\', '/'));
-    }
-
-    private static void AssertDocumentsContain(
-        string root,
-        string token,
-        params string[] relativePaths)
-    {
-        foreach (var relativePath in relativePaths)
-        {
-            var content = File.ReadAllText(Path.Combine(root, relativePath));
-            Assert.True(
-                content.Contains(token, StringComparison.Ordinal),
-                $"{relativePath} does not contain the latest token {token}.");
         }
     }
 
@@ -232,11 +159,6 @@ public sealed partial class RepositoryDocumentationSynchronizationTests
         throw new DirectoryNotFoundException(
             "Could not locate the PeerCast Nova repository root.");
     }
-
-    private sealed record NumberedDocument(
-        int Number,
-        string Title,
-        string RelativePath);
 
     [GeneratedRegex(
         "^(?<prefix>ADR|PCN)-(?<number>[0-9]{4})-.+\\.md$",

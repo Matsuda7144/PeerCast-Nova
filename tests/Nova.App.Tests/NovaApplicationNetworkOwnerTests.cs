@@ -10,33 +10,49 @@ public sealed class NovaApplicationNetworkOwnerTests
     [Fact]
     public async Task SharedPublicListenerBorrowsOnlyInitializedManagerAndJoinsNetworkShutdown()
     {
-        await using var test = new Fixture();
-        using var port = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
-        port.Start();
-        var settings = new GenesisGuiNextConnectionPreferences
-        { WanRelayEnabled = true, ListenPort = ((System.Net.IPEndPoint)port.LocalEndpoint).Port };
-        port.Stop();
-        Assert.Throws<GenesisPublicRelayStartException>(() => test.Owner.GetSharedRelay(settings, (_, _) => null));
-        await test.Owner.InitializeAsync();
-        var host = test.Owner.GetSharedRelay(settings, (_, _) => null);
-        Assert.Empty(test.Runtime!.Manager.ReadState().RegisteredInternalPorts);
-        Assert.Equal(1, test.RuntimeCreates);
-        var id = new PeerCast.Nova.Core.Channels.ChannelId(Guid.NewGuid());
-        await using var fanout = new PeerCast.Nova.Network.Pcp.PcpRelayFanout();
-        await using var lease = await host.AcquireAsync(routes => routes.Register(id, fanout), CancellationToken.None);
-        Assert.Equal(settings.ListenPort, Assert.Single(test.Runtime.Manager.ReadState().RegisteredInternalPorts));
-        Assert.Equal(NovaApplicationPublicListenerAvailability.Listening, test.Owner.ReadSnapshot().PublicListenerAvailability);
-        Assert.Contains("TCP待受中", GuiNextNetworkSettingsPresentation.Create(test.Owner.ReadSnapshot()).IntegratedSettings);
-        var request = new NovaPublicRelayRequest(id, new(Guid.NewGuid()), $"pcp://example.invalid:7144/channel/{id}");
-        Assert.Equal(NovaPublicRelayFailure.IncompatibleIdentity, (await test.Owner.AcquirePublicRelayAsync(request)).Failure);
-        var disposal = test.Owner.DisposeAsync().AsTask();
-        await Assert.ThrowsAsync<ObjectDisposedException>(() => host.AcquireAsync(r => r.Register(new(Guid.NewGuid()), fanout), CancellationToken.None));
-        await disposal;
-        Assert.Equal(1, test.Runtime.Disposals);
-        Assert.Empty(test.Runtime.Manager.ReadState().RegisteredInternalPorts);
-        Assert.Equal(GenesisSharedPublicRelayState.Disposed, host.Snapshot.State);
-        Assert.True(test.Owner.ReadSnapshot().Disposed);
-        Assert.Equal(0, test.Router.Count);
+        // 空きポート取得後の即時リバインド競合（TOCTOU）による並列実行フレークを避けるため最大 3 回試行する
+        for (var attempt = 0; ; attempt++)
+        {
+            await using var test = new Fixture();
+            using var port = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+            port.Start();
+            var settings = new GenesisGuiNextConnectionPreferences
+            { WanRelayEnabled = true, ListenPort = ((System.Net.IPEndPoint)port.LocalEndpoint).Port };
+            port.Stop();
+            Assert.Throws<GenesisPublicRelayStartException>(() => test.Owner.GetSharedRelay(settings, (_, _) => null));
+            await test.Owner.InitializeAsync();
+            var host = test.Owner.GetSharedRelay(settings, (_, _) => null);
+            Assert.Empty(test.Runtime!.Manager.ReadState().RegisteredInternalPorts);
+            Assert.Equal(1, test.RuntimeCreates);
+            var id = new PeerCast.Nova.Core.Channels.ChannelId(Guid.NewGuid());
+            await using var fanout = new PeerCast.Nova.Network.Pcp.PcpRelayFanout();
+            try
+            {
+                await using var lease = await host.AcquireAsync(routes => routes.Register(id, fanout), CancellationToken.None);
+                Assert.Equal(settings.ListenPort, Assert.Single(test.Runtime.Manager.ReadState().RegisteredInternalPorts));
+                Assert.Equal(NovaApplicationPublicListenerAvailability.Listening, test.Owner.ReadSnapshot().PublicListenerAvailability);
+                Assert.Contains("TCP待受中", GuiNextNetworkSettingsPresentation.Create(test.Owner.ReadSnapshot()).IntegratedSettings);
+                var request = new NovaPublicRelayRequest(id, new(Guid.NewGuid()), $"pcp://example.invalid:7144/channel/{id}");
+                Assert.Equal(NovaPublicRelayFailure.IncompatibleIdentity, (await test.Owner.AcquirePublicRelayAsync(request)).Failure);
+                var disposal = test.Owner.DisposeAsync().AsTask();
+                await Assert.ThrowsAsync<ObjectDisposedException>(() => host.AcquireAsync(r => r.Register(new(Guid.NewGuid()), fanout), CancellationToken.None));
+                await disposal;
+                Assert.Equal(1, test.Runtime.Disposals);
+                Assert.Empty(test.Runtime.Manager.ReadState().RegisteredInternalPorts);
+                Assert.Equal(GenesisSharedPublicRelayState.Disposed, host.Snapshot.State);
+                Assert.True(test.Owner.ReadSnapshot().Disposed);
+                Assert.Equal(0, test.Router.Count);
+                return;
+            }
+            catch (System.Net.Sockets.SocketException exception)
+                when (exception.SocketErrorCode == System.Net.Sockets.SocketError.AddressAlreadyInUse && attempt < 2)
+            {
+            }
+            catch (IOException exception)
+                when (exception.InnerException is System.Net.Sockets.SocketException { SocketErrorCode: System.Net.Sockets.SocketError.AddressAlreadyInUse } && attempt < 2)
+            {
+            }
+        }
     }
 
     [Fact]
