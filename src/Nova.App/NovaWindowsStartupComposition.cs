@@ -607,9 +607,9 @@ public sealed class NovaWindowsStartupComposition
                 {
                     await projectionLifetime.DisposeAsync().ConfigureAwait(false);
                 }
-                catch
+                catch (Exception exception)
                 {
-                    // Host cleanup must still run after a rejected projection close.
+                    FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to dispose projection lifetime.", exception);
                 }
             }
 
@@ -619,9 +619,9 @@ public sealed class NovaWindowsStartupComposition
                 {
                     await playbackWindowCoordinator.DisposeAsync().ConfigureAwait(false);
                 }
-                catch
+                catch (Exception exception)
                 {
-                    // Main GUI and host cleanup still own the final shutdown path.
+                    FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to dispose playback window coordinator.", exception);
                 }
             }
 
@@ -631,9 +631,9 @@ public sealed class NovaWindowsStartupComposition
                 {
                     await genesisLifetime.DisposeAsync().ConfigureAwait(false);
                 }
-                catch
+                catch (Exception exception)
                 {
-                    // Host cleanup must still run after a rejected GUI surface close.
+                    FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to dispose Genesis surface lifetime.", exception);
                 }
             }
 

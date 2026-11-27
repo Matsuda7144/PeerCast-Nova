@@ -142,6 +142,34 @@ public sealed class HighDpiAndSplitterTests
         }
     }
 
+    [Fact]
+    public void MainWindowPlacementStoreFailsClosedOnCorruptJsonAndUnwritablePath()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"NovaPlacementFail-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var corruptPath = Path.Combine(directory, "corrupt.json");
+            File.WriteAllText(corruptPath, "{ invalid json");
+            var corruptStore = new GenesisMainWindowPlacementStore(corruptPath);
+            Assert.Null(corruptStore.Load());
+
+            var blockedPath = Path.Combine(directory, "blocked-as-directory");
+            Directory.CreateDirectory(blockedPath);
+            var blockedStore = new GenesisMainWindowPlacementStore(blockedPath);
+            var exception = Record.Exception(() =>
+                blockedStore.Save(new GenesisMainWindowPlacement(10, 20, 1000, 700, false, 200)));
+            Assert.Null(exception);
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+    }
+
     private static string FindRepositoryFile(params string[] segments) =>
         RepositorySourceTestHelper.FindRepositoryFile(segments);
 

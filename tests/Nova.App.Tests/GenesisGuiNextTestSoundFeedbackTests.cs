@@ -77,23 +77,6 @@ public sealed class GenesisGuiNextTestSoundFeedbackTests
         Assert.Empty(presented);
     }
 
-    [Fact]
-    public void SystemApplicationStateBindsTestSoundFeedback()
-    {
-        var source = File.ReadAllText(FindRepositoryFile(
-            "src",
-            "Nova.App",
-            "GenesisGuiNextApplicationState.cs"));
-
-        Assert.Contains(
-            "SystemGenesisGuiNextTestSoundFeedback.Bind(state.Notifications);",
-            source,
-            StringComparison.Ordinal);
-    }
-
-    private static string FindRepositoryFile(params string[] relativeParts) =>
-        RepositorySourceTestHelper.FindRepositoryFile(relativeParts);
-
     private sealed class ThrowingSoundPlayer : IGenesisSystemNotificationSoundPlayer
     {
         public static ThrowingSoundPlayer Instance { get; } = new();

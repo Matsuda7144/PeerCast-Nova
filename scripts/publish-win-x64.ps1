@@ -31,8 +31,8 @@ try {
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
     $portablePdbs = Get-ChildItem -Path $portableDir -Filter "*.pdb" -Recurse
-    if ($portablePdbs.Count -gt 0) {
-        throw "Portable publish unexpectedly contained PDB files."
+    if ($portablePdbs.Count -eq 0) {
+        throw "Portable publish did not produce PDB files."
     }
 
     $portableZip = Join-Path $releaseDir "PeerCast-Nova-$Version-win-x64-portable.zip"

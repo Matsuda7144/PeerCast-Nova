@@ -1,3 +1,5 @@
+using PeerCast.Nova.Foundation.Logging;
+
 namespace PeerCast.Nova.App;
 
 internal enum GenesisChannelNotificationSettingsMutationResult
@@ -83,8 +85,9 @@ internal sealed class GenesisChannelNotificationSettings
         {
             throw;
         }
-        catch
+        catch (Exception exception)
         {
+            FileNovaLogger.Default.Log(LogLevel.Warning, "Test sound playback failed.", exception);
             result = GenesisChannelNotificationSettingsTestSoundResult.Failed;
         }
 
@@ -154,10 +157,11 @@ internal sealed class GenesisChannelNotificationSettings
             {
                 feedback(result);
             }
-            catch
+            catch (Exception exception)
             {
                 // Feedback is auxiliary presentation and cannot replace the
                 // already-completed notification-settings mutation result.
+                FileNovaLogger.Default.Log(LogLevel.Warning, "Notification settings feedback callback failed.", exception);
             }
         }
 
@@ -182,10 +186,11 @@ internal sealed class GenesisChannelNotificationSettings
         {
             feedback(result);
         }
-        catch
+        catch (Exception exception)
         {
             // Test-sound feedback is auxiliary presentation and cannot replace the
             // already-completed sound action result.
+            FileNovaLogger.Default.Log(LogLevel.Warning, "Notification test-sound feedback callback failed.", exception);
         }
     }
 
@@ -200,8 +205,9 @@ internal sealed class GenesisChannelNotificationSettings
         {
             return _persist(next);
         }
-        catch
+        catch (Exception exception)
         {
+            FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to persist notification preferences.", exception);
             return false;
         }
     }
@@ -470,8 +476,9 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
         {
             throw;
         }
-        catch
+        catch (Exception exception)
         {
+            FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to load favorite channels.", exception);
             loadFailures |= GenesisGuiNextApplicationStateLoadFailure.Favorites;
             loadedFavorites = Array.Empty<GenesisFavoriteChannel>();
         }
@@ -486,8 +493,9 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
         {
             throw;
         }
-        catch
+        catch (Exception exception)
         {
+            FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to load notification preferences.", exception);
             loadFailures |=
                 GenesisGuiNextApplicationStateLoadFailure.NotificationPreferences;
             loadedNotifications = GenesisChannelNotificationPreferences.Default;
@@ -504,8 +512,9 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
         {
             throw;
         }
-        catch
+        catch (Exception exception)
         {
+            FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to load yellow page configuration.", exception);
             loadFailures |= GenesisGuiNextApplicationStateLoadFailure.YellowPages;
             loadedYellowPages = GenesisYellowPageConfiguration.CreateDefault();
         }
@@ -521,8 +530,9 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
         {
             throw;
         }
-        catch
+        catch (Exception exception)
         {
+            FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to load playback preferences.", exception);
             loadFailures |= GenesisGuiNextApplicationStateLoadFailure.PlaybackPreferences;
             loadedPlaybackPreferences = GenesisGuiNextPlaybackPreferences.Default;
         }
@@ -537,8 +547,9 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
         {
             throw;
         }
-        catch
+        catch (Exception exception)
         {
+            FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to load connection preferences.", exception);
             loadFailures |= GenesisGuiNextApplicationStateLoadFailure.ConnectionPreferences;
             loadedConnectionPreferences = GenesisGuiNextConnectionPreferences.Default;
         }
@@ -603,9 +614,10 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
                 await _favoriteStore.SaveAsync(Favorites.Snapshot, CancellationToken.None)
                     .ConfigureAwait(false);
             }
-            catch
+            catch (Exception exception)
             {
                 // Persistence is auxiliary to finite application shutdown.
+                FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to flush favorite channels on shutdown.", exception);
             }
         }
 
@@ -619,9 +631,10 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
                         CancellationToken.None)
                     .ConfigureAwait(false);
             }
-            catch
+            catch (Exception exception)
             {
                 // One failed preference save must not block the remaining shutdown path.
+                FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to flush notification preferences on shutdown.", exception);
             }
         }
 
@@ -634,9 +647,10 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
                         CancellationToken.None)
                     .ConfigureAwait(false);
             }
-            catch
+            catch (Exception exception)
             {
                 // One failed configuration save must not block finite GUI shutdown.
+                FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to flush yellow page configuration on shutdown.", exception);
             }
         }
 
@@ -649,9 +663,10 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
                         CancellationToken.None)
                     .ConfigureAwait(false);
             }
-            catch
+            catch (Exception exception)
             {
                 // One failed preference save must not block finite GUI shutdown.
+                FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to flush playback preferences on shutdown.", exception);
             }
         }
         if (publicChannelFailure is not null)
@@ -675,8 +690,9 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
                 .GetResult();
             return true;
         }
-        catch
+        catch (Exception exception)
         {
+            FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to persist favorite channels.", exception);
             return false;
         }
     }
@@ -695,8 +711,9 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
                 .GetResult();
             return true;
         }
-        catch
+        catch (Exception exception)
         {
+            FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to persist notification preferences.", exception);
             return false;
         }
     }
@@ -716,8 +733,9 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
                 .GetResult();
             return true;
         }
-        catch
+        catch (Exception exception)
         {
+            FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to persist yellow page configuration.", exception);
             return false;
         }
     }
@@ -734,8 +752,9 @@ internal sealed class GenesisGuiNextApplicationState : IAsyncDisposable
                 .GetResult();
             return true;
         }
-        catch
+        catch (Exception exception)
         {
+            FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to persist playback preferences.", exception);
             return false;
         }
     }

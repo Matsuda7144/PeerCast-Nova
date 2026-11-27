@@ -1,5 +1,6 @@
 using System.Text.Json;
 using PeerCast.Nova.Foundation.Configuration;
+using PeerCast.Nova.Foundation.Logging;
 
 namespace PeerCast.Nova.App;
 
@@ -63,8 +64,9 @@ internal sealed class GenesisMainWindowPlacementStore
             var placement = JsonSerializer.Deserialize<GenesisMainWindowPlacement>(json, SerializerOptions);
             return placement is { Width: > 0, Height: > 0 } ? placement : null;
         }
-        catch
+        catch (Exception exception)
         {
+            FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to load main window placement.", exception);
             return null;
         }
     }
@@ -88,9 +90,10 @@ internal sealed class GenesisMainWindowPlacementStore
             var json = JsonSerializer.Serialize(placement, SerializerOptions);
             File.WriteAllText(_path, json);
         }
-        catch
+        catch (Exception exception)
         {
             // ウィンドウ配置の保存失敗でアプリの終了やリサイズを妨げない。
+            FileNovaLogger.Default.Log(LogLevel.Warning, "Failed to save main window placement.", exception);
         }
     }
 }

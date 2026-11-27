@@ -53,13 +53,4 @@
           CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
-  <Target Name="RemoveWindowsPortableDebugSymbols"
-          AfterTargets="Publish"
-          Condition="'$(PublishProfile)' == 'WindowsPortable'">
-    <ItemGroup>
-      <WindowsPortableDebugSymbol Include="$(PublishDir)**\*.pdb" />
-    </ItemGroup>
-    <Delete Files="@(WindowsPortableDebugSymbol)" />
-  </Target>
-
 </Project>

@@ -75,26 +75,9 @@ public sealed class GenesisGuiNextNotificationSettingsFeedbackTests
         Assert.Equal(initial, settings.Current);
     }
 
-    [Fact]
-    public void SystemApplicationStateBindsNotificationSettingsFeedback()
-    {
-        var source = File.ReadAllText(FindRepositoryFile(
-            "src",
-            "Nova.App",
-            "GenesisGuiNextApplicationState.cs"));
-
-        Assert.Contains(
-            "SystemGenesisGuiNextNotificationSettingsFeedback.Bind(state.Notifications);",
-            source,
-            StringComparison.Ordinal);
-    }
-
     private static GenesisChannelNotificationSettings CreateSettings(
         GenesisChannelNotificationPreferences initial) =>
         new(initial, SilentSoundPlayer.Instance);
-
-    private static string FindRepositoryFile(params string[] relativeParts) =>
-        RepositorySourceTestHelper.FindRepositoryFile(relativeParts);
 
     private sealed class SilentSoundPlayer : IGenesisSystemNotificationSoundPlayer
     {

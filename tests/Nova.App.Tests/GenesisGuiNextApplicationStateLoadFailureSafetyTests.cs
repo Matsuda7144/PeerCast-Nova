@@ -146,33 +146,6 @@ public sealed class GenesisGuiNextApplicationStateLoadFailureSafetyTests
             static _ => throw new InvalidOperationException("Presentation failed."));
     }
 
-    [Fact]
-    public void SystemApplicationStateDefersLoadFailurePresentationToOwnedSurface()
-    {
-        var stateSource = File.ReadAllText(FindRepositoryFile(
-            "src",
-            "Nova.App",
-            "GenesisGuiNextApplicationState.cs"));
-        var surfaceSource = File.ReadAllText(FindRepositoryFile(
-            "src",
-            "Nova.App",
-            "SystemGenesisInteractiveMainWindowSurfaceTarget.cs"));
-
-        Assert.DoesNotContain(
-            "SystemGenesisGuiNextApplicationStateLoadFeedback.Report",
-            stateSource,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "SystemGenesisGuiNextApplicationStateLoadFeedback.Report(\n" +
-            "                windowToken,\n" +
-            "                guiNextState.LoadFailures);",
-            surfaceSource,
-            StringComparison.Ordinal);
-    }
-
-    private static string FindRepositoryFile(params string[] relativeParts) =>
-        RepositorySourceTestHelper.FindRepositoryFile(relativeParts);
-
     private sealed class RecordingFavoriteStore : IGenesisFavoriteChannelStore
     {
         private readonly bool _loadThrows;

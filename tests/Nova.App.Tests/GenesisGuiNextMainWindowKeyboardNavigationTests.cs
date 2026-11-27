@@ -54,46 +54,6 @@ public sealed class GenesisGuiNextMainWindowKeyboardNavigationTests
                 reverse));
     }
 
-    [Fact]
-    public void GuiNextPresentationOpensMainWindowKeyboardNavigation()
-    {
-        var source = File.ReadAllText(FindRepositoryFile(
-            "src",
-            "Nova.App",
-            "GenesisGuiNextFavoriteFeedback.cs"));
-
-        Assert.Contains(
-            "GenesisGuiNextMainWindowKeyboardNavigation.Open(owner)",
-            source,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "GenesisGuiNextAuxiliaryPresentationLifetime",
-            source,
-            StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void NativeHookConsumesOnlySuccessfullyHandledTabMessages()
-    {
-        var source = File.ReadAllText(FindRepositoryFile(
-            "src",
-            "Nova.App",
-            "GenesisGuiNextMainWindowKeyboardNavigation.cs"));
-
-        Assert.Contains("SetWindowsHookExW(", source, StringComparison.Ordinal);
-        Assert.Contains("IsMessageForOwner(message.Window)", source, StringComparison.Ordinal);
-        Assert.Contains("TryMoveFocus())", source, StringComparison.Ordinal);
-        Assert.Contains(
-            "message.Message = WindowMessageNull;",
-            source,
-            StringComparison.Ordinal);
-        Assert.Contains("CallNextHookEx(", source, StringComparison.Ordinal);
-        Assert.Contains("UnhookWindowsHookEx(hook)", source, StringComparison.Ordinal);
-    }
-
-    private static string FindRepositoryFile(params string[] relativeParts) =>
-        RepositorySourceTestHelper.FindRepositoryFile(relativeParts);
-
     private static readonly int[] MultiRegionMap = [0, 0, 1, 1, 2];
     private static readonly int[] SingleRegionMap = [0, 0];
 

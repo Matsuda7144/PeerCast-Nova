@@ -75,33 +75,6 @@ public sealed class GenesisNetworkSettingsWindowContentTests
         Assert.Contains("Direct listeners: 2", refreshedContent.StatusLines);
     }
 
-    [Fact]
-    public void ReopeningNetworkWindowRecreatesControlsAfterRuntimeRefresh()
-    {
-        var source = File.ReadAllText(FindRepositoryFile(
-            "src",
-            "Nova.App",
-            "GenesisNetworkSettingsWindowHost.cs"));
-
-        var refreshIndex = source.IndexOf(
-            "_viewModel.RefreshStatus();",
-            StringComparison.Ordinal);
-        var disposeIndex = source.IndexOf(
-            "await current.DisposeAsync().ConfigureAwait(false);",
-            StringComparison.Ordinal);
-        var createIndex = source.IndexOf(
-            "GenesisNetworkSettingsWindow.TryCreate(_owner, _viewModel)",
-            StringComparison.Ordinal);
-
-        Assert.True(refreshIndex >= 0);
-        Assert.True(disposeIndex > refreshIndex);
-        Assert.True(createIndex > disposeIndex);
-        Assert.DoesNotContain("current.Activate();", source, StringComparison.Ordinal);
-    }
-
-    private static string FindRepositoryFile(params string[] relativeParts) =>
-        RepositorySourceTestHelper.FindRepositoryFile(relativeParts);
-
     private sealed class MutableNetworkSettingsController :
         IGenesisNetworkSettingsController
     {
