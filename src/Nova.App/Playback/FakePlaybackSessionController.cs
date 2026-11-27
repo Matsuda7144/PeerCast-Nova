@@ -51,6 +51,23 @@ public sealed class FakePlaybackSessionController : IPlaybackSessionController
                     _snapshot));
             }
 
+            if (request.KeepExistingSessions && _snapshot.State == PlaybackSessionState.Playing)
+            {
+                var additionalSnapshot = new PlaybackSessionSnapshot(
+                    PlaybackSessionState.Playing,
+                    normalized,
+                    null)
+                {
+                    ChannelName = string.IsNullOrWhiteSpace(request.ChannelName)
+                        ? normalized
+                        : request.ChannelName.Trim(),
+                    ChannelId = request.ChannelId?.Trim(),
+                };
+                return ValueTask.FromResult(new PlaybackSessionCommandOutcome(
+                    PlaybackSessionCommandResult.Completed,
+                    additionalSnapshot));
+            }
+
             if (_snapshot.State is PlaybackSessionState.Starting or
                 PlaybackSessionState.Playing or
                 PlaybackSessionState.Stopping)

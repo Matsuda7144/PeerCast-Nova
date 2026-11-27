@@ -16,6 +16,6 @@ internal static class GenesisChannelListActivation
         var current = interaction.ViewModel.Channels.FirstOrDefault(channel =>
             string.Equals(channel.Source, rendered.Source, StringComparison.Ordinal));
         return current is null || !GenesisChannelIdentity.Matches(current, rendered)
-            ? ValueTask.FromResult(false) : interaction.ActivateChannelAsync(current);
+            ? ValueTask.FromResult(false) : interaction.ActivateChannelForDoubleClickAsync(current);
     }
 }

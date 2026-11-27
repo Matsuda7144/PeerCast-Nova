@@ -81,7 +81,7 @@ public sealed class GenesisChannelListActivationTests
     }
 
     [Fact]
-    public async Task DoubleClickUsesHitRowInsteadOfPreviousSelectionAndPlaysOnce()
+    public async Task DoubleClickUsesHitRowInsteadOfPreviousSelectionAndAllowsMultipleWindows()
     {
         var controller = new CountingController();
         var model = new GenesisMainViewModel(controller);
@@ -94,10 +94,15 @@ public sealed class GenesisChannelListActivationTests
 
         Assert.True(await GenesisChannelListActivation.ActivateAsync(-3, 1, rows, interaction, true));
         Assert.Equal(1, controller.Requests);
+        Assert.Equal(0, controller.KeepExistingRequests);
         Assert.Same(hit, model.SelectedChannel);
         Assert.Equal(hit.Source, model.CurrentSource);
-        Assert.False(await GenesisChannelListActivation.ActivateAsync(-3, 1, rows, interaction, true));
-        Assert.Equal(1, controller.Requests);
+
+        Assert.True(await GenesisChannelListActivation.ActivateAsync(-3, 0, rows, interaction, true));
+        Assert.Equal(2, controller.Requests);
+        Assert.Equal(1, controller.KeepExistingRequests);
+        Assert.Same(first, model.SelectedChannel);
+        Assert.Equal(hit.Source, model.CurrentSource);
     }
 
     [Theory]
@@ -195,11 +200,24 @@ public sealed class GenesisChannelListActivationTests
     {
         private readonly FakePlaybackSessionController _inner = new();
         internal int Requests { get; private set; }
+        internal int KeepExistingRequests { get; private set; }
         public PlaybackSessionSnapshot Snapshot => _inner.Snapshot;
         public ValueTask<PlaybackSessionCommandOutcome> PlayAsync(string source, CancellationToken cancellationToken = default)
         {
             Requests++;
             return _inner.PlayAsync(source, cancellationToken);
+        }
+        public ValueTask<PlaybackSessionCommandOutcome> PlayAsync(
+            PlaybackSessionRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            Requests++;
+            if (request.KeepExistingSessions)
+            {
+                KeepExistingRequests++;
+            }
+
+            return _inner.PlayAsync(request, cancellationToken);
         }
         public ValueTask<PlaybackSessionCommandOutcome> StopAsync(CancellationToken cancellationToken = default) =>
             _inner.StopAsync(cancellationToken);

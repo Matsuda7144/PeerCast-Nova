@@ -397,10 +397,20 @@ internal sealed class NovaDailyHttpFlvPlaybackController :
                 playerChannelInfo: id => ReadPlayerInfo(additional, id));
             additional = new ActivePlayback(host) { ChannelId = source.ChannelId.Value, CatalogChannel = channel };
             startingPlayback = additional;
+            bool promotedToPrimary;
             lock (_stateGate)
             {
                 ObjectDisposedException.ThrowIf(_disposed, this);
-                _additionalPlaybacks.Add(additional);
+                if (_active is null)
+                {
+                    _active = additional;
+                    promotedToPrimary = true;
+                }
+                else
+                {
+                    _additionalPlaybacks.Add(additional);
+                    promotedToPrimary = false;
+                }
             }
 
             _setStatus($"{channel.Name}: PCP接続中…");
@@ -441,14 +451,14 @@ internal sealed class NovaDailyHttpFlvPlaybackController :
                 new(streamUrl, host.PlaylistUrlFor(source.ChannelId),
                     info?.Metadata.Name ?? channel.Name, info is null ? channel.ContactUrl : info.Metadata.ContactUrl),
                 startupCancellation.Token).ConfigureAwait(false);
-            _setStatus($"{channel.Name}: 別ウィンドウで再生中");
-            _ = ObserveAdditionalPlaybackEndAsync(additional, channel.Name);
+            _setStatus(promotedToPrimary ? $"{channel.Name}: 再生中" : $"{channel.Name}: 別ウィンドウで再生中");
+            _ = ObservePlaybackEndAsync(additional, channel.Name, channel.Source);
         }
         catch
         {
             if (startingPlayback is not null)
             {
-                await DisposeAdditionalInstanceAsync(startingPlayback).ConfigureAwait(false);
+                await DisposeSpecificInstanceAsync(startingPlayback).ConfigureAwait(false);
             }
 
             throw;
@@ -657,12 +667,29 @@ internal sealed class NovaDailyHttpFlvPlaybackController :
         }
     }
 
-    private async Task DisposeAdditionalInstanceAsync(ActivePlayback additional)
+    private async Task DisposeSpecificInstanceAsync(ActivePlayback instance)
     {
         bool removed;
         lock (_stateGate)
         {
-            removed = _additionalPlaybacks.Remove(additional);
+            if (ReferenceEquals(_active, instance))
+            {
+                if (_additionalPlaybacks.Count > 0)
+                {
+                    _active = _additionalPlaybacks[0];
+                    _additionalPlaybacks.RemoveAt(0);
+                }
+                else
+                {
+                    _active = null;
+                }
+
+                removed = true;
+            }
+            else
+            {
+                removed = _additionalPlaybacks.Remove(instance);
+            }
         }
 
         if (!removed)
@@ -670,7 +697,7 @@ internal sealed class NovaDailyHttpFlvPlaybackController :
             return;
         }
 
-        await DisposePlaybackInstanceAsync(additional).ConfigureAwait(false);
+        await DisposePlaybackInstanceAsync(instance).ConfigureAwait(false);
     }
 
     private async Task StopActiveCoreAsync()
@@ -721,80 +748,15 @@ internal sealed class NovaDailyHttpFlvPlaybackController :
         }
     }
 
-    private async Task ObserveAdditionalPlaybackEndAsync(
-        ActivePlayback additional,
-        string channelName)
-    {
-        try
-        {
-            var ownerTask = additional.OwnerTask;
-            var playerCompletion = additional.Player!.Completion;
-            var endedTask = ownerTask is null
-                ? playerCompletion
-                : await Task.WhenAny(ownerTask, playerCompletion)
-                    .ConfigureAwait(false);
-            bool failed;
-            if (ownerTask is not null && ReferenceEquals(endedTask, ownerTask))
-            {
-                failed = await IsSharedOwnerTerminalFailureAsync(ownerTask)
-                    .ConfigureAwait(false);
-            }
-            else
-            {
-                await endedTask.ConfigureAwait(false);
-                failed = false;
-            }
-
-            await _commands.WaitAsync().ConfigureAwait(false);
-            try
-            {
-                await DisposeAdditionalInstanceAsync(additional).ConfigureAwait(false);
-                _setStatus(failed
-                    ? $"{channelName}: 別ウィンドウ再生が予期せず終了しました"
-                    : ActivePlaybackCount > 0 ? "再生中" : "Ready");
-            }
-            finally
-            {
-                _commands.Release();
-            }
-        }
-        catch (Exception exception)
-        {
-            try
-            {
-                _showError($"別ウィンドウ再生が終了しました: {exception.Message}");
-            }
-            catch
-            {
-            }
-
-            try
-            {
-                await _commands.WaitAsync().ConfigureAwait(false);
-                try
-                {
-                    await DisposeAdditionalInstanceAsync(additional).ConfigureAwait(false);
-                }
-                finally
-                {
-                    _commands.Release();
-                }
-            }
-            catch
-            {
-            }
-        }
-    }
-
     private async Task ObservePlaybackEndAsync(
-        ActivePlayback active,
+        ActivePlayback instance,
         string channelName,
         string source)
     {
         try
         {
-            var ownerTask = active.OwnerTask;
-            var playerCompletion = active.Player!.Completion;
+            var ownerTask = instance.OwnerTask;
+            var playerCompletion = instance.Player!.Completion;
             var endedTask = ownerTask is null
                 ? playerCompletion
                 : await Task.WhenAny(ownerTask, playerCompletion)
@@ -811,28 +773,19 @@ internal sealed class NovaDailyHttpFlvPlaybackController :
                 failed = false;
             }
 
-            lock (_stateGate)
-            {
-                if (!ReferenceEquals(_active, active))
-                {
-                    return;
-                }
-            }
-
-            PublishPlaybackEnded(source, failed);
-            _setStatus(failed
-                ? $"{channelName}: 再生セッションが予期せず終了しました"
-                : $"{channelName}: 再生が終了しました");
-            await StopIfCurrentAsync(active).ConfigureAwait(false);
+            await CompleteEndedPlaybackAsync(
+                instance,
+                source,
+                failed,
+                failed
+                    ? $"{channelName}: 再生セッションが予期せず終了しました"
+                    : $"{channelName}: 再生が終了しました").ConfigureAwait(false);
         }
         catch (Exception exception)
         {
-            lock (_stateGate)
+            if (!TryDetachPlaybackInstance(instance, out var remainingCount, consumeOnly: false))
             {
-                if (!ReferenceEquals(_active, active))
-                {
-                    return;
-                }
+                return;
             }
 
             try
@@ -844,11 +797,23 @@ internal sealed class NovaDailyHttpFlvPlaybackController :
                 // Error presentation must not prevent ownership cleanup.
             }
 
-            PublishPlaybackEnded(source, failed: true);
+            if (remainingCount == 0)
+            {
+                PublishPlaybackEnded(source, failed: true);
+            }
 
             try
             {
-                await StopIfCurrentAsync(active).ConfigureAwait(false);
+                await _commands.WaitAsync().ConfigureAwait(false);
+                try
+                {
+                    await DisposePlaybackInstanceAsync(instance).ConfigureAwait(false);
+                    _setStatus(ActivePlaybackCount > 0 ? "再生中" : "Ready");
+                }
+                finally
+                {
+                    _commands.Release();
+                }
             }
             catch
             {
@@ -857,25 +822,64 @@ internal sealed class NovaDailyHttpFlvPlaybackController :
         }
     }
 
-    private async Task StopIfCurrentAsync(ActivePlayback expectedActive)
+    private async Task CompleteEndedPlaybackAsync(
+        ActivePlayback instance,
+        string source,
+        bool failed,
+        string finalStatusText)
     {
         await _commands.WaitAsync().ConfigureAwait(false);
         try
         {
-            lock (_stateGate)
+            if (!TryDetachPlaybackInstance(instance, out var remainingCount, consumeOnly: true))
             {
-                if (!ReferenceEquals(_active, expectedActive))
-                {
-                    return;
-                }
+                return;
             }
 
-            await StopActiveCoreAsync().ConfigureAwait(false);
-            _setStatus("Ready");
+            await DisposePlaybackInstanceAsync(instance).ConfigureAwait(false);
+            if (remainingCount == 0)
+            {
+                PublishPlaybackEnded(source, failed);
+                _setStatus(finalStatusText);
+            }
+            else
+            {
+                _setStatus("再生中");
+            }
         }
         finally
         {
             _commands.Release();
+        }
+    }
+
+    private bool TryDetachPlaybackInstance(ActivePlayback instance, out int remainingCount, bool consumeOnly)
+    {
+        _ = consumeOnly;
+        lock (_stateGate)
+        {
+            bool detached;
+            if (ReferenceEquals(_active, instance))
+            {
+                if (_additionalPlaybacks.Count > 0)
+                {
+                    _active = _additionalPlaybacks[0];
+                    _additionalPlaybacks.RemoveAt(0);
+                }
+                else
+                {
+                    _active = null;
+                }
+
+                detached = true;
+            }
+            else
+            {
+                detached = _additionalPlaybacks.Remove(instance);
+            }
+
+            remainingCount = (_active is null ? 0 : 1) + _additionalPlaybacks.Count;
+            return detached;
         }
     }
 

@@ -76,7 +76,7 @@ internal sealed class GenesisMainWindowInteraction
         string? source,
         CancellationToken cancellationToken = default)
     {
-        if (IsRecordingHistoryView || IsPublishingView || !_viewModel.CanPlay)
+        if (IsRecordingHistoryView || IsPublishingView || !_viewModel.CanPlayInNewWindow)
         {
             return;
         }
@@ -296,6 +296,34 @@ internal sealed class GenesisMainWindowInteraction
         }
 
         await PlaySourceAsync(source, cancellationToken).ConfigureAwait(false);
+        return true;
+    }
+
+    public async ValueTask<bool> ActivateChannelForDoubleClickAsync(
+        GenesisChannelItem channel,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(channel);
+        if (IsRecordingHistoryView || IsPublishingView || !_viewModel.CanPlayInNewWindow)
+        {
+            return false;
+        }
+
+        var source = channel.Source;
+        if (!SelectChannel(channel))
+        {
+            return false;
+        }
+
+        if (_viewModel.PlaybackState == PlaybackSessionState.Playing)
+        {
+            await PlaySourceInNewWindowAsync(source, cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            await PlaySourceAsync(source, cancellationToken).ConfigureAwait(false);
+        }
+
         return true;
     }
 
